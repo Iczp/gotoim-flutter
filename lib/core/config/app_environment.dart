@@ -21,6 +21,8 @@ class AppEnvironment {
     required this.authScope,
     required this.authLoginGrantType,
     required this.authUserInfoPath,
+    required this.authIntrospectionPath,
+    required this.authRevocationPath,
     required this.signalRBaseUrl,
     required this.signalRHubPath,
     required this.signalRSkipNegotiation,
@@ -40,6 +42,8 @@ class AppEnvironment {
   final String authScope;
   final String authLoginGrantType;
   final String authUserInfoPath;
+  final String authIntrospectionPath;
+  final String authRevocationPath;
   final String signalRBaseUrl;
   final String signalRHubPath;
   final bool signalRSkipNegotiation;
@@ -71,6 +75,10 @@ class AppEnvironment {
       ),
       authUserInfoPath:
           dotenv.get('AUTH_USER_INFO_PATH', fallback: '/connect/userinfo'),
+      authIntrospectionPath: dotenv.get('AUTH_INTROSPECTION_PATH',
+          fallback: '/connect/introspect'),
+      authRevocationPath:
+          dotenv.get('AUTH_REVOCATION_PATH', fallback: '/connect/revocat'),
       signalRBaseUrl: dotenv.get('SIGNALR_BASE_URL', fallback: ''),
       signalRHubPath:
           dotenv.get('SIGNALR_HUB_PATH', fallback: '/signalr-hubs/chat'),
@@ -119,6 +127,16 @@ class AppEnvironment {
         ? authUserInfoPath
         : '/$authUserInfoPath';
     return '$baseUrl$path';
+  }
+
+  String get authIntrospectionUrl => _authUrlFor(authIntrospectionPath);
+
+  String get authRevocationUrl => _authUrlFor(authRevocationPath);
+
+  String _authUrlFor(String path) {
+    final baseUrl = authBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+    final normalizedPath = path.startsWith('/') ? path : '/$path';
+    return '$baseUrl$normalizedPath';
   }
 
   void validate() {

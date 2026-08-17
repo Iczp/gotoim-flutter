@@ -5,6 +5,9 @@ import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/presentation/auth_loading_page.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/diagnostics/presentation/connection_test_page.dart';
+import '../../features/diagnostics/presentation/auth_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/diagnostics_home_page.dart';
+import '../../features/diagnostics/presentation/signalr_diagnostics_page.dart';
 import '../shell/application_shell.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -36,8 +39,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AuthLoadingPage(),
       ),
       GoRoute(
-        path: '/diagnostics/connection',
+        path: '/diagnostics',
+        builder: (context, state) => const DiagnosticsHomePage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/auth',
+        builder: (context, state) => const AuthDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/api',
         builder: (context, state) => const ConnectionTestPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/signalr',
+        builder: (context, state) => const SignalRDiagnosticsPage(),
       ),
     ],
   );

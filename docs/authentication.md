@@ -32,6 +32,8 @@ SignalR -------------------------------> TokenStorage.readAccessToken()
 | `AUTH_SCOPE` | 空格分隔的 OAuth scope，通常包含 `offline_access` |
 | `AUTH_LOGIN_GRANT_TYPE` | 当前服务端使用的登录授权类型，现为 `password` |
 | `AUTH_USER_INFO_PATH` | 登录后验证 API 的用户信息端点，通常为 `/connect/userinfo` |
+| `AUTH_INTROSPECTION_PATH` | Token 检查端点，现为 `/connect/introspect` |
+| `AUTH_REVOCATION_PATH` | Token 撤销端点；既有后端当前使用 `/connect/revocat` |
 
 按环境运行：
 
@@ -61,7 +63,9 @@ flutter run --dart-define=APP_ENV=development
 - SignalR 在连接或重连前，都通过回调读取同一安全存储中的最新 access token。
 
 当前 Token 适配器没有调用注销/撤销端点，因为既有 UniApp 项目里的撤销地址为
-不完整的 `revocat`。确认后端契约后再补充该调用，不能猜测后端 API。
+`/connect/revocat`。Flutter 已按该既有契约实现：退出登录时依次撤销 access 和
+refresh token；无论撤销结果如何都会断开 SignalR 并清除本地凭据。若后端迁移到
+标准 OAuth `/connect/revocation`，只需修改 `AUTH_REVOCATION_PATH`。
 
 ## 界面与路由
 
@@ -77,6 +81,20 @@ flutter run --dart-define=APP_ENV=development
 `/api/chat/session-unit-cache/friends?ownerId=<值>&maxResultCount=100`；消息
 测试调用 `/api/chat/message/fast`，必须手动输入已有的 `sessionUnitId`。业务 API
 仅返回数量或字段摘要，以免诊断页泄露联系人资料或消息正文。
+
+## 原 UniApp 认证能力对照
+
+| 能力 | 当前 Flutter 状态 | 说明 |
+| --- | --- | --- |
+| 密码登录 | 已实现 | `/connect/token`，`password` grant |
+| 刷新 Token | 已实现 | 单飞刷新与诊断页手动刷新 |
+| 用户信息 | 已实现 | `/connect/userinfo`，表单编码 |
+| Token 检查 | 已实现 | `/connect/introspect` |
+| Token 撤销与退出 | 已实现 | 保留现有 `/connect/revocat` 路径 |
+| `client_credentials` | 待确认 | 旧项目用于独立服务凭据；移动端不应默认持有 secret |
+| ERP Header 登录 | 待确认 | 需后端提供确切 Header 与安全策略 |
+| 用户缓存 | 待 Drift | 旧项目以 `uni.storage` 缓存，Flutter 应迁入 Drift |
+| 设备注册 | 待平台服务 | 旧项目调用 `/api/chat/device/register`；需先接入推送 Token 与设备详情 |
 
 ## 新增已认证接口
 

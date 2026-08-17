@@ -5,21 +5,42 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
+import '../../../core/config/app_environment.dart';
+import '../../../core/device/client_device_context.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/token_storage.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_repository.dart';
 
 enum ConnectionTestStatus { idle, testing, success, failure }
 
+class SignalRDiagnosticEntry {
+  const SignalRDiagnosticEntry({
+    required this.receivedAt,
+    required this.title,
+    required this.details,
+  });
+
+  final DateTime receivedAt;
+  final String title;
+  final String details;
+}
+
 class ConnectionTestController extends ChangeNotifier {
   ConnectionTestController({
     required AuthRepository authRepository,
     required SignalRGateway signalRGateway,
     required ApiClient apiClient,
+    required TokenStorage tokenStorage,
+    required AppEnvironment environment,
+    required ClientDeviceContext deviceContext,
   })  : _authRepository = authRepository,
         _signalRGateway = signalRGateway,
         _apiClient = apiClient,
+        _tokenStorage = tokenStorage,
+        _environment = environment,
+        _deviceContext = deviceContext,
         _connectionState = signalRGateway.connectionState {
     _subscription = _signalRGateway.events.listen(_onSignalREvent);
   }
@@ -27,6 +48,9 @@ class ConnectionTestController extends ChangeNotifier {
   final AuthRepository _authRepository;
   final SignalRGateway _signalRGateway;
   final ApiClient _apiClient;
+  final TokenStorage _tokenStorage;
+  final AppEnvironment _environment;
+  final ClientDeviceContext _deviceContext;
   late final StreamSubscription<SignalRAppEvent> _subscription;
 
   SignalRConnectionState _connectionState;
@@ -45,6 +69,10 @@ class ConnectionTestController extends ChangeNotifier {
   String? _messagesError;
   String? _signalRError;
   String? _latestEvent;
+  String? _authOperationResult;
+  String? _authOperationError;
+  final List<SignalRDiagnosticEntry> _signalREvents =
+      <SignalRDiagnosticEntry>[];
 
   SignalRConnectionState get connectionState => _connectionState;
   ConnectionTestStatus get apiStatus => _apiStatus;
@@ -62,6 +90,19 @@ class ConnectionTestController extends ChangeNotifier {
   String? get messagesError => _messagesError;
   String? get signalRError => _signalRError;
   String? get latestEvent => _latestEvent;
+  String? get authOperationResult => _authOperationResult;
+  String? get authOperationError => _authOperationError;
+  List<SignalRDiagnosticEntry> get signalREvents =>
+      List<SignalRDiagnosticEntry>.unmodifiable(_signalREvents);
+  SignalRConnectionInfo get signalRConnectionInfo =>
+      _signalRGateway.connectionInfo;
+
+  AppEnvironment get environment => _environment;
+  ClientDeviceContext get deviceContext => _deviceContext;
+
+  Future<String?> readAccessToken() => _tokenStorage.readAccessToken();
+
+  Future<String?> readRefreshToken() => _tokenStorage.readRefreshToken();
 
   Future<void> testAuthenticatedApi() async {
     _apiStatus = ConnectionTestStatus.testing;
@@ -91,6 +132,32 @@ class ConnectionTestController extends ChangeNotifier {
     } catch (error) {
       _refreshStatus = ConnectionTestStatus.failure;
       _refreshError = _safeError(error);
+    }
+    notifyListeners();
+  }
+
+  Future<void> introspectToken(RevocationTokenType tokenType) async {
+    _authOperationError = null;
+    notifyListeners();
+    try {
+      final result = await _authRepository.introspect(tokenType);
+      _authOperationResult = const JsonEncoder.withIndent('  ').convert(result);
+    } catch (error) {
+      _authOperationError = _safeError(error);
+    }
+    notifyListeners();
+  }
+
+  Future<void> revokeToken(RevocationTokenType tokenType) async {
+    _authOperationError = null;
+    notifyListeners();
+    try {
+      await _authRepository.revoke(tokenType);
+      _authOperationResult = tokenType == RevocationTokenType.accessToken
+          ? 'access token 已撤销。'
+          : 'refresh token 已撤销。';
+    } catch (error) {
+      _authOperationError = _safeError(error);
     }
     notifyListeners();
   }
@@ -163,17 +230,84 @@ class ConnectionTestController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> connectSignalR() async {
+    _signalRStatus = ConnectionTestStatus.testing;
+    _signalRError = null;
+    notifyListeners();
+    try {
+      await _signalRGateway.connect();
+      _connectionState = _signalRGateway.connectionState;
+      _signalRStatus = ConnectionTestStatus.success;
+    } catch (error) {
+      _connectionState = _signalRGateway.connectionState;
+      _signalRStatus = ConnectionTestStatus.failure;
+      _signalRError = _safeError(error);
+    }
+    notifyListeners();
+  }
+
+  Future<void> disconnectSignalR() async {
+    _signalRStatus = ConnectionTestStatus.testing;
+    _signalRError = null;
+    notifyListeners();
+    try {
+      await _signalRGateway.disconnect();
+      _connectionState = _signalRGateway.connectionState;
+      _signalRStatus = ConnectionTestStatus.success;
+    } catch (error) {
+      _signalRStatus = ConnectionTestStatus.failure;
+      _signalRError = _safeError(error);
+    }
+    notifyListeners();
+  }
+
+  void clearSignalREvents() {
+    _signalREvents.clear();
+    _latestEvent = null;
+    notifyListeners();
+  }
+
   void _onSignalREvent(SignalRAppEvent event) {
     if (event is SignalRConnectionEvent) {
       _connectionState = event.state;
       if (event.error != null) _signalRError = _safeError(event.error!);
       _latestEvent = '连接状态：${event.state.name}';
+      _addSignalREvent(
+        SignalRDiagnosticEntry(
+          receivedAt: event.receivedAt,
+          title: _latestEvent!,
+          details: const JsonEncoder.withIndent('  ').convert(<String, Object?>{
+            'state': event.state.name,
+            'connectionId': event.connectionId,
+            'error': event.error?.toString(),
+          }),
+        ),
+      );
     } else if (event is SignalRCommandEvent) {
       _latestEvent = '收到命令：${event.command.value}';
+      _addSignalREvent(
+        SignalRDiagnosticEntry(
+          receivedAt: event.receivedAt,
+          title: _latestEvent!,
+          details: const JsonEncoder.withIndent('  ').convert(event.envelope),
+        ),
+      );
     } else if (event is SignalRUnknownCommandEvent) {
       _latestEvent = '收到未知命令：${event.command ?? '空'}';
+      _addSignalREvent(
+        SignalRDiagnosticEntry(
+          receivedAt: event.receivedAt,
+          title: _latestEvent!,
+          details: const JsonEncoder.withIndent('  ').convert(event.envelope),
+        ),
+      );
     }
     notifyListeners();
+  }
+
+  void _addSignalREvent(SignalRDiagnosticEntry entry) {
+    _signalREvents.insert(0, entry);
+    if (_signalREvents.length > 100) _signalREvents.removeLast();
   }
 
   String _safeError(Object error) => error.toString().replaceAll(
@@ -207,5 +341,8 @@ final connectionTestControllerProvider =
     authRepository: ref.watch(authRepositoryProvider),
     signalRGateway: ref.watch(signalRGatewayProvider),
     apiClient: ref.watch(apiClientProvider),
+    tokenStorage: ref.watch(tokenStorageProvider),
+    environment: ref.watch(appEnvironmentProvider),
+    deviceContext: ref.watch(clientDeviceContextProvider),
   );
 });

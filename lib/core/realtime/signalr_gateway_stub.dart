@@ -18,6 +18,15 @@ class UnsupportedSignalRGateway implements SignalRGateway {
       SignalRConnectionState.disconnected;
 
   @override
+  SignalRConnectionInfo get connectionInfo => const SignalRConnectionInfo(
+        hubUrl: '',
+        state: SignalRConnectionState.disconnected,
+        connectionId: null,
+        keepAliveInterval: Duration.zero,
+        serverTimeout: Duration.zero,
+      );
+
+  @override
   Future<void> connect() => Future<void>.error(
         UnsupportedError('SignalR is not configured for this runtime.'),
       );

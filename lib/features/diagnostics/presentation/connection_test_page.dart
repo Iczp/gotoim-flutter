@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/realtime/signalr_gateway.dart';
 import '../application/connection_test_controller.dart';
 
 class ConnectionTestPage extends ConsumerStatefulWidget {
@@ -92,40 +91,14 @@ class _ConnectionTestPageState extends ConsumerState<ConnectionTestPage> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          _TestCard(
-            title: 'SignalR Chat Hub',
-            description: '连接状态：${_connectionLabel(controller.connectionState)}',
-            status: controller.signalRStatus,
-            onPressed: controller.signalRStatus == ConnectionTestStatus.testing
-                ? null
-                : controller.reconnectSignalR,
-            buttonText: '重新连接',
-            detail: controller.signalRError ?? controller.latestEvent,
-          ),
           const SizedBox(height: 12),
           const Text(
-            '诊断页不会显示 access token、client secret 或消息正文。',
+            '接口返回仅显示摘要；SignalR 详情和 payload 请在独立的 SignalR 测试页查看。',
             textAlign: TextAlign.center,
           ),
         ],
       ),
     );
-  }
-
-  String _connectionLabel(SignalRConnectionState state) {
-    switch (state) {
-      case SignalRConnectionState.disconnected:
-        return '未连接';
-      case SignalRConnectionState.connecting:
-        return '连接中';
-      case SignalRConnectionState.connected:
-        return '已连接';
-      case SignalRConnectionState.reconnecting:
-        return '重连中';
-      case SignalRConnectionState.disconnecting:
-        return '断开中';
-    }
   }
 }
 

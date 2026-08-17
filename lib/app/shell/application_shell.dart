@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,13 +26,14 @@ class ApplicationShell extends ConsumerWidget {
           appBar: AppBar(
             title: const Text('Goto IM'),
             actions: [
+              if (kDebugMode)
+                IconButton(
+                  tooltip: '开发诊断中心',
+                  icon: const Icon(Icons.network_check),
+                  onPressed: () => context.go('/diagnostics'),
+                ),
               IconButton(
-                tooltip: '连接测试',
-                icon: const Icon(Icons.network_check),
-                onPressed: () => context.go('/diagnostics/connection'),
-              ),
-              IconButton(
-                tooltip: '退出登录',
+                tooltip: '退出登录',2
                 icon: const Icon(Icons.logout),
                 onPressed: () => ref.read(authControllerProvider).logout(),
               ),

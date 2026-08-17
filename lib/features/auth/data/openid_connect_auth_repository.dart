@@ -87,7 +87,32 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   }
 
   @override
-  Future<void> logout() => clearSession();
+  Future<Map<String, dynamic>> introspect(RevocationTokenType tokenType) async {
+    final token = await _readToken(tokenType);
+    if (token == null || token.isEmpty) {
+      throw const ApiException('没有可供检查的 Token。');
+    }
+    final response = await _postAuthForm(
+      _environment.authIntrospectionUrl,
+      <String, String>{'token': token},
+    );
+    if (response is! Map) throw const ApiException('Token 检查接口返回了无效数据。');
+    return Map<String, dynamic>.from(response);
+  }
+
+  @override
+  Future<void> logout() async {
+    try {
+      await Future.wait<void>(<Future<void>>[
+        revoke(RevocationTokenType.accessToken),
+        revoke(RevocationTokenType.refreshToken),
+      ]);
+    } catch (_) {
+      // Follow UniApp semantics: local logout must still complete.
+    } finally {
+      await clearSession();
+    }
+  }
 
   @override
   Future<void> refreshAccessToken() async {
@@ -103,6 +128,21 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
 
   @override
   Future<bool> restoreSession() => _tokenStorage.hasToken();
+
+  @override
+  Future<void> revoke(RevocationTokenType tokenType) async {
+    final token = await _readToken(tokenType);
+    if (token == null || token.isEmpty) return;
+    await _postAuthForm(
+      _environment.authRevocationUrl,
+      <String, String>{
+        'token_type_hint': tokenType == RevocationTokenType.accessToken
+            ? 'access_token'
+            : 'refresh_token',
+        'token': token,
+      },
+    );
+  }
 
   Future<AuthSession> _refresh() async {
     final refreshToken = await _tokenStorage.readRefreshToken();
@@ -127,23 +167,15 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
 
   Future<AuthSession> _requestToken(Map<String, String> fields) async {
     try {
-      final response = await _dio.post<dynamic>(
+      final response = await _postAuthForm(
         _environment.authTokenUrl,
-        data: <String, String>{
-          'client_id': _environment.authClientId,
-          if (_environment.authClientSecret.isNotEmpty)
-            'client_secret': _environment.authClientSecret,
-          if (_environment.authScope.isNotEmpty)
-            'scope': _environment.authScope,
-          ...fields,
-        },
-        options: Options(contentType: Headers.formUrlEncodedContentType),
+        fields,
+        includeScope: true,
       );
-      if (response.data is! Map) {
+      if (response is! Map) {
         throw const ApiException('Invalid token response.');
       }
-      return AuthSession.fromJson(
-          Map<String, dynamic>.from(response.data as Map));
+      return AuthSession.fromJson(Map<String, dynamic>.from(response));
     } on DioException catch (error) {
       final body = error.response?.data;
       final message = body is Map && body['error_description'] != null
@@ -158,5 +190,31 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
     );
+  }
+
+  Future<String?> _readToken(RevocationTokenType tokenType) {
+    return tokenType == RevocationTokenType.accessToken
+        ? _tokenStorage.readAccessToken()
+        : _tokenStorage.readRefreshToken();
+  }
+
+  Future<Object?> _postAuthForm(
+    String url,
+    Map<String, String> fields, {
+    bool includeScope = false,
+  }) async {
+    final response = await _dio.post<Object?>(
+      url,
+      data: <String, String>{
+        'client_id': _environment.authClientId,
+        if (_environment.authClientSecret.isNotEmpty)
+          'client_secret': _environment.authClientSecret,
+        if (includeScope && _environment.authScope.isNotEmpty)
+          'scope': _environment.authScope,
+        ...fields,
+      },
+      options: Options(contentType: Headers.formUrlEncodedContentType),
+    );
+    return response.data;
   }
 }

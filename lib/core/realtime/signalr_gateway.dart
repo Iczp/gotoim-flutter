@@ -9,6 +9,8 @@ abstract class SignalRGateway {
 
   SignalRConnectionState get connectionState;
 
+  SignalRConnectionInfo get connectionInfo;
+
   Future<void> connect();
 
   Future<void> disconnect();
@@ -24,6 +26,24 @@ enum SignalRConnectionState {
   connected,
   reconnecting,
   disconnecting,
+}
+
+class SignalRConnectionInfo {
+  const SignalRConnectionInfo({
+    required this.hubUrl,
+    required this.state,
+    required this.connectionId,
+    required this.keepAliveInterval,
+    required this.serverTimeout,
+    this.lastReceivedAt,
+  });
+
+  final String hubUrl;
+  final SignalRConnectionState state;
+  final String? connectionId;
+  final Duration keepAliveInterval;
+  final Duration serverTimeout;
+  final DateTime? lastReceivedAt;
 }
 
 enum SignalRCommand {

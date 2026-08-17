@@ -1,5 +1,7 @@
 import 'auth_session.dart';
 
+enum RevocationTokenType { accessToken, refreshToken }
+
 abstract class AuthRepository {
   Future<bool> restoreSession();
 
@@ -10,4 +12,8 @@ abstract class AuthRepository {
   Future<AuthSession> refreshSession();
 
   Future<Map<String, dynamic>> getUserInfo();
+
+  Future<Map<String, dynamic>> introspect(RevocationTokenType tokenType);
+
+  Future<void> revoke(RevocationTokenType tokenType);
 }

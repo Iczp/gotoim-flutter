@@ -69,3 +69,9 @@ gateway.events.forCommand(SignalRCommand.messageCreated).listen((event) async {
 实现覆盖 Android、iOS、Windows、macOS 和 Linux。Web 条件实现当前为明确的
 不支持桩；待升级 Flutter SDK 并验证可用的 Web SignalR 客户端后再实现。共享
 业务代码不依赖任何平台 API。
+
+## 开发诊断入口
+
+Debug 模式下，首页右上角进入“开发诊断中心”。认证页允许查看、复制并手动操作
+Token，仅用于本地联调；接口与 SignalR 页用于业务 API 和 Hub 验证。诊断页不会
+在 Release 构建中提供内容，且不得截图、录屏或提交敏感输出。

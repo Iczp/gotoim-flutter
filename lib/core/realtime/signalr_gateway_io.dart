@@ -55,9 +55,22 @@ class SignalRNetcoreGateway implements SignalRGateway {
   final HubConnection _connection;
   final StreamController<SignalRAppEvent> _events =
       StreamController<SignalRAppEvent>.broadcast();
+  DateTime? _lastReceivedAt;
 
   @override
   SignalRConnectionState get connectionState => _mapState(_connection.state);
+
+  @override
+  SignalRConnectionInfo get connectionInfo => SignalRConnectionInfo(
+        hubUrl: _connection.baseUrl ?? '',
+        state: connectionState,
+        connectionId: _connection.connectionId,
+        keepAliveInterval:
+            Duration(milliseconds: _connection.keepAliveIntervalInMilliseconds),
+        serverTimeout:
+            Duration(milliseconds: _connection.serverTimeoutInMilliseconds),
+        lastReceivedAt: _lastReceivedAt,
+      );
 
   @override
   Stream<SignalRAppEvent> get events => _events.stream;
@@ -97,6 +110,7 @@ class SignalRNetcoreGateway implements SignalRGateway {
     final envelope = _asMap(value);
     final commandValue = envelope?['command']?.toString();
     final now = DateTime.now();
+    _lastReceivedAt = now;
     final command =
         commandValue == null ? null : SignalRCommand.fromValue(commandValue);
     if (envelope == null || command == null) {
