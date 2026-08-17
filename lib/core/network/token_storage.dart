@@ -9,4 +9,7 @@ abstract class TokenStorage {
       {required String accessToken, required String refreshToken});
 
   Future<void> clear();
+
+  Future<bool> hasToken() async =>
+      (await readAccessToken())?.isNotEmpty == true;
 }

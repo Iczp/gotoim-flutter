@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/app_environment.dart';
 import '../../core/platform/platform_facade.dart';
+import '../../features/auth/application/auth_controller.dart';
 import '../layout/app_breakpoints.dart';
 
 /// A platform-neutral host for future feature routes.
@@ -20,7 +21,16 @@ class ApplicationShell extends ConsumerWidget {
       builder: (context, constraints) {
         final layout = AppBreakpoints.resolve(constraints.maxWidth);
         return Scaffold(
-          appBar: AppBar(title: const Text('Goto IM')),
+          appBar: AppBar(
+            title: const Text('Goto IM'),
+            actions: [
+              IconButton(
+                tooltip: '退出登录',
+                icon: const Icon(Icons.logout),
+                onPressed: () => ref.read(authControllerProvider).logout(),
+              ),
+            ],
+          ),
           body: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 720),
