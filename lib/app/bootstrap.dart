@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_environment.dart';
 import '../core/device/client_device_context.dart';
+import '../core/notifications/local_notification_service.dart';
 import '../core/platform/platform_facade.dart';
 import 'app.dart';
+import 'application_providers.dart';
 
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +24,10 @@ Future<void> bootstrap() async {
     environment: environment,
     platformFacade: platformFacade,
   );
+  final localNotificationService = createLocalNotificationService(
+    platformFacade: platformFacade,
+  );
+  await localNotificationService.initialize();
 
   runApp(
     ProviderScope(
@@ -29,6 +35,9 @@ Future<void> bootstrap() async {
         appEnvironmentProvider.overrideWithValue(environment),
         platformFacadeProvider.overrideWithValue(platformFacade),
         clientDeviceContextProvider.overrideWithValue(deviceContext),
+        localNotificationServiceProvider.overrideWithValue(
+          localNotificationService,
+        ),
       ],
       child: const GotoImApp(),
     ),

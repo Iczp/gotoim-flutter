@@ -39,6 +39,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             subtitle: 'Chat Hub、连接详情、事件与 payload',
             onTap: () => context.push('/diagnostics/signalr'),
           ),
+          _Item(
+            icon: Icons.notifications_active_outlined,
+            title: '本地通知测试',
+            subtitle: '权限、渠道、通知内容、点击 Payload 与取消',
+            onTap: () => context.push('/diagnostics/notifications'),
+          ),
         ],
       ),
     );

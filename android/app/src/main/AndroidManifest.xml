@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.gotoim_flutter">
+   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
    <application
         android:label="gotoim_flutter"
         android:name="${applicationName}"

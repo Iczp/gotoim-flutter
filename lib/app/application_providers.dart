@@ -5,6 +5,7 @@ import '../core/config/app_environment.dart';
 import '../core/device/client_device_context.dart';
 import '../core/network/api_client.dart';
 import '../core/network/dio_api_client.dart';
+import '../core/notifications/local_notification_service.dart';
 import '../features/auth/application/auth_controller.dart';
 import '../features/auth/data/openid_connect_auth_repository.dart';
 
@@ -26,3 +27,10 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     deviceContext: ref.watch(clientDeviceContextProvider),
   );
 });
+
+/// 由 bootstrap 创建并覆写，保证通知点击回调在应用启动时即可注册。
+final localNotificationServiceProvider = Provider<LocalNotificationService>(
+  (ref) => throw UnimplementedError(
+    'LocalNotificationService must be provided at bootstrap.',
+  ),
+);
