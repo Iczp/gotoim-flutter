@@ -8,4 +8,6 @@ abstract class AuthRepository {
   Future<void> logout();
 
   Future<AuthSession> refreshSession();
+
+  Future<Map<String, dynamic>> getUserInfo();
 }

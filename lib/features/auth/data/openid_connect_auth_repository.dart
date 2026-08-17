@@ -48,6 +48,34 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   }
 
   @override
+  Future<Map<String, dynamic>> getUserInfo() async {
+    final accessToken = await _tokenStorage.readAccessToken();
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const ApiException('尚未登录，无法请求用户信息。');
+    }
+    try {
+      final response = await _dio.post<dynamic>(
+        _environment.authUserInfoUrl,
+        data: const <String, String>{},
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          headers: <String, String>{'Authorization': 'Bearer $accessToken'},
+        ),
+      );
+      if (response.data is! Map) {
+        throw const ApiException('用户信息接口返回了无效数据。');
+      }
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (error) {
+      final body = error.response?.data;
+      final message = body is Map && body['error_description'] != null
+          ? body['error_description'].toString()
+          : '用户信息请求失败。';
+      throw ApiException(message, statusCode: error.response?.statusCode);
+    }
+  }
+
+  @override
   Future<void> logout() => clearSession();
 
   @override
@@ -92,6 +120,8 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
         _environment.authTokenUrl,
         data: <String, String>{
           'client_id': _environment.authClientId,
+          if (_environment.authClientSecret.isNotEmpty)
+            'client_secret': _environment.authClientSecret,
           if (_environment.authScope.isNotEmpty)
             'scope': _environment.authScope,
           ...fields,

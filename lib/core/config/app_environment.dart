@@ -14,8 +14,10 @@ class AppEnvironment {
     required this.authBaseUrl,
     required this.authTokenPath,
     required this.authClientId,
+    required this.authClientSecret,
     required this.authScope,
     required this.authLoginGrantType,
+    required this.authUserInfoPath,
     required this.signalRBaseUrl,
     required this.signalRHubPath,
     required this.signalRSkipNegotiation,
@@ -28,8 +30,10 @@ class AppEnvironment {
   final String authBaseUrl;
   final String authTokenPath;
   final String authClientId;
+  final String authClientSecret;
   final String authScope;
   final String authLoginGrantType;
+  final String authUserInfoPath;
   final String signalRBaseUrl;
   final String signalRHubPath;
   final bool signalRSkipNegotiation;
@@ -50,9 +54,14 @@ class AppEnvironment {
       authBaseUrl: dotenv.get('AUTH_BASE_URL', fallback: ''),
       authTokenPath: dotenv.get('AUTH_TOKEN_PATH', fallback: '/connect/token'),
       authClientId: dotenv.get('AUTH_CLIENT_ID', fallback: ''),
+      authClientSecret: dotenv.get('AUTH_CLIENT_SECRET', fallback: ''),
       authScope: dotenv.get('AUTH_SCOPE', fallback: ''),
-      authLoginGrantType:
-          dotenv.get('AUTH_LOGIN_GRANT_TYPE', fallback: 'password'),
+      authLoginGrantType: _nonEmpty(
+        dotenv.get('AUTH_LOGIN_GRANT_TYPE', fallback: ''),
+        fallback: 'password',
+      ),
+      authUserInfoPath:
+          dotenv.get('AUTH_USER_INFO_PATH', fallback: '/connect/userinfo'),
       signalRBaseUrl: dotenv.get('SIGNALR_BASE_URL', fallback: ''),
       signalRHubPath:
           dotenv.get('SIGNALR_HUB_PATH', fallback: '/signalr-hubs/chat'),
@@ -77,6 +86,10 @@ class AppEnvironment {
         .toList(growable: false);
   }
 
+  static String _nonEmpty(String value, {required String fallback}) {
+    return value.trim().isEmpty ? fallback : value;
+  }
+
   String get signalRHubUrl {
     final baseUrl = signalRBaseUrl.replaceFirst(RegExp(r'/+$'), '');
     final hubPath =
@@ -89,6 +102,14 @@ class AppEnvironment {
     final tokenPath =
         authTokenPath.startsWith('/') ? authTokenPath : '/$authTokenPath';
     return '$baseUrl$tokenPath';
+  }
+
+  String get authUserInfoUrl {
+    final baseUrl = authBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+    final path = authUserInfoPath.startsWith('/')
+        ? authUserInfoPath
+        : '/$authUserInfoPath';
+    return '$baseUrl$path';
   }
 
   void validate() {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/config/app_environment.dart';
 import '../../core/platform/platform_facade.dart';
@@ -24,6 +25,11 @@ class ApplicationShell extends ConsumerWidget {
           appBar: AppBar(
             title: const Text('Goto IM'),
             actions: [
+              IconButton(
+                tooltip: '连接测试',
+                icon: const Icon(Icons.network_check),
+                onPressed: () => context.go('/diagnostics/connection'),
+              ),
               IconButton(
                 tooltip: '退出登录',
                 icon: const Icon(Icons.logout),

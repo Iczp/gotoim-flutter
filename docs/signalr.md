@@ -1,27 +1,26 @@
-# SignalR gateway
+# SignalR 网关
 
-## Configuration
+## 配置
 
-SignalR configuration lives in the root environment files:
+SignalR 配置位于项目根目录的环境文件中：
 
-| Key | Meaning |
+| 配置项 | 含义 |
 | --- | --- |
-| `SIGNALR_BASE_URL` | Chat realtime host |
-| `SIGNALR_HUB_PATH` | Current UniApp chat hub: `/signalr-hubs/chat` |
-| `SIGNALR_SKIP_NEGOTIATION` | Set `true` only when the server supports direct WebSocket transport |
-| `SIGNALR_RECONNECT_DELAYS_MS` | Comma-separated retry delays, e.g. `0,2000,10000,30000` |
+| `SIGNALR_BASE_URL` | 聊天实时服务地址 |
+| `SIGNALR_HUB_PATH` | 当前 UniApp 聊天 Hub：`/signalr-hubs/chat` |
+| `SIGNALR_SKIP_NEGOTIATION` | 仅当服务端支持直连 WebSocket 时设为 `true` |
+| `SIGNALR_RECONNECT_DELAYS_MS` | 逗号分隔的重试延迟，例如 `0,2000,10000,30000` |
 
-`SignalRNetcoreGateway` uses `HttpTransportType.WebSockets`, registers one
-application-level `ReceivedMessage` handler, and reads the current access token
-from `TokenStorage` through `accessTokenFactory`. It is not created per chat
-page.
+`SignalRNetcoreGateway` 使用 `HttpTransportType.WebSockets`，注册唯一的
+应用级 `ReceivedMessage` 回调，并通过 `accessTokenFactory` 从
+`TokenStorage` 读取当前 access token。不会为每一个聊天页面建立连接。
 
-## Event model
+## 事件模型
 
-The current UniApp app receives a `ReceivedMessage` envelope and dispatches its
-`command`. The Flutter gateway preserves these values as typed commands:
+当前 UniApp 应用接收 `ReceivedMessage` 信封并按其中的 `command` 分发。
+Flutter 网关保留这些 command 值，并转为类型化枚举：
 
-| SignalR `command` | Flutter enum |
+| SignalR `command` | Flutter 枚举 |
 | --- | --- |
 | `offline@me` / `online@me` | `offlineMe` / `onlineMe` |
 | `offline@friend` / `online@friend` | `offlineFriend` / `onlineFriend` |
@@ -33,41 +32,35 @@ The current UniApp app receives a `ReceivedMessage` envelope and dispatches its
 | `changed@session-unit` | `sessionUnitChanged` |
 | `kicked` / `welcome` | `kicked` / `welcome` |
 
-Unknown or malformed envelopes become `SignalRUnknownCommandEvent`; they are
-not silently discarded. Connection changes produce `SignalRConnectionEvent`
-with `connecting`, `connected`, `reconnecting`, `disconnecting`, or
-`disconnected`.
+未知或格式不正确的信封会成为 `SignalRUnknownCommandEvent`，不会被静默丢弃。
+连接状态变化会产生 `SignalRConnectionEvent`，状态包括 `connecting`、
+`connected`、`reconnecting`、`disconnecting`、`disconnected`。
 
-## Repository usage
+## Repository 使用方式
 
-The composition root supplies `signalRGatewayProvider`; it deliberately does
-not connect before authentication succeeds. `AuthController` starts it after a
-successful login or restored session and stops it at logout. Repositories, not
-UI, subscribe to command streams:
+组合根提供 `signalRGatewayProvider`，认证成功之前不会连接。`AuthController`
+会在登录成功或会话恢复后启动连接，并在退出登录时断开。Repository 而不是 UI
+订阅命令流：
 
 ```dart
 gateway.events.forCommand(SignalRCommand.messageCreated).listen((event) async {
-  // validate DTO -> upsert Drift -> Riverpod watches the database
+  // 校验 DTO -> 写入/更新 Drift -> Riverpod 监听数据库更新 UI
 });
 ```
 
-On `connected` after a reconnect, a repository must run HTTP incremental sync.
-SignalR is a low-latency notification path, not the offline source of truth.
-Do not update a screen directly from this stream.
+重连后的 `connected` 事件到达时，Repository 必须执行 HTTP 增量同步。SignalR
+是低延迟通知通道，不是离线数据的权威来源，不能直接用它更新页面状态。
 
-## Initial failures and retry
+## 初始连接失败与重试
 
-Automatic reconnect applies after a connection has been established. The auth
-or application lifecycle should decide how to retry an **initial** `connect()`
-failure (typically using a bounded, observable backoff); it should not block a
-login screen indefinitely. This follows the SignalR client reconnect model
-described in [Microsoft's SignalR client documentation](https://learn.microsoft.com/en-us/aspnet/core/signalr/javascript-client?view=aspnetcore-10.0).
+自动重连仅适用于已经建立过的连接。认证或应用生命周期层应决定首次
+`connect()` 失败后的重试策略（通常应采用有上限、可观测的退避策略），不能让
+登录页无限等待。该行为与 [Microsoft SignalR 客户端文档](https://learn.microsoft.com/en-us/aspnet/core/signalr/javascript-client?view=aspnetcore-10.0)
+描述的重连模型一致。
 
-## Platform note
+## 平台说明
 
-The current project is pinned to `signalr_netcore` 1.3.6 to remain compatible
-with its installed Dart 2.19 SDK. The IO implementation therefore covers
-Android, iOS, Windows, macOS, and Linux. The Web conditional implementation is
-an explicit unsupported stub until the Flutter SDK and a web-compatible SignalR
-client have been upgraded and verified; shared business code remains platform
-independent.
+当前项目锁定 `signalr_netcore` 1.3.6，以兼容已安装的 Dart 2.19 SDK。因此 IO
+实现覆盖 Android、iOS、Windows、macOS 和 Linux。Web 条件实现当前为明确的
+不支持桩；待升级 Flutter SDK 并验证可用的 Web SignalR 客户端后再实现。共享
+业务代码不依赖任何平台 API。

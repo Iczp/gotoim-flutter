@@ -1,79 +1,81 @@
-# Authentication and HTTP
+# 认证与网络层
 
-## Scope
+## 范围
 
-The Flutter client follows the current UniApp contract: OpenIddict token
-endpoint `POST /connect/token`, with the `password` grant for login and the
-`refresh_token` grant for renewal. This is infrastructure only; user/profile
-and IM pages are not part of this step.
+Flutter 客户端遵循现有 UniApp 的认证契约：通过 OpenIddict
+`POST /connect/token`，以 `password` 授权类型登录、以 `refresh_token`
+授权类型续期。本阶段仅实现认证基础设施，不包含用户资料或 IM 业务页面。
 
 ```text
 LoginPage -> AuthController -> OpenIdConnectAuthRepository
                                   |             |
-                                  |             +-> TokenStorage (secure)
+                                  |             +-> TokenStorage（安全存储）
                                   v
                            OpenIddict /connect/token
 
-Repository -> ApiClient (Dio) -> 401 -> one shared refresh -> retry once
+Repository -> ApiClient (Dio) -> 401 -> 单一刷新任务 -> 重试一次
 SignalR -------------------------------> TokenStorage.readAccessToken()
 ```
 
-## Environment
+## 环境配置
 
-Set public, non-secret values in the root `.env.<flavor>` file:
+在项目根目录的 `.env.<flavor>` 中设置可公开、非敏感的配置：
 
-| Key | Meaning |
+| 配置项 | 含义 |
 | --- | --- |
-| `API_BASE_URL` | API host used by the shared Dio client |
-| `AUTH_BASE_URL` | OpenIddict host |
-| `AUTH_TOKEN_PATH` | Token endpoint; normally `/connect/token` |
-| `AUTH_CLIENT_ID` | Public mobile client id registered at the server |
-| `AUTH_SCOPE` | Space-separated OAuth scopes, normally including `offline_access` |
-| `AUTH_LOGIN_GRANT_TYPE` | Existing server's login grant, currently `password` |
+| `API_BASE_URL` | 共享 Dio 客户端使用的 API 主机地址 |
+| `AUTH_BASE_URL` | OpenIddict 服务地址 |
+| `AUTH_TOKEN_PATH` | Token 端点，通常为 `/connect/token` |
+| `AUTH_CLIENT_ID` | 服务端注册的公开移动端 client id |
+| `AUTH_CLIENT_SECRET` | 可选的兼容字段；会随 Token 请求提交 |
+| `AUTH_SCOPE` | 空格分隔的 OAuth scope，通常包含 `offline_access` |
+| `AUTH_LOGIN_GRANT_TYPE` | 当前服务端使用的登录授权类型，现为 `password` |
+| `AUTH_USER_INFO_PATH` | 登录后验证 API 的用户信息端点，通常为 `/connect/userinfo` |
 
-Run a flavor with:
+按环境运行：
 
 ```powershell
 flutter run --dart-define=APP_ENV=development
 ```
 
-Do not place a client secret, password, access token, refresh token, or MinIO
-credential in any `.env` file. A mobile/desktop client cannot keep a secret.
-Production endpoints and the public `AUTH_CLIENT_ID` must be registered with
-the backend before a real login can work.
+`AUTH_CLIENT_SECRET` 已作为兼容既有服务端的可选字段接入；但根目录的
+`.env.<flavor>` 会被打包到客户端，移动端/桌面端无法安全保存 secret。应优先让
+服务端将该 `AUTH_CLIENT_ID` 配置为 public client，或改用 PKCE 授权码流程。不要
+在 `.env` 中填写用户密码、access token、refresh token 或 MinIO 凭据。真实登录
+前，需由后端完成生产环境地址及公开 `AUTH_CLIENT_ID` 的注册。
 
-## Token lifecycle
+## Token 生命周期
 
-- `SecureTokenStorage` is the only concrete token persistence layer. UI and
-  repositories depend only on `TokenStorage`.
-- Login writes access and refresh tokens together.
-- `DioApiClient` adds `Authorization: Bearer <access-token>`.
-- A 401 starts one `refresh_token` request. Concurrent 401 requests await that
-  same future, then retry once with the new token.
-- If refresh fails, local tokens are cleared and the router sends the user to
-  `/login`.
-- SignalR receives a callback to read the same storage immediately before it
-  connects or reconnects.
+- `SecureTokenStorage` 是唯一的 Token 持久化实现。UI 和 Repository 只依赖
+  `TokenStorage` 抽象。
+- 登录时同时保存 access token 和 refresh token。
+- `/connect/token` 与 `/connect/userinfo` 均使用
+  `application/x-www-form-urlencoded`；后者也会附加当前 Bearer Token。
+- `DioApiClient` 自动附加 `Authorization: Bearer <access-token>`。
+- 收到 401 时只会启动一个 `refresh_token` 请求。并发的 401 请求等待同一个
+  Future，成功后使用新 Token 各自重试一次。
+- 刷新失败时清除本地 Token，路由跳转到 `/login`。
+- SignalR 在连接或重连前，都通过回调读取同一安全存储中的最新 access token。
 
-The current token adapter intentionally does not call a logout/revocation
-endpoint because the exact backend route in the existing client is incomplete
-(`revocat`). Add it only after confirming the server contract.
+当前 Token 适配器没有调用注销/撤销端点，因为既有 UniApp 项目里的撤销地址为
+不完整的 `revocat`。确认后端契约后再补充该调用，不能猜测后端 API。
 
-## UI and routing
+## 界面与路由
 
-`/splash` restores the stored session, `/login` is shown when no session
-exists, and `/` is the currently empty authenticated application shell. The
-redirect decision is centralised in `app_router.dart`; feature pages do not
-perform their own auth checks.
+`/splash` 用于恢复本地会话；没有会话时跳转 `/login`；`/` 是当前的已登录
+应用壳。认证跳转逻辑集中在 `app_router.dart`，业务页面无需各自判断登录态。
 
-## Adding an authenticated endpoint
+登录后，可通过应用壳右上角的“连接测试”进入
+`/diagnostics/connection`。页面会调用 `AUTH_USER_INFO_PATH` 验证当前 Token，
+并展示 SignalR 的连接状态和最近一条命令名称；不会展示 Token、secret 或消息
+正文。
 
-Expose an application repository method, inject `ApiClient`, and keep Dio out
-of widgets:
+## 新增已认证接口
+
+请提供应用 Repository 方法并注入 `ApiClient`，不要让 Widget 直接使用 Dio：
 
 ```dart
 final result = await apiClient.get<Map<String, dynamic>>('/api/chat/sessions');
 ```
 
-Do not use the `Dio` instance directly from a feature page. Add typed DTOs and
-repository tests before migrating a real IM endpoint.
+迁移真实 IM 接口前，请先补齐 DTO、Repository 和对应测试。
