@@ -32,6 +32,10 @@ migrate_working_dir/
 .pub/
 /build/
 
+# Local environment overrides may contain developer credentials.
+/.env
+/.env.local
+
 # Symbolication related
 app.*.symbols
 

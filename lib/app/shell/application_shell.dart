@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config/app_environment.dart';
 import '../../core/platform/platform_facade.dart';
 import '../layout/app_breakpoints.dart';
 
@@ -13,6 +14,7 @@ class ApplicationShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final platform = ref.watch(platformFacadeProvider);
+    final environment = ref.watch(appEnvironmentProvider);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -26,6 +28,7 @@ class ApplicationShell extends ConsumerWidget {
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   'Cross-platform foundation ready\n'
+                  'environment: ${environment.flavor.name}\n'
                   'runtime: ${platform.kind.name}\n'
                   'layout: ${layout.name}',
                   textAlign: TextAlign.center,
