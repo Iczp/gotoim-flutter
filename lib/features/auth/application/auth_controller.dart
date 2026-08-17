@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_environment.dart';
+import '../../../core/device/client_device_context.dart';
 import '../../../core/network/secure_token_storage.dart';
 import '../../../core/network/token_storage.dart';
 import '../../../core/realtime/signalr_gateway.dart';
@@ -76,10 +77,12 @@ final tokenStorageProvider =
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final environment = ref.watch(appEnvironmentProvider);
+  final deviceContext = ref.watch(clientDeviceContextProvider);
   return OpenIdConnectAuthRepository(
-    dio: OpenIdConnectAuthRepository.createDio(environment),
+    dio: OpenIdConnectAuthRepository.createDio(environment, deviceContext),
     environment: environment,
     tokenStorage: ref.watch(tokenStorageProvider),
+    deviceContext: deviceContext,
   );
 });
 
@@ -87,6 +90,7 @@ final signalRGatewayProvider = Provider<SignalRGateway>((ref) {
   final gateway = createSignalRGateway(
     environment: ref.watch(appEnvironmentProvider),
     readAccessToken: ref.watch(tokenStorageProvider).readAccessToken,
+    deviceContext: ref.watch(clientDeviceContextProvider),
   );
   ref.onDispose(gateway.dispose);
   return gateway;

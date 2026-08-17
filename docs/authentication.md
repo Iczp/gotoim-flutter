@@ -23,6 +23,7 @@ SignalR -------------------------------> TokenStorage.readAccessToken()
 
 | 配置项 | 含义 |
 | --- | --- |
+| `APP_ID` / `APP_NAME` / `APP_VERSION` | 现有后端使用的 App 标识及版本，请按已注册客户端填写 |
 | `API_BASE_URL` | 共享 Dio 客户端使用的 API 主机地址 |
 | `AUTH_BASE_URL` | OpenIddict 服务地址 |
 | `AUTH_TOKEN_PATH` | Token 端点，通常为 `/connect/token` |
@@ -52,6 +53,8 @@ flutter run --dart-define=APP_ENV=development
 - `/connect/token` 与 `/connect/userinfo` 均使用
   `application/x-www-form-urlencoded`；后者也会附加当前 Bearer Token。
 - `DioApiClient` 自动附加 `Authorization: Bearer <access-token>`。
+- 所有认证与业务 HTTP 请求均附加 `Accept`、`App-Device-Id`、
+  `App-Device-Type`、`App-Id`、`App-Version`。设备 ID 首次启动时生成并稳定保存。
 - 收到 401 时只会启动一个 `refresh_token` 请求。并发的 401 请求等待同一个
   Future，成功后使用新 Token 各自重试一次。
 - 刷新失败时清除本地 Token，路由跳转到 `/login`。
@@ -69,6 +72,11 @@ flutter run --dart-define=APP_ENV=development
 `/diagnostics/connection`。页面会调用 `AUTH_USER_INFO_PATH` 验证当前 Token，
 并展示 SignalR 的连接状态和最近一条命令名称；不会展示 Token、secret 或消息
 正文。
+
+连接测试页还提供 refresh token、好友列表和消息列表验证。好友测试调用
+`/api/chat/session-unit-cache/friends?ownerId=<值>&maxResultCount=100`；消息
+测试调用 `/api/chat/message/fast`，必须手动输入已有的 `sessionUnitId`。业务 API
+仅返回数量或字段摘要，以免诊断页泄露联系人资料或消息正文。
 
 ## 新增已认证接口
 

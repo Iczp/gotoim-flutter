@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_environment.dart';
+import '../core/device/client_device_context.dart';
 import '../core/network/api_client.dart';
 import '../core/network/dio_api_client.dart';
 import '../features/auth/application/auth_controller.dart';
@@ -22,5 +23,6 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     ),
     tokenStorage: ref.watch(tokenStorageProvider),
     tokenRefresher: authRepository as OpenIdConnectAuthRepository,
+    deviceContext: ref.watch(clientDeviceContextProvider),
   );
 });

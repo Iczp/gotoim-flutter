@@ -1,4 +1,5 @@
 import '../config/app_environment.dart';
+import '../device/client_device_context.dart';
 import 'signalr_access_token_reader.dart';
 import 'signalr_gateway.dart';
 import 'signalr_gateway_stub.dart'
@@ -7,9 +8,11 @@ import 'signalr_gateway_stub.dart'
 SignalRGateway createSignalRGateway({
   required AppEnvironment environment,
   required SignalRAccessTokenReader readAccessToken,
+  required ClientDeviceContext deviceContext,
 }) {
   return createPlatformSignalRGateway(
     environment: environment,
     readAccessToken: readAccessToken,
+    deviceContext: deviceContext,
   );
 }

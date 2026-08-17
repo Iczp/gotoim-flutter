@@ -3,16 +3,19 @@ import 'dart:async';
 import 'package:signalr_netcore/signalr_client.dart';
 
 import '../config/app_environment.dart';
+import '../device/client_device_context.dart';
 import 'signalr_access_token_reader.dart';
 import 'signalr_gateway.dart';
 
 SignalRGateway createPlatformSignalRGateway({
   required AppEnvironment environment,
   required SignalRAccessTokenReader readAccessToken,
+  required ClientDeviceContext deviceContext,
 }) {
   return SignalRNetcoreGateway(
     environment: environment,
     readAccessToken: readAccessToken,
+    deviceContext: deviceContext,
   );
 }
 
@@ -20,9 +23,10 @@ class SignalRNetcoreGateway implements SignalRGateway {
   SignalRNetcoreGateway({
     required AppEnvironment environment,
     required SignalRAccessTokenReader readAccessToken,
+    required ClientDeviceContext deviceContext,
   }) : _connection = HubConnectionBuilder()
             .withUrl(
-              environment.signalRHubUrl,
+              _withDeviceQuery(environment.signalRHubUrl, deviceContext),
               options: HttpConnectionOptions(
                 skipNegotiation: environment.signalRSkipNegotiation,
                 transport: HttpTransportType.WebSockets,
@@ -144,5 +148,18 @@ class SignalRNetcoreGateway implements SignalRGateway {
       case null:
         return SignalRConnectionState.disconnected;
     }
+  }
+
+  static String _withDeviceQuery(
+    String hubUrl,
+    ClientDeviceContext deviceContext,
+  ) {
+    final uri = Uri.parse(hubUrl);
+    return uri.replace(
+      queryParameters: <String, String>{
+        ...uri.queryParameters,
+        ...deviceContext.signalRQueryParameters,
+      },
+    ).toString();
   }
 }

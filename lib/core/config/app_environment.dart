@@ -11,6 +11,9 @@ class AppEnvironment {
   const AppEnvironment._({
     required this.flavor,
     required this.apiBaseUrl,
+    required this.appId,
+    required this.appName,
+    required this.appVersion,
     required this.authBaseUrl,
     required this.authTokenPath,
     required this.authClientId,
@@ -27,6 +30,9 @@ class AppEnvironment {
 
   final AppFlavor flavor;
   final String apiBaseUrl;
+  final String appId;
+  final String appName;
+  final String appVersion;
   final String authBaseUrl;
   final String authTokenPath;
   final String authClientId;
@@ -51,6 +57,9 @@ class AppEnvironment {
     return AppEnvironment._(
       flavor: flavor,
       apiBaseUrl: dotenv.get('API_BASE_URL', fallback: ''),
+      appId: dotenv.get('APP_ID', fallback: '__UNI__39F095D'),
+      appName: dotenv.get('APP_NAME', fallback: 'Goto IM'),
+      appVersion: dotenv.get('APP_VERSION', fallback: '1.0.0'),
       authBaseUrl: dotenv.get('AUTH_BASE_URL', fallback: ''),
       authTokenPath: dotenv.get('AUTH_TOKEN_PATH', fallback: '/connect/token'),
       authClientId: dotenv.get('AUTH_CLIENT_ID', fallback: ''),

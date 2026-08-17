@@ -15,6 +15,11 @@ SignalR 配置位于项目根目录的环境文件中：
 应用级 `ReceivedMessage` 回调，并通过 `accessTokenFactory` 从
 `TokenStorage` 读取当前 access token。不会为每一个聊天页面建立连接。
 
+Hub URL 会追加与现有 UniApp 一致的设备查询参数：`appId`、`appName`、
+`deviceId`、`deviceType`、`pushClientId`、`brand`、`model`、`platform`、
+`browser`。当前尚未接入推送 SDK，因此 `pushClientId` 为空；接入 FCM/APNs
+后由平台适配层提供该值，不影响业务代码。
+
 ## 事件模型
 
 当前 UniApp 应用接收 `ReceivedMessage` 信封并按其中的 `command` 分发。

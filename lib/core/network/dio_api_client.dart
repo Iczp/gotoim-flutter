@@ -4,6 +4,7 @@ import 'api_client.dart';
 import 'api_exception.dart';
 import 'token_refresher.dart';
 import 'token_storage.dart';
+import '../device/client_device_context.dart';
 
 /// The single authenticated HTTP transport for repositories.
 class DioApiClient implements ApiClient {
@@ -11,13 +12,16 @@ class DioApiClient implements ApiClient {
     required Dio dio,
     required TokenStorage tokenStorage,
     required TokenRefresher tokenRefresher,
+    required ClientDeviceContext deviceContext,
   })  : _dio = dio,
         _tokenStorage = tokenStorage,
-        _tokenRefresher = tokenRefresher;
+        _tokenRefresher = tokenRefresher,
+        _deviceContext = deviceContext;
 
   final Dio _dio;
   final TokenStorage _tokenStorage;
   final TokenRefresher _tokenRefresher;
+  final ClientDeviceContext _deviceContext;
   final Map<Object, CancelToken> _cancelTokens = <Object, CancelToken>{};
 
   @override
@@ -54,9 +58,11 @@ class DioApiClient implements ApiClient {
         queryParameters: query,
         options: Options(
           method: method,
-          headers: accessToken == null || accessToken.isEmpty
-              ? null
-              : <String, String>{'Authorization': 'Bearer $accessToken'},
+          headers: <String, String>{
+            ..._deviceContext.requestHeaders,
+            if (accessToken != null && accessToken.isNotEmpty)
+              'Authorization': 'Bearer $accessToken',
+          },
         ),
       );
       return _unwrap<T>(response.data);

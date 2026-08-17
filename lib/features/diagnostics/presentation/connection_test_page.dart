@@ -4,11 +4,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../application/connection_test_controller.dart';
 
-class ConnectionTestPage extends ConsumerWidget {
+class ConnectionTestPage extends ConsumerStatefulWidget {
   const ConnectionTestPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ConnectionTestPage> createState() => _ConnectionTestPageState();
+}
+
+class _ConnectionTestPageState extends ConsumerState<ConnectionTestPage> {
+  final _ownerIdController = TextEditingController();
+  final _sessionUnitIdController = TextEditingController();
+
+  @override
+  void dispose() {
+    _ownerIdController.dispose();
+    _sessionUnitIdController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final controller = ref.watch(connectionTestControllerProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('连接测试')),
@@ -16,14 +31,66 @@ class ConnectionTestPage extends ConsumerWidget {
         padding: const EdgeInsets.all(20),
         children: [
           _TestCard(
+            title: '刷新 Token',
+            description: '调用 /connect/token，grant_type=refresh_token',
+            status: controller.refreshStatus,
+            onPressed: controller.refreshStatus == ConnectionTestStatus.testing
+                ? null
+                : controller.refreshToken,
+            buttonText: '刷新 Token',
+            detail: controller.refreshError ?? controller.refreshResult,
+          ),
+          const SizedBox(height: 16),
+          _TestCard(
             title: '认证 API',
             description: '使用当前 Token 调用 /connect/userinfo',
             status: controller.apiStatus,
             onPressed: controller.apiStatus == ConnectionTestStatus.testing
                 ? null
                 : controller.testAuthenticatedApi,
-            buttonText: '测试 API',
+            buttonText: '测试认证 API',
             detail: controller.apiError ?? controller.apiResult,
+          ),
+          const SizedBox(height: 16),
+          _TestCard(
+            title: '好友业务 API',
+            description:
+                'GET /api/chat/session-unit-cache/friends?ownerId=<值>&maxResultCount=100',
+            status: controller.friendsStatus,
+            onPressed: controller.friendsStatus == ConnectionTestStatus.testing
+                ? null
+                : () =>
+                    controller.testFriendsApi(_ownerIdController.text.trim()),
+            buttonText: '测试好友 API',
+            detail: controller.friendsError ?? controller.friendsResult,
+            input: TextField(
+              controller: _ownerIdController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'ownerId',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _TestCard(
+            title: '消息业务 API',
+            description: 'GET /api/chat/message/fast，需要 sessionUnitId',
+            status: controller.messagesStatus,
+            onPressed: controller.messagesStatus == ConnectionTestStatus.testing
+                ? null
+                : () => controller.testMessagesApi(
+                      _sessionUnitIdController.text.trim(),
+                    ),
+            buttonText: '测试消息 API',
+            detail: controller.messagesError ?? controller.messagesResult,
+            input: TextField(
+              controller: _sessionUnitIdController,
+              decoration: const InputDecoration(
+                labelText: 'sessionUnitId',
+                border: OutlineInputBorder(),
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           _TestCard(
@@ -38,7 +105,7 @@ class ConnectionTestPage extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           const Text(
-            '该页面不会显示 access token、client secret 或聊天消息内容。',
+            '诊断页不会显示 access token、client secret 或消息正文。',
             textAlign: TextAlign.center,
           ),
         ],
@@ -70,6 +137,7 @@ class _TestCard extends StatelessWidget {
     required this.onPressed,
     required this.buttonText,
     this.detail,
+    this.input,
   });
 
   final String title;
@@ -78,6 +146,7 @@ class _TestCard extends StatelessWidget {
   final VoidCallback? onPressed;
   final String buttonText;
   final String? detail;
+  final Widget? input;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +161,7 @@ class _TestCard extends StatelessWidget {
             Text(title, style: theme.textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(description),
+            if (input != null) ...[const SizedBox(height: 12), input!],
             const SizedBox(height: 16),
             FilledButton.tonal(
               onPressed: onPressed,

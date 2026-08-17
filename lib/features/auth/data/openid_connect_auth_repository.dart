@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/config/app_environment.dart';
+import '../../../core/device/client_device_context.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/token_refresher.dart';
 import '../../../core/network/token_storage.dart';
@@ -14,21 +15,28 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     required Dio dio,
     required AppEnvironment environment,
     required TokenStorage tokenStorage,
+    required ClientDeviceContext deviceContext,
   })  : _dio = dio,
         _environment = environment,
-        _tokenStorage = tokenStorage;
+        _tokenStorage = tokenStorage,
+        _deviceContext = deviceContext;
 
   final Dio _dio;
   final AppEnvironment _environment;
   final TokenStorage _tokenStorage;
+  final ClientDeviceContext _deviceContext;
   Future<AuthSession>? _refreshInFlight;
 
-  static Dio createDio(AppEnvironment environment) {
+  static Dio createDio(
+    AppEnvironment environment,
+    ClientDeviceContext deviceContext,
+  ) {
     return Dio(
       BaseOptions(
         baseUrl: environment.authBaseUrl,
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 20),
+        headers: deviceContext.requestHeaders,
       ),
     );
   }
@@ -59,7 +67,10 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
         data: const <String, String>{},
         options: Options(
           contentType: Headers.formUrlEncodedContentType,
-          headers: <String, String>{'Authorization': 'Bearer $accessToken'},
+          headers: <String, String>{
+            ..._deviceContext.requestHeaders,
+            'Authorization': 'Bearer $accessToken',
+          },
         ),
       );
       if (response.data is! Map) {
