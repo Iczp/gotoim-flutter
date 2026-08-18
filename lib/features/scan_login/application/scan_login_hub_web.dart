@@ -76,8 +76,12 @@ class _WebScanLoginHub implements ScanLoginHub {
 
   @override
   Future<ScanLoginChallenge> generate(String state) async {
+    final connection = _connection;
+    if (connection == null) {
+      throw StateError('Scan-login connection is not ready.');
+    }
     final result = await js_util.promiseToFuture<Object?>(
-      js_util.callMethod(_connection!, 'invoke', <Object>['Generate', state]),
+      js_util.callMethod(connection, 'invoke', <Object>['Generate', state]),
     );
     return ScanLoginChallenge.fromJson(_map(result));
   }
@@ -94,6 +98,7 @@ class _WebScanLoginHub implements ScanLoginHub {
         js_util.callMethod(_connection!, 'stop', const <Object>[]),
       );
     }
+    _connection = null;
     await _events.close();
   }
 }

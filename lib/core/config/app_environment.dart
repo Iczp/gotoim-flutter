@@ -26,6 +26,7 @@ class AppEnvironment {
     required this.signalRBaseUrl,
     required this.signalRHubPath,
     required this.scanLoginHubPath,
+    required this.scanLoginFallbackExpires,
     required this.signalRSkipNegotiation,
     required this.signalRReconnectDelays,
     required this.enableNetworkLogging,
@@ -48,6 +49,7 @@ class AppEnvironment {
   final String signalRBaseUrl;
   final String signalRHubPath;
   final String scanLoginHubPath;
+  final Duration scanLoginFallbackExpires;
   final bool signalRSkipNegotiation;
   final List<int> signalRReconnectDelays;
   final bool enableNetworkLogging;
@@ -87,6 +89,12 @@ class AppEnvironment {
       scanLoginHubPath: dotenv.get(
         'SCAN_LOGIN_HUB_PATH',
         fallback: '/signalr-hubs/scan-login',
+      ),
+      scanLoginFallbackExpires: Duration(
+        seconds: int.tryParse(
+              dotenv.get('SCAN_LOGIN_QR_EXPIRES_SECONDS', fallback: '90'),
+            ) ??
+            90,
       ),
       signalRSkipNegotiation:
           dotenv.get('SIGNALR_SKIP_NEGOTIATION', fallback: 'true') == 'true',

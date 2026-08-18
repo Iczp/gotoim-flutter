@@ -23,13 +23,23 @@ class _IoScanLoginHub implements ScanLoginHub {
   final StreamController<ScanLoginHubEvent> _events =
       StreamController<ScanLoginHubEvent>.broadcast();
   HubConnection? _connection;
+  Future<void>? _connectInFlight;
 
   @override
   Stream<ScanLoginHubEvent> get events => _events.stream;
 
   @override
-  Future<void> connect() async {
+  Future<void> connect() {
+    return _connectInFlight ??= _connect().whenComplete(() {
+      _connectInFlight = null;
+    });
+  }
+
+  Future<void> _connect() async {
     if (_connection?.state == HubConnectionState.Connected) return;
+    final previousConnection = _connection;
+    _connection = null;
+    await previousConnection?.stop();
     final accessToken = await _readAccessToken();
     final url = Uri.parse(_environment.scanLoginHubUrl)
         .replace(queryParameters: <String, String>{
@@ -53,7 +63,12 @@ class _IoScanLoginHub implements ScanLoginHub {
 
   @override
   Future<ScanLoginChallenge> generate(String state) async {
-    final result = await _connection!.invoke('Generate', args: <Object>[state]);
+    final connection = _connection;
+    if (connection == null ||
+        connection.state != HubConnectionState.Connected) {
+      throw StateError('Scan-login connection is not ready.');
+    }
+    final result = await connection.invoke('Generate', args: <Object>[state]);
     return ScanLoginChallenge.fromJson(_asMap(result));
   }
 
@@ -72,7 +87,9 @@ class _IoScanLoginHub implements ScanLoginHub {
 
   @override
   Future<void> dispose() async {
-    await _connection?.stop();
+    final connection = _connection;
+    _connection = null;
+    await connection?.stop();
     await _events.close();
   }
 }

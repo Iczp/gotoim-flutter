@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../core/config/app_environment.dart';
 import '../../auth/application/auth_controller.dart';
 import '../application/scan_login_hub.dart';
 
@@ -70,6 +71,12 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
       _stateCode = state;
     });
     final expiresAt = challenge.expiredTime;
+    if (expiresAt == null) {
+      _expiryTimer = Timer(
+        ref.read(appEnvironmentProvider).scanLoginFallbackExpires,
+        _refresh,
+      );
+    }
     if (expiresAt != null) {
       final delay = expiresAt.difference(DateTime.now());
       _expiryTimer = Timer(delay.isNegative ? Duration.zero : delay, _refresh);
@@ -120,6 +127,10 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
 
   @override
   Widget build(BuildContext context) {
+    // Keep the auto-disposed hub alive for this page's whole lifetime.
+    // A plain read from the async callback otherwise permits disposal between
+    // widget rebuilds, producing repeated SignalR connect/disconnect cycles.
+    ref.watch(scanLoginHubProvider);
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
