@@ -26,7 +26,13 @@ class AppEnvironment {
     required this.signalRBaseUrl,
     required this.signalRHubPath,
     required this.scanLoginHubPath,
+    required this.scanLoginSignalRBaseUrl,
     required this.scanLoginFallbackExpires,
+    required this.scanLoginAuthBaseUrl,
+    required this.scanLoginAuthTokenPath,
+    required this.scanLoginAuthClientId,
+    required this.scanLoginAuthClientSecret,
+    required this.scanLoginAuthScope,
     required this.signalRSkipNegotiation,
     required this.signalRReconnectDelays,
     required this.enableNetworkLogging,
@@ -49,7 +55,13 @@ class AppEnvironment {
   final String signalRBaseUrl;
   final String signalRHubPath;
   final String scanLoginHubPath;
+  final String scanLoginSignalRBaseUrl;
   final Duration scanLoginFallbackExpires;
+  final String scanLoginAuthBaseUrl;
+  final String scanLoginAuthTokenPath;
+  final String scanLoginAuthClientId;
+  final String scanLoginAuthClientSecret;
+  final String scanLoginAuthScope;
   final bool signalRSkipNegotiation;
   final List<int> signalRReconnectDelays;
   final bool enableNetworkLogging;
@@ -90,12 +102,33 @@ class AppEnvironment {
         'SCAN_LOGIN_HUB_PATH',
         fallback: '/signalr-hubs/scan-login',
       ),
+      scanLoginSignalRBaseUrl: _nonEmpty(
+        dotenv.get('SCAN_LOGIN_SIGNALR_BASE_URL', fallback: ''),
+        fallback: dotenv.get('SIGNALR_BASE_URL', fallback: ''),
+      ),
       scanLoginFallbackExpires: Duration(
         seconds: int.tryParse(
               dotenv.get('SCAN_LOGIN_QR_EXPIRES_SECONDS', fallback: '90'),
             ) ??
             90,
       ),
+      scanLoginAuthBaseUrl: _nonEmpty(
+        dotenv.get('SCAN_LOGIN_AUTH_BASE_URL', fallback: ''),
+        fallback: dotenv.get('AUTH_BASE_URL', fallback: ''),
+      ),
+      scanLoginAuthTokenPath: _nonEmpty(
+        dotenv.get('SCAN_LOGIN_AUTH_TOKEN_PATH', fallback: ''),
+        fallback: dotenv.get('AUTH_TOKEN_PATH', fallback: '/connect/token'),
+      ),
+      scanLoginAuthClientId: dotenv.get(
+        'SCAN_LOGIN_AUTH_CLIENT_ID',
+        fallback: '',
+      ),
+      scanLoginAuthClientSecret: dotenv.get(
+        'SCAN_LOGIN_AUTH_CLIENT_SECRET',
+        fallback: '',
+      ),
+      scanLoginAuthScope: dotenv.get('SCAN_LOGIN_AUTH_SCOPE', fallback: 'IM'),
       signalRSkipNegotiation:
           dotenv.get('SIGNALR_SKIP_NEGOTIATION', fallback: 'true') == 'true',
       signalRReconnectDelays: _parseReconnectDelays(
@@ -128,12 +161,13 @@ class AppEnvironment {
     return '$baseUrl$hubPath';
   }
 
-  String get scanLoginHubUrl => _signalRUrlFor(scanLoginHubPath);
+  String get scanLoginHubUrl =>
+      _urlFor(scanLoginSignalRBaseUrl, scanLoginHubPath);
 
-  String _signalRUrlFor(String path) {
-    final baseUrl = signalRBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+  String _urlFor(String baseUrl, String path) {
+    final normalizedBaseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), '');
     final normalizedPath = path.startsWith('/') ? path : '/$path';
-    return '$baseUrl$normalizedPath';
+    return '$normalizedBaseUrl$normalizedPath';
   }
 
   String get authTokenUrl {
@@ -142,6 +176,9 @@ class AppEnvironment {
         authTokenPath.startsWith('/') ? authTokenPath : '/$authTokenPath';
     return '$baseUrl$tokenPath';
   }
+
+  String get scanLoginAuthTokenUrl =>
+      _urlFor(scanLoginAuthBaseUrl, scanLoginAuthTokenPath);
 
   String get authUserInfoUrl {
     final baseUrl = authBaseUrl.replaceFirst(RegExp(r'/+$'), '');
@@ -165,9 +202,14 @@ class AppEnvironment {
     if (apiBaseUrl.isEmpty ||
         authBaseUrl.isEmpty ||
         authClientId.isEmpty ||
-        signalRBaseUrl.isEmpty) {
+        signalRBaseUrl.isEmpty ||
+        scanLoginSignalRBaseUrl.isEmpty ||
+        scanLoginAuthBaseUrl.isEmpty ||
+        scanLoginAuthClientId.isEmpty) {
       throw StateError(
-        'API_BASE_URL, AUTH_BASE_URL, AUTH_CLIENT_ID, and SIGNALR_BASE_URL '
+        'API_BASE_URL, AUTH_BASE_URL, AUTH_CLIENT_ID, SIGNALR_BASE_URL, '
+        'SCAN_LOGIN_SIGNALR_BASE_URL, SCAN_LOGIN_AUTH_BASE_URL, and '
+        'SCAN_LOGIN_AUTH_CLIENT_ID '
         'must be configured in '
         '.env.${flavor.name}.',
       );

@@ -40,7 +40,12 @@ class _IoScanLoginHub implements ScanLoginHub {
     final previousConnection = _connection;
     _connection = null;
     await previousConnection?.stop();
-    final accessToken = await _readAccessToken();
+    late final String accessToken;
+    try {
+      accessToken = await _readAccessToken();
+    } catch (error) {
+      throw ScanLoginTokenException(error);
+    }
     final url = Uri.parse(_environment.scanLoginHubUrl)
         .replace(queryParameters: <String, String>{
       ...Uri.parse(_environment.scanLoginHubUrl).queryParameters,

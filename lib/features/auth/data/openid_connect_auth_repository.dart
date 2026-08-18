@@ -68,7 +68,11 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   Future<String> getClientCredentialsAccessToken() async {
     final session = await _requestToken(const <String, String>{
       'grant_type': 'client_credentials',
-    });
+    },
+        tokenUrl: _environment.scanLoginAuthTokenUrl,
+        clientId: _environment.scanLoginAuthClientId,
+        clientSecret: _environment.scanLoginAuthClientSecret,
+        scope: _environment.scanLoginAuthScope);
     return session.accessToken;
   }
 
@@ -182,12 +186,21 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     return completedSession;
   }
 
-  Future<AuthSession> _requestToken(Map<String, String> fields) async {
+  Future<AuthSession> _requestToken(
+    Map<String, String> fields, {
+    String? tokenUrl,
+    String? clientId,
+    String? clientSecret,
+    String? scope,
+  }) async {
     try {
       final response = await _postAuthForm(
-        _environment.authTokenUrl,
+        tokenUrl ?? _environment.authTokenUrl,
         fields,
         includeScope: true,
+        clientId: clientId,
+        clientSecret: clientSecret,
+        scope: scope,
       );
       if (response is! Map) {
         throw const ApiException('Invalid token response.');
@@ -219,15 +232,18 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     String url,
     Map<String, String> fields, {
     bool includeScope = false,
+    String? clientId,
+    String? clientSecret,
+    String? scope,
   }) async {
     final response = await _dio.post<Object?>(
       url,
       data: <String, String>{
-        'client_id': _environment.authClientId,
-        if (_environment.authClientSecret.isNotEmpty)
-          'client_secret': _environment.authClientSecret,
-        if (includeScope && _environment.authScope.isNotEmpty)
-          'scope': _environment.authScope,
+        'client_id': clientId ?? _environment.authClientId,
+        if ((clientSecret ?? _environment.authClientSecret).isNotEmpty)
+          'client_secret': clientSecret ?? _environment.authClientSecret,
+        if (includeScope && (scope ?? _environment.authScope).isNotEmpty)
+          'scope': scope ?? _environment.authScope,
         ...fields,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),

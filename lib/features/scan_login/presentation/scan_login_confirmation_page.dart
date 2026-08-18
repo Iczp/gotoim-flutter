@@ -47,7 +47,7 @@ class _ScanLoginConfirmationPageState
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Confirm login')),
+        appBar: AppBar(title: const Text('确认登录')),
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
@@ -66,7 +66,7 @@ class _ScanLoginConfirmationPageState
                                 Icon(Icons.devices_outlined,
                                     size: 52, color: theme.colorScheme.primary),
                                 const SizedBox(height: 20),
-                                Text('Allow this device to log in?',
+                                Text('是否允许此设备登录？',
                                     textAlign: TextAlign.center,
                                     style: theme.textTheme.headlineSmall),
                                 const SizedBox(height: 20),
@@ -107,7 +107,7 @@ class _ScanLoginConfirmationPageState
                                       onPressed: controller.submitting
                                           ? null
                                           : () => _submit(approved: false),
-                                      child: const Text('Reject'),
+                                      child: const Text('拒绝'),
                                     ),
                                   ),
                                   const SizedBox(width: 16),
@@ -123,7 +123,7 @@ class _ScanLoginConfirmationPageState
                                               height: 18,
                                               child: CircularProgressIndicator(
                                                   strokeWidth: 2))
-                                          : const Text('Allow login'),
+                                          : const Text('同意登录'),
                                     ),
                                   ),
                                 ]),

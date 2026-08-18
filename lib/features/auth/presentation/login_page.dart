@@ -86,9 +86,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           icon: Icon(_isQrLogin
                               ? Icons.password_outlined
                               : Icons.qr_code_scanner_outlined),
-                          label: Text(_isQrLogin
-                              ? 'Use password login'
-                              : 'Scan QR code to sign in'),
+                          label: Text(_isQrLogin ? '使用密码登录' : '扫码登录'),
                         ),
                       ],
                     ),
@@ -130,7 +128,7 @@ class _PasswordForm extends StatelessWidget {
         controller: usernameController,
         autofillHints: const [AutofillHints.username],
         decoration: const InputDecoration(
-          labelText: 'Account',
+          labelText: '账号',
           border: OutlineInputBorder(),
         ),
         validator: (value) => value == null || value.trim().isEmpty
@@ -143,7 +141,7 @@ class _PasswordForm extends StatelessWidget {
         obscureText: obscurePassword,
         autofillHints: const [AutofillHints.password],
         decoration: InputDecoration(
-          labelText: 'Password',
+          labelText: '密码',
           border: const OutlineInputBorder(),
           suffixIcon: IconButton(
             tooltip: obscurePassword ? 'Show password' : 'Hide password',
@@ -170,7 +168,7 @@ class _PasswordForm extends StatelessWidget {
                 height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Text('Sign in'),
+            : const Text('登录'),
       ),
     ]);
   }

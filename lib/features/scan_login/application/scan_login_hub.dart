@@ -42,6 +42,15 @@ class ScanLoginHubEvent {
   String? get scanToken => payload['scanToken']?.toString();
 }
 
+class ScanLoginTokenException implements Exception {
+  const ScanLoginTokenException(this.cause);
+
+  final Object cause;
+
+  @override
+  String toString() => cause.toString();
+}
+
 final scanLoginHubProvider = Provider.autoDispose<ScanLoginHub>((ref) {
   final environment = ref.watch(appEnvironmentProvider);
   final device = ref.watch(clientDeviceContextProvider);

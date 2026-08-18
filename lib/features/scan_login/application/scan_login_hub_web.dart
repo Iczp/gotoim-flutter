@@ -36,7 +36,12 @@ class _WebScanLoginHub implements ScanLoginHub {
     if (signalR == null) {
       throw UnsupportedError('SignalR web client was not loaded.');
     }
-    final accessToken = await _readAccessToken();
+    late final String accessToken;
+    try {
+      accessToken = await _readAccessToken();
+    } catch (error) {
+      throw ScanLoginTokenException(error);
+    }
     final uri = Uri.parse(_environment.scanLoginHubUrl).replace(
       queryParameters: <String, String>{
         ...Uri.parse(_environment.scanLoginHubUrl).queryParameters,
