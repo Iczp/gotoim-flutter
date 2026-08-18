@@ -1,11 +1,15 @@
 buildscript {
-    ext.kotlin_version = '1.7.10'
+    // Align with the CameraX scanner plugin's Kotlin runtime and prevent
+    // duplicate stdlib-jdk7/jdk8 classes during Android packaging.
+    ext.kotlin_version = '1.8.22'
     repositories {
         google()
         mavenCentral()
     }
 
     dependencies {
+        // This Flutter SDK's bundled Gradle script uses APIs removed in Gradle 8.
+        // Keep AGP/Gradle on the compatible 7.x line; compileSdk remains 34.
         classpath 'com.android.tools.build:gradle:7.2.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }

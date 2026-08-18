@@ -4,9 +4,11 @@ import 'package:gotoim_flutter/features/scan_login/domain/scan_login_models.dart
 import 'package:gotoim_flutter/features/scan_login/domain/scan_login_repository.dart';
 
 void main() {
-  test('only grants login after the request was inspected and approved', () async {
+  test('only grants login after the request was inspected and approved',
+      () async {
     final repository = _FakeScanLoginRepository();
-    final controller = ScanLoginController(repository, 'gotoim://scan-login?code=1');
+    final controller =
+        ScanLoginController(repository, 'gotoim://scan-login?code=1');
 
     expect(await controller.grant(), isFalse);
     expect(repository.grantCalls, 0);
@@ -17,9 +19,11 @@ void main() {
     expect(repository.cancelCalls, 0);
   });
 
-  test('closing an unapproved request cancels the backend login challenge', () async {
+  test('closing an unapproved request cancels the backend login challenge',
+      () async {
     final repository = _FakeScanLoginRepository();
-    final controller = ScanLoginController(repository, 'gotoim://scan-login?code=1');
+    final controller =
+        ScanLoginController(repository, 'gotoim://scan-login?code=1');
 
     await controller.load();
     await controller.cancelIfNeeded();
@@ -58,4 +62,8 @@ class _FakeScanLoginRepository implements ScanLoginRepository {
 
   @override
   Future<void> reject(String scanText, {String? reason}) async {}
+
+  @override
+  Future<String?> resolveLoginScan(String content, {String? scanType}) async =>
+      content;
 }

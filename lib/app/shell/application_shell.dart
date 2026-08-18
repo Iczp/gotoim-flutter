@@ -33,6 +33,11 @@ class ApplicationShell extends ConsumerWidget {
                   onPressed: () => context.go('/diagnostics'),
                 ),
               IconButton(
+                tooltip: '扫码登录',
+                icon: const Icon(Icons.qr_code_scanner_outlined),
+                onPressed: () => context.push('/scan-login/scan'),
+              ),
+              IconButton(
                 tooltip: '退出登录',
                 icon: const Icon(Icons.logout),
                 onPressed: () => ref.read(authControllerProvider).logout(),

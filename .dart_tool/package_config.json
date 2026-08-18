@@ -236,6 +236,12 @@
       "languageVersion": "2.18"
     },
     {
+      "name": "mobile_scanner",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/mobile_scanner-3.5.7",
+      "packageUri": "lib/",
+      "languageVersion": "2.17"
+    },
+    {
       "name": "path",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/path-1.8.2",
       "packageUri": "lib/",
@@ -416,7 +422,7 @@
       "languageVersion": "2.19"
     }
   ],
-  "generated": "2026-08-17T10:12:34.898144Z",
+  "generated": "2026-08-18T02:48:54.135195Z",
   "generator": "pub",
   "generatorVersion": "2.19.4"
 }

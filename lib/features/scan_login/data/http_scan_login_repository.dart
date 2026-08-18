@@ -41,4 +41,26 @@ class HttpScanLoginRepository implements ScanLoginRepository {
           if (reason != null) 'reason': reason,
         },
       );
+
+  @override
+  Future<String?> resolveLoginScan(String content, {String? scanType}) async {
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      '/api/chat/scan-code/handle',
+      data: <String, Object?>{
+        'content': content,
+        if (scanType != null) 'type': scanType,
+      },
+    );
+    final handlers = response['scanHandlers'];
+    final isScanLogin = handlers is List &&
+        handlers.any((handler) {
+          return handler is Map &&
+              handler['action']?.toString() == 'scan-login';
+        });
+    if (!isScanLogin) return null;
+    final resolvedContent = response['content']?.toString();
+    return resolvedContent == null || resolvedContent.isEmpty
+        ? null
+        : resolvedContent;
+  }
 }
