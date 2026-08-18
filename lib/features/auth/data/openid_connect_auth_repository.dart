@@ -56,6 +56,23 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   }
 
   @override
+  Future<void> loginWithScanToken(String scanToken) async {
+    final session = await _requestToken(<String, String>{
+      'grant_type': 'scan-token',
+      'scan_token': scanToken,
+    });
+    await _save(session);
+  }
+
+  @override
+  Future<String> getClientCredentialsAccessToken() async {
+    final session = await _requestToken(const <String, String>{
+      'grant_type': 'client_credentials',
+    });
+    return session.accessToken;
+  }
+
+  @override
   Future<Map<String, dynamic>> getUserInfo() async {
     final accessToken = await _tokenStorage.readAccessToken();
     if (accessToken == null || accessToken.isEmpty) {

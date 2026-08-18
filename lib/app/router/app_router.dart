@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/presentation/auth_loading_page.dart';
 import '../../features/auth/presentation/login_page.dart';
+import '../../features/scan_login/presentation/scan_login_confirmation_page.dart';
 import '../../features/diagnostics/presentation/connection_test_page.dart';
 import '../../features/diagnostics/presentation/auth_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/diagnostics_home_page.dart';
@@ -34,6 +35,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginPage(),
+      ),
+      GoRoute(
+        path: '/scan-login',
+        builder: (context, state) {
+          final scanText = state.queryParams['scanText'] ?? '';
+          return ScanLoginConfirmationPage(scanText: scanText);
+        },
       ),
       GoRoute(
         path: '/splash',

@@ -19,6 +19,8 @@ dependencies:
   flutter_local_notifications: 13.0.0
   # 1.3.6 is the latest release resolving under this project's Dart 2.19 SDK.
   signalr_netcore: 1.3.6
+  # 4.0.x remains compatible with the project's Dart 2.19.4 SDK.
+  qr_flutter: ^4.0.0
 
 dev_dependencies:
   flutter_test:

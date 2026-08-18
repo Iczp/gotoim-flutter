@@ -42,6 +42,21 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> loginWithScanToken(String scanToken) async {
+    _status = AuthStatus.checking;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _repository.loginWithScanToken(scanToken);
+      _status = AuthStatus.authenticated;
+      _connectRealtime();
+    } catch (error) {
+      _status = AuthStatus.unauthenticated;
+      _errorMessage = _displayError(error);
+    }
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await _signalRGateway.disconnect();
     await _repository.logout();

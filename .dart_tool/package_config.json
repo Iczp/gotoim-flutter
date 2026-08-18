@@ -272,6 +272,18 @@
       "languageVersion": "2.14"
     },
     {
+      "name": "qr",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/qr-2.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "qr_flutter",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/qr_flutter-4.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "riverpod",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/riverpod-2.3.7",
       "packageUri": "lib/",
@@ -404,7 +416,7 @@
       "languageVersion": "2.19"
     }
   ],
-  "generated": "2026-08-17T08:47:44.529332Z",
+  "generated": "2026-08-17T10:12:34.898144Z",
   "generator": "pub",
   "generatorVersion": "2.19.4"
 }

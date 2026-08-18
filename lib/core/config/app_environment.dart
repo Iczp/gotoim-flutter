@@ -25,6 +25,7 @@ class AppEnvironment {
     required this.authRevocationPath,
     required this.signalRBaseUrl,
     required this.signalRHubPath,
+    required this.scanLoginHubPath,
     required this.signalRSkipNegotiation,
     required this.signalRReconnectDelays,
     required this.enableNetworkLogging,
@@ -46,6 +47,7 @@ class AppEnvironment {
   final String authRevocationPath;
   final String signalRBaseUrl;
   final String signalRHubPath;
+  final String scanLoginHubPath;
   final bool signalRSkipNegotiation;
   final List<int> signalRReconnectDelays;
   final bool enableNetworkLogging;
@@ -82,6 +84,10 @@ class AppEnvironment {
       signalRBaseUrl: dotenv.get('SIGNALR_BASE_URL', fallback: ''),
       signalRHubPath:
           dotenv.get('SIGNALR_HUB_PATH', fallback: '/signalr-hubs/chat'),
+      scanLoginHubPath: dotenv.get(
+        'SCAN_LOGIN_HUB_PATH',
+        fallback: '/signalr-hubs/scan-login',
+      ),
       signalRSkipNegotiation:
           dotenv.get('SIGNALR_SKIP_NEGOTIATION', fallback: 'true') == 'true',
       signalRReconnectDelays: _parseReconnectDelays(
@@ -112,6 +118,14 @@ class AppEnvironment {
     final hubPath =
         signalRHubPath.startsWith('/') ? signalRHubPath : '/$signalRHubPath';
     return '$baseUrl$hubPath';
+  }
+
+  String get scanLoginHubUrl => _signalRUrlFor(scanLoginHubPath);
+
+  String _signalRUrlFor(String path) {
+    final baseUrl = signalRBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+    final normalizedPath = path.startsWith('/') ? path : '/$path';
+    return '$baseUrl$normalizedPath';
   }
 
   String get authTokenUrl {
