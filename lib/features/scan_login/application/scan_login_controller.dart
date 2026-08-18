@@ -19,12 +19,14 @@ class ScanLoginController extends ChangeNotifier {
   bool _submitting = false;
   bool _completed = false;
   bool _expired = false;
+  bool _authorizationAttempted = false;
 
   ScanLoginRequest? get request => _request;
   Object? get error => _error;
   bool get loading => _loading;
   bool get submitting => _submitting;
   bool get expired => _expired;
+  bool get authorizationAttempted => _authorizationAttempted;
 
   Future<void> load() async {
     _loading = true;
@@ -47,10 +49,14 @@ class ScanLoginController extends ChangeNotifier {
   Future<bool> reject() => _submit(() => _repository.reject(scanText));
 
   Future<bool> _submit(Future<void> Function() action) async {
-    if (_submitting || _request == null || !_request!.canAuthorize) {
+    if (_submitting ||
+        _authorizationAttempted ||
+        _request == null ||
+        !_request!.canAuthorize) {
       return false;
     }
     _submitting = true;
+    _authorizationAttempted = true;
     _error = null;
     _expired = false;
     notifyListeners();

@@ -30,11 +30,16 @@ class DioApiClient implements ApiClient {
   }
 
   @override
-  Future<T> get<T>(String path, {Map<String, Object?>? query}) {
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) {
     return _request<T>(
       path: path,
       method: 'GET',
       query: query,
+      retryOnUnauthorized: retryOnUnauthorized,
     );
   }
 
@@ -43,8 +48,15 @@ class DioApiClient implements ApiClient {
     String path, {
     Map<String, Object?>? query,
     Object? data,
+    bool retryOnUnauthorized = true,
   }) {
-    return _request<T>(path: path, method: 'POST', query: query, data: data);
+    return _request<T>(
+      path: path,
+      method: 'POST',
+      query: query,
+      data: data,
+      retryOnUnauthorized: retryOnUnauthorized,
+    );
   }
 
   Future<T> _request<T>({
@@ -53,6 +65,7 @@ class DioApiClient implements ApiClient {
     Map<String, Object?>? query,
     Object? data,
     bool hasRetriedAfterRefresh = false,
+    bool retryOnUnauthorized = true,
   }) async {
     try {
       final accessToken = await _tokenStorage.readAccessToken();
@@ -71,7 +84,9 @@ class DioApiClient implements ApiClient {
       );
       return _unwrap<T>(response.data);
     } on DioException catch (error) {
-      if (error.response?.statusCode == 401 && !hasRetriedAfterRefresh) {
+      if (retryOnUnauthorized &&
+          error.response?.statusCode == 401 &&
+          !hasRetriedAfterRefresh) {
         try {
           await _tokenRefresher.refreshAccessToken();
         } catch (_) {
@@ -84,6 +99,7 @@ class DioApiClient implements ApiClient {
           query: query,
           data: data,
           hasRetriedAfterRefresh: true,
+          retryOnUnauthorized: retryOnUnauthorized,
         );
       }
       throw _toApiException(error);

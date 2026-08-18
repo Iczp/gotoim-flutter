@@ -214,7 +214,9 @@ class _ScanLoginConfirmationPageState
                                 if (controller.error != null) ...[
                                   const SizedBox(height: 12),
                                   Text(
-                                    '操作失败：${controller.error}',
+                                    controller.authorizationAttempted
+                                        ? '授权请求未确认，请返回后重新扫码。'
+                                        : '操作失败：${controller.error}',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                         color: theme.colorScheme.error),
@@ -226,6 +228,8 @@ class _ScanLoginConfirmationPageState
                                     Expanded(
                                       child: OutlinedButton(
                                         onPressed: controller.submitting ||
+                                                controller
+                                                    .authorizationAttempted ||
                                                 _expired
                                             ? null
                                             : () => _submit(approved: false),
@@ -236,6 +240,8 @@ class _ScanLoginConfirmationPageState
                                     Expanded(
                                       child: FilledButton(
                                         onPressed: controller.submitting ||
+                                                controller
+                                                    .authorizationAttempted ||
                                                 !request.canAuthorize ||
                                                 _expired
                                             ? null

@@ -24,6 +24,7 @@ class HttpScanLoginRepository implements ScanLoginRepository {
   Future<void> grant(String scanText) => _apiClient.get<Object?>(
         '/api/chat/scan-login/grant',
         query: <String, Object?>{'scanText': scanText},
+        retryOnUnauthorized: false,
       );
 
   @override
@@ -34,6 +35,7 @@ class HttpScanLoginRepository implements ScanLoginRepository {
           'scanText': scanText,
           if (reason != null) 'reason': reason,
         },
+        retryOnUnauthorized: false,
       );
 
   @override

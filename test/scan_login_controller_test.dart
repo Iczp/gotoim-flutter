@@ -55,11 +55,26 @@ void main() {
     expect(repository.cancelCalls, 1);
     expect(repository.grantCalls, 0);
   });
+
+  test('does not send a second authorization after the first attempt fails',
+      () async {
+    final repository = _FakeScanLoginRepository()
+      ..grantError = StateError('network interrupted');
+    final controller =
+        ScanLoginController(repository, 'gotoim://scan-login?code=1');
+
+    await controller.load();
+    expect(await controller.grant(), isFalse);
+    expect(await controller.grant(), isFalse);
+    expect(repository.grantCalls, 1);
+    expect(controller.authorizationAttempted, isTrue);
+  });
 }
 
 class _FakeScanLoginRepository implements ScanLoginRepository {
   int grantCalls = 0;
   int cancelCalls = 0;
+  Object? grantError;
 
   @override
   Future<void> cancel(String connectionId, {String? reason}) async {
@@ -69,6 +84,7 @@ class _FakeScanLoginRepository implements ScanLoginRepository {
   @override
   Future<void> grant(String scanText) async {
     grantCalls++;
+    if (grantError != null) throw grantError!;
   }
 
   @override
