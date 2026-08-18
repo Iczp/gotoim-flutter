@@ -1,5 +1,11 @@
 # Flutter IM Project Development Rules
 
+1. 不能修改 原项目 F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts，  原项目只是参考用的
+
+2. 要改的项目是： F:\Dev\GotoIM\gotoim-flutter
+
+   
+
 ## 1. Project Goal
 
 This project is a cross-platform IM client migrated from an existing UniApp Vue3 + TypeScript application.
