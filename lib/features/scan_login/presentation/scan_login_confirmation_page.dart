@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/config/app_environment.dart';
 import '../application/scan_login_controller.dart';
 import '../domain/scan_login_models.dart';
+import 'verification_code_boxes.dart';
 
 /// The mobile authorization page shown after a login QR code is scanned.
 /// Its countdown follows the `expiredTime` returned by the scan-login API.
@@ -138,6 +139,10 @@ class _ScanLoginConfirmationPageState
     final controller = ref.watch(scanLoginControllerProvider(widget.scanText));
     final request = controller.request;
     final theme = Theme.of(context);
+    final expiryWarning =
+        (_remainingSeconds ?? 999) > 0 && (_remainingSeconds ?? 999) <= 20;
+    final countdownColor =
+        expiryWarning ? Colors.deepOrange : theme.colorScheme.primary;
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
@@ -165,11 +170,26 @@ class _ScanLoginConfirmationPageState
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 if (_remainingSeconds != null)
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      '剩余时间：$_countdownText',
-                                      style: theme.textTheme.labelLarge,
+                                  Center(
+                                    child: AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 300),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 7),
+                                      decoration: BoxDecoration(
+                                        color: countdownColor.withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        expiryWarning
+                                            ? '即将过期  $_countdownText'
+                                            : '剩余时间  $_countdownText',
+                                        style: theme.textTheme.labelLarge
+                                            ?.copyWith(
+                                          color: countdownColor,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 const SizedBox(height: 12),
@@ -206,10 +226,13 @@ class _ScanLoginConfirmationPageState
                                   style: theme.textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 8),
-                                Text(
-                                  '四位校验码：${request.state ?? '----'}',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.headlineSmall,
+                                Text('四位校验码',
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.labelLarge),
+                                const SizedBox(height: 8),
+                                VerificationCodeBoxes(
+                                  code: request.state,
+                                  color: countdownColor,
                                 ),
                                 if (controller.error != null) ...[
                                   const SizedBox(height: 12),
