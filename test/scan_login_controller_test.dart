@@ -18,12 +18,14 @@ void main() {
       'scanUserId': 'user-1',
       'scanUserName': 'admin',
       'scanClientId': 'IM_Mobile',
+      'state': '8451',
       'connectionPool': null,
     });
 
     expect(request.scanUserName, 'admin');
     expect(request.device.clientId, 'IM_Mobile');
     expect(request.device.appName, isNull);
+    expect(request.state, '8451');
   });
 
   test('only grants login after the request was inspected and approved',

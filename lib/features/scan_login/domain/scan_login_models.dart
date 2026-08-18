@@ -65,12 +65,16 @@ class ScanLoginRequest {
     required this.scanUserId,
     required this.scanUserName,
     required this.device,
+    this.state,
+    this.expiredTime,
   });
 
   final String connectionId;
   final String? scanUserId;
   final String? scanUserName;
   final LoginDevice device;
+  final String? state;
+  final DateTime? expiredTime;
 
   bool get canAuthorize => scanUserId != null && scanUserId!.isNotEmpty;
 
@@ -86,6 +90,8 @@ class ScanLoginRequest {
       connectionId: json['connectionId']?.toString() ?? '',
       scanUserId: json['scanUserId']?.toString(),
       scanUserName: json['scanUserName']?.toString(),
+      state: json['state']?.toString(),
+      expiredTime: DateTime.tryParse(json['expiredTime']?.toString() ?? ''),
       device: LoginDevice(
         appName: poolDevice.appName ??
             json['scanAppName']?.toString() ??

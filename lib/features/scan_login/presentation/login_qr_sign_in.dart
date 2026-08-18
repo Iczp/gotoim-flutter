@@ -168,7 +168,7 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
   }
 
   Future<void> _refresh() async {
-    if (_loading || _loggingIn) return;
+    if (_loading || _loggingIn || _status != _QrLoginStatus.ready) return;
     try {
       setState(() {
         _loading = true;
@@ -293,7 +293,9 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
         ],
         const SizedBox(height: 12),
         TextButton.icon(
-          onPressed: _loading || _loggingIn ? null : _retry,
+          onPressed: _loading || _loggingIn || _status != _QrLoginStatus.ready
+              ? null
+              : _retry,
           icon: const Icon(Icons.refresh),
           label: Text(_connected ? '刷新二维码' : '重新连接'),
         ),

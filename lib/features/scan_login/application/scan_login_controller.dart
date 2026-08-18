@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
+import '../../../core/network/api_exception.dart';
 import '../data/http_scan_login_repository.dart';
 import '../domain/scan_login_models.dart';
 import '../domain/scan_login_repository.dart';
@@ -17,20 +18,24 @@ class ScanLoginController extends ChangeNotifier {
   bool _loading = false;
   bool _submitting = false;
   bool _completed = false;
+  bool _expired = false;
 
   ScanLoginRequest? get request => _request;
   Object? get error => _error;
   bool get loading => _loading;
   bool get submitting => _submitting;
+  bool get expired => _expired;
 
   Future<void> load() async {
     _loading = true;
     _error = null;
+    _expired = false;
     notifyListeners();
     try {
       _request = await _repository.inspect(scanText);
     } catch (error) {
       _error = error;
+      _expired = _isExpiredError(error);
     } finally {
       _loading = false;
       notifyListeners();
@@ -47,6 +52,7 @@ class ScanLoginController extends ChangeNotifier {
     }
     _submitting = true;
     _error = null;
+    _expired = false;
     notifyListeners();
     try {
       await action();
@@ -54,11 +60,20 @@ class ScanLoginController extends ChangeNotifier {
       return true;
     } catch (error) {
       _error = error;
+      _expired = _isExpiredError(error);
       return false;
     } finally {
       _submitting = false;
       notifyListeners();
     }
+  }
+
+  bool _isExpiredError(Object error) {
+    if (error is ApiException && error.code == 'E104') return true;
+    final message = error is ApiException ? error.message : error.toString();
+    return message.contains('已经过期') ||
+        message.contains('二维码已过期') ||
+        message.toLowerCase().contains('expired');
   }
 
   Future<void> cancelIfNeeded() async {

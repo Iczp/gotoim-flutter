@@ -75,8 +75,9 @@ class _ScanLoginScanPageState extends ConsumerState<ScanLoginScanPage> {
         setState(() => _error = '这不是有效的扫码登录二维码。');
         return;
       }
-      context
-          .push('/scan-login?scanText=${Uri.encodeQueryComponent(scanText)}');
+      // Replace the camera page so it is disposed while the user authorizes
+      // the request, matching the original UniApp navigation flow.
+      context.go('/scan-login?scanText=${Uri.encodeQueryComponent(scanText)}');
     } catch (error) {
       if (mounted) setState(() => _error = '识别二维码失败：$error');
     } finally {

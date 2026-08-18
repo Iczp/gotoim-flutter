@@ -91,9 +91,9 @@ class DioApiClient implements ApiClient {
   }
 
   T _unwrap<T>(dynamic data) {
-    if (data is Map<String, dynamic> && data['success'] == false) {
+    if (data is Map && (data['success'] == false || data['error'] is Map)) {
       final error = data['error'];
-      final message = error is Map<String, dynamic>
+      final message = error is Map
           ? (error['message'] ?? 'Request failed').toString()
           : 'Request failed';
       throw ApiException(message,
@@ -107,9 +107,16 @@ class DioApiClient implements ApiClient {
 
   ApiException _toApiException(DioException error) {
     final data = error.response?.data;
-    final message = data is Map && data['error_description'] != null
-        ? data['error_description'].toString()
-        : error.message ?? 'Network request failed';
-    return ApiException(message, statusCode: error.response?.statusCode);
+    final responseError = data is Map ? data['error'] : null;
+    final message = responseError is Map && responseError['message'] != null
+        ? responseError['message'].toString()
+        : data is Map && data['error_description'] != null
+            ? data['error_description'].toString()
+            : error.message ?? 'Network request failed';
+    return ApiException(
+      message,
+      statusCode: error.response?.statusCode,
+      code: responseError is Map ? responseError['code']?.toString() : null,
+    );
   }
 }
