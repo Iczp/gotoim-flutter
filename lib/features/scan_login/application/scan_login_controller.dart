@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
+import '../../../core/config/app_environment.dart';
 import '../data/http_scan_login_repository.dart';
 import '../domain/scan_login_models.dart';
 import '../domain/scan_login_repository.dart';
@@ -74,7 +75,10 @@ class ScanLoginController extends ChangeNotifier {
 }
 
 final scanLoginRepositoryProvider = Provider<ScanLoginRepository>((ref) {
-  return HttpScanLoginRepository(ref.watch(apiClientProvider));
+  return HttpScanLoginRepository(
+    ref.watch(apiClientProvider),
+    scanLoginTemplate: ref.watch(appEnvironmentProvider).scanLoginTemplate,
+  );
 });
 
 final scanLoginControllerProvider = ChangeNotifierProvider.autoDispose

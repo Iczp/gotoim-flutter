@@ -3,9 +3,13 @@ import '../domain/scan_login_models.dart';
 import '../domain/scan_login_repository.dart';
 
 class HttpScanLoginRepository implements ScanLoginRepository {
-  HttpScanLoginRepository(this._apiClient);
+  HttpScanLoginRepository(
+    this._apiClient, {
+    String scanLoginTemplate = 'gotoim://scan-login?code={code}',
+  }) : _scanLoginTemplate = ScanLoginTemplate(scanLoginTemplate);
 
   final ApiClient _apiClient;
+  final ScanLoginTemplate _scanLoginTemplate;
 
   @override
   Future<ScanLoginRequest> inspect(String scanText) async {
@@ -45,22 +49,30 @@ class HttpScanLoginRepository implements ScanLoginRepository {
   @override
   Future<String?> resolveLoginScan(String content, {String? scanType}) async {
     final response = await _apiClient.post<Map<String, dynamic>>(
-      '/api/chat/scan-code/handle',
-      data: <String, Object?>{
+      '/api/chat/scan-code/scan',
+      query: <String, Object?>{
         'content': content,
         if (scanType != null) 'type': scanType,
       },
+      data: <String, Object?>{},
     );
     final handlers = response['scanHandlers'];
-    final isScanLogin = handlers is List &&
-        handlers.any((handler) {
-          return handler is Map &&
-              handler['action']?.toString() == 'scan-login';
-        });
-    if (!isScanLogin) return null;
+    Map? handler;
+    if (handlers is List) {
+      for (final item in handlers) {
+        if (item is Map && item['action']?.toString() == 'scan-login') {
+          handler = item;
+          break;
+        }
+      }
+    }
+    if (handler == null) return null;
     final resolvedContent = response['content']?.toString();
-    return resolvedContent == null || resolvedContent.isEmpty
-        ? null
-        : resolvedContent;
+    if (resolvedContent == null || resolvedContent.isEmpty) return null;
+    final handlerTemplate = handler['result']?.toString();
+    final template = handlerTemplate == null || handlerTemplate.isEmpty
+        ? _scanLoginTemplate
+        : ScanLoginTemplate(handlerTemplate);
+    return template.matches(resolvedContent) ? resolvedContent : null;
   }
 }

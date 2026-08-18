@@ -3,7 +3,11 @@
 abstract class ApiClient {
   Future<T> get<T>(String path, {Map<String, Object?>? query});
 
-  Future<T> post<T>(String path, {Object? data});
+  Future<T> post<T>(
+    String path, {
+    Map<String, Object?>? query,
+    Object? data,
+  });
 
   Future<void> cancelByTag(Object tag);
 }

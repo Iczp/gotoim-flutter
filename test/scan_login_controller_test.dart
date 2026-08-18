@@ -4,6 +4,28 @@ import 'package:gotoim_flutter/features/scan_login/domain/scan_login_models.dart
 import 'package:gotoim_flutter/features/scan_login/domain/scan_login_repository.dart';
 
 void main() {
+  test('scan-login template only accepts a non-empty login code', () {
+    const template = ScanLoginTemplate('gotoim://scan-login?code={code}');
+
+    expect(template.matches('gotoim://scan-login?code=abc-123'), isTrue);
+    expect(template.matches('gotoim://scan-login?code='), isFalse);
+    expect(template.matches('gotoim://other?code=abc-123'), isFalse);
+  });
+
+  test('scan-login response uses top-level client information as fallback', () {
+    final request = ScanLoginRequest.fromJson(<String, dynamic>{
+      'connectionId': 'connection-1',
+      'scanUserId': 'user-1',
+      'scanUserName': 'admin',
+      'scanClientId': 'IM_Mobile',
+      'connectionPool': null,
+    });
+
+    expect(request.scanUserName, 'admin');
+    expect(request.device.clientId, 'IM_Mobile');
+    expect(request.device.appName, isNull);
+  });
+
   test('only grants login after the request was inspected and approved',
       () async {
     final repository = _FakeScanLoginRepository();

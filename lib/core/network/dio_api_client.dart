@@ -39,8 +39,12 @@ class DioApiClient implements ApiClient {
   }
 
   @override
-  Future<T> post<T>(String path, {Object? data}) {
-    return _request<T>(path: path, method: 'POST', data: data);
+  Future<T> post<T>(
+    String path, {
+    Map<String, Object?>? query,
+    Object? data,
+  }) {
+    return _request<T>(path: path, method: 'POST', query: query, data: data);
   }
 
   Future<T> _request<T>({

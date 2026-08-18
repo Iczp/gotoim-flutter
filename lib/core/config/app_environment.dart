@@ -27,6 +27,7 @@ class AppEnvironment {
     required this.signalRHubPath,
     required this.scanLoginHubPath,
     required this.scanLoginSignalRBaseUrl,
+    required this.scanLoginTemplate,
     required this.scanLoginFallbackExpires,
     required this.scanLoginAuthBaseUrl,
     required this.scanLoginAuthTokenPath,
@@ -56,6 +57,7 @@ class AppEnvironment {
   final String signalRHubPath;
   final String scanLoginHubPath;
   final String scanLoginSignalRBaseUrl;
+  final String scanLoginTemplate;
   final Duration scanLoginFallbackExpires;
   final String scanLoginAuthBaseUrl;
   final String scanLoginAuthTokenPath;
@@ -105,6 +107,10 @@ class AppEnvironment {
       scanLoginSignalRBaseUrl: _nonEmpty(
         dotenv.get('SCAN_LOGIN_SIGNALR_BASE_URL', fallback: ''),
         fallback: dotenv.get('SIGNALR_BASE_URL', fallback: ''),
+      ),
+      scanLoginTemplate: _nonEmpty(
+        dotenv.get('SCAN_LOGIN_TEMPLATE', fallback: ''),
+        fallback: 'gotoim://scan-login?code={code}',
       ),
       scanLoginFallbackExpires: Duration(
         seconds: int.tryParse(
