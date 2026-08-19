@@ -21,37 +21,39 @@ class LoginDevice {
 /// Matches a scan-login QR code against the configured URI template.
 ///
 /// For example, `gotoim://scan-login?code={code}` accepts a non-empty `code`
-/// value while keeping the scheme, host, path, and fixed query values exact.
+/// value while keeping all fixed text exact. Placeholders are supported in any
+/// URI component, including a path segment and query value.
 class ScanLoginTemplate {
   const ScanLoginTemplate(this.value);
 
   final String value;
 
   bool matches(String scanText) {
-    final template = Uri.tryParse(value);
-    final scanned = Uri.tryParse(scanText);
-    if (template == null ||
-        scanned == null ||
-        template.scheme != scanned.scheme ||
-        template.host != scanned.host ||
-        template.path != scanned.path ||
-        template.port != scanned.port) {
-      return false;
-    }
+    final template = value.trim();
+    final scanned = scanText.trim();
+    if (template.isEmpty || scanned.isEmpty) return false;
 
-    for (final entry in template.queryParametersAll.entries) {
-      final actualValues = scanned.queryParametersAll[entry.key];
-      if (actualValues == null || actualValues.isEmpty) return false;
-      for (final expectedValue in entry.value) {
-        final isPlaceholder = RegExp(r'^\{[^{}]+\}$').hasMatch(expectedValue);
-        if (isPlaceholder) {
-          if (!actualValues.any((item) => item.isNotEmpty)) return false;
-        } else if (!actualValues.contains(expectedValue)) {
-          return false;
-        }
-      }
+    final placeholders = RegExp(r'\{[^{}]+\}').allMatches(template).toList();
+    final pattern = StringBuffer('^');
+    var cursor = 0;
+    for (final placeholder in placeholders) {
+      pattern.write(
+        RegExp.escape(template.substring(cursor, placeholder.start)),
+      );
+      // Keep placeholder values in one URI component, matching the existing
+      // mobile client TemplateBuilder behaviour.
+      pattern.write(r'([^/?&#]+)');
+      cursor = placeholder.end;
     }
-    return true;
+    pattern.write(RegExp.escape(template.substring(cursor)));
+    pattern.write(r'$');
+
+    final match = RegExp(pattern.toString()).firstMatch(scanned);
+    if (match == null) return false;
+    return List<int>.generate(
+      placeholders.length,
+      (index) => index + 1,
+    ).every((index) => (match.group(index) ?? '').isNotEmpty);
   }
 }
 

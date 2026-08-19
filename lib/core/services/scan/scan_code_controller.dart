@@ -14,16 +14,15 @@ class ScanCodeController extends ChangeNotifier {
     required this.onResult,
     ImagePicker? imagePicker,
     ImageCodeService? imageCodeService,
-  }) : _imagePicker = imagePicker ?? ImagePicker(),
-       _imageCodeService = imageCodeService ?? const ZxingImageCodeService(),
-       supportsCamera = _supportsCamera(platform),
-       _scanner =
-           _supportsCamera(platform)
-               ? MobileScannerController(
-                 detectionSpeed: DetectionSpeed.noDuplicates,
-                 formats: _toMobileFormats(request.formats),
-               )
-               : null {
+  })  : _imagePicker = imagePicker ?? ImagePicker(),
+        _imageCodeService = imageCodeService ?? const ZxingImageCodeService(),
+        supportsCamera = _supportsCamera(platform),
+        _scanner = _supportsCamera(platform)
+            ? MobileScannerController(
+                detectionSpeed: DetectionSpeed.noDuplicates,
+                formats: _toMobileFormats(request.formats),
+              )
+            : null {
     _scanner?.addListener(_syncTorch);
   }
 
@@ -107,7 +106,7 @@ class ScanCodeController extends ChangeNotifier {
       return;
     }
     try {
-      await _scanner.toggleTorch();
+      await _scanner?.toggleTorch();
       _syncTorch();
     } catch (error) {
       _setError('无法切换闪光灯。');
@@ -126,7 +125,7 @@ class ScanCodeController extends ChangeNotifier {
         // Delegate image recognition to the native scanner on mobile. It uses
         // the same format configuration as the live camera instead of
         // silently reducing an album scan to QR only.
-        final capture = await _scanner.analyzeImage(image.path);
+        final capture = await _scanner?.analyzeImage(image.path);
         if (capture != null) {
           _completeCapture(capture, ScanCodeSource.album, allowWhileBusy: true);
         }

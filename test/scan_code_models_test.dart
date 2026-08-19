@@ -30,6 +30,11 @@ void main() {
     expect(result.source, ScanCodeSource.album);
   });
 
+  test('scan-code formats use the backend handler values', () {
+    expect(ScanCodeFormat.qrCode.apiValue, 'QR_CODE');
+    expect(ScanCodeFormat.code128.apiValue, 'BAR_CODE');
+  });
+
   test('image decode request defaults to QR code and album source', () {
     final request = DecodeImageRequest(bytes: Uint8List(0));
 

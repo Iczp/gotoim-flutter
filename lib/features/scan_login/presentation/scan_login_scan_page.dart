@@ -17,6 +17,7 @@ class ScanLoginScanPage extends ConsumerStatefulWidget {
 class _ScanLoginScanPageState extends ConsumerState<ScanLoginScanPage> {
   bool _opening = false;
   String? _error;
+  ScanCodeResult? _result;
 
   @override
   void initState() {
@@ -42,9 +43,10 @@ class _ScanLoginScanPageState extends ConsumerState<ScanLoginScanPage> {
             ),
           );
       if (!mounted || result == null) return;
+      setState(() => _result = result);
       final scanText = await ref
           .read(scanLoginRepositoryProvider)
-          .resolveLoginScan(result.content, scanType: result.format?.name);
+          .resolveLoginScan(result.content, scanType: result.format?.apiValue);
       if (!mounted) return;
       if (scanText == null) {
         setState(() => _error = '这不是有效的扫码登录二维码。');
@@ -73,6 +75,10 @@ class _ScanLoginScanPageState extends ConsumerState<ScanLoginScanPage> {
               const Icon(Icons.qr_code_scanner_outlined, size: 64),
             const SizedBox(height: 18),
             Text(_error ?? '正在打开扫码器…', textAlign: TextAlign.center),
+            if (_result != null) ...[
+              const SizedBox(height: 20),
+              _ScanResultCard(result: _result!),
+            ],
             if (!_opening) ...[
               const SizedBox(height: 16),
               FilledButton(onPressed: _openScanner, child: const Text('重新扫码')),
@@ -82,4 +88,33 @@ class _ScanLoginScanPageState extends ConsumerState<ScanLoginScanPage> {
       ),
     ),
   );
+}
+
+class _ScanResultCard extends StatelessWidget {
+  const _ScanResultCard({required this.result});
+
+  final ScanCodeResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('扫码结果', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Text(
+              '类型：${result.format?.apiValue ?? '未知'}  ·  来源：${result.source == ScanCodeSource.camera ? '相机' : '相册'}',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            SelectableText(result.content),
+          ],
+        ),
+      ),
+    );
+  }
 }

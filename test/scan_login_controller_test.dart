@@ -12,6 +12,25 @@ void main() {
     expect(template.matches('gotoim://other?code=abc-123'), isFalse);
   });
 
+  test(
+    'scan-login template supports placeholders outside query parameters',
+    () {
+      const template = ScanLoginTemplate(
+        'gotoim://scan-login/{challenge}/{code}',
+      );
+
+      expect(
+        template.matches('gotoim://scan-login/challenge-1/code-2'),
+        isTrue,
+      );
+      expect(template.matches('gotoim://scan-login/challenge-1/'), isFalse);
+      expect(
+        template.matches('gotoim://scan-login/challenge-1/code-2?x=1'),
+        isFalse,
+      );
+    },
+  );
+
   test('scan-login response uses top-level client information as fallback', () {
     final request = ScanLoginRequest.fromJson(<String, dynamic>{
       'connectionId': 'connection-1',
