@@ -31,17 +31,11 @@ class FlutterLocalNotificationService implements LocalNotificationService {
       case PlatformKind.ios:
       case PlatformKind.macos:
       case PlatformKind.linux:
+      case PlatformKind.windows:
         return LocalNotificationSupport(
           platform: _platformFacade.kind,
           isSupported: true,
           message: '本地通知已接入。',
-        );
-      case PlatformKind.windows:
-        return const LocalNotificationSupport(
-          platform: PlatformKind.windows,
-          isSupported: false,
-          message:
-              '当前 flutter_local_notifications 13.0.0 不提供 Windows 实现；已保留统一契约，需补充 Windows 适配器。',
         );
       case PlatformKind.web:
         return const LocalNotificationSupport(
@@ -77,11 +71,21 @@ class FlutterLocalNotificationService implements LocalNotificationService {
         requestSoundPermission: false,
       ),
       linux: LinuxInitializationSettings(defaultActionName: '打开'),
+      windows: WindowsInitializationSettings(
+        appName: 'Goto IM',
+        appUserModelId: 'GotoIM.GotoIMFlutter',
+        // Keep this stable. Windows uses it to register the toast activation
+        // callback for this desktop application.
+        guid: 'f65966a8-0ef4-4773-819c-b6e650c70b95',
+      ),
     );
-    await _plugin.initialize(
+    final initialized = await _plugin.initialize(
       settings: settings,
       onDidReceiveNotificationResponse: _onNotificationResponse,
     );
+    if (initialized == false) {
+      throw StateError('本地通知插件初始化失败。');
+    }
     _initialized = true;
   }
 
@@ -123,6 +127,10 @@ class FlutterLocalNotificationService implements LocalNotificationService {
           message: 'Linux 通知由系统通知服务处理，无应用级运行时授权弹窗。',
         );
       case PlatformKind.windows:
+        return const LocalNotificationPermissionResult(
+          status: LocalNotificationPermissionStatus.notRequired,
+          message: 'Windows Toast 通知无需应用级运行时授权；请在系统通知设置中确认 Goto IM 未被关闭。',
+        );
       case PlatformKind.web:
       case PlatformKind.unknown:
         return LocalNotificationPermissionResult(
@@ -210,6 +218,7 @@ class FlutterLocalNotificationService implements LocalNotificationService {
         presentSound: true,
       ),
       linux: const LinuxNotificationDetails(),
+      windows: const WindowsNotificationDetails(),
     ),
     payload: request.payload,
   );

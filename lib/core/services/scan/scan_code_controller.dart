@@ -106,7 +106,7 @@ class ScanCodeController extends ChangeNotifier {
       return;
     }
     try {
-      await _scanner?.toggleTorch();
+      await _scanner.toggleTorch();
       _syncTorch();
     } catch (error) {
       _setError('无法切换闪光灯。');
@@ -125,7 +125,7 @@ class ScanCodeController extends ChangeNotifier {
         // Delegate image recognition to the native scanner on mobile. It uses
         // the same format configuration as the live camera instead of
         // silently reducing an album scan to QR only.
-        final capture = await _scanner?.analyzeImage(image.path);
+        final capture = await _scanner.analyzeImage(image.path);
         if (capture != null) {
           _completeCapture(capture, ScanCodeSource.album, allowWhileBusy: true);
         }

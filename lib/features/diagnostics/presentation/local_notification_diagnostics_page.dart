@@ -68,7 +68,8 @@ class _LocalNotificationDiagnosticsPageState
           const SizedBox(height: 16),
           _ActionCard(
             title: '1. 请求通知权限',
-            description: 'Android 13+、iOS、macOS 会在此请求系统授权；Linux 通常无需应用级授权。',
+            description:
+                'Android 13+、iOS、macOS 会在此请求系统授权；Linux 和 Windows 通常无需应用级授权。',
             status: controller.permissionStatus,
             onPressed:
                 controller.permissionStatus ==

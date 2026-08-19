@@ -6,7 +6,7 @@
 
 本地通知用于在**客户端已经拿到事件**后，由系统显示一条通知。它不负责接收服务器推送：后续 SignalR、推送服务或离线同步收到新消息后，应调用统一的 `LocalNotificationService`，而不是在页面、Repository 或业务 UseCase 中直接调用通知插件。
 
-当前已接入 Android、iOS、macOS、Linux 的即时本地通知；Web 和 Windows 返回明确的“不支持”结果，不会静默失败。这样业务层只依赖统一契约，后续补充浏览器或 Windows 实现时无需改动聊天业务代码。
+当前已接入 Android、iOS、macOS、Linux、Windows 的即时本地通知；Web 返回明确的“不支持”结果，不会静默失败。业务层只依赖统一契约，后续补充浏览器实现时无需改动聊天业务代码。
 
 ## 架构与代码位置
 
@@ -38,10 +38,10 @@ flutter_local_notifications / 系统通知服务
 | iOS / iPad | 已接入 | 在诊断页主动请求 alert、badge、sound 授权。 |
 | macOS | 已接入 | 在诊断页主动请求 alert、badge、sound 授权。 |
 | Linux | 已接入 | 由 Freedesktop 系统通知服务决定最终能力；通常没有应用级运行时授权弹窗。 |
-| Windows | 预留适配器 | 当前项目为兼容 Dart 2.19 固定使用 `flutter_local_notifications 13.0.0`，该版本没有 Windows 实现。统一契约已保留，后续增加 Windows 原生实现即可。 |
+| Windows | 已接入 | 使用 `flutter_local_notifications_windows` 的 Windows Toast FFI 实现。无需应用级运行时授权；可在系统通知设置中关闭或管理。 |
 | Web | 预留适配器 | 当前不调用浏览器 API；后续单独实现浏览器 `Notification API` 与用户授权流程。 |
 
-`flutter_local_notifications 13.0.0` 的官方支持范围为 Android、iOS、macOS 与 Linux。Android 8 及以上的通知渠道在首次创建后，其声音、振动等关键设置由系统固定；修改相同渠道 ID 的这些参数通常不会生效。[插件版本说明](https://pub.dev/packages/flutter_local_notifications/versions/13.0.0)
+`flutter_local_notifications 22.3.0` 支持 Android、iOS、macOS、Linux、Windows 与 Web；本项目仅使用其原生平台适配器，Web 仍保留独立实现入口。Android 8 及以上的通知渠道在首次创建后，其声音、振动等关键设置由系统固定；修改相同渠道 ID 的这些参数通常不会生效。
 
 ## 参数说明
 
@@ -71,7 +71,7 @@ flutter_local_notifications / 系统通知服务
 
 诊断页的“请求权限”会在 Android 13+ 请求授权。拒绝后，应引导用户到系统的应用通知设置；应用不能强行重新弹出已被系统限制的授权框。
 
-插件 13.x 依赖 Java 8+ 的 desugaring 支持，因此 `android/app/build.gradle` 已开启 `coreLibraryDesugaringEnabled` 并添加 `desugar_jdk_libs`。默认小图标为 `android/app/src/main/res/drawable/ic_stat_notification.xml`，使用单色 drawable，避免把彩色启动图标显示成异常的状态栏图标。
+插件 22.x 依赖 Java 17 与 core-library desugaring 支持，因此 `android/app/build.gradle.kts` 已开启 `isCoreLibraryDesugaringEnabled` 并添加 `desugar_jdk_libs`。默认小图标为 `android/app/src/main/res/drawable/ic_stat_notification.xml`，使用单色 drawable，避免把彩色启动图标显示成异常的状态栏图标。
 
 ### iOS / macOS
 
@@ -80,6 +80,12 @@ flutter_local_notifications / 系统通知服务
 ### Linux
 
 通知功能依赖当前桌面环境的 Freedesktop 通知服务，展示样式、声音、常驻能力等可能不同。Linux 插件不支持系统级的定时/待发送通知；当前的 `delay` 同样仅限应用进程存活。
+
+### Windows
+
+Windows 使用 Toast 通知。初始化时以固定的应用名、App User Model ID 和 GUID 注册激活回调，因此这三个标识必须保持稳定。诊断页的“请求权限”会返回“无需应用级授权”；如果横幅未显示，请在 Windows 的“通知”系统设置中确认 **Goto IM** 没有被禁用。
+
+开发目录直接运行的 EXE 可以展示通知并接收应用运行期间的点击回调；Windows 只有在应用以 MSIX 等方式获得 package identity 后，`cancel` / `cancelAll` 才能可靠移除已经显示的系统通知。进程内延迟任务仍会被取消。
 
 ## 通知点击事件
 
@@ -110,7 +116,7 @@ flutter_local_notifications / 系统通知服务
 - Android 通知分组、会话样式、快捷回复、图片大图、附件下载与自定义声音。
 - 按会话静音、免打扰、前台抑制、未读计数和通知折叠策略。
 - iOS / Android 的远程推送接收；本地通知只是最终展示的一环。
-- Windows 和 Web 的平台适配器。
+- Web 的浏览器通知适配器。
 - 点击通知后的业务导航与冷启动恢复流程。
 
 如果后续需要可靠定时通知，应另建 `ScheduledNotificationService`：使用时区库、原生平台权限、Android 重启恢复广播及待发送任务持久化。不要把这类需求塞进当前 `delay` 字段。
