@@ -7,14 +7,16 @@ import 'package:gotoim_flutter/core/services/scan/scan_code_controller.dart';
 import 'package:gotoim_flutter/core/services/scan/scan_code_models.dart';
 
 void main() {
-  test('scan code request defaults to all formats and enables common actions',
-      () {
-    const request = ScanCodeRequest();
+  test(
+    'scan code request defaults to all formats and enables common actions',
+    () {
+      const request = ScanCodeRequest();
 
-    expect(request.formats, isEmpty);
-    expect(request.allowAlbum, isTrue);
-    expect(request.allowTorch, isTrue);
-  });
+      expect(request.formats, isEmpty);
+      expect(request.allowAlbum, isTrue);
+      expect(request.allowTorch, isTrue);
+    },
+  );
 
   test('scan code result retains content, format and source', () {
     const result = ScanCodeResult(

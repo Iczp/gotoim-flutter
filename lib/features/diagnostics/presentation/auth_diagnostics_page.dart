@@ -47,7 +47,9 @@ class _AuthDiagnosticsPageState extends ConsumerState<AuthDiagnosticsPage> {
   }
 
   Future<void> _login() async {
-    await ref.read(authControllerProvider).login(
+    await ref
+        .read(authControllerProvider)
+        .login(
           username: _usernameController.text.trim(),
           password: _passwordController.text,
         );
@@ -62,8 +64,9 @@ class _AuthDiagnosticsPageState extends ConsumerState<AuthDiagnosticsPage> {
   Future<void> _copy(String value) async {
     await ref.read(clipboardServiceProvider).copy(value);
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('已复制。')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已复制。')));
     }
   }
 
@@ -81,22 +84,28 @@ class _AuthDiagnosticsPageState extends ConsumerState<AuthDiagnosticsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('仅限本地 Debug 联调。此页会显示密码输入与 Token，请勿录屏、截图或提交到版本库。',
-              style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          Text(
+            '仅限本地 Debug 联调。此页会显示密码输入与 Token，请勿录屏、截图或提交到版本库。',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
           const SizedBox(height: 16),
           Text('登录参数', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           TextField(
             controller: _usernameController,
             decoration: const InputDecoration(
-                labelText: '用户名', border: OutlineInputBorder()),
+              labelText: '用户名',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _passwordController,
             obscureText: false,
             decoration: const InputDecoration(
-                labelText: '密码（明文调试）', border: OutlineInputBorder()),
+              labelText: '密码（明文调试）',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 8),
           FilledButton(
@@ -107,35 +116,48 @@ class _AuthDiagnosticsPageState extends ConsumerState<AuthDiagnosticsPage> {
           const SizedBox(height: 20),
           Text('当前凭据', style: Theme.of(context).textTheme.titleMedium),
           _DebugValue(
-              label: 'access token', value: _accessToken ?? '', onCopy: _copy),
+            label: 'access token',
+            value: _accessToken ?? '',
+            onCopy: _copy,
+          ),
           _DebugValue(
-              label: 'refresh token',
-              value: _refreshToken ?? '',
-              onCopy: _copy),
+            label: 'refresh token',
+            value: _refreshToken ?? '',
+            onCopy: _copy,
+          ),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               FilledButton.tonal(
-                  onPressed: _refresh, child: const Text('刷新 Token')),
+                onPressed: _refresh,
+                child: const Text('刷新 Token'),
+              ),
               OutlinedButton(
-                onPressed: () =>
-                    controller.introspectToken(RevocationTokenType.accessToken),
+                onPressed:
+                    () => controller.introspectToken(
+                      RevocationTokenType.accessToken,
+                    ),
                 child: const Text('检查 access token'),
               ),
               OutlinedButton(
-                onPressed: () => controller
-                    .introspectToken(RevocationTokenType.refreshToken),
+                onPressed:
+                    () => controller.introspectToken(
+                      RevocationTokenType.refreshToken,
+                    ),
                 child: const Text('检查 refresh token'),
               ),
               OutlinedButton(
-                onPressed: () =>
-                    controller.revokeToken(RevocationTokenType.accessToken),
+                onPressed:
+                    () =>
+                        controller.revokeToken(RevocationTokenType.accessToken),
                 child: const Text('撤销 access token'),
               ),
               OutlinedButton(
-                onPressed: () =>
-                    controller.revokeToken(RevocationTokenType.refreshToken),
+                onPressed:
+                    () => controller.revokeToken(
+                      RevocationTokenType.refreshToken,
+                    ),
                 child: const Text('撤销 refresh token'),
               ),
               FilledButton.tonal(
@@ -146,8 +168,10 @@ class _AuthDiagnosticsPageState extends ConsumerState<AuthDiagnosticsPage> {
           ),
           if (controller.authOperationError != null) ...[
             const SizedBox(height: 8),
-            SelectableText(controller.authOperationError!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            SelectableText(
+              controller.authOperationError!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
           ],
           if (controller.authOperationResult != null) ...[
             const SizedBox(height: 8),
@@ -156,20 +180,26 @@ class _AuthDiagnosticsPageState extends ConsumerState<AuthDiagnosticsPage> {
           const SizedBox(height: 20),
           Text('当前配置与设备上下文', style: Theme.of(context).textTheme.titleMedium),
           _DebugValue(
-              label: 'AUTH_BASE_URL',
-              value: environment.authBaseUrl,
-              onCopy: _copy),
+            label: 'AUTH_BASE_URL',
+            value: environment.authBaseUrl,
+            onCopy: _copy,
+          ),
           _DebugValue(
-              label: 'AUTH_CLIENT_ID',
-              value: environment.authClientId,
-              onCopy: _copy),
+            label: 'AUTH_CLIENT_ID',
+            value: environment.authClientId,
+            onCopy: _copy,
+          ),
           _DebugValue(
-              label: 'AUTH_CLIENT_SECRET',
-              value: environment.authClientSecret,
-              onCopy: _copy),
+            label: 'AUTH_CLIENT_SECRET',
+            value: environment.authClientSecret,
+            onCopy: _copy,
+          ),
           _DebugValue(label: 'deviceId', value: device.deviceId, onCopy: _copy),
           _DebugValue(
-              label: 'deviceType', value: device.deviceType, onCopy: _copy),
+            label: 'deviceType',
+            value: device.deviceType,
+            onCopy: _copy,
+          ),
         ],
       ),
     );
@@ -177,8 +207,11 @@ class _AuthDiagnosticsPageState extends ConsumerState<AuthDiagnosticsPage> {
 }
 
 class _DebugValue extends StatelessWidget {
-  const _DebugValue(
-      {required this.label, required this.value, required this.onCopy});
+  const _DebugValue({
+    required this.label,
+    required this.value,
+    required this.onCopy,
+  });
 
   final String label;
   final String value;
@@ -186,21 +219,21 @@ class _DebugValue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: TextField(
-          controller: TextEditingController(text: value),
-          readOnly: true,
-          minLines: 1,
-          maxLines: 5,
-          decoration: InputDecoration(
-            labelText: label,
-            border: const OutlineInputBorder(),
-            suffixIcon: IconButton(
-              tooltip: '复制',
-              icon: const Icon(Icons.copy_outlined),
-              onPressed: value.isEmpty ? null : () => onCopy(value),
-            ),
-          ),
+    padding: const EdgeInsets.only(top: 10),
+    child: TextField(
+      controller: TextEditingController(text: value),
+      readOnly: true,
+      minLines: 1,
+      maxLines: 5,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        suffixIcon: IconButton(
+          tooltip: '复制',
+          icon: const Icon(Icons.copy_outlined),
+          onPressed: value.isEmpty ? null : () => onCopy(value),
         ),
-      );
+      ),
+    ),
+  );
 }

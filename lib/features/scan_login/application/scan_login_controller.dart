@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
@@ -104,10 +105,10 @@ final scanLoginRepositoryProvider = Provider<ScanLoginRepository>((ref) {
 
 final scanLoginControllerProvider = ChangeNotifierProvider.autoDispose
     .family<ScanLoginController, String>((ref, scanText) {
-  final controller = ScanLoginController(
-    ref.watch(scanLoginRepositoryProvider),
-    scanText,
-  );
-  ref.onDispose(controller.cancelIfNeeded);
-  return controller;
-});
+      final controller = ScanLoginController(
+        ref.watch(scanLoginRepositoryProvider),
+        scanText,
+      );
+      ref.onDispose(controller.cancelIfNeeded);
+      return controller;
+    });

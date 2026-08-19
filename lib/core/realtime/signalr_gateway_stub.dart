@@ -7,8 +7,7 @@ SignalRGateway createPlatformSignalRGateway({
   required AppEnvironment environment,
   required SignalRAccessTokenReader readAccessToken,
   required ClientDeviceContext deviceContext,
-}) =>
-    UnsupportedSignalRGateway();
+}) => UnsupportedSignalRGateway();
 
 class UnsupportedSignalRGateway implements SignalRGateway {
   final Stream<SignalRAppEvent> _events = const Stream<SignalRAppEvent>.empty();
@@ -19,17 +18,17 @@ class UnsupportedSignalRGateway implements SignalRGateway {
 
   @override
   SignalRConnectionInfo get connectionInfo => const SignalRConnectionInfo(
-        hubUrl: '',
-        state: SignalRConnectionState.disconnected,
-        connectionId: null,
-        keepAliveInterval: Duration.zero,
-        serverTimeout: Duration.zero,
-      );
+    hubUrl: '',
+    state: SignalRConnectionState.disconnected,
+    connectionId: null,
+    keepAliveInterval: Duration.zero,
+    serverTimeout: Duration.zero,
+  );
 
   @override
   Future<void> connect() => Future<void>.error(
-        UnsupportedError('SignalR is not configured for this runtime.'),
-      );
+    UnsupportedError('SignalR is not configured for this runtime.'),
+  );
 
   @override
   Future<void> disconnect() async {}

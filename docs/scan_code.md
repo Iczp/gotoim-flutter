@@ -57,9 +57,9 @@ final result = await ref.read(imageCodeServiceProvider).decodeImage(
 
 ## 依赖与升级边界
 
-当前工作区的 Flutter 3.7.7 / Dart 2.19.4 最多只能解析 `mobile_scanner 3.5.7`，本项目已使用该工具链下可解析的最新版本；它只作为 Android/iOS 相机适配器，绝不因 Web 或桌面兼容性再降级。Android/iOS 已验证构建；该旧 Flutter 在编译 `mobile_scanner 3.5.7` 的 Web 插件时不认识 `dart:ui_web`，因此 Web 上传页需要在工具链升级后才能构建运行。
+项目已迁移至 Flutter 3.47 / Dart 3.13，Dart 约束为 `>=3.7.0 <4.0.0`，并使用 `mobile_scanner 7.4.0`。该插件只作为 Android/iOS 相机适配器；Web 和桌面不会因相机插件而降低版本或模拟相机能力。
 
-`mobile_scanner 7.4.0` 需要 Dart 3.7，迁移它需要先升级 Flutter SDK，再统一升级项目的 Dart 约束和相关插件。该升级属于项目工具链迁移，完成后再将此适配器升级到 v7；接口 `ScanCodeService`、`ImageCodeService` 与业务调用方不需要变更。
+工具链、Android Gradle 插件和扫码相关接口已完成升级。未来为桌面或 Web 接入更合适的相机实现时，只需新增平台适配器，`ScanCodeService`、`ImageCodeService` 与业务调用方不需要变更。
 
 ## 测试
 

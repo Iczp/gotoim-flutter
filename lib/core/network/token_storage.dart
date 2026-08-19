@@ -5,8 +5,10 @@ abstract class TokenStorage {
 
   Future<String?> readRefreshToken();
 
-  Future<void> save(
-      {required String accessToken, required String refreshToken});
+  Future<void> save({
+    required String accessToken,
+    required String refreshToken,
+  });
 
   Future<void> clear();
 

@@ -16,10 +16,10 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     required AppEnvironment environment,
     required TokenStorage tokenStorage,
     required ClientDeviceContext deviceContext,
-  })  : _dio = dio,
-        _environment = environment,
-        _tokenStorage = tokenStorage,
-        _deviceContext = deviceContext;
+  }) : _dio = dio,
+       _environment = environment,
+       _tokenStorage = tokenStorage,
+       _deviceContext = deviceContext;
 
   final Dio _dio;
   final AppEnvironment _environment;
@@ -45,8 +45,10 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   Future<void> clearSession() => _tokenStorage.clear();
 
   @override
-  Future<void> login(
-      {required String username, required String password}) async {
+  Future<void> login({
+    required String username,
+    required String password,
+  }) async {
     final session = await _requestToken(<String, String>{
       'grant_type': _environment.authLoginGrantType,
       'username': username,
@@ -66,13 +68,13 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
 
   @override
   Future<String> getClientCredentialsAccessToken() async {
-    final session = await _requestToken(const <String, String>{
-      'grant_type': 'client_credentials',
-    },
-        tokenUrl: _environment.scanLoginAuthTokenUrl,
-        clientId: _environment.scanLoginAuthClientId,
-        clientSecret: _environment.scanLoginAuthClientSecret,
-        scope: _environment.scanLoginAuthScope);
+    final session = await _requestToken(
+      const <String, String>{'grant_type': 'client_credentials'},
+      tokenUrl: _environment.scanLoginAuthTokenUrl,
+      clientId: _environment.scanLoginAuthClientId,
+      clientSecret: _environment.scanLoginAuthClientSecret,
+      scope: _environment.scanLoginAuthScope,
+    );
     return session.accessToken;
   }
 
@@ -100,9 +102,10 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
       return Map<String, dynamic>.from(response.data as Map);
     } on DioException catch (error) {
       final body = error.response?.data;
-      final message = body is Map && body['error_description'] != null
-          ? body['error_description'].toString()
-          : '用户信息请求失败。';
+      final message =
+          body is Map && body['error_description'] != null
+              ? body['error_description'].toString()
+              : '用户信息请求失败。';
       throw ApiException(message, statusCode: error.response?.statusCode);
     }
   }
@@ -154,15 +157,13 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   Future<void> revoke(RevocationTokenType tokenType) async {
     final token = await _readToken(tokenType);
     if (token == null || token.isEmpty) return;
-    await _postAuthForm(
-      _environment.authRevocationUrl,
-      <String, String>{
-        'token_type_hint': tokenType == RevocationTokenType.accessToken
-            ? 'access_token'
-            : 'refresh_token',
-        'token': token,
-      },
-    );
+    await _postAuthForm(_environment.authRevocationUrl, <String, String>{
+      'token_type_hint':
+          tokenType == RevocationTokenType.accessToken
+              ? 'access_token'
+              : 'refresh_token',
+      'token': token,
+    });
   }
 
   Future<AuthSession> _refresh() async {
@@ -175,13 +176,14 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
       'refresh_token': refreshToken,
     });
     // Some providers do not rotate refresh tokens. Keep the prior one then.
-    final completedSession = session.refreshToken.isEmpty
-        ? AuthSession(
-            accessToken: session.accessToken,
-            refreshToken: refreshToken,
-            expiresIn: session.expiresIn,
-          )
-        : session;
+    final completedSession =
+        session.refreshToken.isEmpty
+            ? AuthSession(
+              accessToken: session.accessToken,
+              refreshToken: refreshToken,
+              expiresIn: session.expiresIn,
+            )
+            : session;
     await _save(completedSession);
     return completedSession;
   }
@@ -208,9 +210,10 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
       return AuthSession.fromJson(Map<String, dynamic>.from(response));
     } on DioException catch (error) {
       final body = error.response?.data;
-      final message = body is Map && body['error_description'] != null
-          ? body['error_description'].toString()
-          : 'Login failed. Please check your network and credentials.';
+      final message =
+          body is Map && body['error_description'] != null
+              ? body['error_description'].toString()
+              : 'Login failed. Please check your network and credentials.';
       throw ApiException(message, statusCode: error.response?.statusCode);
     }
   }

@@ -117,8 +117,8 @@ class SignalRConnectionEvent extends SignalRAppEvent {
 
 extension SignalRCommandEvents on Stream<SignalRAppEvent> {
   Stream<SignalRCommandEvent> forCommand(SignalRCommand command) {
-    return where((event) => event is SignalRCommandEvent)
-        .cast<SignalRCommandEvent>()
-        .where((event) => event.command == command);
+    return where(
+      (event) => event is SignalRCommandEvent,
+    ).cast<SignalRCommandEvent>().where((event) => event.command == command);
   }
 }

@@ -14,16 +14,17 @@ class ScanCodeController extends ChangeNotifier {
     required this.onResult,
     ImagePicker? imagePicker,
     ImageCodeService? imageCodeService,
-  })  : _imagePicker = imagePicker ?? ImagePicker(),
-        _imageCodeService = imageCodeService ?? const ZxingImageCodeService(),
-        supportsCamera = _supportsCamera(platform),
-        _scanner = _supportsCamera(platform)
-            ? MobileScannerController(
-                detectionSpeed: DetectionSpeed.noDuplicates,
-                formats: _toMobileFormats(request.formats),
-              )
-            : null {
-    _scanner?.torchState.addListener(_syncTorch);
+  }) : _imagePicker = imagePicker ?? ImagePicker(),
+       _imageCodeService = imageCodeService ?? const ZxingImageCodeService(),
+       supportsCamera = _supportsCamera(platform),
+       _scanner =
+           _supportsCamera(platform)
+               ? MobileScannerController(
+                 detectionSpeed: DetectionSpeed.noDuplicates,
+                 formats: _toMobileFormats(request.formats),
+               )
+               : null {
+    _scanner?.addListener(_syncTorch);
   }
 
   final ScanCodeRequest request;
@@ -37,7 +38,6 @@ class ScanCodeController extends ChangeNotifier {
   bool _busy = false;
   bool _torchEnabled = false;
   String? _error;
-  ScanCodeSource _activeSource = ScanCodeSource.camera;
 
   MobileScannerController? get scanner => _scanner;
   bool get busy => _busy;
@@ -58,10 +58,10 @@ class ScanCodeController extends ChangeNotifier {
       ScanCodeFormat.code128: BarcodeFormat.code128,
       ScanCodeFormat.code39: BarcodeFormat.code39,
       ScanCodeFormat.code93: BarcodeFormat.code93,
-      ScanCodeFormat.codabar: BarcodeFormat.codebar,
+      ScanCodeFormat.codabar: BarcodeFormat.codabar,
       ScanCodeFormat.ean13: BarcodeFormat.ean13,
       ScanCodeFormat.ean8: BarcodeFormat.ean8,
-      ScanCodeFormat.itf: BarcodeFormat.itf,
+      ScanCodeFormat.itf: BarcodeFormat.itf14,
       ScanCodeFormat.upcA: BarcodeFormat.upcA,
       ScanCodeFormat.upcE: BarcodeFormat.upcE,
     };
@@ -71,8 +71,15 @@ class ScanCodeController extends ChangeNotifier {
         .toList();
   }
 
-  void onDetect(BarcodeCapture capture) {
-    if (_completed || _busy) return;
+  void onDetect(BarcodeCapture capture) =>
+      _completeCapture(capture, ScanCodeSource.camera);
+
+  void _completeCapture(
+    BarcodeCapture capture,
+    ScanCodeSource source, {
+    bool allowWhileBusy = false,
+  }) {
+    if (_completed || (_busy && !allowWhileBusy)) return;
     Barcode? barcode;
     for (final item in capture.barcodes) {
       if (item.rawValue != null && item.rawValue!.trim().isNotEmpty) {
@@ -80,14 +87,16 @@ class ScanCodeController extends ChangeNotifier {
         break;
       }
     }
-    final content = barcode?.rawValue?.trim();
+    final detectedBarcode = barcode;
+    if (detectedBarcode == null) return;
+    final content = detectedBarcode.rawValue?.trim();
     if (content == null || content.isEmpty) return;
     _completed = true;
     onResult(
       ScanCodeResult(
         content: content,
-        format: _fromMobileFormat(barcode!.format),
-        source: _activeSource,
+        format: _fromMobileFormat(detectedBarcode.format),
+        source: source,
       ),
     );
   }
@@ -98,7 +107,7 @@ class ScanCodeController extends ChangeNotifier {
       return;
     }
     try {
-      await _scanner!.toggleTorch();
+      await _scanner.toggleTorch();
       _syncTorch();
     } catch (error) {
       _setError('无法切换闪光灯。');
@@ -117,12 +126,13 @@ class ScanCodeController extends ChangeNotifier {
         // Delegate image recognition to the native scanner on mobile. It uses
         // the same format configuration as the live camera instead of
         // silently reducing an album scan to QR only.
-        _activeSource = ScanCodeSource.album;
-        final found = await _scanner!.analyzeImage(image.path);
-        if (!found && !_completed) {
+        final capture = await _scanner.analyzeImage(image.path);
+        if (capture != null) {
+          _completeCapture(capture, ScanCodeSource.album, allowWhileBusy: true);
+        }
+        if (!_completed) {
           _setError('未在图片中识别到可用的二维码或条形码，请上传清晰的图片。');
         }
-        _activeSource = ScanCodeSource.camera;
       }
     } catch (error) {
       _setError('相册识别失败，请更换清晰的图片。');
@@ -132,17 +142,12 @@ class ScanCodeController extends ChangeNotifier {
   }
 
   Future<void> _uploadAndDecode() async {
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       type: FileType.image,
-      withData: true,
       dialogTitle: '上传二维码图片',
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final bytes = picked.files.single.bytes;
-    if (bytes == null) {
-      _setError('无法读取所选图片，请重新上传。');
-      return;
-    }
+    if (picked.isEmpty) return;
+    final bytes = await picked.single.readAsBytes();
     await _decodeImageBytes(bytes);
   }
 
@@ -163,7 +168,7 @@ class ScanCodeController extends ChangeNotifier {
   }
 
   void _syncTorch() {
-    _torchEnabled = _scanner?.torchState.value == TorchState.on;
+    _torchEnabled = _scanner?.value.torchState == TorchState.on;
     notifyListeners();
   }
 
@@ -179,7 +184,7 @@ class ScanCodeController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _scanner?.torchState.removeListener(_syncTorch);
+    _scanner?.removeListener(_syncTorch);
     _scanner?.dispose();
     super.dispose();
   }
@@ -194,10 +199,10 @@ ScanCodeFormat? _fromMobileFormat(BarcodeFormat format) {
     BarcodeFormat.code128: ScanCodeFormat.code128,
     BarcodeFormat.code39: ScanCodeFormat.code39,
     BarcodeFormat.code93: ScanCodeFormat.code93,
-    BarcodeFormat.codebar: ScanCodeFormat.codabar,
+    BarcodeFormat.codabar: ScanCodeFormat.codabar,
     BarcodeFormat.ean13: ScanCodeFormat.ean13,
     BarcodeFormat.ean8: ScanCodeFormat.ean8,
-    BarcodeFormat.itf: ScanCodeFormat.itf,
+    BarcodeFormat.itf14: ScanCodeFormat.itf,
     BarcodeFormat.upcA: ScanCodeFormat.upcA,
     BarcodeFormat.upcE: ScanCodeFormat.upcE,
   };

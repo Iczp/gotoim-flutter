@@ -76,11 +76,14 @@ class SignalRDiagnosticsPage extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-                'keep-alive 为 SignalR 客户端库的发送配置；库未公开每个 Ping 的回调，最后收到业务事件不等同于心跳。'),
+              'keep-alive 为 SignalR 客户端库的发送配置；库未公开每个 Ping 的回调，最后收到业务事件不等同于心跳。',
+            ),
           ),
           const SizedBox(height: 20),
-          Text('接收事件（最多保留 100 条）',
-              style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            '接收事件（最多保留 100 条）',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           if (controller.signalREvents.isEmpty)
             const Text('暂无接收事件。')
@@ -92,8 +95,10 @@ class SignalRDiagnosticsPage extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(event.title,
-                          style: Theme.of(context).textTheme.titleSmall),
+                      Text(
+                        event.title,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
                       Text(event.receivedAt.toIso8601String()),
                       const SizedBox(height: 8),
                       SelectableText(event.details),
@@ -107,7 +112,8 @@ class SignalRDiagnosticsPage extends ConsumerWidget {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                    content: Text('事件 payload 已复制。')),
+                                  content: Text('事件 payload 已复制。'),
+                                ),
                               );
                             }
                           },
@@ -134,23 +140,24 @@ class _ValueRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: TextField(
-          controller: TextEditingController(text: value),
-          readOnly: true,
-          minLines: 1,
-          maxLines: 4,
-          decoration: InputDecoration(
-            labelText: label,
-            border: const OutlineInputBorder(),
-            suffixIcon: IconButton(
-              tooltip: '复制',
-              icon: const Icon(Icons.copy_outlined),
-              onPressed: value.isEmpty
+    padding: const EdgeInsets.only(top: 10),
+    child: TextField(
+      controller: TextEditingController(text: value),
+      readOnly: true,
+      minLines: 1,
+      maxLines: 4,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        suffixIcon: IconButton(
+          tooltip: '复制',
+          icon: const Icon(Icons.copy_outlined),
+          onPressed:
+              value.isEmpty
                   ? null
                   : () => ref.read(clipboardServiceProvider).copy(value),
-            ),
-          ),
         ),
-      );
+      ),
+    ),
+  );
 }

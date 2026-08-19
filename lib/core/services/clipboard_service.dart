@@ -16,5 +16,6 @@ class SystemClipboardService implements ClipboardService {
   Future<String?> read() async => (await Clipboard.getData('text/plain'))?.text;
 }
 
-final clipboardServiceProvider =
-    Provider<ClipboardService>((ref) => SystemClipboardService());
+final clipboardServiceProvider = Provider<ClipboardService>(
+  (ref) => SystemClipboardService(),
+);

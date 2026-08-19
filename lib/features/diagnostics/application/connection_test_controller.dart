@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
@@ -35,13 +35,13 @@ class ConnectionTestController extends ChangeNotifier {
     required TokenStorage tokenStorage,
     required AppEnvironment environment,
     required ClientDeviceContext deviceContext,
-  })  : _authRepository = authRepository,
-        _signalRGateway = signalRGateway,
-        _apiClient = apiClient,
-        _tokenStorage = tokenStorage,
-        _environment = environment,
-        _deviceContext = deviceContext,
-        _connectionState = signalRGateway.connectionState {
+  }) : _authRepository = authRepository,
+       _signalRGateway = signalRGateway,
+       _apiClient = apiClient,
+       _tokenStorage = tokenStorage,
+       _environment = environment,
+       _deviceContext = deviceContext,
+       _connectionState = signalRGateway.connectionState {
     _subscription = _signalRGateway.events.listen(_onSignalREvent);
   }
 
@@ -125,9 +125,10 @@ class ConnectionTestController extends ChangeNotifier {
     notifyListeners();
     try {
       final session = await _authRepository.refreshSession();
-      _refreshResult = session.expiresIn == null
-          ? '刷新成功：服务端未返回 expires_in。'
-          : '刷新成功：access token 有效期 ${session.expiresIn!.inSeconds} 秒。';
+      _refreshResult =
+          session.expiresIn == null
+              ? '刷新成功：服务端未返回 expires_in。'
+              : '刷新成功：access token 有效期 ${session.expiresIn!.inSeconds} 秒。';
       _refreshStatus = ConnectionTestStatus.success;
     } catch (error) {
       _refreshStatus = ConnectionTestStatus.failure;
@@ -153,9 +154,10 @@ class ConnectionTestController extends ChangeNotifier {
     notifyListeners();
     try {
       await _authRepository.revoke(tokenType);
-      _authOperationResult = tokenType == RevocationTokenType.accessToken
-          ? 'access token 已撤销。'
-          : 'refresh token 已撤销。';
+      _authOperationResult =
+          tokenType == RevocationTokenType.accessToken
+              ? 'access token 已撤销。'
+              : 'refresh token 已撤销。';
     } catch (error) {
       _authOperationError = _safeError(error);
     }
@@ -175,10 +177,7 @@ class ConnectionTestController extends ChangeNotifier {
     try {
       final result = await _apiClient.get<dynamic>(
         '/api/chat/session-unit-cache/friends',
-        query: <String, Object?>{
-          'ownerId': ownerId,
-          'maxResultCount': 100,
-        },
+        query: <String, Object?>{'ownerId': ownerId, 'maxResultCount': 100},
       );
       _friendsResult = _summarizeResponse(result, label: '好友列表');
       _friendsStatus = ConnectionTestStatus.success;
@@ -311,9 +310,9 @@ class ConnectionTestController extends ChangeNotifier {
   }
 
   String _safeError(Object error) => error.toString().replaceAll(
-        RegExp(r'Bearer\s+\S+', caseSensitive: false),
-        'Bearer <redacted>',
-      );
+    RegExp(r'Bearer\s+\S+', caseSensitive: false),
+    'Bearer <redacted>',
+  );
 
   String _summarizeResponse(Object? result, {required String label}) {
     if (result is Map) {
@@ -337,12 +336,12 @@ class ConnectionTestController extends ChangeNotifier {
 
 final connectionTestControllerProvider =
     ChangeNotifierProvider<ConnectionTestController>((ref) {
-  return ConnectionTestController(
-    authRepository: ref.watch(authRepositoryProvider),
-    signalRGateway: ref.watch(signalRGatewayProvider),
-    apiClient: ref.watch(apiClientProvider),
-    tokenStorage: ref.watch(tokenStorageProvider),
-    environment: ref.watch(appEnvironmentProvider),
-    deviceContext: ref.watch(clientDeviceContextProvider),
-  );
-});
+      return ConnectionTestController(
+        authRepository: ref.watch(authRepositoryProvider),
+        signalRGateway: ref.watch(signalRGatewayProvider),
+        apiClient: ref.watch(apiClientProvider),
+        tokenStorage: ref.watch(tokenStorageProvider),
+        environment: ref.watch(appEnvironmentProvider),
+        deviceContext: ref.watch(clientDeviceContextProvider),
+      );
+    });

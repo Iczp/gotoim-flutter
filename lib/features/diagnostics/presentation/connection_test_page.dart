@@ -33,9 +33,10 @@ class _ConnectionTestPageState extends ConsumerState<ConnectionTestPage> {
             title: '刷新 Token',
             description: '调用 /connect/token，grant_type=refresh_token',
             status: controller.refreshStatus,
-            onPressed: controller.refreshStatus == ConnectionTestStatus.testing
-                ? null
-                : controller.refreshToken,
+            onPressed:
+                controller.refreshStatus == ConnectionTestStatus.testing
+                    ? null
+                    : controller.refreshToken,
             buttonText: '刷新 Token',
             detail: controller.refreshError ?? controller.refreshResult,
           ),
@@ -44,9 +45,10 @@ class _ConnectionTestPageState extends ConsumerState<ConnectionTestPage> {
             title: '认证 API',
             description: '使用当前 Token 调用 /connect/userinfo',
             status: controller.apiStatus,
-            onPressed: controller.apiStatus == ConnectionTestStatus.testing
-                ? null
-                : controller.testAuthenticatedApi,
+            onPressed:
+                controller.apiStatus == ConnectionTestStatus.testing
+                    ? null
+                    : controller.testAuthenticatedApi,
             buttonText: '测试认证 API',
             detail: controller.apiError ?? controller.apiResult,
           ),
@@ -56,10 +58,12 @@ class _ConnectionTestPageState extends ConsumerState<ConnectionTestPage> {
             description:
                 'GET /api/chat/session-unit-cache/friends?ownerId=<值>&maxResultCount=100',
             status: controller.friendsStatus,
-            onPressed: controller.friendsStatus == ConnectionTestStatus.testing
-                ? null
-                : () =>
-                    controller.testFriendsApi(_ownerIdController.text.trim()),
+            onPressed:
+                controller.friendsStatus == ConnectionTestStatus.testing
+                    ? null
+                    : () => controller.testFriendsApi(
+                      _ownerIdController.text.trim(),
+                    ),
             buttonText: '测试好友 API',
             detail: controller.friendsError ?? controller.friendsResult,
             input: TextField(
@@ -76,9 +80,10 @@ class _ConnectionTestPageState extends ConsumerState<ConnectionTestPage> {
             title: '消息业务 API',
             description: 'GET /api/chat/message/fast，需要 sessionUnitId',
             status: controller.messagesStatus,
-            onPressed: controller.messagesStatus == ConnectionTestStatus.testing
-                ? null
-                : () => controller.testMessagesApi(
+            onPressed:
+                controller.messagesStatus == ConnectionTestStatus.testing
+                    ? null
+                    : () => controller.testMessagesApi(
                       _sessionUnitIdController.text.trim(),
                     ),
             buttonText: '测试消息 API',
@@ -138,13 +143,14 @@ class _TestCard extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton.tonal(
               onPressed: onPressed,
-              child: status == ConnectionTestStatus.testing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(buttonText),
+              child:
+                  status == ConnectionTestStatus.testing
+                      ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : Text(buttonText),
             ),
             if (detail != null) ...[
               const SizedBox(height: 12),

@@ -15,17 +15,21 @@ class QrCodeOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (statusText == null) return QrImage(data: data, size: 220);
+    if (statusText == null) return QrImageView(data: data, size: 220);
     return Stack(
       fit: StackFit.expand,
       children: [
         ColorFiltered(
-          colorFilter:
-              const ColorFilter.mode(Colors.grey, BlendMode.saturation),
+          colorFilter: const ColorFilter.mode(
+            Colors.grey,
+            BlendMode.saturation,
+          ),
           child: ImageFiltered(
             imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-            child:
-                Opacity(opacity: 0.55, child: QrImage(data: data, size: 220)),
+            child: Opacity(
+              opacity: 0.55,
+              child: QrImageView(data: data, size: 220),
+            ),
           ),
         ),
         Container(

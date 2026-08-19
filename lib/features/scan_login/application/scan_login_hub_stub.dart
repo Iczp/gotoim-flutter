@@ -6,5 +6,4 @@ ScanLoginHub createScanLoginHub({
   required AppEnvironment environment,
   required ClientDeviceContext deviceContext,
   required Future<String> Function() readAccessToken,
-}) =>
-    throw UnsupportedError('Scan-login is not supported by this runtime.');
+}) => throw UnsupportedError('Scan-login is not supported by this runtime.');

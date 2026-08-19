@@ -14,7 +14,8 @@ class AuthSession {
         (json['access_token'] ?? json['accessToken'] ?? '').toString();
     if (accessToken.isEmpty) {
       throw const FormatException(
-          'The token response does not contain access_token.');
+        'The token response does not contain access_token.',
+      );
     }
     return AuthSession(
       accessToken: accessToken,

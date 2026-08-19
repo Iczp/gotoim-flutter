@@ -1,8 +1,8 @@
 // ignore_for_file: avoid_web_libraries_in_flutter
 
 import 'dart:async';
-import 'dart:js' as js;
-import 'dart:js_util' as js_util;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 import '../../../core/config/app_environment.dart';
 import '../../../core/device/client_device_context.dart';
@@ -12,19 +12,21 @@ ScanLoginHub createScanLoginHub({
   required AppEnvironment environment,
   required ClientDeviceContext deviceContext,
   required Future<String> Function() readAccessToken,
-}) =>
-    _WebScanLoginHub(environment, deviceContext, readAccessToken);
+}) => _WebScanLoginHub(environment, deviceContext, readAccessToken);
 
 class _WebScanLoginHub implements ScanLoginHub {
   _WebScanLoginHub(
-      this._environment, this._deviceContext, this._readAccessToken);
+    this._environment,
+    this._deviceContext,
+    this._readAccessToken,
+  );
 
   final AppEnvironment _environment;
   final ClientDeviceContext _deviceContext;
   final Future<String> Function() _readAccessToken;
   final StreamController<ScanLoginHubEvent> _events =
       StreamController<ScanLoginHubEvent>.broadcast();
-  Object? _connection;
+  JSObject? _connection;
 
   @override
   Stream<ScanLoginHubEvent> get events => _events.stream;
@@ -32,10 +34,11 @@ class _WebScanLoginHub implements ScanLoginHub {
   @override
   Future<void> connect() async {
     if (_connection != null) return;
-    final signalR = js.context['signalR'];
-    if (signalR == null) {
+    final signalR = globalContext['signalR'];
+    if (signalR == null || !signalR.isA<JSObject>()) {
       throw UnsupportedError('SignalR web client was not loaded.');
     }
+    final signalRObject = signalR as JSObject;
     late final String accessToken;
     try {
       accessToken = await _readAccessToken();
@@ -48,35 +51,44 @@ class _WebScanLoginHub implements ScanLoginHub {
         ..._deviceContext.signalRQueryParameters,
       },
     );
-    final builder = js_util.callConstructor(
-      js_util.getProperty(signalR, 'HubConnectionBuilder'),
-      const <Object>[],
+    final builderConstructor = signalRObject['HubConnectionBuilder'];
+    final transportTypes = signalRObject['HttpTransportType'];
+    if (builderConstructor == null ||
+        !builderConstructor.isA<JSFunction>() ||
+        transportTypes == null ||
+        !transportTypes.isA<JSObject>()) {
+      throw UnsupportedError('SignalR web client is incomplete.');
+    }
+    final builderFunction = builderConstructor as JSFunction;
+    final transportTypeObject = transportTypes as JSObject;
+    final options =
+        <String, Object?>{
+              'skipNegotiation': _environment.signalRSkipNegotiation,
+              'accessTokenFactory': (() => accessToken.toJS).toJS,
+            }.jsify()!
+            as JSObject;
+    options['transport'] = transportTypeObject['WebSockets'];
+    final builder = builderFunction.callAsConstructor<JSObject>();
+    final configured = builder.callMethod<JSObject>(
+      'withUrl'.toJS,
+      uri.toString().toJS,
+      options,
     );
-    final configured = js_util.callMethod(builder, 'withUrl', <Object>[
-      uri.toString(),
-      js_util.jsify(<String, Object>{
-        'skipNegotiation': _environment.signalRSkipNegotiation,
-        'transport': js_util.getProperty(
-          js_util.getProperty(signalR, 'HttpTransportType'),
-          'WebSockets',
-        ),
-        'accessTokenFactory': js.allowInterop(() => accessToken),
-      }),
-    ]);
-    _connection = js_util.callMethod(configured, 'build', const <Object>[]);
-    js_util.callMethod(_connection!, 'on', <Object>[
-      'ReceivedMessage',
-      js.allowInterop((Object? message) {
-        final envelope = _map(message);
+    _connection = configured.callMethod<JSObject>('build'.toJS);
+    _connection!.callMethod<JSAny?>(
+      'on'.toJS,
+      'ReceivedMessage'.toJS,
+      ((JSAny? message) {
+        final envelope = _mapJs(message);
         final command = envelope['command']?.toString();
         if (command != null) {
-          _events.add(ScanLoginHubEvent(command, _map(envelope['payload'])));
+          _events.add(
+            ScanLoginHubEvent(command, _mapDart(envelope['payload'])),
+          );
         }
-      }),
-    ]);
-    await js_util.promiseToFuture<void>(
-      js_util.callMethod(_connection!, 'start', const <Object>[]),
+      }).toJS,
     );
+    await _connection!.callMethod<JSPromise<JSAny?>>('start'.toJS).toDart;
   }
 
   @override
@@ -85,23 +97,27 @@ class _WebScanLoginHub implements ScanLoginHub {
     if (connection == null) {
       throw StateError('Scan-login connection is not ready.');
     }
-    final result = await js_util.promiseToFuture<Object?>(
-      js_util.callMethod(connection, 'invoke', <Object>['Generate', state]),
-    );
-    return ScanLoginChallenge.fromJson(_map(result));
+    final result =
+        await connection
+            .callMethod<JSPromise<JSAny?>>(
+              'invoke'.toJS,
+              'Generate'.toJS,
+              state.toJS,
+            )
+            .toDart;
+    return ScanLoginChallenge.fromJson(_mapJs(result));
   }
 
-  Map<String, dynamic> _map(Object? value) {
-    final dartValue = js_util.dartify(value);
+  Map<String, dynamic> _mapJs(JSAny? value) => _mapDart(value?.dartify());
+
+  Map<String, dynamic> _mapDart(Object? dartValue) {
     return dartValue is Map ? Map<String, dynamic>.from(dartValue) : const {};
   }
 
   @override
   Future<void> dispose() async {
     if (_connection != null) {
-      await js_util.promiseToFuture<void>(
-        js_util.callMethod(_connection!, 'stop', const <Object>[]),
-      );
+      await _connection!.callMethod<JSPromise<JSAny?>>('stop'.toJS).toDart;
     }
     _connection = null;
     await _events.close();

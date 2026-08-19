@@ -31,7 +31,9 @@ class _ScanLoginScanPageState extends ConsumerState<ScanLoginScanPage> {
       _error = null;
     });
     try {
-      final result = await ref.read(scanCodeServiceProvider).scanCode(
+      final result = await ref
+          .read(scanCodeServiceProvider)
+          .scanCode(
             Navigator.of(context),
             const ScanCodeRequest(
               title: '扫码登录',
@@ -58,27 +60,26 @@ class _ScanLoginScanPageState extends ConsumerState<ScanLoginScanPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('扫码登录')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_opening)
-                  const CircularProgressIndicator()
-                else
-                  const Icon(Icons.qr_code_scanner_outlined, size: 64),
-                const SizedBox(height: 18),
-                Text(_error ?? '正在打开扫码器…', textAlign: TextAlign.center),
-                if (!_opening) ...[
-                  const SizedBox(height: 16),
-                  FilledButton(
-                      onPressed: _openScanner, child: const Text('重新扫码')),
-                ],
-              ],
-            ),
-          ),
+    appBar: AppBar(title: const Text('扫码登录')),
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_opening)
+              const CircularProgressIndicator()
+            else
+              const Icon(Icons.qr_code_scanner_outlined, size: 64),
+            const SizedBox(height: 18),
+            Text(_error ?? '正在打开扫码器…', textAlign: TextAlign.center),
+            if (!_opening) ...[
+              const SizedBox(height: 16),
+              FilledButton(onPressed: _openScanner, child: const Text('重新扫码')),
+            ],
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }

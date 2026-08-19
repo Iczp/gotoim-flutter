@@ -30,7 +30,8 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 
 /// 由 bootstrap 创建并覆写，保证通知点击回调在应用启动时即可注册。
 final localNotificationServiceProvider = Provider<LocalNotificationService>(
-  (ref) => throw UnimplementedError(
-    'LocalNotificationService must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'LocalNotificationService must be provided at bootstrap.',
+      ),
 );

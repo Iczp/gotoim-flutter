@@ -41,11 +41,11 @@ class _LocalNotificationDiagnosticsPageState
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) {
-      return const Scaffold(
-        body: Center(child: Text('开发诊断仅在 Debug 模式可用。')),
-      );
+      return const Scaffold(body: Center(child: Text('开发诊断仅在 Debug 模式可用。')));
     }
-    final controller = ref.watch(localNotificationDiagnosticsControllerProvider);
+    final controller = ref.watch(
+      localNotificationDiagnosticsControllerProvider,
+    );
     return Scaffold(
       appBar: AppBar(
         title: const Text('本地通知测试'),
@@ -71,7 +71,8 @@ class _LocalNotificationDiagnosticsPageState
             description: 'Android 13+、iOS、macOS 会在此请求系统授权；Linux 通常无需应用级授权。',
             status: controller.permissionStatus,
             onPressed:
-                controller.permissionStatus == LocalNotificationTestStatus.working
+                controller.permissionStatus ==
+                        LocalNotificationTestStatus.working
                     ? null
                     : controller.requestPermission,
             buttonText: '请求权限',
@@ -127,9 +128,10 @@ class _LocalNotificationDiagnosticsPageState
             title: '4. 取消通知',
             description: '按当前通知 ID 取消，或取消全部通知。',
             status: controller.cancelStatus,
-            onPressed: controller.cancelStatus == LocalNotificationTestStatus.working
-                ? null
-                : _cancelCurrent,
+            onPressed:
+                controller.cancelStatus == LocalNotificationTestStatus.working
+                    ? null
+                    : _cancelCurrent,
             buttonText: '取消当前 ID',
             detail: controller.cancelResult,
             extraAction: OutlinedButton(
@@ -148,8 +150,10 @@ class _LocalNotificationDiagnosticsPageState
             ),
           ],
           const SizedBox(height: 20),
-          Text('通知点击事件（最多保留 100 条）',
-              style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            '通知点击事件（最多保留 100 条）',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           if (controller.tapEvents.isEmpty)
             const Text('暂未收到通知点击事件。')
@@ -190,24 +194,24 @@ class _LocalNotificationDiagnosticsPageState
     int maxLines = 1,
     TextInputType? keyboardType,
   }) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: TextField(
-          controller: controller,
-          minLines: 1,
-          maxLines: maxLines,
-          keyboardType: keyboardType,
-          decoration: InputDecoration(
-            labelText: label,
-            helperText: helperText,
-            border: const OutlineInputBorder(),
-            suffixIcon: IconButton(
-              tooltip: '复制',
-              icon: const Icon(Icons.copy_outlined),
-              onPressed: () => _copy(controller.text),
-            ),
-          ),
+    padding: const EdgeInsets.only(bottom: 12),
+    child: TextField(
+      controller: controller,
+      minLines: 1,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: helperText,
+        border: const OutlineInputBorder(),
+        suffixIcon: IconButton(
+          tooltip: '复制',
+          icon: const Icon(Icons.copy_outlined),
+          onPressed: () => _copy(controller.text),
         ),
-      );
+      ),
+    ),
+  );
 
   void _showNotification() {
     final request = _buildRequest();
@@ -249,14 +253,16 @@ class _LocalNotificationDiagnosticsPageState
   Future<void> _copy(String value) async {
     await ref.read(clipboardServiceProvider).copy(value);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已复制。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已复制。')));
     }
   }
 
   void _showInputError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -268,18 +274,18 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              SelectableText(detail),
-            ],
-          ),
-        ),
-      );
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SelectableText(detail),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ActionCard extends StatelessWidget {
@@ -320,13 +326,14 @@ class _ActionCard extends StatelessWidget {
               children: [
                 FilledButton.tonal(
                   onPressed: onPressed,
-                  child: status == LocalNotificationTestStatus.working
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(buttonText),
+                  child:
+                      status == LocalNotificationTestStatus.working
+                          ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : Text(buttonText),
                 ),
                 if (extraAction != null) extraAction!,
               ],

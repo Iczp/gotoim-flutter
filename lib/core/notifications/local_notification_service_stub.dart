@@ -12,12 +12,13 @@ class _UnsupportedLocalNotificationService implements LocalNotificationService {
 
   @override
   LocalNotificationSupport get support => LocalNotificationSupport(
-        platform: _platformFacade.kind,
-        isSupported: false,
-        message: _platformFacade.isWeb
+    platform: _platformFacade.kind,
+    isSupported: false,
+    message:
+        _platformFacade.isWeb
             ? 'Web 端不使用本地通知插件；后续应通过浏览器 Notification API 单独实现。'
             : '当前平台尚未接入本地通知实现。',
-      );
+  );
 
   @override
   Stream<LocalNotificationTapEvent> get tapEvents =>
@@ -46,7 +47,7 @@ class _UnsupportedLocalNotificationService implements LocalNotificationService {
   Future<LocalNotificationDispatchResult> show(
     LocalNotificationRequest request,
   ) async => LocalNotificationDispatchResult(
-        status: LocalNotificationDispatchStatus.unsupported,
-        message: support.message,
-      );
+    status: LocalNotificationDispatchStatus.unsupported,
+    message: support.message,
+  );
 }

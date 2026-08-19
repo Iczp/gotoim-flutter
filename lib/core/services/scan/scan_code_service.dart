@@ -32,10 +32,12 @@ class NavigatorScanCodeService implements ScanCodeService {
   ) {
     return navigator.push<ScanCodeResult>(
       PageRouteBuilder<ScanCodeResult>(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            ScanCodePage(request: request),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-            FadeTransition(opacity: animation, child: child),
+        pageBuilder:
+            (context, animation, secondaryAnimation) =>
+                ScanCodePage(request: request),
+        transitionsBuilder:
+            (context, animation, secondaryAnimation, child) =>
+                FadeTransition(opacity: animation, child: child),
       ),
     );
   }

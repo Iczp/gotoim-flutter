@@ -80,9 +80,10 @@ class ScanLoginRequest {
 
   factory ScanLoginRequest.fromJson(Map<String, dynamic> json) {
     final pool = json['connectionPool'];
-    final deviceJson = pool is Map<String, dynamic>
-        ? pool
-        : pool is Map
+    final deviceJson =
+        pool is Map<String, dynamic>
+            ? pool
+            : pool is Map
             ? Map<String, dynamic>.from(pool)
             : const <String, dynamic>{};
     final poolDevice = LoginDevice.fromJson(deviceJson);
@@ -93,13 +94,16 @@ class ScanLoginRequest {
       state: json['state']?.toString(),
       expiredTime: DateTime.tryParse(json['expiredTime']?.toString() ?? ''),
       device: LoginDevice(
-        appName: poolDevice.appName ??
+        appName:
+            poolDevice.appName ??
             json['scanAppName']?.toString() ??
             json['appName']?.toString(),
-        deviceInfo: poolDevice.deviceInfo ??
+        deviceInfo:
+            poolDevice.deviceInfo ??
             json['scanDeviceInfo']?.toString() ??
             json['deviceInfo']?.toString(),
-        clientId: poolDevice.clientId ??
+        clientId:
+            poolDevice.clientId ??
             json['scanClientId']?.toString() ??
             json['clientId']?.toString(),
       ),

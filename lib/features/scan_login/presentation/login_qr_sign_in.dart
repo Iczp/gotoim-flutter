@@ -87,9 +87,10 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
       _status = _QrLoginStatus.ready;
       _scanUserName = null;
     });
-    final expiresIn = challenge.expiredTime == null
-        ? ref.read(appEnvironmentProvider).scanLoginFallbackExpires
-        : challenge.expiredTime!.difference(DateTime.now());
+    final expiresIn =
+        challenge.expiredTime == null
+            ? ref.read(appEnvironmentProvider).scanLoginFallbackExpires
+            : challenge.expiredTime!.difference(DateTime.now());
     _startCountdown(expiresIn);
   }
 
@@ -127,7 +128,8 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
         if (mounted) {
           setState(() {
             _status = _QrLoginStatus.scanned;
-            _scanUserName = event.payload['scanUserName']?.toString() ??
+            _scanUserName =
+                event.payload['scanUserName']?.toString() ??
                 event.payload['userName']?.toString();
           });
         }
@@ -173,20 +175,21 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
     if (_status == _QrLoginStatus.scanned) {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('确认刷新二维码？'),
-          content: const Text('手机端正在等待授权。刷新后，本次扫码登录将失效。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('继续等待'),
+        builder:
+            (dialogContext) => AlertDialog(
+              title: const Text('确认刷新二维码？'),
+              content: const Text('手机端正在等待授权。刷新后，本次扫码登录将失效。'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('继续等待'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('确认刷新'),
+                ),
+              ],
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认刷新'),
-            ),
-          ],
-        ),
       );
       if (confirmed != true || !mounted) return;
     }
@@ -248,9 +251,10 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
   }
 
   String _errorMessage(Object error, {bool whileConnecting = false}) {
-    final prefix = error is ScanLoginTokenException
-        ? '获取扫码登录令牌失败'
-        : whileConnecting
+    final prefix =
+        error is ScanLoginTokenException
+            ? '获取扫码登录令牌失败'
+            : whileConnecting
             ? '连接扫码登录服务失败'
             : '生成二维码失败';
     return '$prefix：${error.toString().replaceFirst('Exception: ', '')}';
@@ -271,11 +275,17 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('扫码登录',
-            textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
+        Text(
+          '扫码登录',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleLarge,
+        ),
         const SizedBox(height: 6),
-        Text('使用已登录的 Goto IM 扫描二维码',
-            textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+        Text(
+          '使用已登录的 Goto IM 扫描二维码',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall,
+        ),
         const SizedBox(height: 20),
         Center(
           child: InkWell(
@@ -288,13 +298,17 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
               height: 258,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: _accentColor.withOpacity(0.08),
+                color: _accentColor.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(24),
-                border:
-                    Border.all(color: _accentColor, width: isWarning ? 3 : 2),
+                border: Border.all(
+                  color: _accentColor,
+                  width: isWarning ? 3 : 2,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: _accentColor.withOpacity(isWarning ? 0.35 : 0.16),
+                    color: _accentColor.withValues(
+                      alpha: isWarning ? 0.35 : 0.16,
+                    ),
                     blurRadius: isWarning ? 22 : 12,
                     spreadRadius: isWarning ? 2 : 0,
                   ),
@@ -306,18 +320,27 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Center(
-                  child: !_connected
-                      ? _ConnectionState(loading: _loading)
-                      : _isExpired
-                          ? Icon(Icons.timer_off_outlined,
-                              size: 76, color: _accentColor)
+                  child:
+                      !_connected
+                          ? _ConnectionState(loading: _loading)
+                          : _isExpired
+                          ? Icon(
+                            Icons.timer_off_outlined,
+                            size: 76,
+                            color: _accentColor,
+                          )
                           : _loading && _qrText == null
-                              ? const CircularProgressIndicator()
-                              : _qrText == null
-                                  ? Icon(Icons.qr_code_2_outlined,
-                                      size: 156, color: _accentColor)
-                                  : QrCodeOverlay(
-                                      data: _qrText!, statusText: _statusText),
+                          ? const CircularProgressIndicator()
+                          : _qrText == null
+                          ? Icon(
+                            Icons.qr_code_2_outlined,
+                            size: 156,
+                            color: _accentColor,
+                          )
+                          : QrCodeOverlay(
+                            data: _qrText!,
+                            statusText: _statusText,
+                          ),
                 ),
               ),
             ),
@@ -325,8 +348,11 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
         ),
         const SizedBox(height: 14),
         if (_stateCode != null && _connected) ...[
-          Text('四位校验码',
-              textAlign: TextAlign.center, style: theme.textTheme.labelLarge),
+          Text(
+            '四位校验码',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelLarge,
+          ),
           const SizedBox(height: 8),
           VerificationCodeBoxes(code: _stateCode, color: _accentColor),
         ],
@@ -335,10 +361,10 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
           !_connected
               ? (_loading ? '正在连接扫码登录服务…' : '连接失败，请重新连接。')
               : _isExpired
-                  ? '二维码已过期，请点击下方按钮刷新。'
-                  : _status == _QrLoginStatus.ready
-                      ? '点击二维码可立即刷新'
-                      : _statusText ?? '',
+              ? '二维码已过期，请点击下方按钮刷新。'
+              : _status == _QrLoginStatus.ready
+              ? '点击二维码可立即刷新'
+              : _statusText ?? '',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(color: _accentColor),
         ),
@@ -349,7 +375,7 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
               duration: const Duration(milliseconds: 300),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: _accentColor.withOpacity(0.12),
+                color: _accentColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -364,9 +390,11 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
         ],
         if (_error != null) ...[
           const SizedBox(height: 12),
-          Text(_error!,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: theme.colorScheme.error)),
+          Text(
+            _error!,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
         ],
         const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -385,17 +413,18 @@ class _ConnectionState extends StatelessWidget {
   final bool loading;
 
   @override
-  Widget build(BuildContext context) => loading
-      ? Column(
-          mainAxisSize: MainAxisSize.min,
-          // The progress indicator is not const in this Flutter SDK.
-          // ignore: prefer_const_literals_to_create_immutables
-          children: [
-            // ignore: prefer_const_constructors
-            CircularProgressIndicator(),
-            const SizedBox(height: 12),
-            const Text('正在连接…'),
-          ],
-        )
-      : const Icon(Icons.wifi_off_outlined, size: 72);
+  Widget build(BuildContext context) =>
+      loading
+          ? Column(
+            mainAxisSize: MainAxisSize.min,
+            // The progress indicator is not const in this Flutter SDK.
+            // ignore: prefer_const_literals_to_create_immutables
+            children: [
+              // ignore: prefer_const_constructors
+              CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              const Text('正在连接…'),
+            ],
+          )
+          : const Icon(Icons.wifi_off_outlined, size: 72);
 }

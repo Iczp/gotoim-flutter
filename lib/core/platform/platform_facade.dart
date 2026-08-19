@@ -9,6 +9,8 @@ export 'platform_facade_stub.dart'
 
 final Provider<PlatformFacade> platformFacadeProvider =
     Provider<PlatformFacade>(
-  (ref) =>
-      throw UnimplementedError('PlatformFacade must be provided at bootstrap.'),
-);
+      (ref) =>
+          throw UnimplementedError(
+            'PlatformFacade must be provided at bootstrap.',
+          ),
+    );

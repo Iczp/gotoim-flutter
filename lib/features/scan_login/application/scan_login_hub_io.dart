@@ -10,12 +10,14 @@ ScanLoginHub createScanLoginHub({
   required AppEnvironment environment,
   required ClientDeviceContext deviceContext,
   required Future<String> Function() readAccessToken,
-}) =>
-    _IoScanLoginHub(environment, deviceContext, readAccessToken);
+}) => _IoScanLoginHub(environment, deviceContext, readAccessToken);
 
 class _IoScanLoginHub implements ScanLoginHub {
   _IoScanLoginHub(
-      this._environment, this._deviceContext, this._readAccessToken);
+    this._environment,
+    this._deviceContext,
+    this._readAccessToken,
+  );
 
   final AppEnvironment _environment;
   final ClientDeviceContext _deviceContext;
@@ -46,21 +48,26 @@ class _IoScanLoginHub implements ScanLoginHub {
     } catch (error) {
       throw ScanLoginTokenException(error);
     }
-    final url = Uri.parse(_environment.scanLoginHubUrl)
-        .replace(queryParameters: <String, String>{
-      ...Uri.parse(_environment.scanLoginHubUrl).queryParameters,
-      ..._deviceContext.signalRQueryParameters,
-    }).toString();
-    final connection = HubConnectionBuilder()
-        .withUrl(
-          url,
-          options: HttpConnectionOptions(
-            skipNegotiation: _environment.signalRSkipNegotiation,
-            transport: HttpTransportType.WebSockets,
-            accessTokenFactory: () async => accessToken,
-          ),
-        )
-        .build();
+    final url =
+        Uri.parse(_environment.scanLoginHubUrl)
+            .replace(
+              queryParameters: <String, String>{
+                ...Uri.parse(_environment.scanLoginHubUrl).queryParameters,
+                ..._deviceContext.signalRQueryParameters,
+              },
+            )
+            .toString();
+    final connection =
+        HubConnectionBuilder()
+            .withUrl(
+              url,
+              options: HttpConnectionOptions(
+                skipNegotiation: _environment.signalRSkipNegotiation,
+                transport: HttpTransportType.WebSockets,
+                accessTokenFactory: () async => accessToken,
+              ),
+            )
+            .build();
     connection.on('ReceivedMessage', _onReceived);
     _connection = connection;
     await connection.start();
@@ -78,17 +85,19 @@ class _IoScanLoginHub implements ScanLoginHub {
   }
 
   void _onReceived(List<Object?>? arguments) {
-    final payload =
-        _asMap(arguments == null || arguments.isEmpty ? null : arguments.first);
+    final payload = _asMap(
+      arguments == null || arguments.isEmpty ? null : arguments.first,
+    );
     final command = payload['command']?.toString();
     final body = payload['payload'];
     if (command == null) return;
     _events.add(ScanLoginHubEvent(command, _asMap(body)));
   }
 
-  Map<String, dynamic> _asMap(Object? value) => value is Map
-      ? Map<String, dynamic>.from(value)
-      : const <String, dynamic>{};
+  Map<String, dynamic> _asMap(Object? value) =>
+      value is Map
+          ? Map<String, dynamic>.from(value)
+          : const <String, dynamic>{};
 
   @override
   Future<void> dispose() async {

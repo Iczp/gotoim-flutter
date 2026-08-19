@@ -8,7 +8,8 @@ import '../../auth/application/auth_controller.dart';
 
 import 'scan_login_hub_stub.dart'
     if (dart.library.io) 'scan_login_hub_io.dart'
-    if (dart.library.html) 'scan_login_hub_web.dart' as platform;
+    if (dart.library.html) 'scan_login_hub_web.dart'
+    as platform;
 
 abstract class ScanLoginHub {
   Stream<ScanLoginHubEvent> get events;

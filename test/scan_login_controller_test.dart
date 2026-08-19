@@ -28,47 +28,60 @@ void main() {
     expect(request.state, '8451');
   });
 
-  test('only grants login after the request was inspected and approved',
-      () async {
-    final repository = _FakeScanLoginRepository();
-    final controller =
-        ScanLoginController(repository, 'gotoim://scan-login?code=1');
+  test(
+    'only grants login after the request was inspected and approved',
+    () async {
+      final repository = _FakeScanLoginRepository();
+      final controller = ScanLoginController(
+        repository,
+        'gotoim://scan-login?code=1',
+      );
 
-    expect(await controller.grant(), isFalse);
-    expect(repository.grantCalls, 0);
+      expect(await controller.grant(), isFalse);
+      expect(repository.grantCalls, 0);
 
-    await controller.load();
-    expect(await controller.grant(), isTrue);
-    expect(repository.grantCalls, 1);
-    expect(repository.cancelCalls, 0);
-  });
+      await controller.load();
+      expect(await controller.grant(), isTrue);
+      expect(repository.grantCalls, 1);
+      expect(repository.cancelCalls, 0);
+    },
+  );
 
-  test('closing an unapproved request cancels the backend login challenge',
-      () async {
-    final repository = _FakeScanLoginRepository();
-    final controller =
-        ScanLoginController(repository, 'gotoim://scan-login?code=1');
+  test(
+    'closing an unapproved request cancels the backend login challenge',
+    () async {
+      final repository = _FakeScanLoginRepository();
+      final controller = ScanLoginController(
+        repository,
+        'gotoim://scan-login?code=1',
+      );
 
-    await controller.load();
-    await controller.cancelIfNeeded();
+      await controller.load();
+      await controller.cancelIfNeeded();
 
-    expect(repository.cancelCalls, 1);
-    expect(repository.grantCalls, 0);
-  });
+      expect(repository.cancelCalls, 1);
+      expect(repository.grantCalls, 0);
+    },
+  );
 
-  test('does not send a second authorization after the first attempt fails',
-      () async {
-    final repository = _FakeScanLoginRepository()
-      ..grantError = StateError('network interrupted');
-    final controller =
-        ScanLoginController(repository, 'gotoim://scan-login?code=1');
+  test(
+    'does not send a second authorization after the first attempt fails',
+    () async {
+      final repository =
+          _FakeScanLoginRepository()
+            ..grantError = StateError('network interrupted');
+      final controller = ScanLoginController(
+        repository,
+        'gotoim://scan-login?code=1',
+      );
 
-    await controller.load();
-    expect(await controller.grant(), isFalse);
-    expect(await controller.grant(), isFalse);
-    expect(repository.grantCalls, 1);
-    expect(controller.authorizationAttempted, isTrue);
-  });
+      await controller.load();
+      expect(await controller.grant(), isFalse);
+      expect(await controller.grant(), isFalse);
+      expect(repository.grantCalls, 1);
+      expect(controller.authorizationAttempted, isTrue);
+    },
+  );
 }
 
 class _FakeScanLoginRepository implements ScanLoginRepository {

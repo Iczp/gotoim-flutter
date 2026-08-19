@@ -28,7 +28,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    await ref.read(authControllerProvider).login(
+    await ref
+        .read(authControllerProvider)
+        .login(
           username: _usernameController.text.trim(),
           password: _passwordController.text,
         );
@@ -57,12 +59,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Icon(Icons.forum_outlined,
-                            size: 48, color: theme.colorScheme.primary),
+                        Icon(
+                          Icons.forum_outlined,
+                          size: 48,
+                          color: theme.colorScheme.primary,
+                        ),
                         const SizedBox(height: 16),
-                        Text('Goto IM',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.headlineSmall),
+                        Text(
+                          'Goto IM',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineSmall,
+                        ),
                         const SizedBox(height: 28),
                         if (_isQrLogin)
                           const LoginQrSignIn()
@@ -73,19 +80,24 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             obscurePassword: _obscurePassword,
                             isBusy: auth.isBusy,
                             errorMessage: auth.errorMessage,
-                            onObscureChanged: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
+                            onObscureChanged:
+                                () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
                             onSubmit: _submit,
                           ),
                         const SizedBox(height: 8),
                         TextButton.icon(
-                          onPressed: auth.isBusy
-                              ? null
-                              : () => setState(() => _isQrLogin = !_isQrLogin),
-                          icon: Icon(_isQrLogin
-                              ? Icons.password_outlined
-                              : Icons.qr_code_scanner_outlined),
+                          onPressed:
+                              auth.isBusy
+                                  ? null
+                                  : () =>
+                                      setState(() => _isQrLogin = !_isQrLogin),
+                          icon: Icon(
+                            _isQrLogin
+                                ? Icons.password_outlined
+                                : Icons.qr_code_scanner_outlined,
+                          ),
                           label: Text(_isQrLogin ? '使用密码登录' : '扫码登录'),
                         ),
                       ],
@@ -123,53 +135,63 @@ class _PasswordForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(children: [
-      TextFormField(
-        controller: usernameController,
-        autofillHints: const [AutofillHints.username],
-        decoration: const InputDecoration(
-          labelText: '账号',
-          border: OutlineInputBorder(),
-        ),
-        validator: (value) => value == null || value.trim().isEmpty
-            ? 'Enter your account.'
-            : null,
-      ),
-      const SizedBox(height: 16),
-      TextFormField(
-        controller: passwordController,
-        obscureText: obscurePassword,
-        autofillHints: const [AutofillHints.password],
-        decoration: InputDecoration(
-          labelText: '密码',
-          border: const OutlineInputBorder(),
-          suffixIcon: IconButton(
-            tooltip: obscurePassword ? 'Show password' : 'Hide password',
-            icon: Icon(obscurePassword
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined),
-            onPressed: onObscureChanged,
+    return Column(
+      children: [
+        TextFormField(
+          controller: usernameController,
+          autofillHints: const [AutofillHints.username],
+          decoration: const InputDecoration(
+            labelText: '账号',
+            border: OutlineInputBorder(),
           ),
+          validator:
+              (value) =>
+                  value == null || value.trim().isEmpty
+                      ? 'Enter your account.'
+                      : null,
         ),
-        onFieldSubmitted: (_) => onSubmit(),
-        validator: (value) =>
-            value == null || value.isEmpty ? 'Enter your password.' : null,
-      ),
-      if (errorMessage != null) ...[
         const SizedBox(height: 16),
-        Text(errorMessage!, style: TextStyle(color: theme.colorScheme.error)),
+        TextFormField(
+          controller: passwordController,
+          obscureText: obscurePassword,
+          autofillHints: const [AutofillHints.password],
+          decoration: InputDecoration(
+            labelText: '密码',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              tooltip: obscurePassword ? 'Show password' : 'Hide password',
+              icon: Icon(
+                obscurePassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+              ),
+              onPressed: onObscureChanged,
+            ),
+          ),
+          onFieldSubmitted: (_) => onSubmit(),
+          validator:
+              (value) =>
+                  value == null || value.isEmpty
+                      ? 'Enter your password.'
+                      : null,
+        ),
+        if (errorMessage != null) ...[
+          const SizedBox(height: 16),
+          Text(errorMessage!, style: TextStyle(color: theme.colorScheme.error)),
+        ],
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: isBusy ? null : onSubmit,
+          child:
+              isBusy
+                  ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                  : const Text('登录'),
+        ),
       ],
-      const SizedBox(height: 24),
-      FilledButton(
-        onPressed: isBusy ? null : onSubmit,
-        child: isBusy
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Text('登录'),
-      ),
-    ]);
+    );
   }
 }

@@ -6,7 +6,7 @@ import 'token_storage.dart';
 /// and must never access this plugin directly.
 class SecureTokenStorage implements TokenStorage {
   SecureTokenStorage({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   static const _accessTokenKey = 'gotoim.access-token.v1';
   static const _refreshTokenKey = 'gotoim.refresh-token.v1';

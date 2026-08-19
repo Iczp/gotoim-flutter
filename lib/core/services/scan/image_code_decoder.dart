@@ -46,7 +46,7 @@ class ZxingImageCodeService implements ImageCodeService {
     try {
       final decodedImage = image.decodeImage(request.bytes);
       if (decodedImage == null) return null;
-      final rgba = decodedImage.getBytes(format: image.Format.bgra);
+      final rgba = decodedImage.getBytes(order: image.ChannelOrder.bgra);
       final source = RGBLuminanceSource(
         decodedImage.width,
         decodedImage.height,

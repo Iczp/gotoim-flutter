@@ -29,9 +29,9 @@ class VerificationCodeBoxes extends StatelessWidget {
             height: boxSize,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: accent.withOpacity(0.10),
+              color: accent.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: accent.withOpacity(0.55)),
+              border: Border.all(color: accent.withValues(alpha: 0.55)),
             ),
             child: Text(
               normalized[index],

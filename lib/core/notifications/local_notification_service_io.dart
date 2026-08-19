@@ -14,8 +14,8 @@ class FlutterLocalNotificationService implements LocalNotificationService {
   FlutterLocalNotificationService({
     required PlatformFacade platformFacade,
     FlutterLocalNotificationsPlugin? plugin,
-  })  : _platformFacade = platformFacade,
-        _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+  }) : _platformFacade = platformFacade,
+       _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   final PlatformFacade _platformFacade;
   final FlutterLocalNotificationsPlugin _plugin;
@@ -40,7 +40,8 @@ class FlutterLocalNotificationService implements LocalNotificationService {
         return const LocalNotificationSupport(
           platform: PlatformKind.windows,
           isSupported: false,
-          message: '当前 flutter_local_notifications 13.0.0 不提供 Windows 实现；已保留统一契约，需补充 Windows 适配器。',
+          message:
+              '当前 flutter_local_notifications 13.0.0 不提供 Windows 实现；已保留统一契约，需补充 Windows 适配器。',
         );
       case PlatformKind.web:
         return const LocalNotificationSupport(
@@ -78,7 +79,7 @@ class FlutterLocalNotificationService implements LocalNotificationService {
       linux: LinuxInitializationSettings(defaultActionName: '打开'),
     );
     await _plugin.initialize(
-      settings,
+      settings: settings,
       onDidReceiveNotificationResponse: _onNotificationResponse,
     );
     _initialized = true;
@@ -95,21 +96,25 @@ class FlutterLocalNotificationService implements LocalNotificationService {
     await initialize();
     switch (_platformFacade.kind) {
       case PlatformKind.android:
-        final granted = await _plugin
-            .resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin>()
-            ?.requestPermission();
+        final granted =
+            await _plugin
+                .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin
+                >()
+                ?.requestNotificationsPermission();
         return _androidPermissionResult(granted);
       case PlatformKind.ios:
         final granted = await _plugin
             .resolvePlatformSpecificImplementation<
-                IOSFlutterLocalNotificationsPlugin>()
+              IOSFlutterLocalNotificationsPlugin
+            >()
             ?.requestPermissions(alert: true, badge: true, sound: true);
         return _darwinPermissionResult(granted);
       case PlatformKind.macos:
         final granted = await _plugin
             .resolvePlatformSpecificImplementation<
-                MacOSFlutterLocalNotificationsPlugin>()
+              MacOSFlutterLocalNotificationsPlugin
+            >()
             ?.requestPermissions(alert: true, badge: true, sound: true);
         return _darwinPermissionResult(granted);
       case PlatformKind.linux:
@@ -161,7 +166,7 @@ class FlutterLocalNotificationService implements LocalNotificationService {
   @override
   Future<void> cancel(int id) async {
     _delayedNotifications.remove(id)?.cancel();
-    if (support.isSupported) await _plugin.cancel(id);
+    if (support.isSupported) await _plugin.cancel(id: id);
   }
 
   @override
@@ -183,31 +188,31 @@ class FlutterLocalNotificationService implements LocalNotificationService {
   }
 
   Future<void> _showNow(LocalNotificationRequest request) => _plugin.show(
-        request.id,
-        request.title,
-        request.body,
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            request.channelId,
-            request.channelName,
-            channelDescription: 'Goto IM 本地通知',
-            importance: Importance.max,
-            priority: Priority.high,
-          ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-          ),
-          macOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-          ),
-          linux: const LinuxNotificationDetails(),
-        ),
-        payload: request.payload,
-      );
+    id: request.id,
+    title: request.title,
+    body: request.body,
+    notificationDetails: NotificationDetails(
+      android: AndroidNotificationDetails(
+        request.channelId,
+        request.channelName,
+        channelDescription: 'Goto IM 本地通知',
+        importance: Importance.max,
+        priority: Priority.high,
+      ),
+      iOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+      macOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+      linux: const LinuxNotificationDetails(),
+    ),
+    payload: request.payload,
+  );
 
   void _onNotificationResponse(NotificationResponse response) {
     if (_tapEvents.isClosed) return;
@@ -263,10 +268,18 @@ class FlutterLocalNotificationService implements LocalNotificationService {
       throw ArgumentError.value(request.id, 'id', '通知 ID 必须是非负整数。');
     }
     if (request.channelId.trim().isEmpty) {
-      throw ArgumentError.value(request.channelId, 'channelId', 'Android 渠道 ID 不能为空。');
+      throw ArgumentError.value(
+        request.channelId,
+        'channelId',
+        'Android 渠道 ID 不能为空。',
+      );
     }
     if (request.channelName.trim().isEmpty) {
-      throw ArgumentError.value(request.channelName, 'channelName', 'Android 渠道名称不能为空。');
+      throw ArgumentError.value(
+        request.channelName,
+        'channelName',
+        'Android 渠道名称不能为空。',
+      );
     }
     if (request.delay.isNegative) {
       throw ArgumentError.value(request.delay, 'delay', '延迟时间不能小于 0。');

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/notifications/local_notification_service.dart';
@@ -140,7 +140,7 @@ class LocalNotificationDiagnosticsController extends ChangeNotifier {
 
 final localNotificationDiagnosticsControllerProvider =
     ChangeNotifierProvider<LocalNotificationDiagnosticsController>((ref) {
-  return LocalNotificationDiagnosticsController(
-    ref.watch(localNotificationServiceProvider),
-  );
-});
+      return LocalNotificationDiagnosticsController(
+        ref.watch(localNotificationServiceProvider),
+      );
+    });

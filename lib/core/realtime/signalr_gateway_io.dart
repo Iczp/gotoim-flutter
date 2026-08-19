@@ -24,32 +24,36 @@ class SignalRNetcoreGateway implements SignalRGateway {
     required AppEnvironment environment,
     required SignalRAccessTokenReader readAccessToken,
     required ClientDeviceContext deviceContext,
-  }) : _connection = HubConnectionBuilder()
-            .withUrl(
-              _withDeviceQuery(environment.signalRHubUrl, deviceContext),
-              options: HttpConnectionOptions(
-                skipNegotiation: environment.signalRSkipNegotiation,
-                transport: HttpTransportType.WebSockets,
-                accessTokenFactory: () async => await readAccessToken() ?? '',
-              ),
-            )
-            .withAutomaticReconnect(
-              retryDelays: environment.signalRReconnectDelays,
-            )
-            .build() {
+  }) : _connection =
+           HubConnectionBuilder()
+               .withUrl(
+                 _withDeviceQuery(environment.signalRHubUrl, deviceContext),
+                 options: HttpConnectionOptions(
+                   skipNegotiation: environment.signalRSkipNegotiation,
+                   transport: HttpTransportType.WebSockets,
+                   accessTokenFactory:
+                       () async => await readAccessToken() ?? '',
+                 ),
+               )
+               .withAutomaticReconnect(
+                 retryDelays: environment.signalRReconnectDelays,
+               )
+               .build() {
     _connection.on('ReceivedMessage', _onReceivedMessage);
-    _connection.onreconnecting(({error}) => _emitConnection(
-          SignalRConnectionState.reconnecting,
-          error: error,
-        ));
-    _connection.onreconnected(({connectionId}) => _emitConnection(
-          SignalRConnectionState.connected,
-          connectionId: connectionId,
-        ));
-    _connection.onclose(({error}) => _emitConnection(
-          SignalRConnectionState.disconnected,
-          error: error,
-        ));
+    _connection.onreconnecting(
+      ({error}) =>
+          _emitConnection(SignalRConnectionState.reconnecting, error: error),
+    );
+    _connection.onreconnected(
+      ({connectionId}) => _emitConnection(
+        SignalRConnectionState.connected,
+        connectionId: connectionId,
+      ),
+    );
+    _connection.onclose(
+      ({error}) =>
+          _emitConnection(SignalRConnectionState.disconnected, error: error),
+    );
   }
 
   final HubConnection _connection;
@@ -62,15 +66,17 @@ class SignalRNetcoreGateway implements SignalRGateway {
 
   @override
   SignalRConnectionInfo get connectionInfo => SignalRConnectionInfo(
-        hubUrl: _connection.baseUrl ?? '',
-        state: connectionState,
-        connectionId: _connection.connectionId,
-        keepAliveInterval:
-            Duration(milliseconds: _connection.keepAliveIntervalInMilliseconds),
-        serverTimeout:
-            Duration(milliseconds: _connection.serverTimeoutInMilliseconds),
-        lastReceivedAt: _lastReceivedAt,
-      );
+    hubUrl: _connection.baseUrl ?? '',
+    state: connectionState,
+    connectionId: _connection.connectionId,
+    keepAliveInterval: Duration(
+      milliseconds: _connection.keepAliveIntervalInMilliseconds,
+    ),
+    serverTimeout: Duration(
+      milliseconds: _connection.serverTimeoutInMilliseconds,
+    ),
+    lastReceivedAt: _lastReceivedAt,
+  );
 
   @override
   Stream<SignalRAppEvent> get events => _events.stream;
@@ -79,7 +85,9 @@ class SignalRNetcoreGateway implements SignalRGateway {
   Future<void> connect() async {
     if (connectionState == SignalRConnectionState.connected ||
         connectionState == SignalRConnectionState.connecting ||
-        connectionState == SignalRConnectionState.reconnecting) return;
+        connectionState == SignalRConnectionState.reconnecting) {
+      return;
+    }
     _emitConnection(SignalRConnectionState.connecting);
     try {
       await _connection.start();
@@ -114,18 +122,22 @@ class SignalRNetcoreGateway implements SignalRGateway {
     final command =
         commandValue == null ? null : SignalRCommand.fromValue(commandValue);
     if (envelope == null || command == null) {
-      _events.add(SignalRUnknownCommandEvent(
-        command: commandValue,
-        envelope: envelope ?? const <String, dynamic>{},
-        receivedAt: now,
-      ));
+      _events.add(
+        SignalRUnknownCommandEvent(
+          command: commandValue,
+          envelope: envelope ?? const <String, dynamic>{},
+          receivedAt: now,
+        ),
+      );
       return;
     }
-    _events.add(SignalRCommandEvent(
-      command: command,
-      envelope: envelope,
-      receivedAt: now,
-    ));
+    _events.add(
+      SignalRCommandEvent(
+        command: command,
+        envelope: envelope,
+        receivedAt: now,
+      ),
+    );
   }
 
   Map<String, dynamic>? _asMap(Object? value) {
@@ -139,12 +151,14 @@ class SignalRNetcoreGateway implements SignalRGateway {
     String? connectionId,
   }) {
     if (!_events.isClosed) {
-      _events.add(SignalRConnectionEvent(
-        state: state,
-        error: error,
-        connectionId: connectionId,
-        receivedAt: DateTime.now(),
-      ));
+      _events.add(
+        SignalRConnectionEvent(
+          state: state,
+          error: error,
+          connectionId: connectionId,
+          receivedAt: DateTime.now(),
+        ),
+      );
     }
   }
 
@@ -169,11 +183,13 @@ class SignalRNetcoreGateway implements SignalRGateway {
     ClientDeviceContext deviceContext,
   ) {
     final uri = Uri.parse(hubUrl);
-    return uri.replace(
-      queryParameters: <String, String>{
-        ...uri.queryParameters,
-        ...deviceContext.signalRQueryParameters,
-      },
-    ).toString();
+    return uri
+        .replace(
+          queryParameters: <String, String>{
+            ...uri.queryParameters,
+            ...deviceContext.signalRQueryParameters,
+          },
+        )
+        .toString();
   }
 }

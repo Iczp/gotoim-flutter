@@ -91,15 +91,23 @@ class AppEnvironment {
         dotenv.get('AUTH_LOGIN_GRANT_TYPE', fallback: ''),
         fallback: 'password',
       ),
-      authUserInfoPath:
-          dotenv.get('AUTH_USER_INFO_PATH', fallback: '/connect/userinfo'),
-      authIntrospectionPath: dotenv.get('AUTH_INTROSPECTION_PATH',
-          fallback: '/connect/introspect'),
-      authRevocationPath:
-          dotenv.get('AUTH_REVOCATION_PATH', fallback: '/connect/revocat'),
+      authUserInfoPath: dotenv.get(
+        'AUTH_USER_INFO_PATH',
+        fallback: '/connect/userinfo',
+      ),
+      authIntrospectionPath: dotenv.get(
+        'AUTH_INTROSPECTION_PATH',
+        fallback: '/connect/introspect',
+      ),
+      authRevocationPath: dotenv.get(
+        'AUTH_REVOCATION_PATH',
+        fallback: '/connect/revocat',
+      ),
       signalRBaseUrl: dotenv.get('SIGNALR_BASE_URL', fallback: ''),
-      signalRHubPath:
-          dotenv.get('SIGNALR_HUB_PATH', fallback: '/signalr-hubs/chat'),
+      signalRHubPath: dotenv.get(
+        'SIGNALR_HUB_PATH',
+        fallback: '/signalr-hubs/chat',
+      ),
       scanLoginHubPath: dotenv.get(
         'SCAN_LOGIN_HUB_PATH',
         fallback: '/signalr-hubs/scan-login',
@@ -113,7 +121,8 @@ class AppEnvironment {
         fallback: 'gotoim://scan-login?code={code}',
       ),
       scanLoginFallbackExpires: Duration(
-        seconds: int.tryParse(
+        seconds:
+            int.tryParse(
               dotenv.get('SCAN_LOGIN_QR_EXPIRES_SECONDS', fallback: '90'),
             ) ??
             90,
@@ -188,9 +197,10 @@ class AppEnvironment {
 
   String get authUserInfoUrl {
     final baseUrl = authBaseUrl.replaceFirst(RegExp(r'/+$'), '');
-    final path = authUserInfoPath.startsWith('/')
-        ? authUserInfoPath
-        : '/$authUserInfoPath';
+    final path =
+        authUserInfoPath.startsWith('/')
+            ? authUserInfoPath
+            : '/$authUserInfoPath';
     return '$baseUrl$path';
   }
 
@@ -225,7 +235,8 @@ class AppEnvironment {
 
 final Provider<AppEnvironment> appEnvironmentProvider =
     Provider<AppEnvironment>(
-  (ref) => throw UnimplementedError(
-    'AppEnvironment must be provided during bootstrap.',
-  ),
-);
+      (ref) =>
+          throw UnimplementedError(
+            'AppEnvironment must be provided during bootstrap.',
+          ),
+    );

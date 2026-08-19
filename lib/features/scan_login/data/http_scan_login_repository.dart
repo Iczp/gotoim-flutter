@@ -22,10 +22,10 @@ class HttpScanLoginRepository implements ScanLoginRepository {
 
   @override
   Future<void> grant(String scanText) => _apiClient.get<Object?>(
-        '/api/chat/scan-login/grant',
-        query: <String, Object?>{'scanText': scanText},
-        retryOnUnauthorized: false,
-      );
+    '/api/chat/scan-login/grant',
+    query: <String, Object?>{'scanText': scanText},
+    retryOnUnauthorized: false,
+  );
 
   @override
   Future<void> reject(String scanText, {String? reason}) =>
@@ -72,9 +72,10 @@ class HttpScanLoginRepository implements ScanLoginRepository {
     final resolvedContent = response['content']?.toString();
     if (resolvedContent == null || resolvedContent.isEmpty) return null;
     final handlerTemplate = handler['result']?.toString();
-    final template = handlerTemplate == null || handlerTemplate.isEmpty
-        ? _scanLoginTemplate
-        : ScanLoginTemplate(handlerTemplate);
+    final template =
+        handlerTemplate == null || handlerTemplate.isEmpty
+            ? _scanLoginTemplate
+            : ScanLoginTemplate(handlerTemplate);
     return template.matches(resolvedContent) ? resolvedContent : null;
   }
 }

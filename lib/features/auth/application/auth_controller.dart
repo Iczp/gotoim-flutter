@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/config/app_environment.dart';
 import '../../../core/device/client_device_context.dart';
@@ -26,8 +27,10 @@ class AuthController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isBusy => _status == AuthStatus.checking;
 
-  Future<void> login(
-      {required String username, required String password}) async {
+  Future<void> login({
+    required String username,
+    required String password,
+  }) async {
     _status = AuthStatus.checking;
     _errorMessage = null;
     notifyListeners();
@@ -87,8 +90,9 @@ class AuthController extends ChangeNotifier {
   }
 }
 
-final tokenStorageProvider =
-    Provider<TokenStorage>((ref) => SecureTokenStorage());
+final tokenStorageProvider = Provider<TokenStorage>(
+  (ref) => SecureTokenStorage(),
+);
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final environment = ref.watch(appEnvironmentProvider);

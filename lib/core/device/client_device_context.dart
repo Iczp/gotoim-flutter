@@ -35,30 +35,30 @@ class ClientDeviceContext {
   final String pushClientId;
 
   Map<String, String> get requestHeaders => <String, String>{
-        'Accept': '*/*',
-        'App-Device-Id': deviceId,
-        'App-Device-Type': deviceType,
-        'App-Id': appId,
-        'App-Version': appVersion,
-      };
+    'Accept': '*/*',
+    'App-Device-Id': deviceId,
+    'App-Device-Type': deviceType,
+    'App-Id': appId,
+    'App-Version': appVersion,
+  };
 
   Map<String, String> get signalRQueryParameters => <String, String>{
-        'appId': appId,
-        'appName': appName,
-        'deviceId': deviceId,
-        'deviceType': deviceType,
-        'pushClientId': pushClientId,
-        'brand': brand,
-        'model': model,
-        'platform': platform,
-        'browser': browser,
-      };
+    'appId': appId,
+    'appName': appName,
+    'deviceId': deviceId,
+    'deviceType': deviceType,
+    'pushClientId': pushClientId,
+    'brand': brand,
+    'model': model,
+    'platform': platform,
+    'browser': browser,
+  };
 }
 
 class ClientDeviceContextFactory {
   ClientDeviceContextFactory({FlutterSecureStorage? storage, Uuid? uuid})
-      : _storage = storage ?? const FlutterSecureStorage(),
-        _uuid = uuid ?? const Uuid();
+    : _storage = storage ?? const FlutterSecureStorage(),
+      _uuid = uuid ?? const Uuid();
 
   static const _deviceIdKey = 'gotoim.device-id.v1';
 
@@ -91,7 +91,8 @@ class ClientDeviceContextFactory {
 }
 
 final clientDeviceContextProvider = Provider<ClientDeviceContext>(
-  (ref) => throw UnimplementedError(
-    'ClientDeviceContext must be provided during bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'ClientDeviceContext must be provided during bootstrap.',
+      ),
 );

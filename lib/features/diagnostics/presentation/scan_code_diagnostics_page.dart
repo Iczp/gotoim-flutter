@@ -25,14 +25,17 @@ class _ScanCodeDiagnosticsPageState
       _result = null;
     });
     try {
-      final result = await ref.read(scanCodeServiceProvider).scanCode(
+      final result = await ref
+          .read(scanCodeServiceProvider)
+          .scanCode(
             Navigator.of(context),
             ScanCodeRequest(
               title: qrOnly ? '二维码测试' : '统一扫码测试',
               tip: qrOnly ? '仅识别二维码' : '支持二维码与常见条形码',
-              formats: qrOnly
-                  ? const <ScanCodeFormat>[ScanCodeFormat.qrCode]
-                  : const <ScanCodeFormat>[],
+              formats:
+                  qrOnly
+                      ? const <ScanCodeFormat>[ScanCodeFormat.qrCode]
+                      : const <ScanCodeFormat>[],
             ),
           );
       if (mounted && result != null) {
@@ -72,15 +75,18 @@ class _ScanCodeDiagnosticsPageState
           ),
           if (_opening)
             const Padding(
-                padding: EdgeInsets.only(top: 16),
-                child: Center(child: CircularProgressIndicator())),
+              padding: EdgeInsets.only(top: 16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
           if (_result != null) _ResultCard(result: _result!),
           if (_message != null)
             Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Text(_message!,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error))),
+              padding: const EdgeInsets.only(top: 16),
+              child: Text(
+                _message!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
         ],
       ),
     );
@@ -94,19 +100,19 @@ class _ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
-        margin: const EdgeInsets.only(top: 20),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('识别结果', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              SelectableText('内容：${result.content}'),
-              Text('格式：${result.format?.name ?? '未知'}'),
-              Text('来源：${result.source.name}'),
-            ],
-          ),
-        ),
-      );
+    margin: const EdgeInsets.only(top: 20),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('识别结果', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          SelectableText('内容：${result.content}'),
+          Text('格式：${result.format?.name ?? '未知'}'),
+          Text('来源：${result.source.name}'),
+        ],
+      ),
+    ),
+  );
 }

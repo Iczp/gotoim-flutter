@@ -20,7 +20,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: auth,
     redirect: (context, state) {
-      final location = state.location;
+      final location = state.uri.path;
       if (auth.status == AuthStatus.checking) {
         return location == '/splash' ? null : '/splash';
       }
@@ -30,18 +30,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return location == '/login' ? null : '/login';
     },
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const ApplicationShell(),
-      ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginPage(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const ApplicationShell()),
+      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(
         path: '/scan-login',
         builder: (context, state) {
-          final scanText = state.queryParams['scanText'] ?? '';
+          final scanText = state.uri.queryParameters['scanText'] ?? '';
           return ScanLoginConfirmationPage(scanText: scanText);
         },
       ),
