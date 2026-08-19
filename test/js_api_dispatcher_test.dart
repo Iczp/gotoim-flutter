@@ -80,6 +80,35 @@ void main() {
     );
   });
 
+  test('removes a network subscription explicitly', () async {
+    await dispatcher.handleRaw(
+      '{"id":"watch","action":"onNetworkStatusChange","data":{"subscriptionId":"n-1"}}',
+    );
+    final response =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"off","action":"offNetworkStatusChange","data":{"subscriptionId":"n-1"}}',
+              ),
+            )
+            as Map<String, dynamic>;
+
+    expect(response['success'], isTrue);
+    expect(response['data']['removed'], isTrue);
+  });
+
+  test('accepts the image decode bridge action with base64 input', () async {
+    final response =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"image-1","action":"scan.decodeImage","data":{"base64":"aW1hZ2U="}}',
+              ),
+            )
+            as Map<String, dynamic>;
+
+    expect(response['success'], isTrue);
+    expect(response['data']['result'], isNull);
+  });
+
   test(
     'bridge session writes dispatcher responses to its host transport',
     () async {
@@ -138,6 +167,7 @@ class _FakeCapabilities implements ClientCapabilityService {
     systemVersion: '11',
     isPhysicalDevice: true,
     browser: null,
+    source: 'plugin',
   );
 
   @override
@@ -194,6 +224,9 @@ class _FakeCapabilities implements ClientCapabilityService {
 
   @override
   Future<void> setClipboardData(String value) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 
   void addNetworkStatus(ClientNetworkStatus status) =>
       _networkController.add(status);

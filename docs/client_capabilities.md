@@ -12,7 +12,8 @@
 | 设备 | `getDeviceInfo` | 支持非敏感信息 | 支持非敏感信息 | 支持浏览器信息 |
 | 网络 | `getNetworkType`、`onNetworkStatusChange` | 支持 | 支持 | 支持 |
 | 剪贴板 | `setClipboardData`、`getClipboardData` | 支持 | 支持 | 受浏览器手势/权限策略限制 |
-| 文件 | `chooseFile` | 系统选择器 | 系统选择器 | 上传选择器 |
+| 文件 | `chooseFile`、`saveFile`、`clearTemporaryFiles` | 系统选择器/另存为 | 系统选择器/另存为 | 上传选择器/浏览器下载 |
+| 媒体与录音 | `chooseImage`、`takePhoto`、`chooseVideo`、`recordVideo`、`startAudioRecording` 等 | 完整支持 | 视频处理仅 macOS；录音支持 | 相册/录音受浏览器授权；视频处理不支持 |
 | 扫码 | `scanCode`、`decodeImage` | 相机、相册、图片解码 | 不启用相机；选择/上传图片解码 | 不启用相机；上传图片解码 |
 | 本地通知 | `notification.*` | 支持，可能需授权 | 支持（Web 另行适配） | 当前返回不支持 |
 
@@ -61,6 +62,8 @@ final files = await capabilities.chooseFile(
 | `systemName` / `systemVersion` | string? | 操作系统名称与版本；字段缺失时为 `null` |
 | `isPhysicalDevice` | boolean? | 平台支持时返回真机/模拟器状态 |
 | `browser` | string? | Web 的浏览器/UA 信息；非 Web 通常为 `null` |
+| `source` | string | `plugin` 表示原生设备插件读取成功；`fallback` 表示已安全降级 |
+| `warning` | string? | 仅 `fallback` 时包含原因；接口不会因设备插件异常而抛出错误 |
 
 不会返回硬件标识符、通讯录、地理位置或其他敏感信息。
 
@@ -95,10 +98,10 @@ final files = await capabilities.chooseFile(
 返回 `List<SelectedFile>`；用户取消时返回空数组。每项：
 
 ```json
-{"name":"photo.png","size":12034,"extension":"png","hasNativePath":false}
+{"fileId":"f-1","name":"photo.png","size":12034,"extension":"png","mimeType":"image/png","uri":"file:///.../photo.png","path":"/…/photo.png","hasNativePath":true}
 ```
 
-返回值不包含本机绝对路径和二进制字节，避免泄露文件系统信息；上传业务应在后续专用上传契约中处理文件内容。
+`fileId` 在当前应用会话有效，可调用 `SelectedFile.readBytes()` 或 Bridge 的 `file.readFile` 继续上传、压缩、识码。`path` 仅在本机文件路径真实可用时返回；Web/SAF/content URI 可能为 `null`，此时以 `uri` 和会话引用为准。详见[媒体与文件能力](media_and_files.md)。
 
 ### `scanCode(navigator, request)`
 

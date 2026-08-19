@@ -1,12 +1,21 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
+import 'package:uuid/uuid.dart';
 
-/// Project-owned file-selection contract.
+/// Project-owned file-selection and saving contract.
 ///
-/// Absolute paths and file bytes deliberately stay inside the platform service.
-/// The public [SelectedFile] result is safe to return to diagnostics and H5.
+/// [SelectedFile] retains a live [XFile] handle for the current application
+/// session. Callers can read it or pass it to an upload repository; the JSON
+/// representation exposes the original URI/path required by H5 use cases.
 abstract class FilePickerService {
   Future<List<SelectedFile>> chooseFile(FilePickerRequest request);
+
+  Future<SavedFile?> saveFile(FileSaveRequest request);
+
+  Future<bool> clearTemporaryFiles();
 }
 
 class FilePickerRequest {
@@ -21,29 +30,135 @@ class FilePickerRequest {
   final String? dialogTitle;
 }
 
+class FileSaveRequest {
+  const FileSaveRequest({
+    required this.fileName,
+    required this.bytes,
+    this.mimeType = 'application/octet-stream',
+    this.dialogTitle,
+    this.initialDirectory,
+  });
+
+  final String fileName;
+  final Uint8List bytes;
+  final String mimeType;
+  final String? dialogTitle;
+  final String? initialDirectory;
+}
+
+/// A usable file reference, valid for the current app session.
 class SelectedFile {
-  const SelectedFile({
+  SelectedFile._({
+    required this.id,
     required this.name,
     required this.size,
     required this.extension,
-    required this.hasNativePath,
-  });
+    required this.mimeType,
+    required this.originalUri,
+    required this.originalPath,
+    required XFile file,
+  }) : _file = file;
 
+  final String id;
   final String name;
   final int size;
   final String? extension;
-  final bool hasNativePath;
+  final String? mimeType;
+  final Uri originalUri;
+  final String? originalPath;
+  final XFile _file;
 
+  bool get hasNativePath => originalPath != null;
+
+  Future<Uint8List> readBytes() => _file.readAsBytes();
+
+  Stream<Uint8List> readAsByteStream() => _file.openRead();
+
+  /// Does not survive an app restart. Persist/upload the file before then.
   Map<String, Object?> toJson() => <String, Object?>{
+    'fileId': id,
     'name': name,
     'size': size,
     'extension': extension,
+    'mimeType': mimeType,
+    'uri': originalUri.toString(),
+    'path': originalPath,
     'hasNativePath': hasNativePath,
+  };
+
+  static Future<SelectedFile> fromXFile(XFile file, {Uuid? uuid}) async {
+    final name = file.name;
+    final extension = _extensionOf(name);
+    return SelectedFile._(
+      id: (uuid ?? const Uuid()).v4(),
+      name: name,
+      size: await file.length(),
+      extension: extension,
+      mimeType: _mimeTypeFor(extension),
+      originalUri: _uriOf(file),
+      originalPath: _nativePath(file),
+      file: file,
+    );
+  }
+
+  static String? _nativePath(XFile file) {
+    final path = file.path;
+    if (path.isEmpty || path.startsWith('blob:') || path.startsWith('data:')) {
+      return null;
+    }
+    final uri = Uri.tryParse(path);
+    return uri?.scheme == 'file' ? uri!.toFilePath() : path;
+  }
+
+  static Uri _uriOf(XFile file) {
+    final path = file.path;
+    if (path.isEmpty) return Uri();
+    final parsed = Uri.tryParse(path);
+    if (parsed != null && parsed.hasScheme) return parsed;
+    return Uri.file(path, windows: RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(path));
+  }
+
+  static String? _extensionOf(String name) {
+    final dot = name.lastIndexOf('.');
+    return dot > 0 && dot < name.length - 1
+        ? name.substring(dot + 1).toLowerCase()
+        : null;
+  }
+
+  static String? _mimeTypeFor(String? extension) => switch (extension) {
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'gif' => 'image/gif',
+    'heic' => 'image/heic',
+    'mp4' => 'video/mp4',
+    'mov' => 'video/quicktime',
+    'm4a' => 'audio/mp4',
+    'mp3' => 'audio/mpeg',
+    'wav' => 'audio/wav',
+    'opus' => 'audio/ogg',
+    _ => null,
+  };
+}
+
+class SavedFile {
+  const SavedFile({required this.uri});
+
+  final Uri uri;
+
+  String? get path => uri.scheme == 'file' ? uri.toFilePath() : null;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'uri': uri.toString(),
+    'path': path,
+    'hasNativePath': path != null,
   };
 }
 
 class SystemFilePickerService implements FilePickerService {
-  const SystemFilePickerService();
+  SystemFilePickerService({Uuid? uuid}) : _uuid = uuid ?? const Uuid();
+
+  final Uuid _uuid;
 
   @override
   Future<List<SelectedFile>> chooseFile(FilePickerRequest request) async {
@@ -70,27 +185,32 @@ class SystemFilePickerService implements FilePickerService {
                 ? null
                 : request.allowedExtensions,
       );
-      if (file != null) {
-        files.add(file);
-      }
+      if (file != null) files.add(file);
     }
-    return Future.wait(files.map(_toSelectedFile));
+    return Future.wait(
+      files.map((file) => SelectedFile.fromXFile(file.xFile, uuid: _uuid)),
+    );
   }
 
-  Future<SelectedFile> _toSelectedFile(PlatformFile file) async {
-    final dot = file.name.lastIndexOf('.');
-    return SelectedFile(
-      name: file.name,
-      size: await file.length(),
-      extension:
-          dot > 0 && dot < file.name.length - 1
-              ? file.name.substring(dot + 1).toLowerCase()
-              : null,
-      hasNativePath: file.path != null,
+  @override
+  Future<SavedFile?> saveFile(FileSaveRequest request) async {
+    final uri = await FilePicker.saveFile(
+      fileName: request.fileName,
+      bytes: request.bytes,
+      mimeType: request.mimeType,
+      dialogTitle: request.dialogTitle,
+      initialDirectory: request.initialDirectory,
     );
+    return uri == null ? null : SavedFile(uri: uri);
+  }
+
+  @override
+  Future<bool> clearTemporaryFiles() async {
+    await FilePicker.clearTemporaryFiles();
+    return true;
   }
 }
 
 final filePickerServiceProvider = Provider<FilePickerService>(
-  (ref) => const SystemFilePickerService(),
+  (ref) => SystemFilePickerService(),
 );

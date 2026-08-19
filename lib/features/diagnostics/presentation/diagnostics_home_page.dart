@@ -63,6 +63,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             subtitle: 'JSON 请求/响应、能力 API 与网络状态事件',
             onTap: () => context.push('/diagnostics/js-bridge'),
           ),
+          _Item(
+            icon: Icons.perm_media_outlined,
+            title: '媒体与文件测试',
+            subtitle: '相册、拍照、视频、缩略图、压缩、录音、图片识码与另存为',
+            onTap: () => context.push('/diagnostics/media'),
+          ),
         ],
       ),
     );

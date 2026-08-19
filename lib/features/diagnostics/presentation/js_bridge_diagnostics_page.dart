@@ -114,6 +114,21 @@ class _JsBridgeDiagnosticsPageState
                     }),
                 child: const Text('选择文件'),
               ),
+              OutlinedButton(
+                onPressed:
+                    () => _preset('image', 'chooseImage', <String, Object?>{
+                      'allowMultiple': false,
+                    }),
+                child: const Text('选择图片'),
+              ),
+              OutlinedButton(
+                onPressed: () => _preset('photo', 'takePhoto'),
+                child: const Text('拍照'),
+              ),
+              OutlinedButton(
+                onPressed: () => _preset('audio', 'startAudioRecording'),
+                child: const Text('开始录音'),
+              ),
             ],
           ),
           const SizedBox(height: 12),

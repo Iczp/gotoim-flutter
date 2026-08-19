@@ -26,6 +26,10 @@
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
+	<key>NSCameraUsageDescription</key>
+	<string>用于拍照和录制视频。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于录制语音消息和视频声音。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -11,6 +12,8 @@ import '../notifications/local_notification_service.dart';
 import '../platform/platform_contract.dart';
 import '../services/clipboard_service.dart';
 import '../services/file/file_picker_service.dart';
+import '../services/media/media_service.dart';
+import '../services/media/video_processing_models.dart';
 import '../services/scan/scan_code_service.dart';
 import 'client_capability_models.dart';
 
@@ -34,12 +37,58 @@ abstract class ClientCapabilityService {
 
   Future<List<SelectedFile>> chooseFile(FilePickerRequest request);
 
+  Future<SavedFile?> saveFile(FileSaveRequest request);
+
+  Future<bool> clearTemporaryFiles();
+
+  Future<List<SelectedFile>> chooseImage(MediaPickRequest request);
+
+  Future<SelectedFile?> takePhoto(MediaPickRequest request);
+
+  Future<SelectedFile?> chooseVideo(MediaPickRequest request);
+
+  Future<SelectedFile?> recordVideo(MediaPickRequest request);
+
+  Future<ProcessedImage> compressImage(
+    SelectedFile source,
+    ImageCompressionRequest request,
+  );
+
+  Future<VideoMetadata> getVideoMetadata(SelectedFile source);
+
+  Future<Uint8List> createVideoThumbnail(
+    SelectedFile source, {
+    int quality,
+    int positionMs,
+  });
+
+  Future<SelectedFile?> compressVideo(
+    SelectedFile source, {
+    VideoCompressionQuality quality = VideoCompressionQuality.medium,
+    bool includeAudio = true,
+  });
+
+  Future<void> startAudioRecording(AudioRecordingRequest request);
+
+  Future<void> pauseAudioRecording();
+
+  Future<void> resumeAudioRecording();
+
+  Future<SelectedFile?> stopAudioRecording();
+
+  Future<void> cancelAudioRecording();
+
   Future<ScanCodeResult?> scanCode(
     NavigatorState navigator,
     ScanCodeRequest request,
   );
 
   Future<ScanCodeResult?> decodeImage(DecodeImageRequest request);
+
+  Future<ScanCodeResult?> decodeImageFile(
+    SelectedFile file, {
+    List<ScanCodeFormat> formats,
+  });
 
   LocalNotificationSupport get notificationSupport;
 
@@ -55,6 +104,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
     required FilePickerService filePickerService,
     required ScanCodeService scanCodeService,
     required ImageCodeService imageCodeService,
+    required MediaService mediaService,
     required LocalNotificationService localNotificationService,
     Connectivity? connectivity,
     DeviceInfoPlugin? deviceInfoPlugin,
@@ -65,6 +115,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
        _filePickerService = filePickerService,
        _scanCodeService = scanCodeService,
        _imageCodeService = imageCodeService,
+       _mediaService = mediaService,
        _localNotificationService = localNotificationService,
        _connectivity = connectivity ?? Connectivity(),
        _deviceInfoPlugin = deviceInfoPlugin ?? DeviceInfoPlugin();
@@ -76,6 +127,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
   final FilePickerService _filePickerService;
   final ScanCodeService _scanCodeService;
   final ImageCodeService _imageCodeService;
+  final MediaService _mediaService;
   final LocalNotificationService _localNotificationService;
   final Connectivity _connectivity;
   final DeviceInfoPlugin _deviceInfoPlugin;
@@ -116,7 +168,29 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
 
   @override
   Future<ClientDeviceInfo> getDeviceInfo() async {
-    final data = (await _deviceInfoPlugin.deviceInfo).data;
+    try {
+      final data = (await _deviceInfoPlugin.deviceInfo).data;
+      return _deviceInfoFromData(data);
+    } catch (error) {
+      // Device plugins can fail on an OEM ROM or before an Android activity is
+      // fully attached. System/device APIs must still be usable in that case.
+      return ClientDeviceInfo(
+        platform: _platformFacade.kind,
+        appScopedDeviceId: _deviceContext.deviceId,
+        deviceType: _deviceContext.deviceType,
+        brand: _deviceContext.brand.isEmpty ? null : _deviceContext.brand,
+        model: _deviceContext.model.isEmpty ? null : _deviceContext.model,
+        systemName: _platformFacade.kind.name,
+        systemVersion: null,
+        isPhysicalDevice: null,
+        browser: _deviceContext.browser.isEmpty ? null : _deviceContext.browser,
+        source: 'fallback',
+        warning: '设备插件读取失败，已返回稳定基础信息：$error',
+      );
+    }
+  }
+
+  ClientDeviceInfo _deviceInfoFromData(Map<String, dynamic> data) {
     return ClientDeviceInfo(
       platform: _platformFacade.kind,
       appScopedDeviceId: _deviceContext.deviceId,
@@ -135,6 +209,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
       ]),
       isPhysicalDevice: _bool(data, 'isPhysicalDevice'),
       browser: _string(data, const <String>['browserName', 'userAgent']),
+      source: 'plugin',
     );
   }
 
@@ -158,6 +233,11 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
           name: 'device.getDeviceInfo',
           isSupported: true,
           message: '当前平台可读取非敏感设备信息。',
+        ),
+        const ClientCapabilitySupport(
+          name: 'media.chooseImage/chooseVideo/camera/recording',
+          isSupported: true,
+          message: '相册、相机、图片压缩、录音由统一媒体服务提供。',
         ),
         const ClientCapabilitySupport(
           name: 'network.getNetworkType',
@@ -201,6 +281,79 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
       _filePickerService.chooseFile(request);
 
   @override
+  Future<SavedFile?> saveFile(FileSaveRequest request) =>
+      _filePickerService.saveFile(request);
+
+  @override
+  Future<bool> clearTemporaryFiles() =>
+      _filePickerService.clearTemporaryFiles();
+
+  @override
+  Future<List<SelectedFile>> chooseImage(MediaPickRequest request) =>
+      _mediaService.chooseImage(request);
+
+  @override
+  Future<SelectedFile?> takePhoto(MediaPickRequest request) =>
+      _mediaService.takePhoto(request);
+
+  @override
+  Future<SelectedFile?> chooseVideo(MediaPickRequest request) =>
+      _mediaService.chooseVideo(request);
+
+  @override
+  Future<SelectedFile?> recordVideo(MediaPickRequest request) =>
+      _mediaService.recordVideo(request);
+
+  @override
+  Future<ProcessedImage> compressImage(
+    SelectedFile source,
+    ImageCompressionRequest request,
+  ) => _mediaService.compressImage(source, request);
+
+  @override
+  Future<VideoMetadata> getVideoMetadata(SelectedFile source) =>
+      _mediaService.getVideoMetadata(source);
+
+  @override
+  Future<Uint8List> createVideoThumbnail(
+    SelectedFile source, {
+    int quality = 80,
+    int positionMs = 0,
+  }) => _mediaService.createVideoThumbnail(
+    source,
+    quality: quality,
+    positionMs: positionMs,
+  );
+
+  @override
+  Future<SelectedFile?> compressVideo(
+    SelectedFile source, {
+    VideoCompressionQuality quality = VideoCompressionQuality.medium,
+    bool includeAudio = true,
+  }) => _mediaService.compressVideo(
+    source,
+    quality: quality,
+    includeAudio: includeAudio,
+  );
+
+  @override
+  Future<void> startAudioRecording(AudioRecordingRequest request) =>
+      _mediaService.startAudioRecording(request);
+
+  @override
+  Future<void> pauseAudioRecording() => _mediaService.pauseAudioRecording();
+
+  @override
+  Future<void> resumeAudioRecording() => _mediaService.resumeAudioRecording();
+
+  @override
+  Future<SelectedFile?> stopAudioRecording() =>
+      _mediaService.stopAudioRecording();
+
+  @override
+  Future<void> cancelAudioRecording() => _mediaService.cancelAudioRecording();
+
+  @override
   Future<ScanCodeResult?> scanCode(
     NavigatorState navigator,
     ScanCodeRequest request,
@@ -209,6 +362,17 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
   @override
   Future<ScanCodeResult?> decodeImage(DecodeImageRequest request) =>
       _imageCodeService.decodeImage(request);
+
+  /// Opens the independent image decoder over a selected media/file reference.
+  @override
+  Future<ScanCodeResult?> decodeImageFile(
+    SelectedFile file, {
+    List<ScanCodeFormat> formats = const <ScanCodeFormat>[
+      ScanCodeFormat.qrCode,
+    ],
+  }) async => _imageCodeService.decodeImage(
+    DecodeImageRequest(bytes: await file.readBytes(), formats: formats),
+  );
 
   @override
   LocalNotificationSupport get notificationSupport =>

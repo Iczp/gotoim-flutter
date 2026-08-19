@@ -48,15 +48,32 @@ JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议
 | `getCapabilities` | `capabilities.get` | `{}` | `{capabilities:[{name,isSupported,message}]}` |
 | `setClipboardData` | `clipboard.setData` | `{data:string}` | `{ok:true}` |
 | `getClipboardData` | `clipboard.getData` | `{}` | `{data:string|null}` |
-| `chooseFile` | `file.chooseFile` | `{allowMultiple?:boolean,allowedExtensions?:string[],title?:string}` | `{files:[{name,size,extension,hasNativePath}]}` |
+| `chooseFile` | `file.chooseFile` | `{allowMultiple?:boolean,allowedExtensions?:string[],title?:string}` | `{files:[{fileId,name,size,mimeType,uri,path,…}]}` |
+| `saveFile` | `file.saveFile` | `{fileName:string,base64:string,mimeType?:string,title?:string,initialDirectory?:string}` | `{file:{uri,path,hasNativePath}|null}` |
+| `readFile` | `file.readFile` | `{fileId:string}` | `{file,base64}`，上限 10 MiB |
+| `clearTemporaryFiles` | `file.clearTemporaryFiles` | `{}` | `{cleared:boolean}` |
+| `chooseImage` | `media.chooseImage` | [媒体选择参数](media_and_files.md#图片与相机) | `{files:[file]}` |
+| `takePhoto` | `media.takePhoto` | 同上 | `{file:file|null}` |
+| `chooseVideo` | `media.chooseVideo` | `{maxDurationSeconds?:int}` | `{file:file|null}` |
+| `recordVideo` | `media.recordVideo` | `{maxDurationSeconds?:int}` | `{file:file|null}` |
+| `compressImage` | `image.compress` | `{fileId:string,quality?:int,maxWidth?:int,maxHeight?:int,format?:jpeg\|png\|webp}` | `{image:{fileName,mimeType,size,originalSize,width,height},base64}` |
+| `getVideoInfo` | `video.getInfo` | `{fileId:string}` | `{durationMs,width,height,size,path}` |
+| `getVideoThumbnail` | `video.getThumbnail` | `{fileId:string,quality?:int,positionMs?:int}` | `{mimeType:'image/jpeg',base64}` |
+| `compressVideo` | `video.compress` | `{fileId:string,quality?:low\|medium\|high\|original,includeAudio?:boolean}` | `{file:file|null}` |
+| `startAudioRecording` | `audio.startRecording` | `{fileNamePrefix?:string,sampleRate?:int,bitRate?:int,numChannels?:int}` | `{started:true}` |
+| `pauseAudioRecording` | `audio.pauseRecording` | `{}` | `{paused:true}` |
+| `resumeAudioRecording` | `audio.resumeRecording` | `{}` | `{resumed:true}` |
+| `stopAudioRecording` | `audio.stopRecording` | `{}` | `{file:file|null}` |
+| `cancelAudioRecording` | `audio.cancelRecording` | `{}` | `{cancelled:true}` |
 | `scanCode` | `scan.scanCode` | `{formats?:string[],title?:string,tip?:string,allowAlbum?:boolean,allowTorch?:boolean}` | `{result:{content,format,source}|null}` |
-| `decodeImage` | `image.decodeImage` | `{base64:string,formats?:string[]}` | `{result:{content,format,source}|null}` |
+| `decodeImage` | `image.decodeImage` / `scan.decodeImage` | `{base64?:string,fileId?:string,formats?:string[]}`（二者之一必填） | `{result:{content,format,source}|null}` |
+| `scanCodeFromImage` | `scan.chooseImageAndDecode` | 图片选择参数及 `formats?:string[]` | `{file:file|null,result:{content,format,source}|null}` |
 | `onNetworkStatusChange` | `network.onStatusChange` | `{subscriptionId?:string}` | `{subscriptionId:string}` |
 | `offNetworkStatusChange` | `network.offStatusChange` | `{subscriptionId:string}` | `{removed:boolean}` |
 | `notification.getSupport` | — | `{}` | `{platform,isSupported,message}` |
 | `notification.requestPermission` | — | `{}` | `{status,message}` |
 
-`formats` 使用 Flutter 枚举名，例如 `qrCode`、`code128`、`ean13`；空数组表示默认全部。`decodeImage.base64` 可以是纯 base64，也可以是 `data:image/png;base64,...`，最大解码后大小为 10 MiB。文件选择结果刻意没有本地路径或文件 bytes。
+`formats` 使用 Flutter 枚举名，例如 `qrCode`、`code128`、`ean13`；空数组表示默认全部。`decodeImage.base64` 可以是纯 base64，也可以是 `data:image/png;base64,...`，最大解码后大小为 10 MiB。文件选择结果包含平台可用的原始 URI/路径；`fileId` 只在当前宿主会话有效。媒体能力的完整字段和平台限制见 [媒体与文件能力](media_and_files.md)。
 
 详细字段语义和平台支持矩阵见 [客户端能力统一入口](client_capabilities.md)。
 

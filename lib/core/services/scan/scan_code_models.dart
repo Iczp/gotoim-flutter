@@ -24,12 +24,10 @@ extension ScanCodeFormatApiValue on ScanCodeFormat {
   /// This intentionally does not use [Enum.name]. Native scanner packages use
   /// Dart-style names such as `qrCode`, while the existing scan-code API uses
   /// the platform-neutral names `QR_CODE` and `BAR_CODE`.
-  String get apiValue => 
-    switch (this) 
-    {
-      ScanCodeFormat.qrCode => 'QR_CODE',
-      _ => 'BAR_CODE',
-    };
+  String get apiValue => switch (this) {
+    ScanCodeFormat.qrCode => 'QR_CODE',
+    _ => 'BAR_CODE',
+  };
 }
 
 enum ScanCodeSource { camera, album }

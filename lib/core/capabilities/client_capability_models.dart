@@ -81,6 +81,8 @@ class ClientDeviceInfo {
     required this.systemVersion,
     required this.isPhysicalDevice,
     required this.browser,
+    required this.source,
+    this.warning,
   });
 
   final PlatformKind platform;
@@ -92,6 +94,8 @@ class ClientDeviceInfo {
   final String? systemVersion;
   final bool? isPhysicalDevice;
   final String? browser;
+  final String source;
+  final String? warning;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'platform': platform.name,
@@ -103,6 +107,8 @@ class ClientDeviceInfo {
     'systemVersion': systemVersion,
     'isPhysicalDevice': isPhysicalDevice,
     'browser': browser,
+    'source': source,
+    'warning': warning,
   };
 }
 

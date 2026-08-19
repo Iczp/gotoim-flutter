@@ -8,6 +8,8 @@ import 'package:uuid/uuid.dart';
 import '../capabilities/client_capability_models.dart';
 import '../capabilities/client_capability_service.dart';
 import '../services/file/file_picker_service.dart';
+import '../services/media/media_service.dart';
+import '../services/media/video_processing_models.dart';
 import '../services/scan/scan_code_service.dart';
 import 'js_bridge_models.dart';
 
@@ -33,6 +35,7 @@ class JsApiDispatcher {
       StreamController<JsBridgeEvent>.broadcast();
   final Map<String, StreamSubscription<ClientNetworkStatus>> _subscriptions =
       <String, StreamSubscription<ClientNetworkStatus>>{};
+  final Map<String, SelectedFile> _fileReferences = <String, SelectedFile>{};
 
   Stream<JsBridgeEvent> get events => _events.stream;
 
@@ -127,9 +130,130 @@ class JsApiDispatcher {
             dialogTitle: _optionalString(request.data, 'title'),
           ),
         );
+        return <String, Object>{'files': _storeFiles(files)};
+      case 'saveFile':
+      case 'file.saveFile':
+        final bytes = _decodeBase64(_requiredString(request.data, 'base64'));
+        final result = await _capabilities.saveFile(
+          FileSaveRequest(
+            fileName: _requiredString(request.data, 'fileName'),
+            bytes: bytes,
+            mimeType:
+                _optionalString(request.data, 'mimeType') ??
+                'application/octet-stream',
+            dialogTitle: _optionalString(request.data, 'title'),
+            initialDirectory: _optionalString(request.data, 'initialDirectory'),
+          ),
+        );
+        return <String, Object?>{'file': result?.toJson()};
+      case 'readFile':
+      case 'file.readFile':
+        final file = _fileById(request.data);
+        final bytes = await file.readBytes();
+        _ensurePayloadSize(bytes);
         return <String, Object>{
-          'files': files.map((item) => item.toJson()).toList(),
+          'file': file.toJson(),
+          'base64': base64Encode(bytes),
         };
+      case 'clearTemporaryFiles':
+      case 'file.clearTemporaryFiles':
+        final cleared = await _capabilities.clearTemporaryFiles();
+        _fileReferences.clear();
+        return <String, bool>{'cleared': cleared};
+      case 'chooseImage':
+      case 'media.chooseImage':
+        final files = await _capabilities.chooseImage(
+          _mediaPickRequest(request.data),
+        );
+        return <String, Object>{'files': _storeFiles(files)};
+      case 'takePhoto':
+      case 'media.takePhoto':
+        final file = await _capabilities.takePhoto(
+          _mediaPickRequest(request.data),
+        );
+        return <String, Object?>{'file': _storeFile(file)};
+      case 'chooseVideo':
+      case 'media.chooseVideo':
+        final file = await _capabilities.chooseVideo(
+          _mediaPickRequest(request.data),
+        );
+        return <String, Object?>{'file': _storeFile(file)};
+      case 'recordVideo':
+      case 'media.recordVideo':
+        final file = await _capabilities.recordVideo(
+          _mediaPickRequest(request.data),
+        );
+        return <String, Object?>{'file': _storeFile(file)};
+      case 'compressImage':
+      case 'image.compress':
+        final output = await _capabilities.compressImage(
+          _fileById(request.data),
+          ImageCompressionRequest(
+            quality: _int(request.data, 'quality', fallback: 85),
+            maxWidth: _optionalInt(request.data, 'maxWidth'),
+            maxHeight: _optionalInt(request.data, 'maxHeight'),
+            format: _imageFormat(request.data['format']),
+          ),
+        );
+        _ensurePayloadSize(output.bytes);
+        return <String, Object>{
+          'image': output.toJson(),
+          'base64': base64Encode(output.bytes),
+        };
+      case 'getVideoInfo':
+      case 'video.getInfo':
+        return (await _capabilities.getVideoMetadata(
+          _fileById(request.data),
+        )).toJson();
+      case 'getVideoThumbnail':
+      case 'video.getThumbnail':
+        final bytes = await _capabilities.createVideoThumbnail(
+          _fileById(request.data),
+          quality: _int(request.data, 'quality', fallback: 80),
+          positionMs: _int(request.data, 'positionMs', fallback: 0),
+        );
+        _ensurePayloadSize(bytes);
+        return <String, Object>{
+          'mimeType': 'image/jpeg',
+          'base64': base64Encode(bytes),
+        };
+      case 'compressVideo':
+      case 'video.compress':
+        final file = await _capabilities.compressVideo(
+          _fileById(request.data),
+          quality: _videoQuality(request.data['quality']),
+          includeAudio: request.data['includeAudio'] != false,
+        );
+        return <String, Object?>{'file': _storeFile(file)};
+      case 'startAudioRecording':
+      case 'audio.startRecording':
+        await _capabilities.startAudioRecording(
+          AudioRecordingRequest(
+            fileNamePrefix:
+                _optionalString(request.data, 'fileNamePrefix') ??
+                'gotoim_recording',
+            sampleRate: _int(request.data, 'sampleRate', fallback: 44100),
+            bitRate: _int(request.data, 'bitRate', fallback: 128000),
+            numChannels: _int(request.data, 'numChannels', fallback: 1),
+          ),
+        );
+        return const <String, bool>{'started': true};
+      case 'pauseAudioRecording':
+      case 'audio.pauseRecording':
+        await _capabilities.pauseAudioRecording();
+        return const <String, bool>{'paused': true};
+      case 'resumeAudioRecording':
+      case 'audio.resumeRecording':
+        await _capabilities.resumeAudioRecording();
+        return const <String, bool>{'resumed': true};
+      case 'stopAudioRecording':
+      case 'audio.stopRecording':
+        final file = await _capabilities.stopAudioRecording();
+        return <String, Object?>{'file': _storeFile(file)};
+      case 'cancelAudioRecording':
+      case 'audio.cancelRecording':
+        await _capabilities.cancelAudioRecording();
+        return const <String, bool>{'cancelled': true};
       case 'scanCode':
       case 'scan.scanCode':
         final navigator = _navigatorProvider();
@@ -152,19 +276,13 @@ class JsApiDispatcher {
         return <String, Object?>{'result': _scanResult(result)};
       case 'decodeImage':
       case 'image.decodeImage':
-        final raw = _requiredString(request.data, 'base64');
-        Uint8List bytes;
-        try {
-          bytes = base64Decode(_stripDataUrlPrefix(raw));
-        } on FormatException {
-          throw const JsBridgeException('INVALID_ARGUMENT', 'base64 不是有效图片数据。');
-        }
-        if (bytes.lengthInBytes > _maximumImagePayloadBytes) {
-          throw const JsBridgeException(
-            'PAYLOAD_TOO_LARGE',
-            '图片数据不能超过 10 MiB。',
-          );
-        }
+      case 'scan.decodeImage':
+        final fileId = _optionalString(request.data, 'fileId');
+        final bytes =
+            fileId == null
+                ? _decodeBase64(_requiredString(request.data, 'base64'))
+                : await _fileById(request.data).readBytes();
+        _ensurePayloadSize(bytes);
         final result = await _capabilities.decodeImage(
           DecodeImageRequest(
             bytes: bytes,
@@ -172,6 +290,24 @@ class JsApiDispatcher {
           ),
         );
         return <String, Object?>{'result': _scanResult(result)};
+      case 'scanCodeFromImage':
+      case 'scan.chooseImageAndDecode':
+        final files = await _capabilities.chooseImage(
+          _mediaPickRequest(request.data),
+        );
+        if (files.isEmpty) {
+          return const <String, Object?>{'file': null, 'result': null};
+        }
+        final file = files.first;
+        _storeFile(file);
+        final result = await _capabilities.decodeImageFile(
+          file,
+          formats: _scanFormats(request.data['formats']),
+        );
+        return <String, Object?>{
+          'file': file.toJson(),
+          'result': _scanResult(result),
+        };
       case 'notification.getSupport':
         final support = _capabilities.notificationSupport;
         return <String, Object>{
@@ -225,6 +361,7 @@ class JsApiDispatcher {
       await subscription.cancel();
     }
     _subscriptions.clear();
+    _fileReferences.clear();
     await _events.close();
   }
 
@@ -276,6 +413,94 @@ class JsApiDispatcher {
             'format': result.format?.name,
             'source': result.source.name,
           };
+
+  List<Map<String, Object?>> _storeFiles(List<SelectedFile> files) =>
+      files.map(_storeFile).whereType<Map<String, Object?>>().toList();
+
+  Map<String, Object?>? _storeFile(SelectedFile? file) {
+    if (file == null) return null;
+    _fileReferences[file.id] = file;
+    return file.toJson();
+  }
+
+  SelectedFile _fileById(Map<String, dynamic> data) {
+    final fileId = _requiredString(data, 'fileId');
+    final file = _fileReferences[fileId];
+    if (file == null) {
+      throw const JsBridgeException('NOT_FOUND', '文件引用已失效，请重新选择文件。');
+    }
+    return file;
+  }
+
+  Uint8List _decodeBase64(String raw) {
+    try {
+      final bytes = base64Decode(_stripDataUrlPrefix(raw));
+      _ensurePayloadSize(bytes);
+      return bytes;
+    } on FormatException {
+      throw const JsBridgeException('INVALID_ARGUMENT', 'base64 不是有效数据。');
+    }
+  }
+
+  void _ensurePayloadSize(Uint8List bytes) {
+    if (bytes.lengthInBytes > _maximumImagePayloadBytes) {
+      throw const JsBridgeException('PAYLOAD_TOO_LARGE', '二进制数据不能超过 10 MiB。');
+    }
+  }
+
+  MediaPickRequest _mediaPickRequest(Map<String, dynamic> data) =>
+      MediaPickRequest(
+        allowMultiple: data['allowMultiple'] == true,
+        preserveOriginal: data['preserveOriginal'] != false,
+        imageQuality: _optionalInt(data, 'imageQuality'),
+        maxWidth: _optionalDouble(data, 'maxWidth'),
+        maxHeight: _optionalDouble(data, 'maxHeight'),
+        maxDuration:
+            _optionalInt(data, 'maxDurationSeconds') == null
+                ? null
+                : Duration(seconds: _optionalInt(data, 'maxDurationSeconds')!),
+      );
+
+  int _int(Map<String, dynamic> data, String key, {required int fallback}) =>
+      _optionalInt(data, key) ?? fallback;
+
+  int? _optionalInt(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num && value == value.roundToDouble()) return value.toInt();
+    throw JsBridgeException('INVALID_ARGUMENT', '$key 必须是整数。');
+  }
+
+  double? _optionalDouble(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    throw JsBridgeException('INVALID_ARGUMENT', '$key 必须是数字。');
+  }
+
+  ImageOutputFormat _imageFormat(Object? value) => switch (value) {
+    null || 'jpeg' || 'jpg' => ImageOutputFormat.jpeg,
+    'png' => ImageOutputFormat.png,
+    'webp' => ImageOutputFormat.webp,
+    _ =>
+      throw const JsBridgeException(
+        'INVALID_ARGUMENT',
+        'format 仅支持 jpeg、png、webp。',
+      ),
+  };
+
+  VideoCompressionQuality _videoQuality(Object? value) => switch (value) {
+    null || 'medium' => VideoCompressionQuality.medium,
+    'low' => VideoCompressionQuality.low,
+    'high' => VideoCompressionQuality.high,
+    'original' => VideoCompressionQuality.original,
+    _ =>
+      throw const JsBridgeException(
+        'INVALID_ARGUMENT',
+        'quality 仅支持 low、medium、high、original。',
+      ),
+  };
 
   String _stripDataUrlPrefix(String value) {
     final marker = value.indexOf(',');

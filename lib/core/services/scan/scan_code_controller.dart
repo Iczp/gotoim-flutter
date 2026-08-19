@@ -14,15 +14,16 @@ class ScanCodeController extends ChangeNotifier {
     required this.onResult,
     ImagePicker? imagePicker,
     ImageCodeService? imageCodeService,
-  })  : _imagePicker = imagePicker ?? ImagePicker(),
-        _imageCodeService = imageCodeService ?? const ZxingImageCodeService(),
-        supportsCamera = _supportsCamera(platform),
-        _scanner = _supportsCamera(platform)
-            ? MobileScannerController(
-                detectionSpeed: DetectionSpeed.noDuplicates,
-                formats: _toMobileFormats(request.formats),
-              )
-            : null {
+  }) : _imagePicker = imagePicker ?? ImagePicker(),
+       _imageCodeService = imageCodeService ?? const ZxingImageCodeService(),
+       supportsCamera = _supportsCamera(platform),
+       _scanner =
+           _supportsCamera(platform)
+               ? MobileScannerController(
+                 detectionSpeed: DetectionSpeed.noDuplicates,
+                 formats: _toMobileFormats(request.formats),
+               )
+               : null {
     _scanner?.addListener(_syncTorch);
   }
 

@@ -14,6 +14,7 @@ import '../../features/diagnostics/presentation/signalr_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/scan_code_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/client_capabilities_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/js_bridge_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/media_diagnostics_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
@@ -82,6 +83,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/js-bridge',
         builder: (context, state) => const JsBridgeDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/media',
+        builder: (context, state) => const MediaDiagnosticsPage(),
       ),
     ],
   );

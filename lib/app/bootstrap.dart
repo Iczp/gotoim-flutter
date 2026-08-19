@@ -10,6 +10,7 @@ import '../core/notifications/local_notification_service.dart';
 import '../core/platform/platform_facade.dart';
 import '../core/services/clipboard_service.dart';
 import '../core/services/file/file_picker_service.dart';
+import '../core/services/media/media_service.dart';
 import '../core/services/scan/scan_code_service.dart';
 import 'app.dart';
 import 'app_navigation.dart';
@@ -34,14 +35,16 @@ Future<void> bootstrap() async {
     platformFacade: platformFacade,
   );
   await localNotificationService.initialize();
+  final mediaService = DefaultMediaService(platformFacade: platformFacade);
   final capabilities = DefaultClientCapabilityService(
     environment: environment,
     deviceContext: deviceContext,
     platformFacade: platformFacade,
     clipboardService: SystemClipboardService(),
-    filePickerService: const SystemFilePickerService(),
+    filePickerService: SystemFilePickerService(),
     scanCodeService: const NavigatorScanCodeService(),
     imageCodeService: const ZxingImageCodeService(),
+    mediaService: mediaService,
     localNotificationService: localNotificationService,
   );
   final jsApiDispatcher = JsApiDispatcher(
@@ -60,6 +63,7 @@ Future<void> bootstrap() async {
         ),
         clientCapabilityServiceProvider.overrideWithValue(capabilities),
         jsApiDispatcherProvider.overrideWithValue(jsApiDispatcher),
+        mediaServiceProvider.overrideWithValue(mediaService),
       ],
       child: const GotoImApp(),
     ),
