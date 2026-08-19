@@ -80,6 +80,18 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "connectivity_plus",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/connectivity_plus-7.3.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "connectivity_plus_platform_interface",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/connectivity_plus_platform_interface-2.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.18"
+    },
+    {
       "name": "convert",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/convert-3.1.2",
       "packageUri": "lib/",
@@ -108,6 +120,18 @@
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/dbus-0.7.13",
       "packageUri": "lib/",
       "languageVersion": "2.17"
+    },
+    {
+      "name": "device_info_plus",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/device_info_plus-13.2.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.10"
+    },
+    {
+      "name": "device_info_plus_platform_interface",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/device_info_plus_platform_interface-8.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.10"
     },
     {
       "name": "dio",
@@ -141,9 +165,9 @@
     },
     {
       "name": "file",
-      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/file-6.1.4",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/file-7.0.1",
       "packageUri": "lib/",
-      "languageVersion": "2.12"
+      "languageVersion": "3.0"
     },
     {
       "name": "file_picker",
@@ -207,7 +231,7 @@
     },
     {
       "name": "flutter",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/packages/flutter",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -303,13 +327,13 @@
     },
     {
       "name": "flutter_test",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/packages/flutter_test",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter_test",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
     {
       "name": "flutter_web_plugins",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/packages/flutter_web_plugins",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter_web_plugins",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -506,6 +530,12 @@
       "languageVersion": "3.7"
     },
     {
+      "name": "nm",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/nm-0.5.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "node_preamble",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/node_preamble-2.0.2",
       "packageUri": "lib/",
@@ -596,12 +626,6 @@
       "languageVersion": "3.0"
     },
     {
-      "name": "process",
-      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/process-4.2.4",
-      "packageUri": "lib/",
-      "languageVersion": "2.14"
-    },
-    {
       "name": "pub_semver",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/pub_semver-2.2.0",
       "packageUri": "lib/",
@@ -663,7 +687,7 @@
     },
     {
       "name": "sky_engine",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/bin/cache/pkg/sky_engine",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -818,6 +842,12 @@
       "languageVersion": "3.10"
     },
     {
+      "name": "win32_registry",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/win32_registry-3.0.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.10"
+    },
+    {
       "name": "windows_file_picker",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/windows_file_picker-1.0.1",
       "packageUri": "lib/",
@@ -825,9 +855,9 @@
     },
     {
       "name": "xdg_directories",
-      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/xdg_directories-0.2.0+3",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/xdg_directories-1.1.0",
       "packageUri": "lib/",
-      "languageVersion": "2.12"
+      "languageVersion": "3.3"
     },
     {
       "name": "xml",
@@ -856,7 +886,7 @@
   ],
   "generator": "pub",
   "generatorVersion": "3.13.0",
-  "flutterRoot": "file:///E:/sdk/flutter-3.47.0-staged/flutter",
+  "flutterRoot": "file:///E:/sdk/flutter-3.47.0-active",
   "flutterVersion": "3.47.0",
   "pubCache": "file:///C:/Users/ZP/AppData/Local/Pub/Cache"
 }

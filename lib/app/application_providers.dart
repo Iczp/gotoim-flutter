@@ -2,7 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_environment.dart';
+import '../core/capabilities/client_capability_service.dart';
 import '../core/device/client_device_context.dart';
+import '../core/jsbridge/js_api_dispatcher.dart';
 import '../core/network/api_client.dart';
 import '../core/network/dio_api_client.dart';
 import '../core/notifications/local_notification_service.dart';
@@ -33,5 +35,21 @@ final localNotificationServiceProvider = Provider<LocalNotificationService>(
   (ref) =>
       throw UnimplementedError(
         'LocalNotificationService must be provided at bootstrap.',
+      ),
+);
+
+/// Unified application entry point for client/platform APIs.
+final clientCapabilityServiceProvider = Provider<ClientCapabilityService>(
+  (ref) =>
+      throw UnimplementedError(
+        'ClientCapabilityService must be provided at bootstrap.',
+      ),
+);
+
+/// JSON request/response dispatcher used by WebView adapters and diagnostics.
+final jsApiDispatcherProvider = Provider<JsApiDispatcher>(
+  (ref) =>
+      throw UnimplementedError(
+        'JsApiDispatcher must be provided at bootstrap.',
       ),
 );

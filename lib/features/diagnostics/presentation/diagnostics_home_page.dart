@@ -51,6 +51,18 @@ class DiagnosticsHomePage extends StatelessWidget {
             subtitle: '相机、扫描框动画、闪光灯、相册与上传图片识别',
             onTap: () => context.push('/diagnostics/scan-code'),
           ),
+          _Item(
+            icon: Icons.phone_android_outlined,
+            title: '客户端能力中心',
+            subtitle: '系统、设备、网络、剪贴板与文件选择的分级调用和返回结果',
+            onTap: () => context.push('/diagnostics/capabilities'),
+          ),
+          _Item(
+            icon: Icons.javascript_outlined,
+            title: 'JS Bridge 测试',
+            subtitle: 'JSON 请求/响应、能力 API 与网络状态事件',
+            onTap: () => context.push('/diagnostics/js-bridge'),
+          ),
         ],
       ),
     );

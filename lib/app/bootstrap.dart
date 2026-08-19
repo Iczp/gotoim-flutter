@@ -3,10 +3,16 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_environment.dart';
+import '../core/capabilities/client_capability_service.dart';
 import '../core/device/client_device_context.dart';
+import '../core/jsbridge/js_api_dispatcher.dart';
 import '../core/notifications/local_notification_service.dart';
 import '../core/platform/platform_facade.dart';
+import '../core/services/clipboard_service.dart';
+import '../core/services/file/file_picker_service.dart';
+import '../core/services/scan/scan_code_service.dart';
 import 'app.dart';
+import 'app_navigation.dart';
 import 'application_providers.dart';
 
 Future<void> bootstrap() async {
@@ -28,6 +34,20 @@ Future<void> bootstrap() async {
     platformFacade: platformFacade,
   );
   await localNotificationService.initialize();
+  final capabilities = DefaultClientCapabilityService(
+    environment: environment,
+    deviceContext: deviceContext,
+    platformFacade: platformFacade,
+    clipboardService: SystemClipboardService(),
+    filePickerService: const SystemFilePickerService(),
+    scanCodeService: const NavigatorScanCodeService(),
+    imageCodeService: const ZxingImageCodeService(),
+    localNotificationService: localNotificationService,
+  );
+  final jsApiDispatcher = JsApiDispatcher(
+    capabilities: capabilities,
+    navigatorProvider: () => rootNavigatorKey.currentState,
+  );
 
   runApp(
     ProviderScope(
@@ -38,6 +58,8 @@ Future<void> bootstrap() async {
         localNotificationServiceProvider.overrideWithValue(
           localNotificationService,
         ),
+        clientCapabilityServiceProvider.overrideWithValue(capabilities),
+        jsApiDispatcherProvider.overrideWithValue(jsApiDispatcher),
       ],
       child: const GotoImApp(),
     ),

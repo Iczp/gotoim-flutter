@@ -28,6 +28,10 @@ dependencies:
   # Pure Dart QR image decoder used as the web/desktop upload fallback.
   image: ^4.9.1
   zxing2: ^0.2.4
+  # Unified client capability adapters. These remain behind a project service
+  # so business/UI code never depends on their plugin APIs.
+  connectivity_plus: ^7.3.1
+  device_info_plus: ^13.2.0
 
 dev_dependencies:
   flutter_test:

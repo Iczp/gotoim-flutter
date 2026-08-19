@@ -12,11 +12,15 @@ import '../../features/diagnostics/presentation/diagnostics_home_page.dart';
 import '../../features/diagnostics/presentation/local_notification_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/signalr_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/scan_code_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/client_capabilities_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/js_bridge_diagnostics_page.dart';
+import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authControllerProvider);
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: auth,
     redirect: (context, state) {
@@ -70,6 +74,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/scan-code',
         builder: (context, state) => const ScanCodeDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/capabilities',
+        builder: (context, state) => const ClientCapabilitiesDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/js-bridge',
+        builder: (context, state) => const JsBridgeDiagnosticsPage(),
       ),
     ],
   );
