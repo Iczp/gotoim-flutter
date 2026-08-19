@@ -64,6 +64,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/js-bridge'),
           ),
           _Item(
+            icon: Icons.web_outlined,
+            title: 'JS Bridge Harness',
+            subtitle: '在原生 WebView 中加载独立测试站，验证真实双向通道',
+            onTap: () => context.push('/diagnostics/js-bridge-harness'),
+          ),
+          _Item(
             icon: Icons.perm_media_outlined,
             title: '媒体与文件测试',
             subtitle: '相册、拍照、视频、缩略图、压缩、录音、图片识码与另存为',
