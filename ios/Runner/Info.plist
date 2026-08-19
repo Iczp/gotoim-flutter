@@ -47,6 +47,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>用于扫描登录二维码。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于从相册选择二维码图片进行识别。</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 </dict>

@@ -1,0 +1,35 @@
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:gotoim_flutter/core/services/scan/image_code_decoder.dart';
+import 'package:gotoim_flutter/core/services/scan/scan_code_models.dart';
+
+void main() {
+  test('scan code request defaults to all formats and enables common actions',
+      () {
+    const request = ScanCodeRequest();
+
+    expect(request.formats, isEmpty);
+    expect(request.allowAlbum, isTrue);
+    expect(request.allowTorch, isTrue);
+  });
+
+  test('scan code result retains content, format and source', () {
+    const result = ScanCodeResult(
+      content: 'gotoim://scan-login?code=abc',
+      format: ScanCodeFormat.qrCode,
+      source: ScanCodeSource.album,
+    );
+
+    expect(result.content, contains('scan-login'));
+    expect(result.format, ScanCodeFormat.qrCode);
+    expect(result.source, ScanCodeSource.album);
+  });
+
+  test('image decode request defaults to QR code and album source', () {
+    final request = DecodeImageRequest(bytes: Uint8List(0));
+
+    expect(request.formats, <ScanCodeFormat>[ScanCodeFormat.qrCode]);
+    expect(request.source, ScanCodeSource.album);
+  });
+}

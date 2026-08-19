@@ -45,6 +45,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             subtitle: '权限、渠道、通知内容、点击 Payload 与取消',
             onTap: () => context.push('/diagnostics/notifications'),
           ),
+          _Item(
+            icon: Icons.qr_code_scanner_outlined,
+            title: '统一扫码测试',
+            subtitle: '相机、扫描框动画、闪光灯、相册与上传图片识别',
+            onTap: () => context.push('/diagnostics/scan-code'),
+          ),
         ],
       ),
     );
