@@ -6,11 +6,21 @@ class JsBridgeHarnessWebView extends StatelessWidget {
   const JsBridgeHarnessWebView({
     required this.url,
     required this.dispatcher,
+    this.onProgress,
+    this.onPageStarted,
+    this.onPageFinished,
+    this.onError,
+    this.onNavigationBlocked,
     super.key,
   });
 
   final String url;
   final JsApiDispatcher dispatcher;
+  final ValueChanged<int>? onProgress;
+  final ValueChanged<String>? onPageStarted;
+  final ValueChanged<String>? onPageFinished;
+  final ValueChanged<String>? onError;
+  final ValueChanged<String>? onNavigationBlocked;
 
   @override
   Widget build(BuildContext context) => const Center(

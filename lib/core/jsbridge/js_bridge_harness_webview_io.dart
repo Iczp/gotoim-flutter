@@ -11,11 +11,21 @@ class JsBridgeHarnessWebView extends StatefulWidget {
   const JsBridgeHarnessWebView({
     required this.url,
     required this.dispatcher,
+    this.onProgress,
+    this.onPageStarted,
+    this.onPageFinished,
+    this.onError,
+    this.onNavigationBlocked,
     super.key,
   });
 
   final String url;
   final JsApiDispatcher dispatcher;
+  final ValueChanged<int>? onProgress;
+  final ValueChanged<String>? onPageStarted;
+  final ValueChanged<String>? onPageFinished;
+  final ValueChanged<String>? onError;
+  final ValueChanged<String>? onNavigationBlocked;
 
   @override
   State<JsBridgeHarnessWebView> createState() => _JsBridgeHarnessWebViewState();
@@ -33,6 +43,15 @@ class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
           ..setJavaScriptMode(JavaScriptMode.unrestricted)
           ..setNavigationDelegate(
             NavigationDelegate(
+              onProgress: widget.onProgress,
+              onPageStarted: widget.onPageStarted,
+              onPageFinished: widget.onPageFinished,
+              onWebResourceError: (error) {
+                final url = error.url?.isEmpty ?? true ? '' : '\n${error.url}';
+                widget.onError?.call(
+                  '网页加载失败 (${error.errorCode})：${error.description}$url',
+                );
+              },
               onNavigationRequest:
                   (request) => _navigationDecision(request.url),
             ),
@@ -40,7 +59,7 @@ class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
           ..addJavaScriptChannel(
             'GotoIMBridge',
             onMessageReceived: (message) {
-              _session.handleIncoming(message.message);
+              _handleBridgeMessage(message.message);
             },
           );
     _session = JsBridgeSession(
@@ -64,21 +83,39 @@ class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
 
   void _load(String value) {
     final uri = Uri.tryParse(value);
-    if (uri == null || !uri.hasScheme) return;
-    _controller.loadRequest(uri);
+    if (uri == null || !uri.hasScheme) {
+      widget.onError?.call('无效的 Harness 地址：$value');
+      return;
+    }
+    _controller.loadRequest(uri).catchError((Object error) {
+      widget.onError?.call('无法发起网页加载：$error');
+    });
+  }
+
+  Future<void> _handleBridgeMessage(String message) async {
+    try {
+      await _session.handleIncoming(message);
+    } catch (error) {
+      widget.onError?.call('JS Bridge 消息处理失败：$error');
+    }
   }
 
   NavigationDecision _navigationDecision(String requestedUrl) {
     final requested = Uri.tryParse(requestedUrl);
     final harness = Uri.tryParse(widget.url);
-    if (requested == null || harness == null) return NavigationDecision.prevent;
+    if (requested == null || harness == null) {
+      widget.onNavigationBlocked?.call('已拦截无效跳转：$requestedUrl');
+      return NavigationDecision.prevent;
+    }
     final sameOrigin =
         requested.scheme == harness.scheme &&
         requested.host == harness.host &&
         requested.port == harness.port;
-    return sameOrigin || requestedUrl == 'about:blank'
-        ? NavigationDecision.navigate
-        : NavigationDecision.prevent;
+    if (sameOrigin || requestedUrl == 'about:blank') {
+      return NavigationDecision.navigate;
+    }
+    widget.onNavigationBlocked?.call('已拦截跨域跳转：$requestedUrl');
+    return NavigationDecision.prevent;
   }
 
   @override

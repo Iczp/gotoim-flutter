@@ -38,6 +38,8 @@ cd F:\Dev\GotoIM\gotoim-flutter-jsbridge
 python -m http.server 4173
 ```
 
-在 Flutter Debug 应用中进入“开发诊断中心 → JS Bridge Harness”。Android 模拟器默认使用 `http://10.0.2.2:4173`；真机需填电脑局域网 IP；iOS/macOS 本机模拟器通常可填 `http://127.0.0.1:4173`。Harness 路由仅在 Android、iOS、macOS 启用；Windows/Web 继续使用 JSON 模拟诊断页。
+在 Flutter Debug 应用中进入“开发诊断中心 → JS Bridge Harness”。默认地址读取当前环境文件的 `JS_BRIDGE_HARNESS_URL`；开发环境已配置为 `http://10.0.5.20:4173`。未配置时，Android 回退为 `http://10.0.2.2:4173`（模拟器），iOS/macOS 回退为 `http://127.0.0.1:4173`。真机须使用电脑的局域网 IP。
+
+Harness 会显示请求进度、完成地址和明确的网络/WebView 错误。Android Debug manifest 已声明 `INTERNET`，并仅在 Debug 包允许明文 HTTP，故局域网的 `http://` 测试服务可直接加载；Release 包不暴露该入口。Harness 路由仅在 Android、iOS、macOS 启用；Windows/Web 继续使用 JSON 模拟诊断页。
 
 最小验证矩阵：Android 真机（相机、录像、录音、视频压缩）、iPhone/iPad（权限与相册）、Windows（文件路径/另存为/录音）、WebView 中的 H5（所有 JSON action、取消订阅和文件引用失效）。在生产接入实际 WebView 插件之前，先用该 harness 固化协议回归测试最合适。

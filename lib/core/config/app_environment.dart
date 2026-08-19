@@ -36,6 +36,7 @@ class AppEnvironment {
     required this.scanLoginAuthScope,
     required this.signalRSkipNegotiation,
     required this.signalRReconnectDelays,
+    required this.jsBridgeHarnessUrl,
     required this.enableNetworkLogging,
   });
 
@@ -66,6 +67,8 @@ class AppEnvironment {
   final String scanLoginAuthScope;
   final bool signalRSkipNegotiation;
   final List<int> signalRReconnectDelays;
+  /// Debug-only standalone H5 page used to verify the native JS bridge.
+  final String jsBridgeHarnessUrl;
   final bool enableNetworkLogging;
 
   static AppFlavor parseFlavor(String value) {
@@ -152,6 +155,7 @@ class AppEnvironment {
           fallback: '0,2000,10000,30000',
         ),
       ),
+      jsBridgeHarnessUrl: dotenv.get('JS_BRIDGE_HARNESS_URL', fallback: ''),
       enableNetworkLogging:
           dotenv.get('ENABLE_NETWORK_LOGGING', fallback: 'false') == 'true',
     );
