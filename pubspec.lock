@@ -468,10 +468,10 @@ packages:
     dependency: "direct main"
     description:
       name: mobile_scanner
-      sha256: "4045e8441e21f1fb8998a76fbffd054510dd3a3b1dee55c7c9a2083eee687345"
+      sha256: "1b60b8f9d4ce0cb0e7d7bc223c955d083a0737bee66fa1fcfe5de48225e0d5b3"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.0.0"
+    version: "3.5.7"
   path:
     dependency: transitive
     description:

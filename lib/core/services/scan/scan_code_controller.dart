@@ -37,6 +37,7 @@ class ScanCodeController extends ChangeNotifier {
   bool _busy = false;
   bool _torchEnabled = false;
   String? _error;
+  ScanCodeSource _activeSource = ScanCodeSource.camera;
 
   MobileScannerController? get scanner => _scanner;
   bool get busy => _busy;
@@ -86,7 +87,7 @@ class ScanCodeController extends ChangeNotifier {
       ScanCodeResult(
         content: content,
         format: _fromMobileFormat(barcode!.format),
-        source: ScanCodeSource.camera,
+        source: _activeSource,
       ),
     );
   }
@@ -113,7 +114,15 @@ class ScanCodeController extends ChangeNotifier {
       } else {
         final image = await _imagePicker.pickImage(source: ImageSource.gallery);
         if (image == null) return;
-        await _decodeImageBytes(await image.readAsBytes());
+        // Delegate image recognition to the native scanner on mobile. It uses
+        // the same format configuration as the live camera instead of
+        // silently reducing an album scan to QR only.
+        _activeSource = ScanCodeSource.album;
+        final found = await _scanner!.analyzeImage(image.path);
+        if (!found && !_completed) {
+          _setError('未在图片中识别到可用的二维码或条形码，请上传清晰的图片。');
+        }
+        _activeSource = ScanCodeSource.camera;
       }
     } catch (error) {
       _setError('相册识别失败，请更换清晰的图片。');
@@ -139,7 +148,11 @@ class ScanCodeController extends ChangeNotifier {
 
   Future<void> _decodeImageBytes(Uint8List bytes) async {
     final result = await _imageCodeService.decodeImage(
-      DecodeImageRequest(bytes: bytes, source: ScanCodeSource.album),
+      DecodeImageRequest(
+        bytes: bytes,
+        formats: request.formats,
+        source: ScanCodeSource.album,
+      ),
     );
     if (result == null) {
       _setError('未在图片中识别到二维码，请上传清晰的二维码图片。');

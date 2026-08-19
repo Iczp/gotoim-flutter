@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gotoim_flutter/core/platform/platform_contract.dart';
 import 'package:gotoim_flutter/core/services/scan/image_code_decoder.dart';
+import 'package:gotoim_flutter/core/services/scan/scan_code_controller.dart';
 import 'package:gotoim_flutter/core/services/scan/scan_code_models.dart';
 
 void main() {
@@ -32,4 +34,34 @@ void main() {
     expect(request.formats, <ScanCodeFormat>[ScanCodeFormat.qrCode]);
     expect(request.source, ScanCodeSource.album);
   });
+
+  test('desktop and web keep the API but do not create a camera scanner', () {
+    for (final kind in <PlatformKind>[PlatformKind.windows, PlatformKind.web]) {
+      final controller = ScanCodeController(
+        request: const ScanCodeRequest(),
+        platform: _FakePlatformFacade(kind),
+        onResult: (_) {},
+      );
+      addTearDown(controller.dispose);
+
+      expect(controller.supportsCamera, isFalse, reason: '$kind');
+      expect(controller.scanner, isNull, reason: '$kind');
+    }
+  });
+}
+
+class _FakePlatformFacade implements PlatformFacade {
+  const _FakePlatformFacade(this.kind);
+
+  @override
+  final PlatformKind kind;
+
+  @override
+  bool get isWeb => kind == PlatformKind.web;
+
+  @override
+  bool get supportsMultipleWindows => false;
+
+  @override
+  bool get supportsNativeFilePaths => kind != PlatformKind.web;
 }
