@@ -133,6 +133,29 @@ void main() {
     expect(event.data['progress'], 0.5);
   });
 
+  test('records a Flutter-to-H5 ping receipt as a bridge event', () async {
+    final eventFuture = dispatcher.events.first;
+    final response =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"ping-receipt","action":"diagnostics.reportHostPing","data":{"pingId":"ping-1","receivedAt":"2026-08-20T00:00:00.000Z","success":true,"systemInfo":{"platform":"android"}}}',
+              ),
+            )
+            as Map<String, dynamic>;
+
+    expect(response['success'], isTrue);
+    expect(response['data']['received'], isTrue);
+
+    final event = await eventFuture;
+    expect(event.name, 'diagnostics.hostPingResult');
+    expect(event.data['pingId'], 'ping-1');
+    expect(event.data['success'], isTrue);
+    expect(
+      (event.data['systemInfo'] as Map<String, dynamic>)['platform'],
+      'android',
+    );
+  });
+
   test('accepts the image decode bridge action with base64 input', () async {
     final response =
         jsonDecode(

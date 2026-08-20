@@ -2,7 +2,7 @@
 
 JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议解析和能力分发。`JsBridgeSession` 将调度器绑定到 `JsBridgeTransport`：宿主 WebView 只需把 JavaScriptChannel 收到的文本传给 `handleIncoming()`，并实现 `postMessage()` 回推响应/事件。这使 `webview_flutter`、桌面 WebView 和未来宿主适配器能共享同一个协议。
 
-开发验证入口：Debug 模式的“开发诊断中心 → JS Bridge 测试”。该页会模拟 JavaScriptChannel 输入，显示完整响应，并显示网络订阅事件。
+开发验证入口：Debug 模式的“开发诊断中心 → JS Bridge 测试”。该页会模拟 JavaScriptChannel 输入，显示完整响应，提供文件上传任务闭环，并显示网络及上传订阅事件。每个响应和事件面板均可选中或点击复制，便于人工比对。
 
 ## 请求与响应协议
 
@@ -79,6 +79,7 @@ JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议
 | `offNetworkStatusChange` | `network.offStatusChange` | `{subscriptionId:string}` | `{removed:boolean}` |
 | `notification.getSupport` | — | `{}` | `{platform,isSupported,message}` |
 | `notification.requestPermission` | — | `{}` | `{status,message}` |
+| `diagnostics.reportHostPing` | — | `{pingId:string,receivedAt:string,success:boolean,systemInfo?:object,error?:object}` | `{received:true}`；仅 Debug Harness 用于上报主动调用回执 |
 
 `formats` 使用 Flutter 枚举名，例如 `qrCode`、`code128`、`ean13`；空数组表示默认全部。`decodeImage.base64` 可以是纯 base64，也可以是 `data:image/png;base64,...`，最大解码后大小为 10 MiB。文件选择结果包含平台可用的原始 URI/路径；`fileId` 只在当前宿主会话有效。URI/path 不是 H5 可直接访问的地址，后续操作必须传 `fileId`。媒体能力、上传白名单与平台限制见 [媒体与文件能力](media_and_files.md)。
 
@@ -138,6 +139,19 @@ const { task } = await goto.invoke('file.upload', {
 ```
 
 上传地址主机必须位于 Flutter 环境变量 `JS_BRIDGE_UPLOAD_ALLOWED_HOSTS`。Bridge 不会自动附带 App Token；使用业务后端签发的短期上传令牌或对象存储预签名 URL。`UPLOAD_DISABLED` 表示白名单未配置，`UPLOAD_HOST_NOT_ALLOWED` 表示主机不在白名单，`UPLOAD_FAILED` 会通过失败事件给出网络或 HTTP 状态。
+
+## Flutter 主动调用 H5
+
+Harness 宿主可通过 WebView 向页面投递独立事件；当前诊断按钮发送：
+
+```json
+{
+  "event": "host.command",
+  "data": {"name": "harness.ping", "pingId": "2026-08-20T00:00:00.000Z"}
+}
+```
+
+H5 收到 `host.command` 后调用 `getSystemInfo`，再调用仅供诊断使用的 `diagnostics.reportHostPing`。Flutter 会发出 `diagnostics.hostPingResult` 事件，Harness 页将完整 payload 显示在“Flutter → H5 Ping 回执”面板；`success:true` 且带有 `systemInfo` 即代表 Flutter → H5 → Flutter 的往返链路已完成。该面板可直接复制用于缺陷报告。业务 H5 不应依赖 `diagnostics.*` action。
 
 ## H5 Promise 包装示例
 

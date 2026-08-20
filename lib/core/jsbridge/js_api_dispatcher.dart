@@ -385,6 +385,22 @@ class JsApiDispatcher {
           'status': permission.status.name,
           'message': permission.message,
         };
+      case 'diagnostics.reportHostPing':
+        final payload = <String, Object?>{
+          'pingId': _requiredString(request.data, 'pingId'),
+          'receivedAt': _requiredString(request.data, 'receivedAt'),
+          'success': request.data['success'] == true,
+          if (request.data['systemInfo'] is Map)
+            'systemInfo': Map<String, dynamic>.from(
+              request.data['systemInfo'] as Map,
+            ),
+          if (request.data['error'] is Map)
+            'error': Map<String, dynamic>.from(request.data['error'] as Map),
+        };
+        _events.add(
+          JsBridgeEvent(name: 'diagnostics.hostPingResult', data: payload),
+        );
+        return const <String, bool>{'received': true};
       default:
         throw JsBridgeException(
           'NOT_SUPPORTED',

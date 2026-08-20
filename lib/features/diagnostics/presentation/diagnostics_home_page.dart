@@ -60,13 +60,13 @@ class DiagnosticsHomePage extends StatelessWidget {
           _Item(
             icon: Icons.javascript_outlined,
             title: 'JS Bridge 测试',
-            subtitle: 'JSON 请求/响应、能力 API 与网络状态事件',
+            subtitle: 'JSON 请求/响应、能力 API、上传任务、订阅与事件',
             onTap: () => context.push('/diagnostics/js-bridge'),
           ),
           _Item(
             icon: Icons.web_outlined,
             title: 'JS Bridge Harness',
-            subtitle: '在原生 WebView 中加载独立测试站，验证真实双向通道',
+            subtitle: '真实双向通道、上传闭环与 Flutter 主动调用回执',
             onTap: () => context.push('/diagnostics/js-bridge-harness'),
           ),
           _Item(
@@ -96,10 +96,10 @@ class _Item extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: Icon(icon),
-    title: Text(title),
-    subtitle: Text(subtitle),
-    trailing: const Icon(Icons.chevron_right),
-    onTap: onTap,
-  );
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      );
 }

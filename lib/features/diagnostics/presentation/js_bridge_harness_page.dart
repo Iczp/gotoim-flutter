@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +26,8 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
   String? _loadError;
   String? _pageStatus;
   int _progress = 0;
+  String _hostPingResult = '尚未发起 Flutter → H5 主动调用。';
+  StreamSubscription? _bridgeEventsSubscription;
   final StreamController<Map<String, Object?>> _hostEvents =
       StreamController<Map<String, Object?>>.broadcast();
 
@@ -32,16 +35,27 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
   void initState() {
     super.initState();
     final configuredUrl = ref.read(appEnvironmentProvider).jsBridgeHarnessUrl;
-    _loadedUrl =
-        configuredUrl.trim().isEmpty
-            ? _fallbackHarnessUrl(ref.read(platformFacadeProvider).kind)
-            : configuredUrl.trim();
+    _loadedUrl = configuredUrl.trim().isEmpty
+        ? _fallbackHarnessUrl(ref.read(platformFacadeProvider).kind)
+        : configuredUrl.trim();
     _urlController = TextEditingController(text: _loadedUrl);
     _pageStatus = '准备请求 $_loadedUrl';
+    _bridgeEventsSubscription =
+        ref.read(jsApiDispatcherProvider).events.listen((
+      event,
+    ) {
+      if (!mounted || event.name != 'diagnostics.hostPingResult') return;
+      setState(() {
+        _hostPingResult = const JsonEncoder.withIndent('  ').convert(
+          event.toJson(),
+        );
+      });
+    });
   }
 
   @override
   void dispose() {
+    _bridgeEventsSubscription?.cancel();
     _urlController.dispose();
     _hostEvents.close();
     super.dispose();
@@ -70,14 +84,19 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
   }
 
   void _sendHostPing() {
+    final pingId = DateTime.now().toUtc().toIso8601String();
     _hostEvents.add(<String, Object?>{
       'event': 'host.command',
       'data': <String, Object?>{
         'name': 'harness.ping',
-        'sentAt': DateTime.now().toUtc().toIso8601String(),
+        'pingId': pingId,
+        'sentAt': pingId,
       },
     });
-    setState(() => _pageStatus = 'Flutter 已主动发送 harness.ping 给网页。');
+    setState(() {
+      _pageStatus = 'Flutter 已主动发送 harness.ping 给网页，等待 H5 回执。';
+      _hostPingResult = '等待 H5 回执。pingId: $pingId';
+    });
   }
 
   @override
@@ -88,8 +107,7 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
       );
     }
     final platform = ref.read(platformFacadeProvider).kind;
-    final supported =
-        platform == PlatformKind.android ||
+    final supported = platform == PlatformKind.android ||
         platform == PlatformKind.ios ||
         platform == PlatformKind.macos ||
         platform == PlatformKind.windows;
@@ -108,10 +126,9 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                     onSubmitted: (_) => _load(),
                     decoration: InputDecoration(
                       labelText: 'Harness 地址',
-                      helperText:
-                          platform == PlatformKind.android
-                              ? 'Android 模拟器默认 10.0.2.2；真机请填电脑局域网 IP。'
-                              : '本机服务可填 http://127.0.0.1:4173。',
+                      helperText: platform == PlatformKind.android
+                          ? 'Android 模拟器默认 10.0.2.2；真机请填电脑局域网 IP。'
+                          : '本机服务可填 http://127.0.0.1:4173。',
                       errorText: _inputError,
                       border: const OutlineInputBorder(),
                     ),
@@ -132,6 +149,7 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
             status: _pageStatus,
             error: _loadError,
           ),
+          _HostPingResult(value: _hostPingResult),
           if (!supported)
             const Expanded(
               child: Center(
@@ -181,6 +199,53 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
   }
 }
 
+class _HostPingResult extends StatelessWidget {
+  const _HostPingResult({required this.value});
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: SelectionArea(
+                  child: Text(
+                    'Flutter → H5 Ping 回执\n$value',
+                    style: const TextStyle(fontFamily: 'monospace'),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: '复制 Ping 回执',
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: value));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Ping 回执已复制')),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.copy_outlined),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LoadFeedback extends StatelessWidget {
   const _LoadFeedback({
     required this.progress,
@@ -200,10 +265,9 @@ class _LoadFeedback extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color:
-              error == null
-                  ? colorScheme.surfaceContainerHighest
-                  : colorScheme.errorContainer,
+          color: error == null
+              ? colorScheme.surfaceContainerHighest
+              : colorScheme.errorContainer,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
@@ -225,10 +289,9 @@ class _LoadFeedback extends StatelessWidget {
                       child: Text(
                         error ?? status!,
                         style: TextStyle(
-                          color:
-                              error == null
-                                  ? null
-                                  : colorScheme.onErrorContainer,
+                          color: error == null
+                              ? null
+                              : colorScheme.onErrorContainer,
                         ),
                       ),
                     ),
