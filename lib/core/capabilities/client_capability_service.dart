@@ -255,6 +255,14 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
           message: '调用系统文件选择器；返回安全的文件元数据。',
         ),
         ClientCapabilitySupport(
+          name: 'file.upload',
+          isSupported: _environment.jsBridgeUploadAllowedHosts.isNotEmpty,
+          message:
+              _environment.jsBridgeUploadAllowedHosts.isEmpty
+                  ? '当前环境未配置 JS Bridge 上传主机白名单。'
+                  : '由 Flutter 宿主使用文件流上传，并支持进度、取消和事件订阅。',
+        ),
+        ClientCapabilitySupport(
           name: 'scan.scanCode',
           isSupported: true,
           message:

@@ -21,6 +21,7 @@ class JsBridgeHarnessWebView extends StatefulWidget {
     this.onPageFinished,
     this.onError,
     this.onNavigationBlocked,
+    this.hostEvents,
     super.key,
   });
 
@@ -32,8 +33,13 @@ class JsBridgeHarnessWebView extends StatefulWidget {
   final ValueChanged<String>? onError;
   final ValueChanged<String>? onNavigationBlocked;
 
+  /// Messages initiated by Flutter and delivered to the loaded H5 page.
+  final Stream<Map<String, Object?>>? hostEvents;
+
   @override
-  State<JsBridgeHarnessWebView> createState() =>
+  State<JsBridgeHarnessWebView> createState() => _createHarnessState(); // ignore: no_logic_in_create_state
+
+  State<JsBridgeHarnessWebView> _createHarnessState() =>
       Platform.isWindows
           ? _WindowsHarnessWebViewState()
           : _JsBridgeHarnessWebViewState();
@@ -43,6 +49,7 @@ class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
   late final WebViewController _controller;
   late final JsBridgeSession _session;
   Timer? _loadTimeout;
+  StreamSubscription<Map<String, Object?>>? _hostEventsSubscription;
 
   @override
   void initState() {
@@ -82,6 +89,7 @@ class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
       dispatcher: widget.dispatcher,
       transport: _WebViewTransport(_controller),
     )..start();
+    _hostEventsSubscription = widget.hostEvents?.listen(_postHostEvent);
     _load(widget.url);
   }
 
@@ -94,6 +102,7 @@ class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
   @override
   void dispose() {
     _loadTimeout?.cancel();
+    _hostEventsSubscription?.cancel();
     _session.dispose();
     super.dispose();
   }
@@ -126,6 +135,16 @@ class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
       await _session.handleIncoming(message);
     } catch (error) {
       widget.onError?.call('JS Bridge 消息处理失败：$error');
+    }
+  }
+
+  Future<void> _postHostEvent(Map<String, Object?> event) async {
+    try {
+      await _controller.runJavaScript(
+        'window.GotoImHarness?.receiveFromHost(${jsonEncode(event)});',
+      );
+    } catch (error) {
+      widget.onError?.call('Flutter 主动调用网页失败：$error');
     }
   }
 

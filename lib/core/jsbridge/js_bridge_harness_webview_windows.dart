@@ -9,6 +9,7 @@ class _WindowsHarnessWebViewState extends State<JsBridgeHarnessWebView> {
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   late final JsBridgeSession _session;
   Timer? _loadTimeout;
+  StreamSubscription<Map<String, Object?>>? _hostEventsSubscription;
   bool _initialized = false;
 
   @override
@@ -18,6 +19,7 @@ class _WindowsHarnessWebViewState extends State<JsBridgeHarnessWebView> {
       dispatcher: widget.dispatcher,
       transport: _WindowsWebViewTransport(_controller),
     )..start();
+    _hostEventsSubscription = widget.hostEvents?.listen(_postHostEvent);
     unawaited(_initialize());
   }
 
@@ -102,9 +104,18 @@ class _WindowsHarnessWebViewState extends State<JsBridgeHarnessWebView> {
     }
   }
 
+  Future<void> _postHostEvent(Map<String, Object?> event) async {
+    try {
+      await _controller.postWebMessage(jsonEncode(event));
+    } catch (error) {
+      widget.onError?.call('Flutter 主动调用网页失败：$error');
+    }
+  }
+
   @override
   void dispose() {
     _loadTimeout?.cancel();
+    _hostEventsSubscription?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }

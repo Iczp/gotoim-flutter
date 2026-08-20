@@ -11,6 +11,7 @@ class JsBridgeHarnessWebView extends StatelessWidget {
     this.onPageFinished,
     this.onError,
     this.onNavigationBlocked,
+    this.hostEvents,
     super.key,
   });
 
@@ -21,6 +22,9 @@ class JsBridgeHarnessWebView extends StatelessWidget {
   final ValueChanged<String>? onPageFinished;
   final ValueChanged<String>? onError;
   final ValueChanged<String>? onNavigationBlocked;
+
+  /// Messages initiated by Flutter and delivered to the loaded H5 page.
+  final Stream<Map<String, Object?>>? hostEvents;
 
   @override
   Widget build(BuildContext context) => const Center(

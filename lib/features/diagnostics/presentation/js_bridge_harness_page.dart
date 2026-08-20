@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +25,8 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
   String? _loadError;
   String? _pageStatus;
   int _progress = 0;
+  final StreamController<Map<String, Object?>> _hostEvents =
+      StreamController<Map<String, Object?>>.broadcast();
 
   @override
   void initState() {
@@ -39,6 +43,7 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
   @override
   void dispose() {
     _urlController.dispose();
+    _hostEvents.close();
     super.dispose();
   }
 
@@ -62,6 +67,17 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
     return platform == PlatformKind.android
         ? 'http://10.0.2.2:4173'
         : 'http://127.0.0.1:4173';
+  }
+
+  void _sendHostPing() {
+    _hostEvents.add(<String, Object?>{
+      'event': 'host.command',
+      'data': <String, Object?>{
+        'name': 'harness.ping',
+        'sentAt': DateTime.now().toUtc().toIso8601String(),
+      },
+    });
+    setState(() => _pageStatus = 'Flutter 已主动发送 harness.ping 给网页。');
   }
 
   @override
@@ -103,6 +119,11 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                 ),
                 const SizedBox(width: 8),
                 FilledButton(onPressed: _load, child: const Text('加载')),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: supported ? _sendHostPing : null,
+                  child: const Text('Flutter → H5 Ping'),
+                ),
               ],
             ),
           ),
@@ -151,6 +172,7 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                 onNavigationBlocked: (message) {
                   if (mounted) setState(() => _pageStatus = message);
                 },
+                hostEvents: _hostEvents.stream,
               ),
             ),
         ],

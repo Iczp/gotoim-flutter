@@ -37,6 +37,7 @@ class AppEnvironment {
     required this.signalRSkipNegotiation,
     required this.signalRReconnectDelays,
     required this.jsBridgeHarnessUrl,
+    required this.jsBridgeUploadAllowedHosts,
     required this.enableNetworkLogging,
   });
 
@@ -67,8 +68,12 @@ class AppEnvironment {
   final String scanLoginAuthScope;
   final bool signalRSkipNegotiation;
   final List<int> signalRReconnectDelays;
+
   /// Debug-only standalone H5 page used to verify the native JS bridge.
   final String jsBridgeHarnessUrl;
+
+  /// Explicit allowlist for H5-requested upload destinations.
+  final List<String> jsBridgeUploadAllowedHosts;
   final bool enableNetworkLogging;
 
   static AppFlavor parseFlavor(String value) {
@@ -156,6 +161,9 @@ class AppEnvironment {
         ),
       ),
       jsBridgeHarnessUrl: dotenv.get('JS_BRIDGE_HARNESS_URL', fallback: ''),
+      jsBridgeUploadAllowedHosts: _parseCsv(
+        dotenv.get('JS_BRIDGE_UPLOAD_ALLOWED_HOSTS', fallback: ''),
+      ),
       enableNetworkLogging:
           dotenv.get('ENABLE_NETWORK_LOGGING', fallback: 'false') == 'true',
     );
@@ -168,6 +176,12 @@ class AppEnvironment {
         .whereType<int>()
         .toList(growable: false);
   }
+
+  static List<String> _parseCsv(String value) => value
+      .split(',')
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toList(growable: false);
 
   static String _nonEmpty(String value, {required String fallback}) {
     return value.trim().isEmpty ? fallback : value;

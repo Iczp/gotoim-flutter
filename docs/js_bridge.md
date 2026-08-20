@@ -51,6 +51,13 @@ JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议
 | `chooseFile` | `file.chooseFile` | `{allowMultiple?:boolean,allowedExtensions?:string[],title?:string}` | `{files:[{fileId,name,size,mimeType,uri,path,…}]}` |
 | `saveFile` | `file.saveFile` | `{fileName:string,base64:string,mimeType?:string,title?:string,initialDirectory?:string}` | `{file:{uri,path,hasNativePath}|null}` |
 | `readFile` | `file.readFile` | `{fileId:string}` | `{file,base64}`，上限 10 MiB |
+| `getFileInfo` | `file.getInfo` | `{fileId:string}` | `{file}` |
+| `releaseFile` | `file.release` | `{fileId:string}` | `{released:boolean}` |
+| `uploadFile` | `file.upload` | `{fileId,uploadUrl,method?:POST\|PUT,multipart?:boolean,fieldName?:string,headers?:object,formData?:object,timeoutSeconds?:5..600}` | 立即返回 `{task:{taskId,state:'queued',…}}` |
+| `getUploadTask` | `file.getUploadTask` | `{taskId:string}` | `{task}` |
+| `cancelUpload` | `file.cancelUpload` | `{taskId:string}` | `{cancelled:boolean}` |
+| `onUploadEvent` | `file.onUploadEvent` | `{subscriptionId?:string,taskId?:string}` | `{subscriptionId,taskId}` |
+| `offUploadEvent` | `file.offUploadEvent` | `{subscriptionId:string}` | `{removed:boolean}` |
 | `clearTemporaryFiles` | `file.clearTemporaryFiles` | `{}` | `{cleared:boolean}` |
 | `chooseImage` | `media.chooseImage` | [媒体选择参数](media_and_files.md#图片与相机) | `{files:[file]}` |
 | `takePhoto` | `media.takePhoto` | 同上 | `{file:file|null}` |
@@ -73,7 +80,7 @@ JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议
 | `notification.getSupport` | — | `{}` | `{platform,isSupported,message}` |
 | `notification.requestPermission` | — | `{}` | `{status,message}` |
 
-`formats` 使用 Flutter 枚举名，例如 `qrCode`、`code128`、`ean13`；空数组表示默认全部。`decodeImage.base64` 可以是纯 base64，也可以是 `data:image/png;base64,...`，最大解码后大小为 10 MiB。文件选择结果包含平台可用的原始 URI/路径；`fileId` 只在当前宿主会话有效。媒体能力的完整字段和平台限制见 [媒体与文件能力](media_and_files.md)。
+`formats` 使用 Flutter 枚举名，例如 `qrCode`、`code128`、`ean13`；空数组表示默认全部。`decodeImage.base64` 可以是纯 base64，也可以是 `data:image/png;base64,...`，最大解码后大小为 10 MiB。文件选择结果包含平台可用的原始 URI/路径；`fileId` 只在当前宿主会话有效。URI/path 不是 H5 可直接访问的地址，后续操作必须传 `fileId`。媒体能力、上传白名单与平台限制见 [媒体与文件能力](media_and_files.md)。
 
 详细字段语义和平台支持矩阵见 [客户端能力统一入口](client_capabilities.md)。
 
@@ -96,6 +103,41 @@ JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议
 ```
 
 页面销毁或不再监听时必须调用 `offNetworkStatusChange`，避免保留 Stream 订阅。网络类型仅代表传输层状态，不代表后端可达。
+
+## 文件上传与事件示例
+
+```javascript
+const { files } = await goto.invoke('file.chooseFile', { allowMultiple: false });
+const file = files[0];
+if (!file) return; // 用户取消
+
+const { subscriptionId } = await goto.invoke('file.onUploadEvent', {});
+const stopProgress = goto.on('file.uploadProgress', (event) => {
+  if (event.subscriptionId !== subscriptionId) return;
+  console.log(`${Math.round(event.progress * 100)}%`, event.sentBytes, event.totalBytes);
+});
+
+goto.on('file.uploadCompleted', (event) => {
+  if (event.subscriptionId === subscriptionId) console.log(event.response);
+});
+goto.on('file.uploadFailed', (event) => {
+  if (event.subscriptionId === subscriptionId) console.error(event.error);
+});
+
+const { task } = await goto.invoke('file.upload', {
+  fileId: file.fileId,
+  uploadUrl: 'https://uploads.example.com/presigned-path',
+  method: 'PUT',
+  multipart: false,
+  headers: { 'Content-Type': file.mimeType || 'application/octet-stream' },
+  timeoutSeconds: 120
+});
+
+// 需要取消时：await goto.invoke('file.cancelUpload', { taskId: task.taskId });
+// 页面销毁时：await goto.invoke('file.offUploadEvent', { subscriptionId }); stopProgress();
+```
+
+上传地址主机必须位于 Flutter 环境变量 `JS_BRIDGE_UPLOAD_ALLOWED_HOSTS`。Bridge 不会自动附带 App Token；使用业务后端签发的短期上传令牌或对象存储预签名 URL。`UPLOAD_DISABLED` 表示白名单未配置，`UPLOAD_HOST_NOT_ALLOWED` 表示主机不在白名单，`UPLOAD_FAILED` 会通过失败事件给出网络或 HTTP 状态。
 
 ## H5 Promise 包装示例
 

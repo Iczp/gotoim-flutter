@@ -9,20 +9,27 @@ import 'package:gotoim_flutter/core/jsbridge/js_bridge_session.dart';
 import 'package:gotoim_flutter/core/notifications/local_notification_contract.dart';
 import 'package:gotoim_flutter/core/platform/platform_contract.dart';
 import 'package:gotoim_flutter/core/services/file/file_picker_service.dart';
+import 'package:gotoim_flutter/core/services/file/file_upload_service.dart';
 import 'package:gotoim_flutter/core/services/scan/scan_code_service.dart';
 
 void main() {
   late _FakeCapabilities capabilities;
+  late _FakeUploadService uploadService;
   late JsApiDispatcher dispatcher;
 
   setUp(() {
     capabilities = _FakeCapabilities();
-    dispatcher = JsApiDispatcher(capabilities: capabilities);
+    uploadService = _FakeUploadService();
+    dispatcher = JsApiDispatcher(
+      capabilities: capabilities,
+      uploadService: uploadService,
+    );
   });
 
   tearDown(() async {
     await dispatcher.dispose();
     await capabilities.dispose();
+    await uploadService.dispose();
   });
 
   test('dispatches Uni-compatible getSystemInfo request', () async {
@@ -94,6 +101,36 @@ void main() {
 
     expect(response['success'], isTrue);
     expect(response['data']['removed'], isTrue);
+  });
+
+  test('forwards subscribed file-upload progress events', () async {
+    final eventFuture = dispatcher.events.first;
+    final response =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"upload-watch","action":"file.onUploadEvent","data":{"subscriptionId":"u-1"}}',
+              ),
+            )
+            as Map<String, dynamic>;
+    expect(response['data']['subscriptionId'], 'u-1');
+
+    uploadService.emit(
+      const FileUploadEvent(
+        name: 'file.uploadProgress',
+        task: FileUploadTask(
+          taskId: 'task-1',
+          fileId: 'file-1',
+          state: FileUploadState.uploading,
+          sentBytes: 50,
+          totalBytes: 100,
+        ),
+      ),
+    );
+    final event = await eventFuture;
+
+    expect(event.name, 'file.uploadProgress');
+    expect(event.data['subscriptionId'], 'u-1');
+    expect(event.data['progress'], 0.5);
   });
 
   test('accepts the image decode bridge action with base64 input', () async {
@@ -239,4 +276,27 @@ class _FakeTransport implements JsBridgeTransport {
 
   @override
   Future<void> postMessage(String message) async => messages.add(message);
+}
+
+class _FakeUploadService implements FileUploadService {
+  final StreamController<FileUploadEvent> _events =
+      StreamController<FileUploadEvent>.broadcast();
+
+  @override
+  Stream<FileUploadEvent> get events => _events.stream;
+
+  @override
+  Future<bool> cancel(String taskId) async => taskId == 'task-1';
+
+  @override
+  Future<void> dispose() => _events.close();
+
+  void emit(FileUploadEvent event) => _events.add(event);
+
+  @override
+  Future<FileUploadTask> start(SelectedFile file, FileUploadRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  FileUploadTask? task(String taskId) => null;
 }

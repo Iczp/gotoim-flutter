@@ -14,7 +14,25 @@
 | `path` | string? | 原始本机路径；SAF/Web 不保证存在，不能假设必有 |
 | `hasNativePath` | boolean | 是否可安全交给仅接受本机路径的视频处理器 |
 
-直接 Dart 调用可使用 `readBytes()` / `readAsByteStream()` 上传。Bridge 的 `file.readFile` 只允许当前会话的 `fileId`，且响应上限为 10 MiB；大文件必须走 HTTP 分片上传接口。
+直接 Dart 调用可使用 `readBytes()` / `readAsByteStream()`。Bridge 的 `file.readFile` 只允许当前会话的 `fileId`，且响应上限为 10 MiB；大文件必须使用 `file.upload`，由 Flutter 读取 `XFile` 流并直接发送 HTTP 请求。H5 不应尝试访问 `uri` 或 `path`：它们可能是 Android `content:`、Web `blob:` 或受系统沙箱保护的本机路径。
+
+## 宿主代理上传
+
+`file.upload` 创建后台上传任务，立即返回 `taskId`，不会把文件二进制、访问令牌或本机路径回传给 H5。先调用 `file.onUploadEvent`，再发起上传；任务进度、完成、失败和取消都通过事件返回。上传任务与 `fileId` 一样只在当前宿主会话有效。
+
+环境变量 `JS_BRIDGE_UPLOAD_ALLOWED_HOSTS` 是逗号分隔的上传主机白名单；未配置时上传被拒绝。开发环境默认允许 `10.0.5.20`、`127.0.0.1`、`localhost`，Staging/Production 必须显式配置实际文件服务或预签名上传域名。该限制防止不受信任的 H5 将用户刚选择的文件发送到任意站点。
+
+| 操作 | 参数 | 返回/事件 |
+| --- | --- | --- |
+| `file.upload` | `fileId`、`uploadUrl`、`method=POST\|PUT`、`multipart=true`、`fieldName=file`、`headers`、`formData`、`timeoutSeconds=60` | 立即返回 `{task:{taskId,state:'queued',…}}` |
+| `file.getUploadTask` | `taskId` | 当前 `{task}` 快照 |
+| `file.cancelUpload` | `taskId` | `{cancelled:boolean}` |
+| `file.onUploadEvent` | `subscriptionId?`、`taskId?` | `{subscriptionId,taskId}`；不传 `taskId` 订阅全部任务 |
+| `file.offUploadEvent` | `subscriptionId` | `{removed:boolean}` |
+
+事件名为 `file.uploadQueued`、`file.uploadProgress`、`file.uploadCompleted`、`file.uploadFailed`、`file.uploadCancelled`。事件 `data` 均包含 `subscriptionId`、`taskId`、`fileId`、`state`、`sentBytes`、`totalBytes`、`progress`；完成事件额外含受限大小的 `{response:{statusCode,data}}`，失败事件含 `{error:{code,message,statusCode?}}`。
+
+`POST + multipart=true` 生成标准表单上传；`PUT + multipart=false` 发送原始文件字节，适合对象存储预签名 URL。请求头和表单字段只能是字符串、数字或布尔值，不会自动附加 App 登录 Token；建议由业务后端下发短期上传凭证或预签名 URL。
 
 ### `chooseFile(request)`
 

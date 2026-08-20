@@ -35,7 +35,7 @@
 
 ```powershell
 cd F:\Dev\GotoIM\gotoim-flutter-jsbridge
-python -m http.server 4173
+python server.py --bind 0.0.0.0 --port 4173
 ```
 
 在 Flutter Debug 应用中进入“开发诊断中心 → JS Bridge Harness”。默认地址读取当前环境文件的 `JS_BRIDGE_HARNESS_URL`；开发环境已配置为 `http://10.0.5.20:4173`。未配置时，Android 回退为 `http://10.0.2.2:4173`（模拟器），iOS/macOS 回退为 `http://127.0.0.1:4173`。真机须使用电脑的局域网 IP。
@@ -43,6 +43,14 @@ python -m http.server 4173
 Harness 会显示请求进度、完成地址和明确的网络/WebView 错误；15 秒没有完成会报告超时，错误文字可选中或点复制按钮直接复制。Android 主 Manifest 已声明 `INTERNET` 并允许明文 HTTP，因此所有 Android 构建变体均可访问局域网 `http://` 服务；Harness 页面本身仍只在 Debug 模式暴露。
 
 Harness 支持 Android、iOS、macOS 与 Windows。Windows 使用 WebView2：需要 Windows 10 1809+ 和 WebView2 Runtime；若运行时缺失，页面会显示初始化错误。Web 与 Linux 继续使用 JSON 模拟诊断页。
+
+### 上传闭环验证
+
+1. 确认 `.env.development` 的 `JS_BRIDGE_UPLOAD_ALLOWED_HOSTS` 包含测试站点主机（默认含 `10.0.5.20`），完整重启 Flutter。
+2. 在 Harness 的“宿主代理上传”输入 `http://10.0.5.20:4173/upload`，选择一个非敏感测试文件。
+3. 点击“订阅上传事件”，再点击“开始上传”。确认 H5 显示 `file.uploadProgress` 和 `file.uploadCompleted`，最终响应含 `receivedBytes`。`server.py` 只读取并丢弃字节，不落盘。
+4. 选择较大测试文件后再次上传并立即点击“取消任务”，确认 `file.uploadCancelled`。离开页面前点击“取消上传订阅”。
+5. 点击 Flutter 页面的“Flutter → H5 Ping”。H5 会收到 `host.command`，再回调 `getSystemInfo`；状态显示“已完成 Flutter → H5 → Flutter 往返”。这验证 Flutter 主动调用 WebView、网页主动回调 Flutter、以及 JSON 响应三段链路。
 
 当前开发机的默认 `cmake` 若低于 3.20，无法构建 Windows WebView2 插件。Visual Studio 已安装新版 CMake 时，可在启动前执行：
 

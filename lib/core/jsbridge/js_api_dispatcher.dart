@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../capabilities/client_capability_models.dart';
 import '../capabilities/client_capability_service.dart';
 import '../services/file/file_picker_service.dart';
+import '../services/file/file_upload_service.dart';
 import '../services/media/media_service.dart';
 import '../services/media/video_processing_models.dart';
 import '../services/scan/scan_code_service.dart';
@@ -21,21 +22,30 @@ class JsApiDispatcher {
   JsApiDispatcher({
     required ClientCapabilityService capabilities,
     NavigatorState? Function()? navigatorProvider,
+    FileUploadService? uploadService,
     Uuid? uuid,
   }) : _capabilities = capabilities,
        _navigatorProvider = navigatorProvider ?? (() => null),
-       _uuid = uuid ?? const Uuid();
+       _uploadService = uploadService ?? UnsupportedFileUploadService(),
+       _uuid = uuid ?? const Uuid() {
+    _uploadEventsSubscription = _uploadService.events.listen(
+      _forwardUploadEvent,
+    );
+  }
 
   static const _maximumImagePayloadBytes = 10 * 1024 * 1024;
 
   final ClientCapabilityService _capabilities;
   final NavigatorState? Function() _navigatorProvider;
+  final FileUploadService _uploadService;
   final Uuid _uuid;
   final StreamController<JsBridgeEvent> _events =
       StreamController<JsBridgeEvent>.broadcast();
   final Map<String, StreamSubscription<ClientNetworkStatus>> _subscriptions =
       <String, StreamSubscription<ClientNetworkStatus>>{};
+  final Map<String, String?> _uploadEventSubscriptions = <String, String?>{};
   final Map<String, SelectedFile> _fileReferences = <String, SelectedFile>{};
+  late final StreamSubscription<FileUploadEvent> _uploadEventsSubscription;
 
   Stream<JsBridgeEvent> get events => _events.stream;
 
@@ -45,6 +55,15 @@ class JsApiDispatcher {
       final request = JsBridgeRequest.parse(raw);
       id = request.id;
       return (await dispatch(request)).encode();
+    } on FileUploadException catch (error) {
+      return JsBridgeResponse.failure(
+        id: id,
+        error: JsBridgeError(
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        ),
+      ).encode();
     } on JsBridgeException catch (error) {
       return JsBridgeResponse.failure(
         id: id,
@@ -71,6 +90,15 @@ class JsApiDispatcher {
     try {
       final data = await _invoke(request);
       return JsBridgeResponse.success(id: request.id, data: data);
+    } on FileUploadException catch (error) {
+      return JsBridgeResponse.failure(
+        id: request.id,
+        error: JsBridgeError(
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        ),
+      );
     } on JsBridgeException catch (error) {
       return JsBridgeResponse.failure(
         id: request.id,
@@ -155,6 +183,42 @@ class JsApiDispatcher {
           'file': file.toJson(),
           'base64': base64Encode(bytes),
         };
+      case 'getFileInfo':
+      case 'file.getInfo':
+        return <String, Object?>{'file': _fileById(request.data).toJson()};
+      case 'releaseFile':
+      case 'file.release':
+        final fileId = _requiredString(request.data, 'fileId');
+        final released = _fileReferences.remove(fileId) != null;
+        return <String, bool>{'released': released};
+      case 'uploadFile':
+      case 'file.upload':
+        final task = await _uploadService.start(
+          _fileById(request.data),
+          _uploadRequest(request.data),
+        );
+        return <String, Object?>{'task': task.toJson()};
+      case 'getUploadTask':
+      case 'file.getUploadTask':
+        final task = _uploadService.task(
+          _requiredString(request.data, 'taskId'),
+        );
+        if (task == null) {
+          throw const JsBridgeException('NOT_FOUND', '上传任务不存在或已失效。');
+        }
+        return <String, Object?>{'task': task.toJson()};
+      case 'cancelUpload':
+      case 'file.cancelUpload':
+        final cancelled = await _uploadService.cancel(
+          _requiredString(request.data, 'taskId'),
+        );
+        return <String, bool>{'cancelled': cancelled};
+      case 'onUploadEvent':
+      case 'file.onUploadEvent':
+        return _subscribeUploadEvents(request.data);
+      case 'offUploadEvent':
+      case 'file.offUploadEvent':
+        return _unsubscribeUploadEvents(request.data);
       case 'clearTemporaryFiles':
       case 'file.clearTemporaryFiles':
         final cleared = await _capabilities.clearTemporaryFiles();
@@ -356,11 +420,49 @@ class JsApiDispatcher {
     return <String, Object>{'removed': removed != null};
   }
 
+  Map<String, String?> _subscribeUploadEvents(Map<String, dynamic> data) {
+    final subscriptionId =
+        _optionalString(data, 'subscriptionId') ?? _uuid.v4();
+    final taskId = _optionalString(data, 'taskId');
+    if (taskId != null && _uploadService.task(taskId) == null) {
+      throw const JsBridgeException('NOT_FOUND', '上传任务不存在或已失效。');
+    }
+    _uploadEventSubscriptions[subscriptionId] = taskId;
+    return <String, String?>{
+      'subscriptionId': subscriptionId,
+      'taskId': taskId,
+    };
+  }
+
+  Map<String, Object> _unsubscribeUploadEvents(Map<String, dynamic> data) {
+    final subscriptionId = _requiredString(data, 'subscriptionId');
+    final removed = _uploadEventSubscriptions.remove(subscriptionId) != null;
+    return <String, Object>{'removed': removed};
+  }
+
+  void _forwardUploadEvent(FileUploadEvent event) {
+    for (final entry in _uploadEventSubscriptions.entries) {
+      final taskId = entry.value;
+      if (taskId != null && taskId != event.task.taskId) continue;
+      _events.add(
+        JsBridgeEvent(
+          name: event.name,
+          data: <String, Object?>{
+            'subscriptionId': entry.key,
+            ...event.toJson(),
+          },
+        ),
+      );
+    }
+  }
+
   Future<void> dispose() async {
     for (final subscription in _subscriptions.values) {
       await subscription.cancel();
     }
     _subscriptions.clear();
+    _uploadEventSubscriptions.clear();
+    await _uploadEventsSubscription.cancel();
     _fileReferences.clear();
     await _events.close();
   }
@@ -388,6 +490,50 @@ class JsApiDispatcher {
       throw const JsBridgeException('INVALID_ARGUMENT', '列表参数必须是字符串数组。');
     }
     return value.cast<String>();
+  }
+
+  Map<String, String> _stringMap(Object? value, {required String name}) {
+    if (value == null) return const <String, String>{};
+    if (value is! Map) {
+      throw JsBridgeException('INVALID_ARGUMENT', '$name 必须是对象。');
+    }
+    final result = <String, String>{};
+    for (final entry in value.entries) {
+      if (entry.key is! String || entry.key.trim().isEmpty) {
+        throw JsBridgeException('INVALID_ARGUMENT', '$name 的键必须是非空字符串。');
+      }
+      final item = entry.value;
+      if (item is! String && item is! num && item is! bool) {
+        throw JsBridgeException('INVALID_ARGUMENT', '$name 的值必须是字符串、数字或布尔值。');
+      }
+      result[entry.key] = '$item';
+    }
+    return result;
+  }
+
+  FileUploadRequest _uploadRequest(Map<String, dynamic> data) {
+    final rawUrl = _requiredString(data, 'uploadUrl');
+    final url = Uri.tryParse(rawUrl);
+    if (url == null || !url.hasScheme) {
+      throw const JsBridgeException('INVALID_ARGUMENT', 'uploadUrl 不是有效地址。');
+    }
+    final method = (_optionalString(data, 'method') ?? 'POST').toUpperCase();
+    final timeoutSeconds = _optionalInt(data, 'timeoutSeconds') ?? 60;
+    if (timeoutSeconds < 5 || timeoutSeconds > 600) {
+      throw const JsBridgeException(
+        'INVALID_ARGUMENT',
+        'timeoutSeconds 必须在 5 到 600 之间。',
+      );
+    }
+    return FileUploadRequest(
+      uploadUrl: url,
+      method: method,
+      multipart: data['multipart'] != false,
+      fieldName: _optionalString(data, 'fieldName') ?? 'file',
+      headers: _stringMap(data['headers'], name: 'headers'),
+      formData: _stringMap(data['formData'], name: 'formData'),
+      timeout: Duration(seconds: timeoutSeconds),
+    );
   }
 
   List<ScanCodeFormat> _scanFormats(Object? value) {
