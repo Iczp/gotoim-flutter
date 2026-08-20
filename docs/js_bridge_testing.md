@@ -23,7 +23,7 @@
 
 ## 独立 Web 测试站
 
-已创建独立、无业务鉴权的静态 H5 harness：`F:\Dev\GotoIM\gotoim-flutter-jsbridge`。原因是普通 Flutter Web 没有 WebView JavaScriptChannel，无法端到端验证“网页 → 宿主 → 网页”链路；必须将该站点装载在 Flutter 的原生 WebView 中。
+已创建独立、无业务鉴权的静态 H5 harness：`F:\Dev\GotoIM\gotoim-flutter-jsbridge`。原因是普通 Flutter Web 无法完整验证原生 `flutter_inappwebview` Handler 的“网页 → 宿主 → 网页”链路；必须将该站点装载在 Flutter 的原生 WebView 中。
 
 站点包含：
 
@@ -43,7 +43,9 @@ python server.py --bind 0.0.0.0 --port 4173
 
 Harness 会显示请求进度、完成地址和明确的网络/WebView 错误；15 秒没有完成会报告超时，错误文字可选中或点复制按钮直接复制。Android 主 Manifest 已声明 `INTERNET` 并允许明文 HTTP，因此所有 Android 构建变体均可访问局域网 `http://` 服务；Harness 页面本身仍只在 Debug 模式暴露。
 
-Harness 支持 Android、iOS、macOS 与 Windows。Windows 使用 WebView2：需要 Windows 10 1809+ 和 WebView2 Runtime；若运行时缺失，页面会显示初始化错误。Web 与 Linux 继续使用 JSON 模拟诊断页。
+Harness 使用单一的 `flutter_inappwebview` 适配器支持 Android、iOS、macOS 与 Windows。Windows 使用 WebView2：需要 Windows 10 1809+ 和 WebView2 Runtime；Harness 会在应用支持目录创建独立用户数据目录，若运行时缺失页面会显示初始化错误。Web 与 Linux 继续使用 JSON 模拟诊断页。
+
+H5 会等待 `flutterInAppWebViewPlatformReady`（最多 5 秒）再调用 `window.flutter_inappwebview.callHandler`，并在页首显示宿主连接状态。通过 `server.py` 启动时静态资源使用 `Cache-Control: no-store`，避免 WebView 缓存旧版 bridge-client；修改站点后请在 Harness 页重新加载。
 
 ### 上传闭环验证
 
@@ -53,11 +55,6 @@ Harness 支持 Android、iOS、macOS 与 Windows。Windows 使用 WebView2：需
 4. 选择较大测试文件后，再分别取消两种上传：代理上传点击“取消任务”，网页上传点击“取消网页上传”。代理方式应出现 `file.uploadCancelled`；网页方式显示“已取消网页上传”。离开页面前点击“取消上传订阅”。
 5. 点击 Flutter 页面的“Flutter → H5 Ping”。按钮下方的“Flutter → H5 Ping 回执”先显示 `pingId` 和“等待 H5 回执”，随后必须显示 `diagnostics.hostPingResult` JSON。确认 `success:true`、`pingId` 一致且 `systemInfo` 非空；该回执可直接复制。未出现回执即代表主动事件、H5 回调或 Bridge 返回其中一段未完成。这验证 Flutter 主动调用 WebView、网页主动回调 Flutter、以及 JSON 响应三段链路。
 
-当前开发机的默认 `cmake` 若低于 3.20，无法构建 Windows WebView2 插件。Visual Studio 已安装新版 CMake 时，可在启动前执行：
-
-```powershell
-$env:Path = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;' + $env:Path
-flutter run -d windows
-```
+Windows 构建需具备 Visual Studio 的 Desktop development with C++ 工作负载与可用的 NuGet CLI（可执行 `winget install Microsoft.NuGet` 安装）；运行用户仍需安装 WebView2 Runtime。不要再为旧 `webview_flutter_windows` 插件配置 CMake。
 
 最小验证矩阵：Android 真机（相机、录像、录音、视频压缩）、iPhone/iPad（权限与相册）、Windows（文件路径/另存为/录音）、WebView 中的 H5（所有 JSON action、取消订阅和文件引用失效）。在生产接入实际 WebView 插件之前，先用该 harness 固化协议回归测试最合适。

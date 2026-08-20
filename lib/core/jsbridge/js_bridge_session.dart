@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'js_api_dispatcher.dart';
 
-/// Minimal transport contract implemented by a WebView JavaScriptChannel
+/// Minimal transport contract implemented by a WebView bridge callback
 /// adapter. Keeping it plugin-free lets Android/iOS and desktop WebViews share
 /// the same request/response and event behavior.
 abstract class JsBridgeTransport {
@@ -11,7 +11,7 @@ abstract class JsBridgeTransport {
 
 /// Binds a [JsApiDispatcher] to a WebView-like bidirectional text channel.
 ///
-/// Call [handleIncoming] from the host JavaScriptChannel callback and [start]
+/// Call [handleIncoming] from the host bridge callback and [start]
 /// after the channel has been registered. The host owns the session lifecycle
 /// and must call [dispose] when its WebView is disposed.
 class JsBridgeSession {

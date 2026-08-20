@@ -32,6 +32,17 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# flutter_inappwebview's current Windows WebView2 SDK still includes
+# <experimental/coroutine>. Newer MSVC versions reject that header unless this
+# compatibility macro is explicitly set. Keep it directory-scoped so plugin
+# targets generated below inherit it without patching the Pub cache.
+if(MSVC)
+  add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+  # The WebView2 plugin builds many translation units in parallel. Serialize
+  # shared PDB writes to avoid MSVC C1041 on the current toolchain.
+  add_compile_options(/FS)
+endif()
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
@@ -58,6 +69,16 @@ add_subdirectory("runner")
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
+
+# flutter_inappwebview_windows opts out of APPLY_STANDARD_SETTINGS, so apply
+# the current MSVC compatibility flags directly after Flutter creates its
+# target. This keeps the workaround in our project rather than the Pub cache.
+if(MSVC AND TARGET flutter_inappwebview_windows_plugin)
+  target_compile_definitions(
+    flutter_inappwebview_windows_plugin
+    PRIVATE _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+  target_compile_options(flutter_inappwebview_windows_plugin PRIVATE /FS)
+endif()
 
 
 # === Installation ===
