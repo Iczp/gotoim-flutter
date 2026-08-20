@@ -10,7 +10,6 @@ import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/jsbridge/js_bridge_harness_webview.dart';
 import '../../../core/platform/platform_facade.dart';
-import '../../../core/services/file/file_picker_service.dart';
 
 class JsBridgeHarnessPage extends ConsumerStatefulWidget {
   const JsBridgeHarnessPage({super.key});
@@ -98,18 +97,6 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
       _pageStatus = 'Flutter 已主动发送 harness.ping 给网页，等待 H5 回执。';
       _hostPingResult = '等待 H5 回执。pingId: $pingId';
     });
-  }
-
-  Future<List<String>> _selectNativeH5Files(bool allowMultiple) async {
-    final files = await ref
-        .read(filePickerServiceProvider)
-        .chooseFile(
-          FilePickerRequest(
-            allowMultiple: allowMultiple,
-            dialogTitle: '网页选择文件',
-          ),
-        );
-    return files.map((file) => file.originalUri.toString()).toList();
   }
 
   void _configureH5Harness() {
@@ -216,7 +203,6 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                   if (mounted) setState(() => _pageStatus = message);
                 },
                 hostEvents: _hostEvents.stream,
-                onSelectNativeFiles: _selectNativeH5Files,
               ),
             ),
         ],

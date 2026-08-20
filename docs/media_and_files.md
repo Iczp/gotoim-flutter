@@ -26,7 +26,7 @@
 
 ## H5 原生文件输入上传
 
-H5 也可以使用 `<input type="file">` 直接取得浏览器 `File` 对象，再通过 `XMLHttpRequest` 或 `fetch` 上传。Harness 同时提供该测试入口，并以 `XMLHttpRequest.upload.onprogress` 显示字节进度。Android Harness 会把 WebView 文件选择请求交给 Flutter 的系统选择器；Windows WebView2 使用系统选择器。此方式不创建 `fileId`、没有 Flutter 上传任务和事件订阅，适合简单表单上传；需要原生预览、压缩、受控白名单上传或后台任务时应使用 `file.chooseFile` + `file.upload`。
+H5 也可以使用 `<input type="file">` 直接取得浏览器 `File` 对象，再通过 `XMLHttpRequest` 或 `fetch` 上传。Harness 同时提供该测试入口，并以 `XMLHttpRequest.upload.onprogress` 显示字节进度。Android、iOS、macOS 与 Windows 均由 `flutter_inappwebview` 的原生宿主弹出系统选择器（Windows 使用 WebView2）。此方式不创建 `fileId`、没有 Flutter 上传任务和事件订阅，适合简单表单上传；需要原生预览、压缩、受控白名单上传或后台任务时应使用 `file.chooseFile` + `file.upload`。
 
 | 操作 | 参数 | 返回/事件 |
 | --- | --- | --- |

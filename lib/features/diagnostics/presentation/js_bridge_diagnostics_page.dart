@@ -187,7 +187,7 @@ class _JsBridgeDiagnosticsPageState
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
-            '模拟 WebView JavaScriptChannel 输入。填写 JSON 请求，调用后显示完整 JSON 响应；订阅网络事件后，切换网络可看到事件 payload。',
+            '模拟 WebView Bridge 输入。填写 JSON 请求，调用后显示完整 JSON 响应；订阅网络事件后，切换网络可看到事件 payload。',
           ),
           const SizedBox(height: 12),
           Wrap(

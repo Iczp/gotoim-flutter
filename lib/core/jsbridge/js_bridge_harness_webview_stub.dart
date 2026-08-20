@@ -12,7 +12,6 @@ class JsBridgeHarnessWebView extends StatelessWidget {
     this.onError,
     this.onNavigationBlocked,
     this.hostEvents,
-    this.onSelectNativeFiles,
     super.key,
   });
 
@@ -26,7 +25,6 @@ class JsBridgeHarnessWebView extends StatelessWidget {
 
   /// Messages initiated by Flutter and delivered to the loaded H5 page.
   final Stream<Map<String, Object?>>? hostEvents;
-  final Future<List<String>> Function(bool allowMultiple)? onSelectNativeFiles;
 
   @override
   Widget build(BuildContext context) => const Center(

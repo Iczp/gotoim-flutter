@@ -1,8 +1,8 @@
 # JS Bridge
 
-JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议解析和能力分发。`JsBridgeSession` 将调度器绑定到 `JsBridgeTransport`：宿主 WebView 只需把 JavaScriptChannel 收到的文本传给 `handleIncoming()`，并实现 `postMessage()` 回推响应/事件。这使 `webview_flutter`、桌面 WebView 和未来宿主适配器能共享同一个协议。
+JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议解析和能力分发。`JsBridgeSession` 将调度器绑定到 `JsBridgeTransport`：宿主 WebView 只需把收到的文本传给 `handleIncoming()`，并实现 `postMessage()` 回推响应/事件。当前 Debug Harness 使用单一的 `flutter_inappwebview` 适配器覆盖 Android、iOS、macOS 和 Windows；H5 必须等待 `flutterInAppWebViewPlatformReady` 后，再通过 `window.flutter_inappwebview.callHandler('GotoIMBridge', json)` 请求 Flutter。
 
-开发验证入口：Debug 模式的“开发诊断中心 → JS Bridge 测试”。该页会模拟 JavaScriptChannel 输入，显示完整响应，提供文件上传任务闭环，并显示网络及上传订阅事件。每个响应和事件面板均可选中或点击复制，便于人工比对。
+开发验证入口：Debug 模式的“开发诊断中心 → JS Bridge 测试”。该页会模拟 WebView Bridge 输入，显示完整响应，提供文件上传任务闭环，并显示网络及上传订阅事件。每个响应和事件面板均可选中或点击复制，便于人工比对。
 
 ## 请求与响应协议
 
@@ -174,10 +174,10 @@ goto.on('network.statusChange', ({ subscriptionId: id, status }) => {
 ```dart
 final session = JsBridgeSession(dispatcher: dispatcher, transport: transport);
 session.start();
-// JavaScriptChannel 收到 message 后：
+// flutter_inappwebview JavaScript Handler 收到 message 后：
 await session.handleIncoming(message);
 // WebView 销毁时：
 await session.dispose();
 ```
 
-`JsBridgeSession` 不拥有也不会销毁全局 `JsApiDispatcher`，因此多个 WebView 的订阅生命周期应由宿主明确管理。当前工程未强行引入某个 WebView 插件；页面实际接入时只需增加该平台的 transport 适配器，不需要复制或改动任何 API 分发代码。
+`JsBridgeSession` 不拥有也不会销毁全局 `JsApiDispatcher`，因此多个 WebView 的订阅生命周期应由宿主明确管理。Harness 已统一使用 `flutter_inappwebview`，业务页面若采用其他 WebView 插件，只需另建 transport 适配器，不需要复制或改动 API 分发代码。

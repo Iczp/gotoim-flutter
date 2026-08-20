@@ -37,10 +37,10 @@ dependencies:
   video_compress: ^3.1.4
   record: ^7.1.1
   path_provider: ^2.1.5
-  # Debug WebView hosts for the independent JS Bridge harness.
-  webview_flutter: ^4.14.1
-  webview_flutter_android: ^4.14.0
-  webview_flutter_windows: ^1.1.1
+  # Unified Android/iOS/macOS/Windows WebView host for the JS Bridge harness.
+  # 6.2 fixes Android Gradle Plugin 9 compatibility; use the current beta
+  # until its stable release is available.
+  flutter_inappwebview: ^6.2.0-beta.3
 
 dev_dependencies:
   flutter_test:
