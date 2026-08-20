@@ -138,7 +138,7 @@ const { task } = await goto.invoke('file.upload', {
 // 页面销毁时：await goto.invoke('file.offUploadEvent', { subscriptionId }); stopProgress();
 ```
 
-上传地址主机必须位于 Flutter 环境变量 `JS_BRIDGE_UPLOAD_ALLOWED_HOSTS`。Bridge 不会自动附带 App Token；使用业务后端签发的短期上传令牌或对象存储预签名 URL。`UPLOAD_DISABLED` 表示白名单未配置，`UPLOAD_HOST_NOT_ALLOWED` 表示主机不在白名单，`UPLOAD_FAILED` 会通过失败事件给出网络或 HTTP 状态。
+上传地址主机必须位于 Flutter 环境变量 `JS_BRIDGE_UPLOAD_ALLOWED_HOSTS`。Bridge 不会自动附带 App Token；使用业务后端签发的短期上传令牌或对象存储预签名 URL。`UPLOAD_DISABLED` 表示白名单未配置，`UPLOAD_HOST_NOT_ALLOWED` 表示主机不在白名单，`UPLOAD_FAILED` 会通过失败事件给出网络或 HTTP 状态。开发诊断预置地址来自 `JS_BRIDGE_UPLOAD_URL`（当前为 `http://10.0.5.20:4173/upload`），而不是根据 Harness 页面地址拼接。
 
 ## Flutter 主动调用 H5
 

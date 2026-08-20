@@ -22,6 +22,12 @@
 
 环境变量 `JS_BRIDGE_UPLOAD_ALLOWED_HOSTS` 是逗号分隔的上传主机白名单；未配置时上传被拒绝。开发环境默认允许 `10.0.5.20`、`127.0.0.1`、`localhost`，Staging/Production 必须显式配置实际文件服务或预签名上传域名。该限制防止不受信任的 H5 将用户刚选择的文件发送到任意站点。
 
+开发诊断/Harness 的固定测试端点由 `JS_BRIDGE_UPLOAD_URL` 指定，开发环境为 `http://10.0.5.20:4173/upload`。它只决定测试页面显示和默认调用的地址，仍必须同时满足 `JS_BRIDGE_UPLOAD_ALLOWED_HOSTS`。
+
+## H5 原生文件输入上传
+
+H5 也可以使用 `<input type="file">` 直接取得浏览器 `File` 对象，再通过 `XMLHttpRequest` 或 `fetch` 上传。Harness 同时提供该测试入口，并以 `XMLHttpRequest.upload.onprogress` 显示字节进度。Android Harness 会把 WebView 文件选择请求交给 Flutter 的系统选择器；Windows WebView2 使用系统选择器。此方式不创建 `fileId`、没有 Flutter 上传任务和事件订阅，适合简单表单上传；需要原生预览、压缩、受控白名单上传或后台任务时应使用 `file.chooseFile` + `file.upload`。
+
 | 操作 | 参数 | 返回/事件 |
 | --- | --- | --- |
 | `file.upload` | `fileId`、`uploadUrl`、`method=POST\|PUT`、`multipart=true`、`fieldName=file`、`headers`、`formData`、`timeoutSeconds=60` | 立即返回 `{task:{taskId,state:'queued',…}}` |

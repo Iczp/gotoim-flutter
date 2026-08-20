@@ -35,12 +35,8 @@ class _JsBridgeDiagnosticsPageState
   @override
   void initState() {
     super.initState();
-    final harnessUrl =
-        ref.read(appEnvironmentProvider).jsBridgeHarnessUrl.trim();
     _uploadUrlController.text =
-        harnessUrl.isEmpty
-            ? ''
-            : '${harnessUrl.replaceFirst(RegExp(r'/+$'), '')}/upload';
+        ref.read(appEnvironmentProvider).jsBridgeUploadUrl.trim();
     _eventsSubscription = ref.read(jsApiDispatcherProvider).events.listen((
       event,
     ) {
@@ -380,10 +376,11 @@ class _UploadTaskTestCard extends StatelessWidget {
             controller: uploadUrlController,
             keyboardType: TextInputType.url,
             decoration: const InputDecoration(
-              labelText: '测试上传地址',
+              labelText: '测试上传地址（环境配置）',
               hintText: 'http://10.0.5.20:4173/upload',
               border: OutlineInputBorder(),
             ),
+            readOnly: true,
           ),
           const SizedBox(height: 8),
           SelectionArea(

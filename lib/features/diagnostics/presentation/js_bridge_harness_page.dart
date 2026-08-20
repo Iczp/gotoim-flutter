@@ -10,6 +10,7 @@ import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/jsbridge/js_bridge_harness_webview.dart';
 import '../../../core/platform/platform_facade.dart';
+import '../../../core/services/file/file_picker_service.dart';
 
 class JsBridgeHarnessPage extends ConsumerStatefulWidget {
   const JsBridgeHarnessPage({super.key});
@@ -35,22 +36,22 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
   void initState() {
     super.initState();
     final configuredUrl = ref.read(appEnvironmentProvider).jsBridgeHarnessUrl;
-    _loadedUrl = configuredUrl.trim().isEmpty
-        ? _fallbackHarnessUrl(ref.read(platformFacadeProvider).kind)
-        : configuredUrl.trim();
+    _loadedUrl =
+        configuredUrl.trim().isEmpty
+            ? _fallbackHarnessUrl(ref.read(platformFacadeProvider).kind)
+            : configuredUrl.trim();
     _urlController = TextEditingController(text: _loadedUrl);
     _pageStatus = '准备请求 $_loadedUrl';
-    _bridgeEventsSubscription =
-        ref.read(jsApiDispatcherProvider).events.listen((
-      event,
-    ) {
-      if (!mounted || event.name != 'diagnostics.hostPingResult') return;
-      setState(() {
-        _hostPingResult = const JsonEncoder.withIndent('  ').convert(
-          event.toJson(),
-        );
-      });
-    });
+    _bridgeEventsSubscription = ref.read(jsApiDispatcherProvider).events.listen(
+      (event) {
+        if (!mounted || event.name != 'diagnostics.hostPingResult') return;
+        setState(() {
+          _hostPingResult = const JsonEncoder.withIndent(
+            '  ',
+          ).convert(event.toJson());
+        });
+      },
+    );
   }
 
   @override
@@ -99,6 +100,27 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
     });
   }
 
+  Future<List<String>> _selectNativeH5Files(bool allowMultiple) async {
+    final files = await ref
+        .read(filePickerServiceProvider)
+        .chooseFile(
+          FilePickerRequest(
+            allowMultiple: allowMultiple,
+            dialogTitle: '网页选择文件',
+          ),
+        );
+    return files.map((file) => file.originalUri.toString()).toList();
+  }
+
+  void _configureH5Harness() {
+    _hostEvents.add(<String, Object?>{
+      'event': 'harness.config',
+      'data': <String, Object?>{
+        'uploadUrl': ref.read(appEnvironmentProvider).jsBridgeUploadUrl,
+      },
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) {
@@ -107,7 +129,8 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
       );
     }
     final platform = ref.read(platformFacadeProvider).kind;
-    final supported = platform == PlatformKind.android ||
+    final supported =
+        platform == PlatformKind.android ||
         platform == PlatformKind.ios ||
         platform == PlatformKind.macos ||
         platform == PlatformKind.windows;
@@ -126,9 +149,10 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                     onSubmitted: (_) => _load(),
                     decoration: InputDecoration(
                       labelText: 'Harness 地址',
-                      helperText: platform == PlatformKind.android
-                          ? 'Android 模拟器默认 10.0.2.2；真机请填电脑局域网 IP。'
-                          : '本机服务可填 http://127.0.0.1:4173。',
+                      helperText:
+                          platform == PlatformKind.android
+                              ? 'Android 模拟器默认 10.0.2.2；真机请填电脑局域网 IP。'
+                              : '本机服务可填 http://127.0.0.1:4173。',
                       errorText: _inputError,
                       border: const OutlineInputBorder(),
                     ),
@@ -183,6 +207,7 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                     _progress = 100;
                     _pageStatus = '已加载 $url';
                   });
+                  _configureH5Harness();
                 },
                 onError: (message) {
                   if (mounted) setState(() => _loadError = message);
@@ -191,6 +216,7 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                   if (mounted) setState(() => _pageStatus = message);
                 },
                 hostEvents: _hostEvents.stream,
+                onSelectNativeFiles: _selectNativeH5Files,
               ),
             ),
         ],
@@ -231,9 +257,9 @@ class _HostPingResult extends StatelessWidget {
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: value));
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Ping 回执已复制')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('Ping 回执已复制')));
                   }
                 },
                 icon: const Icon(Icons.copy_outlined),
@@ -265,9 +291,10 @@ class _LoadFeedback extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: error == null
-              ? colorScheme.surfaceContainerHighest
-              : colorScheme.errorContainer,
+          color:
+              error == null
+                  ? colorScheme.surfaceContainerHighest
+                  : colorScheme.errorContainer,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
@@ -289,9 +316,10 @@ class _LoadFeedback extends StatelessWidget {
                       child: Text(
                         error ?? status!,
                         style: TextStyle(
-                          color: error == null
-                              ? null
-                              : colorScheme.onErrorContainer,
+                          color:
+                              error == null
+                                  ? null
+                                  : colorScheme.onErrorContainer,
                         ),
                       ),
                     ),

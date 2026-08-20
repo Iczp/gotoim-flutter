@@ -37,6 +37,7 @@ class AppEnvironment {
     required this.signalRSkipNegotiation,
     required this.signalRReconnectDelays,
     required this.jsBridgeHarnessUrl,
+    required this.jsBridgeUploadUrl,
     required this.jsBridgeUploadAllowedHosts,
     required this.enableNetworkLogging,
   });
@@ -71,6 +72,10 @@ class AppEnvironment {
 
   /// Debug-only standalone H5 page used to verify the native JS bridge.
   final String jsBridgeHarnessUrl;
+
+  /// Debug upload endpoint used by the native Bridge and browser file-input
+  /// harness flows. It is intentionally separate from the Harness page URL.
+  final String jsBridgeUploadUrl;
 
   /// Explicit allowlist for H5-requested upload destinations.
   final List<String> jsBridgeUploadAllowedHosts;
@@ -161,6 +166,7 @@ class AppEnvironment {
         ),
       ),
       jsBridgeHarnessUrl: dotenv.get('JS_BRIDGE_HARNESS_URL', fallback: ''),
+      jsBridgeUploadUrl: dotenv.get('JS_BRIDGE_UPLOAD_URL', fallback: ''),
       jsBridgeUploadAllowedHosts: _parseCsv(
         dotenv.get('JS_BRIDGE_UPLOAD_ALLOWED_HOSTS', fallback: ''),
       ),

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_windows/webview_flutter_windows.dart';
 
 import 'js_api_dispatcher.dart';
@@ -22,6 +23,7 @@ class JsBridgeHarnessWebView extends StatefulWidget {
     this.onError,
     this.onNavigationBlocked,
     this.hostEvents,
+    this.onSelectNativeFiles,
     super.key,
   });
 
@@ -35,6 +37,9 @@ class JsBridgeHarnessWebView extends StatefulWidget {
 
   /// Messages initiated by Flutter and delivered to the loaded H5 page.
   final Stream<Map<String, Object?>>? hostEvents;
+
+  /// Handles a plain H5 <input type="file"> request on Android.
+  final Future<List<String>> Function(bool allowMultiple)? onSelectNativeFiles;
 
   @override
   State<JsBridgeHarnessWebView> createState() => _createHarnessState(); // ignore: no_logic_in_create_state
@@ -85,6 +90,19 @@ class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
               _handleBridgeMessage(message.message);
             },
           );
+    final platformController = _controller.platform;
+    if (platformController is AndroidWebViewController) {
+      platformController.setOnShowFileSelector((params) async {
+        final callback = widget.onSelectNativeFiles;
+        if (callback == null) return const <String>[];
+        try {
+          return await callback(params.mode == FileSelectorMode.openMultiple);
+        } catch (error) {
+          widget.onError?.call('网页文件选择失败：$error');
+          return const <String>[];
+        }
+      });
+    }
     _session = JsBridgeSession(
       dispatcher: widget.dispatcher,
       transport: _WebViewTransport(_controller),
