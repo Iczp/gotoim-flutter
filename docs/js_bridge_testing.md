@@ -40,6 +40,15 @@ python -m http.server 4173
 
 在 Flutter Debug 应用中进入“开发诊断中心 → JS Bridge Harness”。默认地址读取当前环境文件的 `JS_BRIDGE_HARNESS_URL`；开发环境已配置为 `http://10.0.5.20:4173`。未配置时，Android 回退为 `http://10.0.2.2:4173`（模拟器），iOS/macOS 回退为 `http://127.0.0.1:4173`。真机须使用电脑的局域网 IP。
 
-Harness 会显示请求进度、完成地址和明确的网络/WebView 错误。Android Debug manifest 已声明 `INTERNET`，并仅在 Debug 包允许明文 HTTP，故局域网的 `http://` 测试服务可直接加载；Release 包不暴露该入口。Harness 路由仅在 Android、iOS、macOS 启用；Windows/Web 继续使用 JSON 模拟诊断页。
+Harness 会显示请求进度、完成地址和明确的网络/WebView 错误；15 秒没有完成会报告超时，错误文字可选中或点复制按钮直接复制。Android 主 Manifest 已声明 `INTERNET` 并允许明文 HTTP，因此所有 Android 构建变体均可访问局域网 `http://` 服务；Harness 页面本身仍只在 Debug 模式暴露。
+
+Harness 支持 Android、iOS、macOS 与 Windows。Windows 使用 WebView2：需要 Windows 10 1809+ 和 WebView2 Runtime；若运行时缺失，页面会显示初始化错误。Web 与 Linux 继续使用 JSON 模拟诊断页。
+
+当前开发机的默认 `cmake` 若低于 3.20，无法构建 Windows WebView2 插件。Visual Studio 已安装新版 CMake 时，可在启动前执行：
+
+```powershell
+$env:Path = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;' + $env:Path
+flutter run -d windows
+```
 
 最小验证矩阵：Android 真机（相机、录像、录音、视频压缩）、iPhone/iPad（权限与相册）、Windows（文件路径/另存为/录音）、WebView 中的 H5（所有 JSON action、取消订阅和文件引用失效）。在生产接入实际 WebView 插件之前，先用该 harness 固化协议回归测试最合适。

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
@@ -27,10 +28,12 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
   void initState() {
     super.initState();
     final configuredUrl = ref.read(appEnvironmentProvider).jsBridgeHarnessUrl;
-    _loadedUrl = configuredUrl.trim().isEmpty
-        ? _fallbackHarnessUrl(ref.read(platformFacadeProvider).kind)
-        : configuredUrl.trim();
+    _loadedUrl =
+        configuredUrl.trim().isEmpty
+            ? _fallbackHarnessUrl(ref.read(platformFacadeProvider).kind)
+            : configuredUrl.trim();
     _urlController = TextEditingController(text: _loadedUrl);
+    _pageStatus = '准备请求 $_loadedUrl';
   }
 
   @override
@@ -72,7 +75,8 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
     final supported =
         platform == PlatformKind.android ||
         platform == PlatformKind.ios ||
-        platform == PlatformKind.macos;
+        platform == PlatformKind.macos ||
+        platform == PlatformKind.windows;
     return Scaffold(
       appBar: AppBar(title: const Text('JS Bridge Harness')),
       body: Column(
@@ -113,7 +117,7 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                 child: Padding(
                   padding: EdgeInsets.all(24),
                   child: Text(
-                    '官方 WebView 宿主当前仅在 Android、iOS、macOS 启用。Windows/Web 请使用诊断页的 JSON 模拟测试。',
+                    '当前平台没有可用的 WebView 测试宿主。请使用 Android、iOS、macOS 或 Windows，或改用 JSON 模拟诊断页。',
                   ),
                 ),
               ),
@@ -174,9 +178,10 @@ class _LoadFeedback extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: error == null
-              ? colorScheme.surfaceContainerHighest
-              : colorScheme.errorContainer,
+          color:
+              error == null
+                  ? colorScheme.surfaceContainerHighest
+                  : colorScheme.errorContainer,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
@@ -185,19 +190,47 @@ class _LoadFeedback extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (error == null && progress < 100) ...[
-                LinearProgressIndicator(value: progress == 0 ? null : progress / 100),
+                LinearProgressIndicator(
+                  value: progress == 0 ? null : progress / 100,
+                ),
                 const SizedBox(height: 8),
               ],
-              Text(
-                error ?? status!,
-                style: TextStyle(
-                  color: error == null ? null : colorScheme.onErrorContainer,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: SelectionArea(
+                      child: Text(
+                        error ?? status!,
+                        style: TextStyle(
+                          color:
+                              error == null
+                                  ? null
+                                  : colorScheme.onErrorContainer,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '复制信息',
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        ClipboardData(text: error ?? status!),
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(const SnackBar(content: Text('信息已复制')));
+                      }
+                    },
+                    icon: const Icon(Icons.copy_outlined),
+                  ),
+                ],
               ),
               if (error != null) ...[
                 const SizedBox(height: 4),
                 Text(
-                  '请检查手机与电脑是否在同一局域网、地址端口是否可达，以及 Android Debug 包的网络权限。',
+                  '请检查设备与电脑是否在同一局域网、地址端口是否可达，以及应用的网络权限。',
                   style: TextStyle(color: colorScheme.onErrorContainer),
                 ),
               ],

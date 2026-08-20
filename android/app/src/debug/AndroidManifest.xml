@@ -1,6 +1,0 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Flutter apps need this permission to reach a LAN harness server. -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Local HTTP is required only for the Debug JS Bridge harness server. -->
-    <application android:usesCleartextTraffic="true" />
-</manifest>
