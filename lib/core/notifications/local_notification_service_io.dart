@@ -23,9 +23,17 @@ class FlutterLocalNotificationService implements LocalNotificationService {
       StreamController<LocalNotificationTapEvent>.broadcast();
   final Map<int, Timer> _delayedNotifications = <int, Timer>{};
   bool _initialized = false;
+  String? _initializationError;
 
   @override
   LocalNotificationSupport get support {
+    if (_initializationError != null) {
+      return LocalNotificationSupport(
+        platform: _platformFacade.kind,
+        isSupported: false,
+        message: '本地通知初始化失败：$_initializationError',
+      );
+    }
     switch (_platformFacade.kind) {
       case PlatformKind.android:
       case PlatformKind.ios:
@@ -79,14 +87,19 @@ class FlutterLocalNotificationService implements LocalNotificationService {
         guid: 'f65966a8-0ef4-4773-819c-b6e650c70b95',
       ),
     );
-    final initialized = await _plugin.initialize(
-      settings: settings,
-      onDidReceiveNotificationResponse: _onNotificationResponse,
-    );
-    if (initialized == false) {
-      throw StateError('本地通知插件初始化失败。');
+    try {
+      final initialized = await _plugin.initialize(
+        settings: settings,
+        onDidReceiveNotificationResponse: _onNotificationResponse,
+      );
+      if (initialized == false) {
+        _initializationError = '本地通知插件初始化返回 false。';
+        return;
+      }
+      _initialized = true;
+    } catch (error) {
+      _initializationError = error.toString();
     }
-    _initialized = true;
   }
 
   @override

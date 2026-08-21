@@ -69,10 +69,15 @@ class ClientDeviceContextFactory {
     required AppEnvironment environment,
     required PlatformFacade platformFacade,
   }) async {
-    var deviceId = await _storage.read(key: _deviceIdKey);
-    if (deviceId == null || deviceId.isEmpty) {
-      deviceId = _uuid.v4();
-      await _storage.write(key: _deviceIdKey, value: deviceId);
+    String? deviceId;
+    try {
+      deviceId = await _storage.read(key: _deviceIdKey);
+      if (deviceId == null || deviceId.isEmpty) {
+        deviceId = _uuid.v4();
+        await _storage.write(key: _deviceIdKey, value: deviceId);
+      }
+    } catch (_) {
+      deviceId ??= _uuid.v4();
     }
     final kind = platformFacade.kind.name;
     return ClientDeviceContext(

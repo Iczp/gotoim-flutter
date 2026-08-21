@@ -21,13 +21,14 @@ import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final auth = ref.watch(authControllerProvider);
+  final authNotifier = ref.watch(authControllerProvider.notifier);
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
-    refreshListenable: auth,
+    refreshListenable: authNotifier,
     redirect: (context, state) {
       final location = state.uri.path;
+      final auth = ref.read(authControllerProvider);
       if (auth.status == AuthStatus.checking) {
         return location == '/splash' ? null : '/splash';
       }
