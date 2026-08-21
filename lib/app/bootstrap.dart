@@ -17,64 +17,95 @@ import '../core/services/scan/scan_code_service.dart';
 import 'app.dart';
 import 'app_navigation.dart';
 import 'application_providers.dart';
+import 'bootstrap_error_app.dart';
 
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
-  const flavorName = String.fromEnvironment(
-    'APP_ENV',
-    defaultValue: 'development',
-  );
-  final flavor = AppEnvironment.parseFlavor(flavorName);
-  await dotenv.load(fileName: '.env.${flavor.name}');
-  final environment = AppEnvironment.fromDotEnv(flavor);
-  environment.validate();
-  final platformFacade = createPlatformFacade();
-  final deviceContext = await ClientDeviceContextFactory().create(
-    environment: environment,
-    platformFacade: platformFacade,
-  );
-  final localNotificationService = createLocalNotificationService(
-    platformFacade: platformFacade,
-  );
-  await localNotificationService.initialize();
-  final database = UnifiedDatabase.openDefault();
-  await database.initialize();
-  final mediaService = DefaultMediaService(platformFacade: platformFacade);
-  final fileUploadService = DioFileUploadService(
-    allowedHosts: environment.jsBridgeUploadAllowedHosts,
-  );
-  final capabilities = DefaultClientCapabilityService(
-    environment: environment,
-    deviceContext: deviceContext,
-    platformFacade: platformFacade,
-    clipboardService: SystemClipboardService(),
-    filePickerService: SystemFilePickerService(),
-    scanCodeService: const NavigatorScanCodeService(),
-    imageCodeService: const ZxingImageCodeService(),
-    mediaService: mediaService,
-    localNotificationService: localNotificationService,
-  );
-  final jsApiDispatcher = JsApiDispatcher(
-    capabilities: capabilities,
-    navigatorProvider: () => rootNavigatorKey.currentState,
-    uploadService: fileUploadService,
-  );
+  try {
+    const flavorName = String.fromEnvironment(
+      'APP_ENV',
+      defaultValue: 'development',
+    );
+    final flavor = AppEnvironment.parseFlavor(flavorName);
+    try {
+      await dotenv.load(fileName: '.env.${flavor.name}');
+    } catch (dotenvError) {
+      debugPrint('Warning: Could not load .env.${flavor.name}: $dotenvError');
+      try {
+        await dotenv.load(fileName: '.env');
+      } catch (_) {}
+    }
+    final environment = AppEnvironment.fromDotEnv(flavor);
+    try {
+      environment.validate();
+    } catch (validationError) {
+      debugPrint('Warning: Environment validation: $validationError');
+    }
+    final platformFacade = createPlatformFacade();
+    final deviceContext = await ClientDeviceContextFactory().create(
+      environment: environment,
+      platformFacade: platformFacade,
+    );
+    final localNotificationService = createLocalNotificationService(
+      platformFacade: platformFacade,
+    );
+    try {
+      await localNotificationService.initialize();
+    } catch (e) {
+      debugPrint('Warning: Notification service initialization failed: $e');
+    }
+    final database = UnifiedDatabase.openDefault();
+    try {
+      await database.initialize();
+    } catch (e) {
+      debugPrint('Warning: Database initialization failed: $e');
+    }
+    final mediaService = DefaultMediaService(platformFacade: platformFacade);
+    final fileUploadService = DioFileUploadService(
+      allowedHosts: environment.jsBridgeUploadAllowedHosts,
+    );
+    final capabilities = DefaultClientCapabilityService(
+      environment: environment,
+      deviceContext: deviceContext,
+      platformFacade: platformFacade,
+      clipboardService: SystemClipboardService(),
+      filePickerService: SystemFilePickerService(),
+      scanCodeService: const NavigatorScanCodeService(),
+      imageCodeService: const ZxingImageCodeService(),
+      mediaService: mediaService,
+      localNotificationService: localNotificationService,
+    );
+    final jsApiDispatcher = JsApiDispatcher(
+      capabilities: capabilities,
+      navigatorProvider: () => rootNavigatorKey.currentState,
+      uploadService: fileUploadService,
+    );
 
-  runApp(
-    ProviderScope(
-      overrides: [
-        appEnvironmentProvider.overrideWithValue(environment),
-        platformFacadeProvider.overrideWithValue(platformFacade),
-        clientDeviceContextProvider.overrideWithValue(deviceContext),
-        localNotificationServiceProvider.overrideWithValue(
-          localNotificationService,
-        ),
-        clientCapabilityServiceProvider.overrideWithValue(capabilities),
-        jsApiDispatcherProvider.overrideWithValue(jsApiDispatcher),
-        unifiedDatabaseProvider.overrideWithValue(database),
-        mediaServiceProvider.overrideWithValue(mediaService),
-      ],
-      child: const GotoImApp(),
-    ),
-  );
+    runApp(
+      ProviderScope(
+        overrides: [
+          appEnvironmentProvider.overrideWithValue(environment),
+          platformFacadeProvider.overrideWithValue(platformFacade),
+          clientDeviceContextProvider.overrideWithValue(deviceContext),
+          localNotificationServiceProvider.overrideWithValue(
+            localNotificationService,
+          ),
+          clientCapabilityServiceProvider.overrideWithValue(capabilities),
+          jsApiDispatcherProvider.overrideWithValue(jsApiDispatcher),
+          unifiedDatabaseProvider.overrideWithValue(database),
+          mediaServiceProvider.overrideWithValue(mediaService),
+        ],
+        child: const GotoImApp(),
+      ),
+    );
+  } catch (error, stackTrace) {
+    debugPrint('Fatal bootstrap error: $error\n$stackTrace');
+    runApp(
+      BootstrapErrorApp(
+        error: error,
+        stackTrace: stackTrace,
+      ),
+    );
+  }
 }
+
