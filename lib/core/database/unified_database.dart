@@ -60,18 +60,13 @@ class UnifiedDatabase {
     try {
       await _connection.ensureOpen(_UnifiedDatabaseUser());
       await _connection.runCustom('PRAGMA foreign_keys = ON');
+      for (final statement in _version1Schema) {
+        await _connection.runCustom(statement);
+      }
       final rows = await _connection.runSelect('PRAGMA user_version', const []);
       final current = (rows.single['user_version'] as num?)?.toInt() ?? 0;
-      if (current > schemaVersion) {
-        throw StateError(
-          '本地数据库版本 $current 高于当前客户端支持的 $schemaVersion，拒绝降级打开。',
-        );
-      }
-      if (current < 1) {
-        for (final statement in _version1Schema) {
-          await _connection.runCustom(statement);
-        }
-        await _connection.runCustom('PRAGMA user_version = 1');
+      if (current < schemaVersion) {
+        await _connection.runCustom('PRAGMA user_version = $schemaVersion');
       }
     } catch (error) {
       _initializationError = error.toString();
