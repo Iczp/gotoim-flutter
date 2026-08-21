@@ -1,52 +1,66 @@
-# Flutter IM Project Development Rules
+#  Flutter CodeX 开发规范
 
-1. 不能修改 原项目 F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts，  原项目只是参考用的
+## 1. 项目范围
 
-2. 要改的项目是： F:\Dev\GotoIM\gotoim-flutter
+### 项目路径
 
-2. 依赖包不一定要选全平台支持的组件包，以例如有些包在移动端是比较好的选择，但是桌面端有其他更好的包就用相应的包。
+原 UniApp 项目仅供参考，禁止修改：
 
-2. 跨平台时，移动端和平板端优先支持，桌面端次要，web最后支持，如有些没办法支持时，
+```text
+F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts
+```
 
-2. 项目要长期维护升级，包尽量使用新版本，不要为了支持全平台，降低包的版本，不支持时，要找替代方案，或是提示不支持
+实际开发项目：
 
-   
-   
-   
+```text
+F:\Dev\GotoIM\gotoim-flutter
+```
 
-## 1. Project Goal
+### 项目目标
 
-This project is a cross-platform IM client migrated from an existing UniApp Vue3 + TypeScript application.
+将现有 UniApp IM 客户端迁移到 Flutter，并保持现有业务逻辑、接口协议和消息同步语义。
 
-Target platforms:
+目标平台：
 
-- Android
-- iOS
-- Android Tablet
-- iPad
-- Windows
-- macOS
-- Linux
+```text
+Android
+iOS
+Android Tablet
+iPad
+Windows
+macOS
+Linux
+Web
+```
 
-The application communicates with an existing ABP vNext backend.
+优先级：
 
-Backend technologies:
+```text
+手机 / 平板 > Windows / macOS / Linux > Web
+```
 
-- .NET
-- ABP vNext
-- OpenIddict
-- EF Core
-- Redis
-- SignalR
-- MinIO
+不要求所有平台强行使用同一个插件。
 
-The Flutter application must preserve the existing IM business behavior and data synchronization semantics.
+#### 功能原则
 
-------
+	- 移动端能用，那么Andorid/ios/平板 就要能都能用
+	- 桌面端能用，那么macOS/Windows就是一定要能用，Linux优先级靠后。
+	- 最后才是WEB
 
-# 2. Core Architecture
+某个平台有更合适的实现时，可以使用平台专用方案，并通过统一 Service / Facade 对外提供能力。
 
-The application uses the following architecture:
+#### 依赖包原则：
+
+- 优先使用较新的稳定版本。
+- 不为了兼容所有平台而长期降低版本。
+- 当前平台不支持时，寻找替代实现。
+- 无法支持时明确标记，不允许直接崩溃。
+
+---
+
+## 2. 核心架构
+
+统一使用：
 
 ```text
 UI
@@ -55,110 +69,94 @@ Riverpod
  ↓
 Repository
  ↓
- ┌──────────────┬──────────────┬──────────────┐
- │              │              │
-Drift          Dio          SignalR
- │              │              │
- └──────────────┴──────────────┘
-                ↓
-             Backend
+ ┌────────────┬────────────┬────────────┐
+ │            │            │
+Drift        Dio        SignalR
+ │            │            │
+ └────────────┴────────────┴────────────┘
+                  ↓
+               Backend
 ```
 
-UI must NOT directly access:
+核心原则：
 
-- Dio
-- Drift
-- SignalR
-- platform plugins
-- SharedPreferences
-- file system
-- native APIs
+```text
+UI 不关心数据来源。
+Repository 负责业务数据访问。
+Drift 是本地数据源。
+Dio 是 HTTP 通道。
+SignalR 是实时事件通道。
+Riverpod 是状态层。
+PlatformFacade 隔离平台差异。
+JSBridge 隔离 H5 与 Flutter。
+```
 
-UI communicates through Riverpod providers and repositories.
+UI 禁止直接访问：
 
-------
+```text
+Dio
+Drift
+SignalR
+SharedPreferences
+文件系统
+平台插件
+Native API
+```
 
-# 3. Main Technologies
+---
 
-Use:
+## 3. 技术栈
 
-- Flutter
-- Dart
-- Riverpod
-- Dio
-- go_router
-- Drift
-- SignalR client
-- freezed
-- json_serializable
-- cached_network_image
-- video_player
-- permission_handler
-- file_picker
-- image_picker / wechat_assets_picker
-- flutter_svg
+默认使用：
 
-Do not introduce another state-management framework unless explicitly requested.
+```text
+Flutter
+Dart
+Riverpod
+Dio
+go_router
+Drift
+SignalR
+freezed
+json_serializable
+cached_network_image
+video_player
+permission_handler
+file_picker
+image_picker / wechat_assets_picker
+flutter_svg
+```
 
-Do not introduce GetX, Bloc, Provider, MobX, etc. without explicit approval.
+未经明确要求，不引入：
 
-------
+```text
+GetX
+Bloc
+Provider
+MobX
+```
 
-# 4. Directory Structure
+---
 
-Preferred structure:
+## 4. 目录原则
+
+推荐结构：
 
 ```text
 lib/
 ├── app/
-│   ├── app.dart
-│   ├── router/
-│   └── bootstrap.dart
-│
 ├── core/
 │   ├── network/
-│   │   ├── api_client.dart
-│   │   ├── api_result.dart
-│   │   ├── api_exception.dart
-│   │   ├── interceptors/
-│   │   └── auth/
-│   │
 │   ├── database/
-│   │   ├── app_database.dart
-│   │   ├── tables/
-│   │   └── dao/
-│   │
 │   ├── signalr/
-│   │   ├── signalr_service.dart
-│   │   └── handlers/
-│   │
 │   ├── jsbridge/
-│   │   ├── js_bridge.dart
-│   │   ├── js_api_dispatcher.dart
-│   │   └── apis/
-│   │
 │   ├── platform/
-│   │   ├── platform_facade.dart
-│   │   ├── mobile/
-│   │   ├── desktop/
-│   │   ├── web/
-│   │   └── stub/
-│   │
 │   └── utils/
-│
 ├── data/
 │   ├── models/
 │   ├── repositories/
 │   └── datasources/
-│
 ├── services/
-│   ├── window/
-│   ├── notification/
-│   ├── share/
-│   ├── scan/
-│   ├── file/
-│   └── clipboard/
-│
 ├── features/
 │   ├── auth/
 │   ├── session/
@@ -167,152 +165,75 @@ lib/
 │   ├── user/
 │   ├── media/
 │   └── setting/
-│
 └── main.dart
 ```
 
-Keep feature-specific code inside its feature directory.
+规则：
 
-Shared infrastructure belongs under `core`.
+- 业务代码优先放在对应 `features`。
+- 公共基础设施放 `core`。
+- 跨业务服务放 `services`。
+- 新建 Repository / Service / Client 前必须先搜索现有实现。
+- 禁止因为现有代码不好用就创建 `ApiClient2`、`RepositoryNew` 等重复设施。
 
-------
+---
 
-# 5. Repository Rules
+## 5. HTTP / Dio
 
-Repositories are the boundary between business logic and data sources.
+#### 全局只维护统一的 Dio Client。
 
-Example:
-
-```text
-MessageRepository
- ├── Drift
- ├── Dio
- └── SignalR
-```
-
-Repositories may use:
-
-- local database
-- HTTP
-- SignalR
-- cache
-
-UI must not.
-
-For example:
-
-Correct:
+必须支持：
 
 ```text
-ChatPage
- ↓
-MessageProvider
- ↓
-MessageRepository
- ↓
-Drift
+BaseUrl
+AccessToken
+RefreshToken
+401 自动刷新
+并发刷新保护
+统一错误处理
+请求取消
+文件上传 / 下载
+上传 / 下载进度
+开发环境日志
 ```
 
-Incorrect:
+多个请求同时出现 401：
 
 ```text
-ChatPage
- ↓
-Dio.get()
+只允许 1 个 RefreshToken 请求
+其他请求等待
+刷新成功后统一重试
+刷新失败后退出登录
 ```
 
-------
+禁止并发执行多个 Token Refresh。
 
-# 6. Dio / HTTP Rules
-
-Use one shared Dio client.
-
-Do not create Dio instances in feature pages.
-
-Required capabilities:
-
-- Base URL
-- Access Token
-- Refresh Token
-- 401 handling
-- concurrent refresh protection
-- API error handling
-- request cancellation
-- multipart upload
-- file download
-- upload progress
-- download progress
-- request logging in development
-
-ABP vNext response format must be supported.
-
-Typical response:
-
-```json
-{
-  "result": {},
-  "success": true,
-  "error": null,
-  "targetUrl": null,
-  "unAuthorizedRequest": false
-}
-```
-
-401 refresh behavior:
+Token 必须通过统一 `TokenStorage` 管理：
 
 ```text
-Request
- ↓
-401
- ↓
-Refresh Token
- ↓
-success
- ↓
-retry original request
+accessToken
+refreshToken
+save()
+clear()
+hasToken()
 ```
 
-If multiple requests receive 401 simultaneously:
+SignalR 也必须读取同一套 TokenProvider。
 
-- only ONE refresh request may be active
-- other requests must wait
-- after refresh succeeds, retry waiting requests
-- after refresh fails, logout
+#### 命名规则
 
-Never start multiple concurrent refresh-token requests.
+- 后端是AbpVnext，方法名、请求参，反回参可以做参考
+- 请求Api命名xxxxApi 如：  AuthApi，  SessionUnitApi,  MessageApi
+- 请求参数 getTokenInput或是GetTokenInput ,messageGetListInput,FriendsGetListInput
+- 返回结果  PagedResultDto<T> MessageDto
 
-------
+---
 
-# 7. Token Rules
+## 6. Drift / SQLite
 
-AccessToken and RefreshToken must be stored through a dedicated TokenStorage.
+Drift 是 IM 本地核心数据源，不只是临时缓存。
 
-Do not directly access storage from UI.
-
-Required:
-
-```text
-TokenStorage
- ├── accessToken
- ├── refreshToken
- ├── save()
- ├── clear()
- └── hasToken()
-```
-
-SignalR must obtain the latest access token through the same token provider.
-
-------
-
-# 8. Drift / SQLite Rules
-
-Drift is the primary local data store.
-
-SQLite is not just a temporary cache.
-
-For IM data, SQLite is the local source of truth for the currently synchronized data.
-
-Recommended tables:
+建议包含：
 
 ```text
 Messages
@@ -322,15 +243,40 @@ Users
 Attachments
 ```
 
-Use DAO classes.
+数据库访问统一通过 DAO。
 
-Business code should not directly execute Drift queries.
+业务层禁止直接写 Drift 查询。
 
-------
+典型数据流：
 
-# 9. Message Table Rules
+```text
+HTTP / SignalR
+      ↓
+ Repository
+      ↓
+    Drift
+      ↓
+  Riverpod
+      ↓
+     UI
+```
 
-Messages must distinguish between:
+离线优先：
+
+```text
+UI 先展示 Drift 数据
+网络后台同步
+同步结果写回 Drift
+UI 自动更新
+```
+
+不要让已有本地数据的页面等待 HTTP 才显示。
+
+---
+
+## 7. 消息模型
+
+消息至少区分：
 
 ```text
 localId
@@ -340,36 +286,17 @@ sessionId
 sessionMessageId
 ```
 
-Recommended semantics:
+含义：
 
-```text
-localId
-    Local SQLite primary key.
+- `localId`：SQLite 本地主键。
+- `serverId`：服务器消息 ID，本地待发送消息可为空。
+- `clientMessageId`：客户端唯一 ID，用于发送匹配和去重。
+- `sessionId`：会话 ID。
+- `sessionMessageId`：会话内消息序号。
 
-serverId
-    Server-generated message ID.
-    May be null for unsent local messages.
+禁止仅使用 `serverId` 作为本地主键。
 
-clientMessageId
-    Client-generated unique ID.
-    Used for deduplication and send-result matching.
-
-sessionId
-    Chat session ID.
-
-sessionMessageId
-    Session-scoped message sequence.
-```
-
-Do not use serverId as the only local primary key.
-
-Local pending messages must be supported.
-
-------
-
-# 10. Message Status
-
-Messages should support states similar to:
+消息状态需要能够表达：
 
 ```text
 Pending
@@ -382,31 +309,33 @@ Recalled
 Deleted
 ```
 
-The exact enum names may differ, but the state model must distinguish local sending state from server message state.
+发送失败的消息不得自动删除。
 
-Do not delete failed messages automatically.
+---
 
-------
+## 8. 消息发送与同步
 
-# 11. Message Synchronization
-
-The synchronization model is:
+发送流程：
 
 ```text
-HTTP
- ↓
-Drift
- ↓
-Riverpod
- ↓
 UI
+ ↓
+生成 clientMessageId
+ ↓
+写入本地 Pending 消息
+ ↓
+UI 立即显示
+ ↓
+HTTP 发送
+ ↓
+服务器返回
+ ↓
+更新 Drift
 ```
 
-SignalR is a real-time event transport.
+SignalR 主要负责实时通知，不作为离线消息存储，也不要作为唯一消息发送通道。
 
-SignalR is NOT the authoritative offline message store.
-
-When receiving a SignalR message:
+收到 SignalR 消息：
 
 ```text
 SignalR
@@ -415,32 +344,125 @@ MessageRepository
  ↓
 Upsert Drift
  ↓
-Riverpod stream
+Riverpod
  ↓
 UI
 ```
 
-Never directly mutate UI state from SignalR.
+禁止 SignalR 直接修改页面状态。
 
-------
+断线重连后，根据需要执行 HTTP 增量同步。
 
-# 12. SignalR Rules
+---
 
-Use one application-level SignalR connection where possible.
+## 9. 已读机制
 
-Do not create one SignalR connection per chat page.
+继续兼容现有：
 
-Responsibilities:
+```text
+ReadMessageId
+PeerReadMessageId
+```
 
-- connect
-- disconnect
-- reconnect
-- connection state
-- event registration
-- invoke
-- event dispatch
+不要擅自改成每条消息一条已读记录。
 
-Typical events:
+---
+
+## 10. 聊天列表
+
+不要照搬 UniApp 虚拟列表实现。
+
+Flutter 优先使用：
+
+```text
+CustomScrollView
+SliverList
+```
+
+消息高度允许不同。
+
+支持：
+
+```text
+文本
+图片
+视频
+语音
+文件
+系统消息
+撤回
+删除
+时间分隔
+新消息分隔
+```
+
+建议 UI Model：
+
+```text
+ChatItem
+├── TimeDivider
+├── MessageItem
+├── NewMessageDivider
+├── SystemMessage
+└── OtherSpecialItem
+```
+
+除非实际性能测试证明有必要，否则不要自己维护：
+
+```text
+height
+offset
+translateY
+visibleItems
+```
+
+---
+
+## 11. 消息分页
+
+禁止一次加载大量历史消息。
+
+流程：
+
+```text
+Drift 读取最近 N 条
+ ↓
+向上滚动
+ ↓
+Drift 加载更早消息
+ ↓
+本地不足
+ ↓
+HTTP 获取
+ ↓
+写入 Drift
+ ↓
+UI 更新
+```
+
+追加历史消息时必须保持当前滚动位置，不能跳动。
+
+---
+
+## 12. SignalR
+
+原则上使用应用级单连接。
+
+禁止每个聊天页面创建一个 SignalR Connection。
+
+统一负责：
+
+```text
+连接
+断开
+自动重连
+状态管理
+事件注册
+Invoke
+事件分发
+```
+
+事件例如：
 
 ```text
 ReceiveMessage
@@ -454,210 +476,11 @@ ReceiveSessionUpdate
 ReceiveBadgeUpdate
 ```
 
-SignalR reconnection must be automatic.
+---
 
-After reconnection, perform HTTP incremental synchronization when necessary.
+## 13. 媒体和附件
 
-Do not assume SignalR guarantees delivery while disconnected.
-
-------
-
-# 13. Message Sending
-
-Preferred flow:
-
-```text
-UI
- ↓
-create clientMessageId
- ↓
-insert local pending message
- ↓
-UI immediately displays message
- ↓
-HTTP send
- ↓
-server response
- ↓
-update local message
- ↓
-SignalR events synchronize other clients
-```
-
-Do not make SignalR the only mechanism for sending business messages.
-
-------
-
-# 14. Read Receipt
-
-The application already uses:
-
-```text
-ReadMessageId
-PeerReadMessageId
-```
-
-Do not replace these with a per-message read record unless explicitly required.
-
-For a one-to-one conversation:
-
-```text
-ReadMessageId
-    Local user's read position
-
-PeerReadMessageId
-    Other user's read position
-```
-
-Use these values to determine whether a message is read.
-
-------
-
-# 15. Chat List
-
-Do not translate the old UniApp virtual-list implementation directly.
-
-Flutter must use Flutter's rendering model.
-
-Preferred:
-
-```text
-CustomScrollView
- ↓
-SliverList
-```
-
-Message item heights are variable.
-
-The list must support:
-
-- text messages
-- image messages
-- video messages
-- file messages
-- voice messages
-- system messages
-- recalled messages
-- deleted messages
-- time dividers
-- "new messages" divider
-
-Do NOT assume a fixed item height.
-
-Do NOT manually implement DOM-style:
-
-```text
-height
-offset
-translateY
-visibleItems
-```
-
-unless a specific performance issue proves it necessary.
-
-------
-
-# 16. ChatItem
-
-The UI list should use a presentation model such as:
-
-```text
-ChatItem
- ├── TimeDivider
- ├── MessageItem
- ├── NewMessageDivider
- ├── SystemMessage
- └── OtherSpecialItem
-```
-
-Different ChatItems may have completely different heights.
-
-Example:
-
-```text
-TimeDivider
-Message
-Message
-ImageMessage
-NewMessageDivider
-Message
-SystemMessage
-```
-
-Flutter is responsible for measuring widget heights.
-
-------
-
-# 17. Chat Pagination
-
-Do not load hundreds of thousands of messages into memory.
-
-Use incremental loading.
-
-Typical flow:
-
-```text
-SQLite
- ↓
-load latest N
- ↓
-display
- ↓
-user scrolls upward
- ↓
-load older messages
- ↓
-SQLite
- ↓
-if insufficient
- ↓
-HTTP
- ↓
-upsert SQLite
- ↓
-display
-```
-
-When loading history, preserve the user's current scroll position.
-
-Do not cause the chat to jump after prepending older messages.
-
-------
-
-# 18. Session List
-
-Session list should be backed by local SQLite data.
-
-Typical:
-
-```text
-SignalR / HTTP
- ↓
-SessionRepository
- ↓
-Drift
- ↓
-Riverpod
- ↓
-SessionList
-```
-
-Unread count, last message, sorting and related session state should be persisted locally.
-
-------
-
-# 19. Media
-
-Messages may contain:
-
-- image
-- video
-- audio
-- file
-
-Use an Attachment model/table.
-
-Recommended fields include:
+附件统一建模，例如：
 
 ```text
 id
@@ -672,154 +495,40 @@ downloadState
 uploadState
 ```
 
-Do not store large binary files directly inside SQLite.
+大文件禁止直接存 SQLite Blob。
 
-Actual private files should be stored in the application file system / MinIO.
-
-------
-
-# 20. MinIO
-
-MinIO files are private.
-
-The Flutter client should not assume that object URLs are public.
-
-Use the backend to obtain authorized access or temporary signed URLs.
-
-Do not expose permanent private MinIO credentials to the client.
-
-------
-
-# 21. WebView / H5
-
-The H5 application is built with UniApp.
-
-The Flutter application must provide a JSBridge compatible with the existing H5 JS API whenever possible.
-
-Architecture:
+实际文件存：
 
 ```text
-UniApp H5
- ↓
-goto.xxx()
- ↓
-JavaScriptChannel
- ↓
-JsBridge
- ↓
-JsApiDispatcher
- ↓
-PlatformFacade / Service
- ↓
-Native API
+应用文件目录
++
+MinIO
 ```
 
-The H5 layer should not need to know whether the host is Flutter, Android or iOS.
+MinIO 为私有存储。
 
-------
+客户端通过后端获取授权地址 / Presigned URL。
 
-# 22. JSBridge Protocol
+禁止把 MinIO AccessKey / SecretKey 放到客户端。
 
-Use a request/response protocol.
+---
 
-Request:
+## 14. 平台抽象
 
-```json
-{
-  "id": "unique-request-id",
-  "action": "chooseImage",
-  "data": {}
-}
-```
-
-Response:
-
-```json
-{
-  "id": "unique-request-id",
-  "success": true,
-  "data": {}
-}
-```
-
-Error:
-
-```json
-{
-  "id": "unique-request-id",
-  "success": false,
-  "error": {
-    "code": "USER_CANCEL",
-    "message": "User cancelled"
-  }
-}
-```
-
-All asynchronous APIs should return Promises on the H5 side.
-
-Example:
-
-```javascript
-const result = await goto.chooseImage();
-```
-
-------
-
-# 23. JSAPI Compatibility
-
-Before implementing JSAPI, scan the existing UniApp project and identify the actual APIs currently used.
-
-Do not invent APIs without checking the existing project.
-
-Potential APIs include:
-
-```text
-login
-logout
-chooseImage
-chooseVideo
-chooseFile
-scanCode
-previewImage
-getLocation
-openLocation
-setClipboardData
-getClipboardData
-share
-showToast
-showLoading
-hideLoading
-navigateTo
-close
-openSession
-openUser
-```
-
-Only implement APIs that are actually required.
-
-------
-
-# 24. Platform Architecture
-
-Business code must not directly depend on platform-specific APIs.
-
-Avoid:
+业务代码禁止大量出现：
 
 ```dart
-if (Platform.isWindows)
+Platform.isWindows
+Platform.isAndroid
 ```
 
-inside business features.
-
-Instead use:
+统一通过：
 
 ```text
 PlatformFacade
- ↓
-Platform-specific Service
 ```
 
-Examples:
+以及：
 
 ```text
 WindowService
@@ -830,138 +539,68 @@ ClipboardService
 FilePickerService
 ```
 
-------
-
-# 25. Conditional Imports
-
-Use Dart conditional imports when a source file imports platform-specific libraries.
-
-Examples:
+需要导入平台专用库时使用 Conditional Imports：
 
 ```text
-platform_service.dart
-platform_service_mobile.dart
-platform_service_desktop.dart
-platform_service_web.dart
-platform_service_stub.dart
+xxx.dart
+xxx_mobile.dart
+xxx_desktop.dart
+xxx_web.dart
+xxx_stub.dart
 ```
 
-Do not import:
+共享业务代码禁止直接 import `dart:html` 或桌面专用库。
+
+---
+
+## 15. 桌面端
+
+Windows / macOS / Linux 可以支持：
 
 ```text
-dart:html
+多窗口
+窗口尺寸调整
+系统托盘
+桌面通知
+置顶
+最小化 / 最大化
 ```
 
-or platform-specific APIs from shared business code.
+这些能力统一放在 Service 后面。
 
-------
-
-# 26. Desktop Windows
-
-Desktop platforms support:
-
-- Windows
-- macOS
-- Linux
-
-Desktop-specific features include:
-
-```text
-multiple windows
-system tray
-desktop notifications
-window resizing
-always-on-top
-minimize/maximize
-```
-
-These must be implemented behind services.
-
-Business code must not directly depend on:
-
-```text
-desktop_multi_window
-window_manager
-tray_manager
-```
-
-------
-
-# 27. Multiple Desktop Windows
-
-Main window:
-
-```text
-Session List
-```
-
-Chat window:
-
-```text
-Chat
-```
-
-Opening a chat:
+例如：
 
 ```text
 WindowService.openChat(sessionId)
 ```
 
-Do not call desktop_multi_window directly from Chat UI.
+Desktop：
 
-Window manager should maintain:
+```text
+打开独立聊天窗口
+```
+
+Mobile：
+
+```text
+在当前 App 内导航
+```
+
+业务调用方式保持一致。
+
+多窗口需要维护：
 
 ```text
 sessionId -> windowId
 ```
 
-If the session is already open:
+同一 Session 已打开时激活已有窗口，不重复创建。
 
-```text
-activate existing window
-```
+---
 
-Otherwise:
+## 16. 响应式布局
 
-```text
-create new window
-```
-
-All windows should share the same data model and synchronization architecture.
-
-------
-
-# 28. Mobile Window Behavior
-
-On mobile:
-
-```text
-WindowService.openChat(sessionId)
-```
-
-should navigate within the current application instead of creating a desktop window.
-
-The business API must remain the same.
-
-Example:
-
-```text
-Desktop:
-openChat()
- ↓
-new window
-
-Mobile:
-openChat()
- ↓
-Navigator/go_router
-```
-
-------
-
-# 29. Responsive UI
-
-The application must support:
+必须适配：
 
 ```text
 Phone
@@ -969,17 +608,17 @@ Tablet
 Desktop
 ```
 
-Use:
+使用：
 
 ```text
 LayoutBuilder
 MediaQuery
-breakpoints
+统一 Breakpoints
 ```
 
-Do not simply scale the mobile UI.
+不要简单放大手机版 UI。
 
-Typical layout:
+推荐：
 
 ```text
 Phone:
@@ -992,84 +631,112 @@ Desktop:
 Navigation | SessionList | Chat
 ```
 
-The exact breakpoints should be defined centrally.
+---
 
-------
+## 17. 路由
 
-# 30. Pixel / rpx Migration
+统一使用 `go_router`。
 
-The existing UniApp project uses rpx.
-
-Flutter uses logical pixels.
-
-If preserving the existing 750-width design system is useful, use a centralized adapter such as ScreenUtil or an rpx extension.
-
-Do not scatter custom rpx conversion logic throughout the application.
-
-Preferred example:
-
-```dart
-28.rpx
-```
-
-or a centralized responsive sizing utility.
-
-------
-
-# 31. Routing
-
-Use go_router.
-
-Routing should support:
-
-- login
-- main
-- session
-- chat
-- user
-- settings
-- deep links
-
-Authentication redirect logic should be centralized.
-
-Do not manually perform route authentication checks in every page.
-
-------
-
-# 32. State Management
-
-Use Riverpod.
-
-Prefer:
+支持：
 
 ```text
-Provider
-NotifierProvider
-AsyncNotifierProvider
-StreamProvider
+login
+main
+session
+chat
+user
+settings
+deep link
 ```
 
-depending on the use case.
+登录鉴权和 Redirect 集中处理。
 
-For database streams:
+禁止每个页面自己检查 Token。
+
+---
+
+## 18. WebView / JSBridge
+
+现有 UniApp H5 应尽量保持原 JS API。
+
+架构：
 
 ```text
-Drift Stream
+UniApp H5
  ↓
-Riverpod StreamProvider
+goto.xxx()
  ↓
-UI
+JsBridge
+ ↓
+JsApiDispatcher
+ ↓
+PlatformFacade / Service
+ ↓
+Native API
 ```
 
-Avoid unnecessary manual event buses.
+统一请求协议：
 
-------
+```json
+{
+  "id": "request-id",
+  "action": "chooseImage",
+  "data": {}
+}
+```
 
-# 33. Error Handling
+统一返回：
 
-Create application-level exceptions.
+```json
+{
+  "id": "request-id",
+  "success": true,
+  "data": {}
+}
+```
 
-Examples:
+错误：
+
+```json
+{
+  "id": "request-id",
+  "success": false,
+  "error": {
+    "code": "USER_CANCEL",
+    "message": "User cancelled"
+  }
+}
+```
+
+异步 JSAPI 使用 Promise。
+
+实现 JSAPI 前必须扫描原 UniApp 项目，确认真实使用情况。
+
+不要凭空增加 API。
+
+---
+
+## 19. 后端兼容
+
+现有 ABP vNext API 属于外部契约。
+
+未经明确要求，不修改后端接口。
+
+DTO / Model 修改前：
+
+```text
+1. 查看 UniApp 原实现
+2. 查看后端 DTO
+3. 查看实际 JSON
+4. 实现 Flutter Model
+5. 增加序列化测试
+```
+
+---
+
+## 20. 错误与日志
+
+统一应用异常，例如：
 
 ```text
 ApiException
@@ -1080,81 +747,90 @@ PlatformException
 JsApiException
 ```
 
-Do not expose raw Dio / SQLite / platform exceptions directly to UI.
+不要把 Dio / SQLite / Native 原始异常直接抛给 UI。
 
-Convert infrastructure exceptions at the appropriate boundary.
+统一 Logger。
 
-------
+开发环境可记录：
 
-# 34. Logging
+```text
+HTTP
+SignalR
+数据库同步
+JSBridge
+平台服务
+```
 
-Use a centralized logger.
+禁止记录：
 
-Development:
+```text
+密码
+RefreshToken
+AccessToken
+私有密钥
+完整敏感 Presigned URL
+不必要的私人聊天内容
+```
 
-- request
-- response
-- SignalR connection
-- database synchronization
-- JSBridge
-- platform services
+---
 
-Production:
+## 21. 性能要求
 
-- do not log tokens
-- do not log passwords
-- do not log private message content unnecessarily
-- do not log private file URLs unnecessarily
+这是 IM 应用，重点关注：
 
-------
+```text
+聊天列表 rebuild
+数据库查询
+Riverpod rebuild
+SignalR 高频事件
+图片解码
+视频内存
+大型群聊
+大量历史消息
+```
 
-# 35. Security
+禁止：
 
-Never expose:
+```text
+单条消息变化
+ ↓
+整个 1000 条消息列表全部 rebuild
+```
 
-- OpenIddict client secrets intended for server-side use
-- MinIO permanent access keys
-- Refresh tokens in logs
-- private encryption keys
+图片、视频必须懒加载。
 
-Do not hardcode production secrets.
+不要一次预加载全部媒体。
 
-------
+---
 
-# 36. Testing
+## 22. 测试
 
-Every major infrastructure component should have tests.
-
-At minimum:
+主要基础设施必须有测试：
 
 ```text
 ApiClient
-Token refresh
+Token Refresh
 MessageRepository
 MessageDao
 SessionDao
-SignalR event handling
-JSBridge dispatch
-Platform service
+SignalR
+JSBridge
+Platform Service
 ```
 
-Important test:
-
-Multiple simultaneous HTTP requests receive 401.
-
-Expected:
+必须覆盖：
 
 ```text
-1 refresh request
-N waiting requests
-N requests retry after refresh
+多个 HTTP 请求同时 401
+ ↓
+只产生一次 RefreshToken 请求
+ ↓
+其余请求等待
+ ↓
+刷新成功后全部重试
 ```
 
-------
-
-# 37. Code Generation
-
-Use code generation where appropriate:
+使用：
 
 ```text
 freezed
@@ -1162,296 +838,262 @@ json_serializable
 drift
 ```
 
-After modifying generated models or Drift tables, run the appropriate build_runner command.
+修改相关 Model / Table 后执行对应 `build_runner`。
 
-Do not manually edit generated files.
+禁止手动修改生成文件。
 
-------
+---
 
-# 38. Migration Strategy
+## 23. Codex 开发流程
 
-Do not migrate the whole UniApp application in one step.
-
-Recommended order:
+每个任务：
 
 ```text
-1. Flutter project
-2. Architecture
-3. Platform abstraction
-4. Dio
-5. Token / authentication
-6. Drift
-7. Message DAO
-8. Session DAO
-9. Repository
-10. SignalR
-11. JSBridge
-12. Login
-13. Main / Session List
-14. Contact
-15. Chat
-16. Media
-17. Desktop features
-18. Tablet optimization
-19. H5 integration
-20. Testing / performance
+1. 阅读现有代码
+2. 搜索是否已有相关实现
+3. 确认架构位置
+4. 以最小改动实现
+5. format
+6. flutter analyze
+7. 执行相关测试
+8. 修复问题
+9. 总结修改内容
 ```
 
-------
+禁止顺手进行无关的大规模重构。
 
-# 39. Important Migration Rule
-
-Do NOT blindly translate Vue/UniApp code to Dart.
-
-For example:
-
-UniApp:
+复杂任务开始编码前，简要说明：
 
 ```text
-virtual-list
+修改哪些文件
+架构影响
+实现方式
+主要风险
 ```
 
-must not become a custom Flutter virtual-list simply because the original code used one.
+普通明确任务直接执行，不需要反复询问确认。
 
-Instead use Flutter-native solutions:
+---
 
-```text
-CustomScrollView
-SliverList
-```
+## 24. UniApp 迁移原则
 
-Similarly:
+禁止机械地把 Vue / UniApp 翻译成 Dart。
+
+例如：
 
 ```text
 Pinia
+→
+Riverpod
 ```
 
-should become Riverpod architecture rather than a direct syntax translation.
-
-------
-
-# 40. Existing Backend Compatibility
-
-Do not modify backend APIs unless explicitly requested.
-
-Existing ABP backend contracts should be treated as external contracts.
-
-Before changing a DTO/model:
-
-1. inspect existing UniApp API implementation
-2. inspect backend DTO
-3. inspect actual JSON response
-4. implement Flutter model
-5. add serialization test
-
-------
-
-# 41. Development Workflow
-
-For every task:
-
 ```text
-1. Inspect existing code
-2. Identify related architecture
-3. Make the smallest change
-4. Run formatter
-5. Run flutter analyze
-6. Run relevant tests
-7. Fix errors
-8. Summarize changes
+UniApp virtual-list
+→
+Flutter SliverList
 ```
 
-Do not perform unrelated refactoring while implementing a feature.
+优先按照 Flutter 自身架构重新实现。
 
-------
-
-# 42. Before Writing Code
-
-For non-trivial tasks:
-
-First explain briefly:
+迁移建议顺序：
 
 ```text
-- files to change
-- architecture impact
-- implementation approach
-- potential risks
+基础架构
+→ 平台抽象
+→ Dio / Token
+→ Drift
+→ Repository
+→ SignalR
+→ JSBridge
+→ 登录
+→ 首页 / 会话
+→ 联系人
+→ 聊天
+→ 媒体
+→ 桌面能力
+→ 平板适配
+→ H5
+→ 测试与性能优化
 ```
 
-Then implement.
+---
 
-Do not ask for confirmation for ordinary implementation tasks unless the requested change is ambiguous or destructive.
+## 25. 开发诊断中心
 
-------
-
-# 43. Do Not Create Duplicate Infrastructure
-
-Before creating a new:
-
-- API client
-- Repository
-- Service
-- Database
-- SignalR connection
-- JSBridge
-- Platform abstraction
-
-search the project first.
-
-Reuse existing infrastructure.
-
-Do not create:
+项目中的：
 
 ```text
-ApiClient2
-MessageRepositoryNew
-SignalRManager2
+开发诊断中心
+Development Diagnostics Center
 ```
 
-just because the existing implementation is inconvenient.
+属于正式开发工具，不是临时 Demo。
 
-------
+以后每个可以独立验证的重要功能，都必须同步提供诊断入口。
 
-# 44. Performance
-
-This is an IM application.
-
-Pay special attention to:
-
-- message list rebuilds
-- database queries
-- image decoding
-- video memory
-- unnecessary Riverpod rebuilds
-- SignalR event frequency
-- large group sessions
-- large message histories
-
-Do not rebuild the entire chat list when a single message changes.
-
-Use appropriate provider granularity.
-
-------
-
-# 45. Chat Performance
-
-Avoid:
+也就是说：
 
 ```text
-setState()
+业务功能
++
+诊断 Demo
+```
+
+视为同一个开发任务。
+
+### 每个诊断功能至少包含
+
+```text
+功能说明
+支持平台
+输入参数
+执行按钮
+执行状态
+返回结果
+实际效果
+异常信息
+复制功能
+恢复默认
+```
+
+主要输入必须允许人工修改，不能全部写死。
+
+同时提供默认测试数据，打开即可执行。
+
+执行状态至少：
+
+```text
+未执行
+执行中
+成功
+失败
+```
+
+异步任务建议显示：
+
+```text
+耗时：128 ms
+```
+
+返回值尽量结构化显示：
+
+```text
+输入
  ↓
-rebuild entire 1000-message list
+实际执行
+ ↓
+返回结果
+ ↓
+最终渲染效果
 ```
 
-Prefer:
+不能只显示：
 
 ```text
-message provider
- ↓
-fine-grained update
+测试成功
 ```
 
-Images and videos must be lazy loaded.
+### 异常
 
-Do not preload all media.
-
-------
-
-# 46. Offline First
-
-The application should work with the local database whenever possible.
-
-Typical flow:
+失败时至少显示：
 
 ```text
-UI
- ↓
-Drift
- ↓
-immediate data
-
-Network
- ↓
-sync
- ↓
-Drift
- ↓
-UI updates
+异常类型
+异常消息
+必要的 StackTrace
 ```
 
-Do not make every screen wait for HTTP before displaying existing local data.
+StackTrace 可以折叠。
 
-------
+### 复制
 
-# 47. Final Architectural Principle
-
-The most important rule:
+以下内容尽量支持复制：
 
 ```text
-UI does not know where data comes from.
-
-Repository does not know which platform the UI is running on.
-
-Business code does not know whether it is Android,
-iOS, Tablet, Windows, macOS or Linux.
-
-Platform services hide platform differences.
-
-Drift is the local data source.
-
-Dio is the HTTP transport.
-
-SignalR is the realtime transport.
-
-Riverpod is the application state layer.
-
-JSBridge is the H5/native boundary.
+输入
+输出
+异常
+日志
 ```
 
-The final architecture should remain:
+方便直接发给 Codex 或粘贴到 Issue。
+
+### 平台信息
+
+诊断中心应显示当前运行环境，至少：
 
 ```text
-                   Flutter App
-                       │
-                    Riverpod
-                       │
-                  Repositories
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-      Drift           Dio          SignalR
-        │              │              │
-        └──────────────┼──────────────┘
-                       │
-                    Backend
-
-
-                PlatformFacade
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-      Mobile         Desktop         Web
-        │              │              │
-   Native APIs     Window/Tray     Browser APIs
-
-
-                    WebView
-                       │
-                    JSBridge
-                       │
-                JsApiDispatcher
-                       │
-                 PlatformFacade
+Platform
+Flutter Version
+App Version
+Build Mode
 ```
 
-## Codex 执行原则
+项目已有能力时再增加：
 
-When implementing a task, always follow this document.
+```text
+OS Version
+Device
+Architecture
+Screen Size
+Pixel Ratio
+Locale
+```
 
-If existing code conflicts with these rules:
+不要为了诊断信息引入大量额外依赖。
 
-1. Preserve existing business behavior.
-2. Do not silently change backend contracts.
-3. Prefer the architecture defined here.
-4. Report architectural conflicts before making a large refactor.
-5. Keep changes focused and incremental.
+### 平台验证
+
+所有诊断功能必须明确标记平台支持情况：
+
+```text
+Android   ✓
+iOS       ✓
+iPad      ✓
+Windows   ✓
+macOS     ✓
+Linux     ✓
+Web       ✓
+```
+
+不支持的平台显示：
+
+```text
+暂不支持
+```
+
+禁止调用后直接崩溃。
+
+### 禁止伪造结果
+
+所有：
+
+```text
+成功
+失败
+返回值
+耗时
+```
+
+必须来自实际执行。
+
+禁止静态写：
+
+```dart
+Text('测试成功')
+```
+
+冒充真实测试结果。
+
+---
+
+## 26. 最终原则
+
+遇到现有代码与本规范冲突时：
+
+1. 优先保持现有业务行为。
+2. 不擅自修改后端契约。
+3. 新代码优先遵循本规范架构。
+4. 大规模架构调整前说明冲突。
+5. 保持修改范围小、可测试、可回滚。
+6. 所有可独立验证的重要能力同步加入开发诊断中心。

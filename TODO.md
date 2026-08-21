@@ -2,6 +2,13 @@
 
 
 
+### chooseVideo
+
+1. 增加 是否要压缩 与及压缩的参数
+2. 增加 是否载取视频缩略图，可以是多个缩略图
+
+
+
 ### webview 使用  flutter_inappwebview 库
 
 1. JS 双向通信
@@ -20,6 +27,15 @@
 2. 消息文本渲染
 
 ### 数据库方案
+
+迁移数据库，统一封装，原项目使用了Sqlite和IndexDb，主要是因为Web端不支持Sqlite，现在使用Flutter,  也是兼容多平台，移动端、桌面端，和WEB端。  能统一方案是最好的。
+
+在 开发诊断中心 加入测试，并展示，如CRUD功能，表操作功能等。
+
+
+
+1. 不能修改 原项目 F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts，  原项目只是参考用的
+2. 要改的项目是： F:\Dev\GotoIM\gotoim-flutter
 
 ### 离线推送方案
 

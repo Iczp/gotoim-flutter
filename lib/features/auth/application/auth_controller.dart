@@ -70,7 +70,9 @@ class AuthController extends ChangeNotifier {
 
   Future<void> _restore() async {
     try {
-      final hasSession = await _repository.restoreSession();
+      final hasSession = await _repository
+          .restoreSession()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
       _status =
           hasSession ? AuthStatus.authenticated : AuthStatus.unauthenticated;
       if (hasSession) _connectRealtime();

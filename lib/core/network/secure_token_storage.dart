@@ -12,20 +12,46 @@ class SecureTokenStorage implements TokenStorage {
   static const _refreshTokenKey = 'gotoim.refresh-token.v1';
 
   final FlutterSecureStorage _storage;
+  String? _cachedAccessToken;
+  String? _cachedRefreshToken;
 
   @override
   Future<void> clear() async {
-    await Future.wait(<Future<void>>[
-      _storage.delete(key: _accessTokenKey),
-      _storage.delete(key: _refreshTokenKey),
-    ]);
+    _cachedAccessToken = null;
+    _cachedRefreshToken = null;
+    try {
+      await Future.wait(<Future<void>>[
+        _storage.delete(key: _accessTokenKey),
+        _storage.delete(key: _refreshTokenKey),
+      ]);
+    } catch (_) {}
   }
 
   @override
-  Future<String?> readAccessToken() => _storage.read(key: _accessTokenKey);
+  Future<String?> readAccessToken() async {
+    try {
+      final value = await _storage.read(key: _accessTokenKey);
+      if (value != null && value.isNotEmpty) {
+        _cachedAccessToken = value;
+      }
+      return value ?? _cachedAccessToken;
+    } catch (_) {
+      return _cachedAccessToken;
+    }
+  }
 
   @override
-  Future<String?> readRefreshToken() => _storage.read(key: _refreshTokenKey);
+  Future<String?> readRefreshToken() async {
+    try {
+      final value = await _storage.read(key: _refreshTokenKey);
+      if (value != null && value.isNotEmpty) {
+        _cachedRefreshToken = value;
+      }
+      return value ?? _cachedRefreshToken;
+    } catch (_) {
+      return _cachedRefreshToken;
+    }
+  }
 
   @override
   Future<bool> hasToken() async =>
@@ -36,9 +62,14 @@ class SecureTokenStorage implements TokenStorage {
     required String accessToken,
     required String refreshToken,
   }) async {
-    await Future.wait(<Future<void>>[
-      _storage.write(key: _accessTokenKey, value: accessToken),
-      _storage.write(key: _refreshTokenKey, value: refreshToken),
-    ]);
+    _cachedAccessToken = accessToken;
+    _cachedRefreshToken = refreshToken;
+    try {
+      await Future.wait(<Future<void>>[
+        _storage.write(key: _accessTokenKey, value: accessToken),
+        _storage.write(key: _refreshTokenKey, value: refreshToken),
+      ]);
+    } catch (_) {}
   }
 }
+

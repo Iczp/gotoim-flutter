@@ -3,16 +3,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
-import 'package:webview_flutter_windows/webview_flutter_windows.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'js_api_dispatcher.dart';
 import 'js_bridge_session.dart';
 
-part 'js_bridge_harness_webview_windows.dart';
-
 /// Debug-only WebView host for the standalone JS Bridge harness.
+///
+/// [flutter_inappwebview] supplies the same host widget and controller contract
+/// on Android, iOS, macOS, and Windows. The H5 page talks to the native side
+/// through the `GotoIMBridge` JavaScript handler.
 class JsBridgeHarnessWebView extends StatefulWidget {
   const JsBridgeHarnessWebView({
     required this.url,
@@ -23,7 +24,6 @@ class JsBridgeHarnessWebView extends StatefulWidget {
     this.onError,
     this.onNavigationBlocked,
     this.hostEvents,
-    this.onSelectNativeFiles,
     super.key,
   });
 
@@ -38,104 +38,88 @@ class JsBridgeHarnessWebView extends StatefulWidget {
   /// Messages initiated by Flutter and delivered to the loaded H5 page.
   final Stream<Map<String, Object?>>? hostEvents;
 
-  /// Handles a plain H5 <input type="file"> request on Android.
-  final Future<List<String>> Function(bool allowMultiple)? onSelectNativeFiles;
-
   @override
-  State<JsBridgeHarnessWebView> createState() => _createHarnessState(); // ignore: no_logic_in_create_state
-
-  State<JsBridgeHarnessWebView> _createHarnessState() =>
-      Platform.isWindows
-          ? _WindowsHarnessWebViewState()
-          : _JsBridgeHarnessWebViewState();
+  State<JsBridgeHarnessWebView> createState() => _JsBridgeHarnessWebViewState();
 }
 
 class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
-  late final WebViewController _controller;
+  InAppWebViewController? _controller;
   late final JsBridgeSession _session;
   Timer? _loadTimeout;
   StreamSubscription<Map<String, Object?>>? _hostEventsSubscription;
+  WebViewEnvironment? _windowsEnvironment;
+  String? _initializationError;
+  bool _ready = !Platform.isWindows;
 
   @override
   void initState() {
     super.initState();
-    _controller =
-        WebViewController()
-          ..setJavaScriptMode(JavaScriptMode.unrestricted)
-          ..setNavigationDelegate(
-            NavigationDelegate(
-              onProgress: (progress) => widget.onProgress?.call(progress),
-              onPageStarted: (url) {
-                _beginLoadTimeout(url);
-                widget.onPageStarted?.call(url);
-              },
-              onPageFinished: (url) {
-                _loadTimeout?.cancel();
-                widget.onPageFinished?.call(url);
-              },
-              onWebResourceError: (error) {
-                _loadTimeout?.cancel();
-                final url = error.url?.isEmpty ?? true ? '' : '\n${error.url}';
-                widget.onError?.call(
-                  '网页加载失败 (${error.errorCode})：${error.description}$url',
-                );
-              },
-              onNavigationRequest:
-                  (request) => _navigationDecision(request.url),
-            ),
-          )
-          ..addJavaScriptChannel(
-            'GotoIMBridge',
-            onMessageReceived: (message) {
-              _handleBridgeMessage(message.message);
-            },
-          );
-    final platformController = _controller.platform;
-    if (platformController is AndroidWebViewController) {
-      platformController.setOnShowFileSelector((params) async {
-        final callback = widget.onSelectNativeFiles;
-        if (callback == null) return const <String>[];
-        try {
-          return await callback(params.mode == FileSelectorMode.openMultiple);
-        } catch (error) {
-          widget.onError?.call('网页文件选择失败：$error');
-          return const <String>[];
-        }
-      });
-    }
     _session = JsBridgeSession(
       dispatcher: widget.dispatcher,
-      transport: _WebViewTransport(_controller),
+      transport: _InAppWebViewTransport(_postSessionMessage),
     )..start();
     _hostEventsSubscription = widget.hostEvents?.listen(_postHostEvent);
-    _load(widget.url);
+    if (Platform.isWindows) {
+      unawaited(_prepareWindowsEnvironment());
+    }
   }
 
   @override
   void didUpdateWidget(covariant JsBridgeHarnessWebView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) _load(widget.url);
+    if (oldWidget.url != widget.url && _controller != null) {
+      unawaited(_load(widget.url));
+    }
   }
 
   @override
   void dispose() {
     _loadTimeout?.cancel();
     _hostEventsSubscription?.cancel();
-    _session.dispose();
+    unawaited(_session.dispose());
     super.dispose();
   }
 
-  void _load(String value) {
+  Future<void> _prepareWindowsEnvironment() async {
+    try {
+      final availableVersion = await WebViewEnvironment.getAvailableVersion();
+      if (availableVersion == null) {
+        throw StateError('未检测到 Microsoft Edge WebView2 Runtime。');
+      }
+      final supportDirectory = await getApplicationSupportDirectory();
+      _windowsEnvironment = await WebViewEnvironment.create(
+        settings: WebViewEnvironmentSettings(
+          userDataFolder:
+              '${supportDirectory.path}${Platform.pathSeparator}js_bridge_harness_webview2',
+        ),
+      );
+      if (mounted) setState(() => _ready = true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _initializationError =
+              'Windows WebView2 初始化失败：$error\n'
+              '请确认已安装 Microsoft Edge WebView2 Runtime。';
+        });
+      }
+    }
+  }
+
+  Future<void> _load(String value) async {
     final uri = Uri.tryParse(value);
-    if (uri == null || !uri.hasScheme) {
+    if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
       widget.onError?.call('无效的 Harness 地址：$value');
       return;
     }
+    final controller = _controller;
+    if (controller == null) return;
     _beginLoadTimeout(value);
-    _controller.loadRequest(uri).catchError((Object error) {
+    try {
+      await controller.loadUrl(urlRequest: URLRequest(url: WebUri(value)));
+    } catch (error) {
       _loadTimeout?.cancel();
       widget.onError?.call('无法发起网页加载：$error');
-    });
+    }
   }
 
   void _beginLoadTimeout(String url) {
@@ -156,45 +140,109 @@ class _JsBridgeHarnessWebViewState extends State<JsBridgeHarnessWebView> {
     }
   }
 
-  Future<void> _postHostEvent(Map<String, Object?> event) async {
+  Future<void> _postHostEvent(Map<String, Object?> event) => _postToPage(event);
+
+  Future<void> _postSessionMessage(String message) => _postToPage(message);
+
+  Future<void> _postToPage(Object message) async {
+    final controller = _controller;
+    if (controller == null) {
+      throw StateError('WebView 尚未创建，无法向 H5 发送消息。');
+    }
     try {
-      await _controller.runJavaScript(
-        'window.GotoImHarness?.receiveFromHost(${jsonEncode(event)});',
+      await controller.evaluateJavascript(
+        source:
+            'window.GotoImHarness?.receiveFromHost(${jsonEncode(message)});',
       );
     } catch (error) {
       widget.onError?.call('Flutter 主动调用网页失败：$error');
     }
   }
 
-  NavigationDecision _navigationDecision(String requestedUrl) {
+  NavigationActionPolicy _navigationDecision(String requestedUrl) {
     final requested = Uri.tryParse(requestedUrl);
     final harness = Uri.tryParse(widget.url);
     if (requested == null || harness == null) {
       widget.onNavigationBlocked?.call('已拦截无效跳转：$requestedUrl');
-      return NavigationDecision.prevent;
+      return NavigationActionPolicy.CANCEL;
     }
     final sameOrigin =
         requested.scheme == harness.scheme &&
         requested.host == harness.host &&
         requested.port == harness.port;
     if (sameOrigin || requestedUrl == 'about:blank') {
-      return NavigationDecision.navigate;
+      return NavigationActionPolicy.ALLOW;
     }
     widget.onNavigationBlocked?.call('已拦截跨域跳转：$requestedUrl');
-    return NavigationDecision.prevent;
+    return NavigationActionPolicy.CANCEL;
   }
 
   @override
-  Widget build(BuildContext context) => WebViewWidget(controller: _controller);
+  Widget build(BuildContext context) {
+    if (_initializationError case final error?) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: SelectionArea(child: Text(error)),
+        ),
+      );
+    }
+    if (!_ready) return const Center(child: CircularProgressIndicator());
+    return InAppWebView(
+      webViewEnvironment: _windowsEnvironment,
+      initialUrlRequest: URLRequest(url: WebUri(widget.url)),
+      initialSettings: InAppWebViewSettings(
+        javaScriptEnabled: true,
+        javaScriptBridgeEnabled: true,
+        useShouldOverrideUrlLoading: true,
+        supportMultipleWindows: false,
+      ),
+      onWebViewCreated: (controller) {
+        _controller = controller;
+        controller.addJavaScriptHandler(
+          handlerName: 'GotoIMBridge',
+          callback: (arguments) async {
+            final raw = arguments.isEmpty ? null : arguments.first;
+            if (raw is! String) {
+              widget.onError?.call('JS Bridge 消息必须是字符串 JSON。');
+              return null;
+            }
+            await _handleBridgeMessage(raw);
+            return null;
+          },
+        );
+      },
+      onLoadStart: (_, url) {
+        final value = url?.toString() ?? widget.url;
+        _beginLoadTimeout(value);
+        widget.onPageStarted?.call(value);
+      },
+      onLoadStop: (_, url) {
+        _loadTimeout?.cancel();
+        widget.onProgress?.call(100);
+        widget.onPageFinished?.call(url?.toString() ?? widget.url);
+      },
+      onProgressChanged: (_, progress) => widget.onProgress?.call(progress),
+      onReceivedError: (_, request, error) {
+        _loadTimeout?.cancel();
+        final url = request.url.toString();
+        widget.onError?.call(
+          '网页加载失败 (${error.type})：${error.description}'
+          '${url.isEmpty ? '' : '\n$url'}',
+        );
+      },
+      shouldOverrideUrlLoading:
+          (_, action) async =>
+              _navigationDecision(action.request.url?.toString() ?? ''),
+    );
+  }
 }
 
-class _WebViewTransport implements JsBridgeTransport {
-  const _WebViewTransport(this._controller);
+class _InAppWebViewTransport implements JsBridgeTransport {
+  const _InAppWebViewTransport(this._postMessage);
 
-  final WebViewController _controller;
+  final Future<void> Function(String message) _postMessage;
 
   @override
-  Future<void> postMessage(String message) => _controller.runJavaScript(
-    'window.GotoImHarness?.receiveFromHost(${jsonEncode(message)});',
-  );
+  Future<void> postMessage(String message) => _postMessage(message);
 }
