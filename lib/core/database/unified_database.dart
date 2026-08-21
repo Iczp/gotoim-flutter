@@ -58,6 +58,7 @@ class UnifiedDatabase {
 
   Future<void> _initialize() async {
     try {
+      await _connection.ensureOpen(_UnifiedDatabaseUser());
       await _connection.runCustom('PRAGMA foreign_keys = ON');
       final rows = await _connection.runSelect('PRAGMA user_version', const []);
       final current = (rows.single['user_version'] as num?)?.toInt() ?? 0;
@@ -338,3 +339,12 @@ const _version1Schema = <String>[
   )''',
   'CREATE INDEX IF NOT EXISTS idx_diagnostic_records_updated_at ON diagnostic_records (updated_at DESC)',
 ];
+
+class _UnifiedDatabaseUser extends QueryExecutorUser {
+  @override
+  int get schemaVersion => UnifiedDatabase.schemaVersion;
+
+  @override
+  Future<void> beforeOpen(QueryExecutor executor, OpeningDetails details) async {}
+}
+
