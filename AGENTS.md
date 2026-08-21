@@ -1455,3 +1455,399 @@ If existing code conflicts with these rules:
 3. Prefer the architecture defined here.
 4. Report architectural conflicts before making a large refactor.
 5. Keep changes focused and incremental.
+
+
+
+## 开发诊断中心：功能演示与人工测试规范
+
+在完成 Markdown 功能的同时，必须同步完善项目现有的：
+
+```
+开发诊断中心
+Development Diagnostics Center
+```
+
+以后开发任何可以独立测试的功能时，都必须同步在“开发诊断中心”增加对应的：
+
+```
+功能说明
+输入参数
+执行按钮
+运行状态
+返回结果
+实际渲染效果
+异常信息
+平台信息
+```
+
+目的不是做普通 Demo，而是做一套长期保留的：
+
+```
+开发调试
+功能诊断
+多平台人工测试
+问题复现
+能力验证
+```
+
+工具。
+
+# 一、核心原则
+
+以后新增一个独立功能时：
+
+```
+实现业务功能
+        +
+实现诊断 Demo
+        +
+写输入说明
+        +
+写输出说明
+        +
+提供实际效果
+```
+
+视为同一个开发任务。
+
+不能出现：
+
+```
+功能代码完成
+但是开发诊断中心无法单独测试
+```
+
+的情况。
+
+# 二、每个功能都必须回答 3 个问题
+
+诊断页面必须让开发者明确知道：
+
+## 1. 输入是什么
+
+例如：
+
+```
+Markdown文本
+图片URI
+BlobId
+URL
+代码语言
+Mermaid源码
+LaTeX源码
+```
+
+## 2. 返回结果是什么
+
+例如：
+
+```
+Uri
+String
+bool
+Widget效果
+异常
+解析后的数据
+```
+
+## 3. 最终效果是什么
+
+例如：
+
+```
+Markdown真实渲染效果
+代码块效果
+图片效果
+Mermaid效果
+LaTeX效果
+链接跳转效果
+```
+
+也就是说诊断中心不能只显示：
+
+```
+测试成功
+```
+
+而应该尽可能同时显示：
+
+```
+输入
+↓
+处理
+↓
+输出
+↓
+实际效果
+```
+
+# 八、诊断 Demo 必须允许修改输入
+
+不能只写死：
+
+```
+const demoText = '...';
+```
+
+然后给开发者看。
+
+主要功能必须允许人工修改输入。
+
+例如 Markdown：
+
+```
+多行 TextField
+```
+
+图片：
+
+```
+URI TextField
+```
+
+Blob：
+
+```
+BlobId TextField
+```
+
+Mermaid：
+
+```
+Mermaid源码 TextField
+```
+
+LaTeX：
+
+```
+LaTeX源码 TextField
+```
+
+这样才能用于真正的问题复现。
+
+# 九、必须提供默认测试数据
+
+虽然输入可以修改，但每个诊断项必须提供默认值。
+
+例如 Markdown：
+
+```
+# GotoIM
+
+这是 **Markdown**。
+
+```dart
+void main() {
+  print('GotoIM');
+}
+这样打开页面可以直接点击：
+
+```text
+执行
+```
+
+查看效果。
+
+# 十、增加“恢复默认”功能
+
+建议每个带输入的诊断 Demo 提供：
+
+```
+恢复默认
+```
+
+避免测试过程中修改大量内容之后无法快速恢复标准测试案例。
+
+# 十一、执行状态
+
+涉及异步功能时至少显示：
+
+```
+未执行
+执行中
+成功
+失败
+```
+
+例如：
+
+```
+状态：成功
+耗时：128 ms
+```
+
+# 十二、返回结果
+
+返回结果尽量结构化显示。
+
+例如图片解析：
+
+输入：
+
+```
+gotoim-image://blob/123
+```
+
+返回：
+
+```
+Source Scheme:
+gotoim-image
+
+BlobId:
+123
+
+Resolved Uri:
+https://xxx/xxx?signature=...
+```
+
+注意：
+
+如果包含：
+
+```
+Token
+签名
+敏感 Header
+Presigned URL
+```
+
+默认显示时应该考虑脱敏。
+
+不要在日志里永久记录敏感凭证。
+
+# 十三、异常必须显示
+
+执行失败时不能只：
+
+```
+debugPrint(error);
+```
+
+诊断中心至少显示：
+
+```
+异常类型
+
+异常消息
+
+必要的 StackTrace
+```
+
+例如：
+
+```
+Type:
+FormatException
+
+Message:
+Invalid URI
+
+Stack:
+...
+```
+
+StackTrace 可以折叠显示。
+
+# 十四、增加复制功能
+
+对于：
+
+```
+输入
+返回结果
+错误
+日志
+```
+
+适合复制的内容，提供：
+
+```
+复制
+```
+
+方便开发者把结果发给 Codex 或粘贴到 Issue。
+
+# 十五、增加平台信息
+
+开发诊断中心顶部或者诊断页面应该可以看到当前运行环境。
+
+至少：
+
+```
+Platform
+Flutter Version
+App Version
+Build Mode
+```
+
+可获取时再增加：
+
+```
+OS Version
+Device
+Architecture
+Screen Size
+Pixel Ratio
+Locale
+```
+
+不要为了拿这些信息引入大量不必要依赖。
+
+优先复用项目已有 Device / App Info 能力。
+
+# 十六、每个平台人工测试
+
+开发诊断中心必须支持我分别在：
+
+```
+Android
+iOS
+Web
+Windows
+```
+
+打开并人工验证。
+
+因此每个功能需要明确标识：
+
+```
+支持的平台
+```
+
+例如：
+
+```
+Android   ✓
+iOS       ✓
+Web       ✓
+Windows   ✓
+```
+
+如果某功能某个平台暂时不支持：
+
+```
+Windows   暂不支持
+```
+
+不要让应用直接崩溃。
+
+# 十七、不要伪造测试结果
+
+诊断中心显示的：
+
+```
+成功
+结果
+耗时
+```
+
+必须来源于实际执行。
+
+不要静态写：
+
+```
+Text('测试成功')
+```
+
+来模拟结果。

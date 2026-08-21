@@ -16,6 +16,7 @@ import '../../features/diagnostics/presentation/client_capabilities_diagnostics_
 import '../../features/diagnostics/presentation/js_bridge_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/media_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/js_bridge_harness_page.dart';
+import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
@@ -88,6 +89,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/media',
         builder: (context, state) => const MediaDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/database',
+        builder: (context, state) => const DatabaseDiagnosticsPage(),
       ),
       GoRoute(
         path: '/diagnostics/js-bridge-harness',

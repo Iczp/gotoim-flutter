@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/config/app_environment.dart';
 import '../core/capabilities/client_capability_service.dart';
 import '../core/device/client_device_context.dart';
+import '../core/database/unified_database.dart';
 import '../core/jsbridge/js_api_dispatcher.dart';
 import '../core/network/api_client.dart';
 import '../core/network/dio_api_client.dart';
@@ -52,4 +53,11 @@ final jsApiDispatcherProvider = Provider<JsApiDispatcher>(
       throw UnimplementedError(
         'JsApiDispatcher must be provided at bootstrap.',
       ),
+);
+
+/// The single SQL database shared by native and Web clients.
+final unifiedDatabaseProvider = Provider<UnifiedDatabase>(
+  (ref) => throw UnimplementedError(
+    'UnifiedDatabase must be provided at bootstrap.',
+  ),
 );

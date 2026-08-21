@@ -37,6 +37,10 @@ dependencies:
   video_compress: ^3.1.4
   record: ^7.1.1
   path_provider: ^2.1.5
+  # One SQLite API on Android/iOS/desktop/Web. Native platforms persist a
+  # sqlite file; Web uses SQLite WASM with browser-backed storage.
+  drift: ^2.34.3
+  drift_flutter: ^0.3.1
   # Unified Android/iOS/macOS/Windows WebView host for the JS Bridge harness.
   # 6.2 fixes Android Gradle Plugin 9 compatibility; use the current beta
   # until its stable release is available.
@@ -53,3 +57,9 @@ flutter:
     - .env.development
     - .env.staging
     - .env.production
+
+# hooks:
+#   user_defines:
+#     sqlite3:
+#       source: source
+#       path: third_party/sqlite/sqlite3.c

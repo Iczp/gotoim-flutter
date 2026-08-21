@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/config/app_environment.dart';
 import '../core/capabilities/client_capability_service.dart';
 import '../core/device/client_device_context.dart';
+import '../core/database/unified_database.dart';
 import '../core/jsbridge/js_api_dispatcher.dart';
 import '../core/notifications/local_notification_service.dart';
 import '../core/platform/platform_facade.dart';
@@ -36,6 +37,8 @@ Future<void> bootstrap() async {
     platformFacade: platformFacade,
   );
   await localNotificationService.initialize();
+  final database = UnifiedDatabase.openDefault();
+  await database.initialize();
   final mediaService = DefaultMediaService(platformFacade: platformFacade);
   final fileUploadService = DioFileUploadService(
     allowedHosts: environment.jsBridgeUploadAllowedHosts,
@@ -68,6 +71,7 @@ Future<void> bootstrap() async {
         ),
         clientCapabilityServiceProvider.overrideWithValue(capabilities),
         jsApiDispatcherProvider.overrideWithValue(jsApiDispatcher),
+        unifiedDatabaseProvider.overrideWithValue(database),
         mediaServiceProvider.overrideWithValue(mediaService),
       ],
       child: const GotoImApp(),
