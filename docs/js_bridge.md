@@ -79,31 +79,69 @@ JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议
 | `offNetworkStatusChange` | `network.offStatusChange` | `{subscriptionId:string}` | `{removed:boolean}` |
 | `notification.getSupport` | — | `{}` | `{platform,isSupported,message}` |
 | `notification.requestPermission` | — | `{}` | `{status,message}` |
+| `vibrate` | `device.vibrate` | `{style?:light\|medium\|heavy\|selection\|vibrate,duration?:int}` | `{ok:true}` |
+| `getBatteryInfo` | `device.getBatteryInfo` | `{}` | `{level:int,isCharging:boolean,status:string}` |
+| `getScreenBrightness` | `device.getScreenBrightness` | `{}` | `{value:double}`（0.0 ~ 1.0） |
+| `setScreenBrightness` | `device.setScreenBrightness` | `{value:double}`（0.0 ~ 1.0） | `{ok:boolean,value:double}` |
+| `makePhoneCall` | `system.makePhoneCall` | `{phoneNumber:string}` | `{ok:boolean}` |
+| `onUserCaptureScreen` | `system.onUserCaptureScreen` | `{subscriptionId?:string}` | `{subscriptionId:string}` |
+| `offUserCaptureScreen` | `system.offUserCaptureScreen` | `{subscriptionId:string}` | `{removed:boolean}` |
+| `onThemeChange` | `system.onThemeChange` | `{subscriptionId?:string}` | `{subscriptionId,currentBrightness:light\|dark}` |
+| `offThemeChange` | `system.offThemeChange` | `{subscriptionId:string}` | `{removed:boolean}` |
+| `onResize` | `system.onResize` | `{subscriptionId?:string}` | `{subscriptionId,currentSize:{width,height}}` |
+| `offResize` | `system.offResize` | `{subscriptionId:string}` | `{removed:boolean}` |
+| `onMemoryWarning` | `system.onMemoryWarning` | `{subscriptionId?:string}` | `{subscriptionId:string}` |
+| `offMemoryWarning` | `system.offMemoryWarning` | `{subscriptionId:string}` | `{removed:boolean}` |
+| `onAccelerometerChange` | `sensor.onAccelerometerChange` | `{subscriptionId?:string,interval?:int}` | `{subscriptionId:string}` |
+| `offAccelerometerChange` | `sensor.offAccelerometerChange` | `{subscriptionId?:string}` | `{ok:true}` |
+| `onGyroscopeChange` | `sensor.onGyroscopeChange` | `{subscriptionId?:string,interval?:int}` | `{subscriptionId:string}` |
+| `offGyroscopeChange` | `sensor.offGyroscopeChange` | `{subscriptionId?:string}` | `{ok:true}` |
+| `onProximityChange` | `sensor.onProximityChange` | `{subscriptionId?:string}` | `{subscriptionId:string}` |
+| `offProximityChange` | `sensor.offProximityChange` | `{subscriptionId?:string}` | `{ok:true}` |
 | `diagnostics.reportHostPing` | — | `{pingId:string,receivedAt:string,success:boolean,systemInfo?:object,error?:object}` | `{received:true}`；仅 Debug Harness 用于上报主动调用回执 |
 
 `formats` 使用 Flutter 枚举名，例如 `qrCode`、`code128`、`ean13`；空数组表示默认全部。`decodeImage.base64` 可以是纯 base64，也可以是 `data:image/png;base64,...`，最大解码后大小为 10 MiB。文件选择结果包含平台可用的原始 URI/路径；`fileId` 只在当前宿主会话有效。URI/path 不是 H5 可直接访问的地址，后续操作必须传 `fileId`。媒体能力、上传白名单与平台限制见 [媒体与文件能力](media_and_files.md)。
 
 详细字段语义和平台支持矩阵见 [客户端能力统一入口](client_capabilities.md)。
 
-## 网络订阅事件
+## 事件订阅与注销生命周期 (Event Subscriptions & Lifecycle)
 
-调用 `onNetworkStatusChange` 成功后，Flutter 在网络变化时发送独立事件消息：
+所有持续产出事件的能力均遵循「**订阅必有注销**」原则。调用 `on*` Action 时可传入自定义 `subscriptionId`（或由系统自动生成 UUID）；注销时调用对应的 `off*` Action 传入该 `subscriptionId`：
 
-```json
-{
-  "event":"network.statusChange",
-  "data":{
-    "subscriptionId":"network-1",
-    "status":{
-      "networkTypes":["wifi"],
-      "isConnected":true,
-      "observedAt":"2026-08-19T00:00:00.000Z"
-    }
+| 监听能力 | 订阅 Action (`on*`) | 注销 Action (`off*`) | 事件名称 (`event`) | 事件 Payload 核心字段 |
+| :--- | :--- | :--- | :--- | :--- |
+| **网络状态** | `onNetworkStatusChange` | `offNetworkStatusChange` | `network.statusChange` | `{ status: { networkTypes, isConnected } }` |
+| **截屏监听** | `onUserCaptureScreen` | `offUserCaptureScreen` | `system.userCaptureScreen` | `{ timestamp }` |
+| **系统主题** | `onThemeChange` | `offThemeChange` | `system.themeChange` | `{ brightness: "light"\|"dark" }` |
+| **窗口尺寸** | `onResize` | `offResize` | `system.resize` | `{ width, height }` |
+| **内存不足** | `onMemoryWarning` | `offMemoryWarning` | `system.memoryWarning` | `{ timestamp }` |
+| **加速度计** | `onAccelerometerChange` | `offAccelerometerChange` | `sensor.accelerometerChange`| `{ x, y, z, timestamp }` |
+| **陀螺仪** | `onGyroscopeChange` | `offGyroscopeChange` | `sensor.gyroscopeChange` | `{ x, y, z, timestamp }` |
+| **距离传感器** | `onProximityChange` | `offProximityChange` | `sensor.proximityChange` | `{ distance, isNear }` |
+| **文件上传** | `file.onUploadEvent` | `file.offUploadEvent` | `file.uploadProgress` 等 | `{ progress, state, response }` |
+
+### 订阅与注销 JavaScript 调用示例
+
+```javascript
+// 1. 订阅加速度传感器 (每 200ms 推送一次)
+const { subscriptionId } = await goto.invoke('onAccelerometerChange', {
+  subscriptionId: 'my-acc-sub',
+  interval: 200
+});
+
+// 2. 注册客户端事件监听回调
+const stopListening = goto.on('sensor.accelerometerChange', (event) => {
+  if (event.subscriptionId === subscriptionId) {
+    console.log(`X: ${event.x}, Y: ${event.y}, Z: ${event.z}`);
   }
-}
-```
+});
 
-页面销毁或不再监听时必须调用 `offNetworkStatusChange`，避免保留 Stream 订阅。网络类型仅代表传输层状态，不代表后端可达。
+// 3. 页面离开或组件销毁时，必须显式注销订阅以避免后台耗电和内存泄漏
+await goto.invoke('offAccelerometerChange', {
+  subscriptionId: subscriptionId
+});
+stopListening(); // 移除 H5 内部回调
+```
 
 ## 文件上传与事件示例
 

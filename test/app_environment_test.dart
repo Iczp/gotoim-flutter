@@ -14,5 +14,7 @@ void main() {
 
     expect(environment.jsBridgeHarnessUrl, 'http://10.0.5.20:4173');
     expect(environment.jsBridgeUploadUrl, 'http://10.0.5.20:4173/upload');
+    expect(environment.deepLinkCustomSchemes, ['gotoim-dev', 'gotoim']);
+    expect(environment.deepLinkAllowedHosts, ['gotoim.com']);
   });
 }

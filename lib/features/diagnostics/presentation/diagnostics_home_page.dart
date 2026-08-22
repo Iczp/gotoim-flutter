@@ -81,6 +81,24 @@ class DiagnosticsHomePage extends StatelessWidget {
             subtitle: '相册、拍照、视频、缩略图、压缩、录音、图片识码与另存为',
             onTap: () => context.push('/diagnostics/media'),
           ),
+          _Item(
+            icon: Icons.tab_outlined,
+            title: '应用级任务栈',
+            subtitle: '独立 Task 创建/复用、工作台动态应用、Android Document Task',
+            onTap: () => context.push('/diagnostics/app-task'),
+          ),
+          _Item(
+            icon: Icons.link_outlined,
+            title: 'Deep Link / App Links',
+            subtitle: 'URI 解析、聊天/用户/群组/扫码/工作台/OAuth 协议、执行与事件日志',
+            onTap: () => context.push('/diagnostics/deep-link'),
+          ),
+          _Item(
+            icon: Icons.developer_mode_outlined,
+            title: 'Native / Device 设备能力',
+            subtitle: '截屏监听、振动反馈、系统主题、内存告警、加速度计、陀螺仪、距离传感器、亮度与电量',
+            onTap: () => context.push('/diagnostics/native'),
+          ),
         ],
       ),
     );

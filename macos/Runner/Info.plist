@@ -32,5 +32,18 @@
 	<string>用于录制语音消息和视频声音。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.example.gotoimFlutter</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>gotoim-dev</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

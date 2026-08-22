@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../capabilities/client_capability_models.dart';
 import '../capabilities/client_capability_service.dart';
+import '../native/native.dart';
 import '../services/file/file_picker_service.dart';
 import '../services/file/file_upload_service.dart';
 import '../services/media/media_service.dart';
@@ -44,6 +45,8 @@ class JsApiDispatcher {
   final Map<String, StreamSubscription<ClientNetworkStatus>> _subscriptions =
       <String, StreamSubscription<ClientNetworkStatus>>{};
   final Map<String, String?> _uploadEventSubscriptions = <String, String?>{};
+  final Map<String, StreamSubscription<dynamic>> _nativeSubscriptions =
+      <String, StreamSubscription<dynamic>>{};
   final Map<String, SelectedFile> _fileReferences = <String, SelectedFile>{};
   late final StreamSubscription<FileUploadEvent> _uploadEventsSubscription;
 
@@ -152,11 +155,7 @@ class JsApiDispatcher {
       case 'chooseFile':
       case 'file.chooseFile':
         final files = await _capabilities.chooseFile(
-          FilePickerRequest(
-            allowMultiple: request.data['allowMultiple'] == true,
-            allowedExtensions: _stringList(request.data['allowedExtensions']),
-            dialogTitle: _optionalString(request.data, 'title'),
-          ),
+          _filePickerRequest(request.data),
         );
         return <String, Object>{'files': _storeFiles(files)};
       case 'saveFile':
@@ -385,6 +384,232 @@ class JsApiDispatcher {
           'status': permission.status.name,
           'message': permission.message,
         };
+      case 'vibrate':
+      case 'device.vibrate':
+        final styleStr =
+            _optionalString(request.data, 'style') ??
+            _optionalString(request.data, 'type');
+        final duration = _optionalInt(request.data, 'duration');
+        final type = HapticFeedbackType.values.firstWhere(
+          (e) => e.name.toLowerCase() == (styleStr ?? 'medium').toLowerCase(),
+          orElse: () => HapticFeedbackType.medium,
+        );
+        await Native.vibrate(type, duration);
+        return const <String, bool>{'ok': true};
+      case 'getBatteryInfo':
+      case 'device.getBatteryInfo':
+        final info = await Native.getBatteryInfo();
+        return info.toMap();
+      case 'getScreenBrightness':
+      case 'device.getScreenBrightness':
+        final brightness = await Native.getScreenBrightness();
+        return <String, double>{'value': brightness};
+      case 'setScreenBrightness':
+      case 'device.setScreenBrightness':
+        final value = (request.data['value'] as num?)?.toDouble() ?? 1.0;
+        final ok = await Native.setScreenBrightness(value);
+        return <String, Object>{'ok': ok, 'value': value.clamp(0.0, 1.0)};
+      case 'makePhoneCall':
+      case 'system.makePhoneCall':
+        final phoneNumber = _requiredString(request.data, 'phoneNumber');
+        final ok = await Native.makePhoneCall(phoneNumber);
+        return <String, bool>{'ok': ok};
+      case 'onUserCaptureScreen':
+      case 'system.onUserCaptureScreen':
+        final subId =
+            _optionalString(request.data, 'subscriptionId') ?? _uuid.v4();
+        _nativeSubscriptions.remove(subId)?.cancel();
+        _nativeSubscriptions[subId] = Native.onUserCaptureScreen((timestamp) {
+          _events.add(
+            JsBridgeEvent(
+              name: 'system.userCaptureScreen',
+              data: <String, Object?>{
+                'subscriptionId': subId,
+                'timestamp': timestamp.toIso8601String(),
+              },
+            ),
+          );
+        });
+        return <String, String>{'subscriptionId': subId};
+      case 'offUserCaptureScreen':
+      case 'system.offUserCaptureScreen':
+        final subId = _requiredString(request.data, 'subscriptionId');
+        final removed = _nativeSubscriptions.remove(subId);
+        removed?.cancel();
+        return <String, Object>{'removed': removed != null};
+      case 'onThemeChange':
+      case 'system.onThemeChange':
+        final subId =
+            _optionalString(request.data, 'subscriptionId') ?? _uuid.v4();
+        _nativeSubscriptions.remove(subId)?.cancel();
+        _nativeSubscriptions[subId] = Native.onThemeChange((brightness) {
+          _events.add(
+            JsBridgeEvent(
+              name: 'system.themeChange',
+              data: <String, Object?>{
+                'subscriptionId': subId,
+                'brightness': brightness.name,
+              },
+            ),
+          );
+        });
+        return <String, String>{
+          'subscriptionId': subId,
+          'currentBrightness': Native.system.currentBrightness.name,
+        };
+      case 'offThemeChange':
+      case 'system.offThemeChange':
+        final subId = _requiredString(request.data, 'subscriptionId');
+        final removed = _nativeSubscriptions.remove(subId);
+        removed?.cancel();
+        return <String, Object>{'removed': removed != null};
+      case 'onResize':
+      case 'system.onResize':
+        final subId =
+            _optionalString(request.data, 'subscriptionId') ?? _uuid.v4();
+        _nativeSubscriptions.remove(subId)?.cancel();
+        _nativeSubscriptions[subId] = Native.onResize((size) {
+          _events.add(
+            JsBridgeEvent(
+              name: 'system.resize',
+              data: <String, Object?>{
+                'subscriptionId': subId,
+                'width': size.width,
+                'height': size.height,
+              },
+            ),
+          );
+        });
+        final currentSize = Native.system.currentWindowSize;
+        return <String, Object>{
+          'subscriptionId': subId,
+          'currentSize': <String, double>{
+            'width': currentSize.width,
+            'height': currentSize.height,
+          },
+        };
+      case 'offResize':
+      case 'system.offResize':
+        final subId = _requiredString(request.data, 'subscriptionId');
+        final removed = _nativeSubscriptions.remove(subId);
+        removed?.cancel();
+        return <String, Object>{'removed': removed != null};
+      case 'onMemoryWarning':
+      case 'system.onMemoryWarning':
+        final subId =
+            _optionalString(request.data, 'subscriptionId') ?? _uuid.v4();
+        _nativeSubscriptions.remove(subId)?.cancel();
+        _nativeSubscriptions[subId] = Native.onMemoryWarning((timestamp) {
+          _events.add(
+            JsBridgeEvent(
+              name: 'system.memoryWarning',
+              data: <String, Object?>{
+                'subscriptionId': subId,
+                'timestamp': timestamp.toIso8601String(),
+              },
+            ),
+          );
+        });
+        return <String, String>{'subscriptionId': subId};
+      case 'offMemoryWarning':
+      case 'system.offMemoryWarning':
+        final subId = _requiredString(request.data, 'subscriptionId');
+        final removed = _nativeSubscriptions.remove(subId);
+        removed?.cancel();
+        return <String, Object>{'removed': removed != null};
+      case 'onAccelerometerChange':
+      case 'sensor.onAccelerometerChange':
+        final subId =
+            _optionalString(request.data, 'subscriptionId') ?? _uuid.v4();
+        final interval = _optionalInt(request.data, 'interval') ?? 200;
+        _nativeSubscriptions.remove(subId)?.cancel();
+        _nativeSubscriptions[subId] = Native.onAccelerometerChange((event) {
+          _events.add(
+            JsBridgeEvent(
+              name: 'sensor.accelerometerChange',
+              data: <String, Object?>{
+                'subscriptionId': subId,
+                'x': event.x,
+                'y': event.y,
+                'z': event.z,
+                'timestamp': event.timestamp.toIso8601String(),
+              },
+            ),
+          );
+        }, intervalMs: interval);
+        return <String, String>{'subscriptionId': subId};
+      case 'offAccelerometerChange':
+      case 'sensor.offAccelerometerChange':
+      case 'sensor.offAccelerometer':
+        final subId = _optionalString(request.data, 'subscriptionId');
+        if (subId != null) {
+          final removed = _nativeSubscriptions.remove(subId);
+          removed?.cancel();
+        } else {
+          Native.offAccelerometer();
+        }
+        return const <String, bool>{'ok': true};
+      case 'onGyroscopeChange':
+      case 'sensor.onGyroscopeChange':
+        final subId =
+            _optionalString(request.data, 'subscriptionId') ?? _uuid.v4();
+        final interval = _optionalInt(request.data, 'interval') ?? 200;
+        _nativeSubscriptions.remove(subId)?.cancel();
+        _nativeSubscriptions[subId] = Native.onGyroscopeChange((event) {
+          _events.add(
+            JsBridgeEvent(
+              name: 'sensor.gyroscopeChange',
+              data: <String, Object?>{
+                'subscriptionId': subId,
+                'x': event.x,
+                'y': event.y,
+                'z': event.z,
+                'timestamp': event.timestamp.toIso8601String(),
+              },
+            ),
+          );
+        }, intervalMs: interval);
+        return <String, String>{'subscriptionId': subId};
+      case 'offGyroscopeChange':
+      case 'sensor.offGyroscopeChange':
+      case 'sensor.offGyroscope':
+        final subId = _optionalString(request.data, 'subscriptionId');
+        if (subId != null) {
+          final removed = _nativeSubscriptions.remove(subId);
+          removed?.cancel();
+        } else {
+          Native.offGyroscope();
+        }
+        return const <String, bool>{'ok': true};
+      case 'onProximityChange':
+      case 'sensor.onProximityChange':
+        final subId =
+            _optionalString(request.data, 'subscriptionId') ?? _uuid.v4();
+        _nativeSubscriptions.remove(subId)?.cancel();
+        _nativeSubscriptions[subId] = Native.onProximityChange((event) {
+          _events.add(
+            JsBridgeEvent(
+              name: 'sensor.proximityChange',
+              data: <String, Object?>{
+                'subscriptionId': subId,
+                'distance': event.distance,
+                'isNear': event.isNear,
+              },
+            ),
+          );
+        });
+        return <String, String>{'subscriptionId': subId};
+      case 'offProximityChange':
+      case 'sensor.offProximityChange':
+      case 'sensor.offProximity':
+        final subId = _optionalString(request.data, 'subscriptionId');
+        if (subId != null) {
+          final removed = _nativeSubscriptions.remove(subId);
+          removed?.cancel();
+        } else {
+          Native.offProximity();
+        }
+        return const <String, bool>{'ok': true};
       case 'diagnostics.reportHostPing':
         final payload = <String, Object?>{
           'pingId': _requiredString(request.data, 'pingId'),
@@ -477,6 +702,10 @@ class JsApiDispatcher {
       await subscription.cancel();
     }
     _subscriptions.clear();
+    for (final subscription in _nativeSubscriptions.values) {
+      await subscription.cancel();
+    }
+    _nativeSubscriptions.clear();
     _uploadEventSubscriptions.clear();
     await _uploadEventsSubscription.cancel();
     _fileReferences.clear();
@@ -610,18 +839,43 @@ class JsApiDispatcher {
     }
   }
 
-  MediaPickRequest _mediaPickRequest(Map<String, dynamic> data) =>
-      MediaPickRequest(
-        allowMultiple: data['allowMultiple'] == true,
-        preserveOriginal: data['preserveOriginal'] != false,
-        imageQuality: _optionalInt(data, 'imageQuality'),
-        maxWidth: _optionalDouble(data, 'maxWidth'),
-        maxHeight: _optionalDouble(data, 'maxHeight'),
-        maxDuration:
-            _optionalInt(data, 'maxDurationSeconds') == null
-                ? null
-                : Duration(seconds: _optionalInt(data, 'maxDurationSeconds')!),
-      );
+  MediaPickRequest _mediaPickRequest(Map<String, dynamic> data) {
+    final count = _optionalInt(data, 'count') ?? _optionalInt(data, 'maxCount');
+    return MediaPickRequest(
+      allowMultiple: data['allowMultiple'] == true || (count != null && count > 1),
+      maxCount: count,
+      preserveOriginal: data['preserveOriginal'] != false,
+      imageQuality: _optionalInt(data, 'imageQuality'),
+      maxWidth: _optionalDouble(data, 'maxWidth'),
+      maxHeight: _optionalDouble(data, 'maxHeight'),
+      maxDuration:
+          _optionalInt(data, 'maxDurationSeconds') == null
+              ? null
+              : Duration(seconds: _optionalInt(data, 'maxDurationSeconds')!),
+    );
+  }
+
+  FilePickerRequest _filePickerRequest(Map<String, dynamic> data) {
+    final count = _optionalInt(data, 'count') ?? _optionalInt(data, 'maxCount');
+    final rawExt = data['allowedExtensions'] ?? data['extensions'];
+    final extensions = rawExt is List ? _stringList(rawExt) : <String>[];
+    final typeString = _optionalString(data, 'fileType') ?? _optionalString(data, 'type');
+    final category = switch (typeString?.toLowerCase()) {
+      'image' || 'images' => FileTypeCategory.image,
+      'video' || 'videos' => FileTypeCategory.video,
+      'audio' || 'audios' => FileTypeCategory.audio,
+      'media' => FileTypeCategory.media,
+      'custom' => FileTypeCategory.custom,
+      _ => extensions.isNotEmpty ? FileTypeCategory.custom : FileTypeCategory.any,
+    };
+    return FilePickerRequest(
+      allowMultiple: data['allowMultiple'] == true || (count != null && count > 1),
+      maxCount: count,
+      allowedExtensions: extensions,
+      fileType: category,
+      dialogTitle: _optionalString(data, 'title') ?? _optionalString(data, 'dialogTitle'),
+    );
+  }
 
   int _int(Map<String, dynamic> data, String key, {required int fallback}) =>
       _optionalInt(data, key) ?? fallback;

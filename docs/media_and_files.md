@@ -42,7 +42,17 @@ H5 也可以使用 `<input type="file">` 直接取得浏览器 `File` 对象，�
 
 ### `chooseFile(request)`
 
-参数：`allowMultiple=false`、`allowedExtensions=[]`、`dialogTitle?`。用户取消时返回空数组。
+`FilePickerRequest`：
+
+| 参数 | 类型 | 默认 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `allowMultiple` | boolean | false | 是否开启多选模式（多选时原生选择器支持复选框） |
+| `maxCount` | int? | null | 多选时最大允许选择的文件数（超额时截取前 N 个） |
+| `fileType` | string | "any" | 文件分类：`any`、`image`、`video`、`audio`、`media`、`custom` |
+| `allowedExtensions` | string[] | `[]` | 允许的文件扩展名列表（如 `['pdf', 'docx', 'xlsx']`） |
+| `dialogTitle` | string? | null | 系统的对话框标题 |
+
+用户取消时返回空数组 `[]`；成功时返回 `List<SelectedFile>`。
 
 ### `saveFile(request)`
 
@@ -57,8 +67,9 @@ H5 也可以使用 `<input type="file">` 直接取得浏览器 `File` 对象，�
 `MediaPickRequest`：
 
 | 参数 | 类型 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `allowMultiple` | boolean | false | 仅相册图片选择支持多选 |
+| :--- | :--- | :--- | :--- |
+| `allowMultiple` | boolean | false | 仅相册图片选择支持多选（多选时原生展示多选复选框/序号） |
+| `maxCount` / `count` | int? | 9 | 多选时最大允许选择的图片数量（传给系统 limit，超额自动截断） |
 | `preserveOriginal` | boolean | true | true 时不请求 picker 压缩；视频选择始终保留源视频 |
 | `imageQuality` | int? | 85（仅非原图） | 0–100，交给 picker 压缩 |
 | `maxWidth` / `maxHeight` | double? | null | 仅非原图时请求最大尺寸 |

@@ -6,6 +6,9 @@ import '../core/config/app_environment.dart';
 import '../core/capabilities/client_capability_service.dart';
 import '../core/device/client_device_context.dart';
 import '../core/database/unified_database.dart';
+import '../core/deep_link/deep_link_handler.dart';
+import '../core/deep_link/deep_link_parser.dart';
+import '../core/deep_link/deep_link_service.dart';
 import '../core/jsbridge/js_api_dispatcher.dart';
 import '../core/notifications/local_notification_service.dart';
 import '../core/platform/platform_facade.dart';
@@ -14,6 +17,10 @@ import '../core/services/file/file_picker_service.dart';
 import '../core/services/file/file_upload_service.dart';
 import '../core/services/media/media_service.dart';
 import '../core/services/scan/scan_code_service.dart';
+import '../core/services/task/app_task_manager.dart';
+import '../core/services/task/app_task_manager_android.dart';
+import '../core/services/task/app_task_manager_stub.dart';
+import '../features/workbench/data/workbench_repository.dart';
 import 'app.dart';
 import 'app_navigation.dart';
 import 'application_providers.dart';
@@ -80,6 +87,30 @@ Future<void> bootstrap() async {
       navigatorProvider: () => rootNavigatorKey.currentState,
       uploadService: fileUploadService,
     );
+    final appTaskManager = platformFacade.kind == PlatformKind.android
+        ? AndroidAppTaskManager()
+        : StubAppTaskManager(
+            navigatorProvider: () => rootNavigatorKey.currentState,
+          );
+    final workbenchRepository = MockWorkbenchRepository();
+    final deepLinkParser = DeepLinkParser(
+      allowedCustomSchemes: environment.deepLinkCustomSchemes,
+      allowedHosts: environment.deepLinkAllowedHosts,
+    );
+    final deepLinkHandler = DeepLinkHandler(
+      navigatorProvider: () => rootNavigatorKey.currentState,
+      workbenchRepositoryProvider: () => workbenchRepository,
+      appTaskManagerProvider: () => appTaskManager,
+    );
+    final deepLinkService = DeepLinkService(
+      parser: deepLinkParser,
+      handler: deepLinkHandler,
+    );
+    try {
+      await deepLinkService.initialize();
+    } catch (e) {
+      debugPrint('Warning: Deep link service initialization failed: $e');
+    }
 
     runApp(
       ProviderScope(
@@ -94,6 +125,9 @@ Future<void> bootstrap() async {
           jsApiDispatcherProvider.overrideWithValue(jsApiDispatcher),
           unifiedDatabaseProvider.overrideWithValue(database),
           mediaServiceProvider.overrideWithValue(mediaService),
+          appTaskManagerProvider.overrideWithValue(appTaskManager),
+          workbenchRepositoryProvider.overrideWithValue(workbenchRepository),
+          deepLinkServiceProvider.overrideWith((ref) => deepLinkService),
         ],
         child: const GotoImApp(),
       ),
