@@ -43,7 +43,7 @@ Web
 
 #### 功能原则
 
-	- 移动端能用，那么Andorid/ios/平板 就要能都能用
+	- 移动端能用，那么Andorid/ios/平板 就要能都能用（如果不支持要特别说明）
 	- 桌面端能用，那么macOS/Windows就是一定要能用，Linux优先级靠后。
 	- 最后才是WEB
 
@@ -159,8 +159,6 @@ lib/
 ├── services/
 ├── features/
 │   ├── auth/
-│   ├── session/
-│   ├── chat/
 │   ├── contact/
 │   ├── user/
 │   ├── media/
@@ -180,7 +178,37 @@ lib/
 
 ## 5. HTTP / Dio
 
-#### 全局只维护统一的 Dio Client。
+### Dio Client
+
+全局统一维护两个 Dio Client，禁止业务代码自行创建 `Dio()`。
+
+1. **Auth Dio**
+   - 用于认证、授权、Token 相关请求。
+   - 主要请求路径为 `/connect/**`。
+   - 例如：
+     - `/connect/token`
+     - `/connect/userinfo`
+     - `/connect/introspect`
+     - `/connect/revocation`
+   - 认证服务的 BaseUrl、Header、拦截器独立维护。
+
+2. **API Dio**
+   - 用于普通业务 API 请求。
+   - 主要请求路径为 `/api/**`。
+   - 例如：
+     - `/api/chat/**`
+     - `/api/account/**`
+     - `/api/app/**`
+   - 统一处理 AccessToken、错误、日志、刷新 Token 等公共逻辑。
+
+### 使用原则
+
+- 优先复用现有两个 Dio Client，不要在 Repository、Service、页面中直接 `Dio()`。
+- 根据请求所属服务选择 Dio Client，不要仅根据 URL 字符串临时创建 Client。
+- BaseUrl、超时、Header、代理、证书等统一在 HTTP 模块配置。
+- Token 刷新、401 重试等逻辑集中处理，业务代码不要重复实现。
+- 如后续确实出现独立微服务且配置差异明显，再按实际需要增加新的 Dio Client，不提前过度设计。
+
 
 必须支持：
 
@@ -220,7 +248,7 @@ hasToken()
 
 SignalR 也必须读取同一套 TokenProvider。
 
-#### 命名规则
+### 命名规则
 
 - 后端是AbpVnext，方法名、请求参，反回参可以做参考
 - 请求Api命名xxxxApi 如：  AuthApi，  SessionUnitApi,  MessageApi
@@ -551,6 +579,17 @@ xxx_stub.dart
 
 共享业务代码禁止直接 import `dart:html` 或桌面专用库。
 
+不要过度设计，不必每个都抽象，必要时才抽象
+
+```
+- 避免过度设计，不要求所有实现都增加抽象层。
+- 只有在存在多平台差异、第三方实现可替换、需要隔离平台 API，或已有明确多实现需求时才进行抽象。
+- 单一、简单、稳定的实现直接使用即可，不要为了“未来可能扩展”提前创建接口、基类、Factory、Adapter 等。
+- 优先保持代码简单、清晰、易维护；出现实际扩展需求后再重构抽象。
+```
+
+
+
 ---
 
 ## 15. 桌面端
@@ -655,7 +694,47 @@ deep link
 
 ---
 
+### Native 能力
+
+统一在 `Native`（或现有设备能力模块）中维护系统/设备能力，业务页面不要直接调用 MethodChannel 或平台原生 API。
+
+需要支持：
+
+- `onUserCaptureScreen`：监听用户主动截屏。
+- `vibrate`：设备振动 / 触觉反馈。
+- `onThemeChange`：监听系统 Light/Dark Theme 变化。
+- `onMemoryWarning`：监听系统内存不足。
+- `onAccelerometerChange` / `offAccelerometer`：加速度计，默认约 5 次/秒。
+- `onGyroscopeChange` / `offGyroscope`：陀螺仪。
+- `makePhoneCall`：拨打电话。
+- `setScreenBrightness` / `getScreenBrightness`：屏幕亮度。
+- `getBatteryInfo`：电量、充电状态等。
+- `onResize`：监听窗口尺寸/方向变化。
+- `onProximityChange` / `offProximity`：距离传感器。
+
+实现原则：
+
+- Flutter 自带能力优先直接使用。
+- 有成熟稳定插件时优先使用插件。
+- Flutter/插件无法满足时，再通过 MethodChannel / EventChannel 实现 Android、iOS 原生能力。
+- 不要求每个能力都创建 interface / service / adapter，保持最小必要封装。
+- 事件监听必须提供取消监听能力，避免重复订阅和内存泄漏。
+- 注意 Android/iOS 权限、生命周期及平台差异，不支持的平台明确返回 unsupported。
+- 所有 Native 能力在“开发诊断中心”提供独立测试入口，显示输入、返回值、事件数据及异常。
+
+但底层不需要做成一个几千行的 `Native.dart`。可以按职责简单拆：
+
+```
+native/
+├── native.dart
+├── sensor.dart
+├── device.dart
+└── system.dart
+```
+
 ## 18. WebView / JSBridge
+
+
 
 现有 UniApp H5 应尽量保持原 JS API。
 
