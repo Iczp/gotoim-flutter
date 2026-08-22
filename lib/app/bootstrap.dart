@@ -6,6 +6,9 @@ import '../core/config/app_environment.dart';
 import '../core/capabilities/client_capability_service.dart';
 import '../core/device/client_device_context.dart';
 import '../core/database/unified_database.dart';
+import '../core/deep_link/deep_link_handler.dart';
+import '../core/deep_link/deep_link_parser.dart';
+import '../core/deep_link/deep_link_service.dart';
 import '../core/jsbridge/js_api_dispatcher.dart';
 import '../core/notifications/local_notification_service.dart';
 import '../core/platform/platform_facade.dart';
@@ -90,6 +93,22 @@ Future<void> bootstrap() async {
             navigatorProvider: () => rootNavigatorKey.currentState,
           );
     final workbenchRepository = MockWorkbenchRepository();
+    final deepLinkParser = DeepLinkParser(
+      allowedCustomSchemes: environment.deepLinkCustomSchemes,
+      allowedHosts: environment.deepLinkAllowedHosts,
+    );
+    final deepLinkHandler = DeepLinkHandler(
+      navigatorProvider: () => rootNavigatorKey.currentState,
+    );
+    final deepLinkService = DeepLinkService(
+      parser: deepLinkParser,
+      handler: deepLinkHandler,
+    );
+    try {
+      await deepLinkService.initialize();
+    } catch (e) {
+      debugPrint('Warning: Deep link service initialization failed: $e');
+    }
 
     runApp(
       ProviderScope(
@@ -106,6 +125,7 @@ Future<void> bootstrap() async {
           mediaServiceProvider.overrideWithValue(mediaService),
           appTaskManagerProvider.overrideWithValue(appTaskManager),
           workbenchRepositoryProvider.overrideWithValue(workbenchRepository),
+          deepLinkServiceProvider.overrideWith((ref) => deepLinkService),
         ],
         child: const GotoImApp(),
       ),

@@ -87,6 +87,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             subtitle: '独立 Task 创建/复用、工作台动态应用、Android Document Task',
             onTap: () => context.push('/diagnostics/app-task'),
           ),
+          _Item(
+            icon: Icons.link_outlined,
+            title: 'Deep Link / App Links',
+            subtitle: 'URI 解析、聊天/用户/群组/扫码/工作台/OAuth 协议、执行与事件日志',
+            onTap: () => context.push('/diagnostics/deep-link'),
+          ),
         ],
       ),
     );

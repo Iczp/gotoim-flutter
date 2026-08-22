@@ -18,6 +18,7 @@ import '../../features/diagnostics/presentation/media_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/js_bridge_harness_page.dart';
 import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/app_task_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/deep_link_diagnostics_page.dart';
 import '../../features/workbench/presentation/workbench_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
@@ -104,6 +105,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/app-task',
         builder: (context, state) => const AppTaskDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/deep-link',
+        builder: (context, state) => const DeepLinkDiagnosticsPage(),
       ),
       GoRoute(
         path: '/workbench',

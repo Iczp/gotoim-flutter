@@ -20,6 +20,30 @@
       "languageVersion": "3.10"
     },
     {
+      "name": "app_links",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/app_links-7.2.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.12"
+    },
+    {
+      "name": "app_links_linux",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/app_links_linux-1.0.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "app_links_platform_interface",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/app_links_platform_interface-2.0.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.12"
+    },
+    {
+      "name": "app_links_web",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/app_links_web-1.0.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
       "name": "archive",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/archive-4.0.9",
       "packageUri": "lib/",
@@ -243,7 +267,7 @@
     },
     {
       "name": "flutter",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/packages/flutter",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -393,13 +417,13 @@
     },
     {
       "name": "flutter_test",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter_test",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/packages/flutter_test",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
     {
       "name": "flutter_web_plugins",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter_web_plugins",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -420,6 +444,12 @@
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/go_router-17.5.0",
       "packageUri": "lib/",
       "languageVersion": "3.10"
+    },
+    {
+      "name": "gtk",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/gtk-2.2.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "hooks",
@@ -807,7 +837,7 @@
     },
     {
       "name": "sky_engine",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/bin/cache/pkg/sky_engine",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -1030,7 +1060,7 @@
   ],
   "generator": "pub",
   "generatorVersion": "3.13.0",
-  "flutterRoot": "file:///E:/sdk/flutter-3.47.0-active",
+  "flutterRoot": "file:///E:/sdk/flutter-3.47.0-staged/flutter",
   "flutterVersion": "3.47.0",
   "pubCache": "file:///C:/Users/ZP/AppData/Local/Pub/Cache"
 }

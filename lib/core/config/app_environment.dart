@@ -40,6 +40,8 @@ class AppEnvironment {
     required this.jsBridgeUploadUrl,
     required this.jsBridgeUploadAllowedHosts,
     required this.enableNetworkLogging,
+    required this.deepLinkCustomSchemes,
+    required this.deepLinkAllowedHosts,
   });
 
   final AppFlavor flavor;
@@ -80,6 +82,12 @@ class AppEnvironment {
   /// Explicit allowlist for H5-requested upload destinations.
   final List<String> jsBridgeUploadAllowedHosts;
   final bool enableNetworkLogging;
+
+  /// Allowed custom URL schemes for deep links (e.g. gotoim-dev, gotoim).
+  final List<String> deepLinkCustomSchemes;
+
+  /// Allowed HTTPS domain hosts for universal/app links (e.g. gotoim.com).
+  final List<String> deepLinkAllowedHosts;
 
   static AppFlavor parseFlavor(String value) {
     return AppFlavor.values.firstWhere(
@@ -172,6 +180,12 @@ class AppEnvironment {
       ),
       enableNetworkLogging:
           dotenv.get('ENABLE_NETWORK_LOGGING', fallback: 'false') == 'true',
+      deepLinkCustomSchemes: _parseCsv(
+        dotenv.get('DEEP_LINK_SCHEMES', fallback: 'gotoim-dev,gotoim'),
+      ),
+      deepLinkAllowedHosts: _parseCsv(
+        dotenv.get('DEEP_LINK_ALLOWED_HOSTS', fallback: 'gotoim.com'),
+      ),
     );
   }
 
