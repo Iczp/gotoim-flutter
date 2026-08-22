@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import io.flutter.FlutterInjector
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
@@ -32,6 +33,10 @@ import com.example.gotoim_flutter.GotoIMApplication
  * needed by a MiniApp container (Theme, HTTP, Auth, WebView, JSBridge).
  */
 class MiniAppActivity : FlutterActivity() {
+
+    override fun getRenderMode(): RenderMode = RenderMode.texture
+
+    override fun shouldDestroyEngineWithHost(): Boolean = true
 
     companion object {
         private const val TAG = "MiniAppActivity"

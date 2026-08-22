@@ -9,6 +9,10 @@
         android:name=".GotoIMApplication"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
+        <!-- Disable Impeller on Android to prevent EGL_BAD_ACCESS driver crashes with multi-activity and WebViews -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

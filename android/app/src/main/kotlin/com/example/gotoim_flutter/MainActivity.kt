@@ -4,11 +4,14 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.example.gotoim_flutter.task.MiniAppActivity
 
 class MainActivity : FlutterActivity() {
+
+    override fun getRenderMode(): RenderMode = RenderMode.texture
 
     companion object {
         private const val TAG = "MainActivity"
