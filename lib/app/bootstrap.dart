@@ -14,6 +14,10 @@ import '../core/services/file/file_picker_service.dart';
 import '../core/services/file/file_upload_service.dart';
 import '../core/services/media/media_service.dart';
 import '../core/services/scan/scan_code_service.dart';
+import '../core/services/task/app_task_manager.dart';
+import '../core/services/task/app_task_manager_android.dart';
+import '../core/services/task/app_task_manager_stub.dart';
+import '../features/workbench/data/workbench_repository.dart';
 import 'app.dart';
 import 'app_navigation.dart';
 import 'application_providers.dart';
@@ -80,6 +84,12 @@ Future<void> bootstrap() async {
       navigatorProvider: () => rootNavigatorKey.currentState,
       uploadService: fileUploadService,
     );
+    final appTaskManager = platformFacade.kind == PlatformKind.android
+        ? AndroidAppTaskManager()
+        : StubAppTaskManager(
+            navigatorProvider: () => rootNavigatorKey.currentState,
+          );
+    final workbenchRepository = MockWorkbenchRepository();
 
     runApp(
       ProviderScope(
@@ -94,6 +104,8 @@ Future<void> bootstrap() async {
           jsApiDispatcherProvider.overrideWithValue(jsApiDispatcher),
           unifiedDatabaseProvider.overrideWithValue(database),
           mediaServiceProvider.overrideWithValue(mediaService),
+          appTaskManagerProvider.overrideWithValue(appTaskManager),
+          workbenchRepositoryProvider.overrideWithValue(workbenchRepository),
         ],
         child: const GotoImApp(),
       ),

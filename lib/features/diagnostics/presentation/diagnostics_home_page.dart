@@ -81,6 +81,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             subtitle: '相册、拍照、视频、缩略图、压缩、录音、图片识码与另存为',
             onTap: () => context.push('/diagnostics/media'),
           ),
+          _Item(
+            icon: Icons.tab_outlined,
+            title: '应用级任务栈',
+            subtitle: '独立 Task 创建/复用、工作台动态应用、Android Document Task',
+            onTap: () => context.push('/diagnostics/app-task'),
+          ),
         ],
       ),
     );
