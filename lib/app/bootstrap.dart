@@ -99,6 +99,8 @@ Future<void> bootstrap() async {
     );
     final deepLinkHandler = DeepLinkHandler(
       navigatorProvider: () => rootNavigatorKey.currentState,
+      workbenchRepositoryProvider: () => workbenchRepository,
+      appTaskManagerProvider: () => appTaskManager,
     );
     final deepLinkService = DeepLinkService(
       parser: deepLinkParser,

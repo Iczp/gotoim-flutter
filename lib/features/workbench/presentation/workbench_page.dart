@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/deep_link/deep_link_service.dart';
 import '../../../core/services/task/app_task_manager.dart';
 import '../data/workbench_models.dart';
 import '../data/workbench_repository.dart';
 
 /// The workbench tab page that displays dynamically loaded applications.
 ///
-/// Applications are fetched from [WorkbenchRepository] and displayed in a
-/// grid layout. Tapping an app opens it according to its [AppOpenMode].
+/// Supports opening applications via:
+/// 1. Direct task launch (Android Document Task / Flutter Page).
+/// 2. Uniform Deep Link dispatch (`gotoim-dev://workbench/{appId}`).
 class WorkbenchPage extends ConsumerStatefulWidget {
   const WorkbenchPage({super.key});
 
@@ -20,6 +23,7 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
   List<WorkbenchApp> _apps = <WorkbenchApp>[];
   bool _loading = true;
   String? _error;
+  bool _useDeepLinkMode = false;
 
   @override
   void initState() {
@@ -51,7 +55,7 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
     }
   }
 
-  Future<void> _openApp(WorkbenchApp app) async {
+  Future<void> _openAppDirect(WorkbenchApp app) async {
     try {
       final taskManager = ref.read(appTaskManagerProvider);
       await openWorkbenchApp(
@@ -66,6 +70,109 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
         );
       }
     }
+  }
+
+  Future<void> _openAppViaDeepLink(WorkbenchApp app) async {
+    final deepLinkUri = Uri.parse('gotoim-dev://workbench/${app.appId}');
+    try {
+      final service = ref.read(deepLinkServiceProvider);
+      final result = await service.handleUri(
+        deepLinkUri,
+        source: 'workbench_ui',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Deep Link 响应 (${result.status.name}): ${result.message}',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deep Link 打开失败：$e')),
+        );
+      }
+    }
+  }
+
+  void _showAppActionSheet(WorkbenchApp app) {
+    final deepLinkStr = 'gotoim-dev://workbench/${app.appId}';
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primaryContainer,
+                    child: Text(
+                      app.name.isNotEmpty ? app.name[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    app.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    'AppID: ${app.appId}  •  ${app.url}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.rocket_launch_outlined),
+                  title: const Text('常规打开 (直接启动)'),
+                  subtitle: Text('以 ${app.openMode.name} 模式独立启动应用'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openAppDirect(app);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.link),
+                  title: const Text('通过 Deep Link 唤醒'),
+                  subtitle: Text(deepLinkStr),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openAppViaDeepLink(app);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.copy_outlined),
+                  title: const Text('复制 Deep Link 链接'),
+                  subtitle: const Text('可用于外部网页唤醒或快捷方式'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Clipboard.setData(ClipboardData(text: deepLinkStr));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('已复制：$deepLinkStr')),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -103,7 +210,11 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
             final app = _apps[index];
             return _AppGridItem(
               app: app,
-              onTap: () => _openApp(app),
+              useDeepLink: _useDeepLinkMode,
+              onTap: () => _useDeepLinkMode
+                  ? _openAppViaDeepLink(app)
+                  : _openAppDirect(app),
+              onLongPress: () => _showAppActionSheet(app),
             );
           },
         ),
@@ -111,50 +222,133 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('工作台')),
+      appBar: AppBar(
+        title: const Text('工作台'),
+        actions: [
+          Tooltip(
+            message: _useDeepLinkMode ? '当前：Deep Link 打开模式' : '当前：直接启动模式',
+            child: Row(
+              children: [
+                Icon(
+                  _useDeepLinkMode ? Icons.link : Icons.open_in_new,
+                  size: 18,
+                  color: _useDeepLinkMode
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _useDeepLinkMode ? 'DeepLink' : '常规',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: _useDeepLinkMode
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.grey,
+                  ),
+                ),
+                Switch(
+                  value: _useDeepLinkMode,
+                  onChanged: (val) => setState(() => _useDeepLinkMode = val),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: content,
     );
   }
 }
 
 class _AppGridItem extends StatelessWidget {
-  const _AppGridItem({required this.app, required this.onTap});
+  const _AppGridItem({
+    required this.app,
+    required this.onTap,
+    required this.onLongPress,
+    this.useDeepLink = false,
+  });
 
   final WorkbenchApp app;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final bool useDeepLink;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Center(
-              child: Text(
-                app.name.isNotEmpty ? app.name[0].toUpperCase() : '?',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      colorScheme.primaryContainer,
+                      colorScheme.surfaceContainerHighest,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    app.name.isNotEmpty ? app.name[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
                 ),
               ),
-            ),
+              if (useDeepLink)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.link,
+                      size: 12,
+                      color: colorScheme.onPrimary,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
             app.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
             textAlign: TextAlign.center,
           ),
         ],

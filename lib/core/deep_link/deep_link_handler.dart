@@ -3,6 +3,9 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_navigation.dart';
+import '../../features/workbench/data/workbench_models.dart';
+import '../../features/workbench/data/workbench_repository.dart';
+import '../services/task/app_task_manager.dart';
 import 'deep_link_parser.dart';
 import 'deep_link_target.dart';
 
@@ -79,11 +82,14 @@ class PendingDeepLink {
 /// - Validates authentication state for protected targets.
 /// - Queues pending deep links when unauthenticated to resume after login.
 /// - Connects to existing [GoRouter] routes safely without creating mockup dummy pages.
+/// - Launches workbench mini-apps directly when appId is matched in [WorkbenchRepository].
 /// - Returns explicit [DeepLinkExecutionStatus.notImplemented] for unbuilt routes.
 class DeepLinkHandler {
   DeepLinkHandler({
     this.isAuthenticatedProvider,
     this.navigatorProvider,
+    this.workbenchRepositoryProvider,
+    this.appTaskManagerProvider,
   });
 
   /// Function to check whether current session is authenticated.
@@ -91,6 +97,12 @@ class DeepLinkHandler {
 
   /// Provider for the root NavigatorState (used for GoRouter context lookup).
   final NavigatorState? Function()? navigatorProvider;
+
+  /// Provider for the workbench application repository.
+  final WorkbenchRepository Function()? workbenchRepositoryProvider;
+
+  /// Provider for the application task manager.
+  final AppTaskManager Function()? appTaskManagerProvider;
 
   PendingDeepLink? _pendingDeepLink;
 
@@ -169,7 +181,7 @@ class DeepLinkHandler {
           return _handleScanLogin(target, qrCode, stopwatch);
 
         case WorkbenchDeepLink(:final appId):
-          return _handleWorkbench(target, appId, stopwatch);
+          return await _handleWorkbench(target, appId, stopwatch);
 
         case ChatDeepLink(:final sessionId, :final messageId):
           stopwatch.stop();
@@ -238,12 +250,27 @@ class DeepLinkHandler {
     }
   }
 
+  NavigatorState? _resolveNavigator() {
+    if (navigatorProvider != null) {
+      try {
+        return navigatorProvider!();
+      } catch (_) {
+        return null;
+      }
+    }
+    try {
+      return rootNavigatorKey.currentState;
+    } catch (_) {
+      return null;
+    }
+  }
+
   DeepLinkExecutionResult _handleScanLogin(
     ScanLoginDeepLink target,
     String qrCode,
     Stopwatch stopwatch,
   ) {
-    final nav = (navigatorProvider?.call() ?? rootNavigatorKey.currentState);
+    final nav = _resolveNavigator();
     if (nav != null && nav.context.mounted) {
       GoRouter.of(nav.context).push('/scan-login?scanText=$qrCode');
       stopwatch.stop();
@@ -264,19 +291,54 @@ class DeepLinkHandler {
     );
   }
 
-  DeepLinkExecutionResult _handleWorkbench(
+  Future<DeepLinkExecutionResult> _handleWorkbench(
     WorkbenchDeepLink target,
     String appId,
     Stopwatch stopwatch,
-  ) {
-    final nav = (navigatorProvider?.call() ?? rootNavigatorKey.currentState);
+  ) async {
+    final taskManager = appTaskManagerProvider?.call();
+    final repository = workbenchRepositoryProvider?.call();
+    final nav = _resolveNavigator();
+
+    // If an appId is specified, attempt to find the WorkbenchApp and open it directly.
+    if (repository != null && taskManager != null && appId.isNotEmpty) {
+      try {
+        final apps = await repository.getApps();
+        WorkbenchApp? matchedApp;
+        for (final app in apps) {
+          if (app.appId.toLowerCase() == appId.toLowerCase()) {
+            matchedApp = app;
+            break;
+          }
+        }
+
+        if (matchedApp != null) {
+          await openWorkbenchApp(
+            matchedApp,
+            taskManager: taskManager,
+            navigator: nav,
+          );
+          stopwatch.stop();
+          return DeepLinkExecutionResult(
+            status: DeepLinkExecutionStatus.success,
+            target: target,
+            message: '成功通过 DeepLink 打开独立应用: ${matchedApp.name} (${matchedApp.appId})',
+            elapsedMs: stopwatch.elapsedMilliseconds,
+          );
+        }
+      } catch (e) {
+        debugPrint('[DeepLinkHandler] Failed to launch workbench app "$appId": $e');
+      }
+    }
+
+    // Fallback: Navigate to the workbench home page
     if (nav != null && nav.context.mounted) {
       GoRouter.of(nav.context).push('/workbench');
       stopwatch.stop();
       return DeepLinkExecutionResult(
         status: DeepLinkExecutionStatus.success,
         target: target,
-        message: '成功导航至工作台页面: /workbench (appId: $appId)',
+        message: '未匹配到独立应用 "$appId"，已导航至工作台首页: /workbench',
         elapsedMs: stopwatch.elapsedMilliseconds,
       );
     }

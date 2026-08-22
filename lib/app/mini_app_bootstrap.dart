@@ -23,35 +23,43 @@ Future<void> miniAppBootstrap() async {
     defaultValue: 'development',
   );
   final flavor = AppEnvironment.parseFlavor(flavorName);
-  try {
-    await dotenv.load(fileName: '.env.${flavor.name}');
-  } catch (_) {
-    try {
-      await dotenv.load(fileName: '.env');
-    } catch (_) {}
-  }
 
-  final environment = AppEnvironment.fromDotEnv(flavor);
-  final platformFacade = createPlatformFacade();
-
-  // Get initial launch payload from native side.
+  // Concurrently load environment and fetch native launch payload to minimize white screen.
   const channel = MethodChannel('com.gotoim.mini_app');
 
-  MiniAppLaunchRequest? initialRequest;
-  try {
-    final payload = await channel.invokeMapMethod<String, dynamic>(
-      'getLaunchPayload',
-    );
-    if (payload != null) {
-      initialRequest = MiniAppLaunchRequest(
-        appId: payload['appId'] as String? ?? '',
-        url: Uri.parse(payload['url'] as String? ?? ''),
-        title: payload['title'] as String?,
-      );
-    }
-  } catch (e) {
-    debugPrint('[MiniApp] Failed to get launch payload: $e');
-  }
+  final results = await Future.wait<dynamic>([
+    () async {
+      try {
+        await dotenv.load(fileName: '.env.${flavor.name}');
+      } catch (_) {
+        try {
+          await dotenv.load(fileName: '.env');
+        } catch (_) {}
+      }
+      return AppEnvironment.fromDotEnv(flavor);
+    }(),
+    () async {
+      try {
+        final payload = await channel.invokeMapMethod<String, dynamic>(
+          'getLaunchPayload',
+        );
+        if (payload != null) {
+          return MiniAppLaunchRequest(
+            appId: payload['appId'] as String? ?? '',
+            url: Uri.parse(payload['url'] as String? ?? ''),
+            title: payload['title'] as String?,
+          );
+        }
+      } catch (e) {
+        debugPrint('[MiniApp] Failed to get launch payload: $e');
+      }
+      return null;
+    }(),
+  ]);
+
+  final environment = results[0] as AppEnvironment;
+  final initialRequest = results[1] as MiniAppLaunchRequest?;
+  final platformFacade = createPlatformFacade();
 
   runApp(
     MiniAppApp(
