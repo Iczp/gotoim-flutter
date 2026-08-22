@@ -138,6 +138,40 @@ abstract class MediaService {
   Future<void> cancelAudioRecording();
 }
 
+class GotoImAssetPickerTextDelegate extends AssetPickerTextDelegate {
+  const GotoImAssetPickerTextDelegate();
+
+  @override
+  String get confirm => '完成';
+
+  @override
+  String get preview => '预览';
+
+  @override
+  String get edit => '编辑';
+
+  @override
+  String get original => '原图';
+
+  @override
+  String get cancel => '取消';
+
+  @override
+  String get loadFailed => '加载失败';
+
+  @override
+  String get emptyList => '暂无可选择的图片或视频';
+
+  @override
+  String get unSupportedAssetType => '不支持的格式';
+
+  @override
+  String get unableToAccessAll => '无法访问所有相册资源';
+
+  @override
+  String get goToSystemSettings => '前往系统设置';
+}
+
 class DefaultMediaService implements MediaService {
   DefaultMediaService({
     required PlatformFacade platformFacade,
@@ -170,6 +204,7 @@ class DefaultMediaService implements MediaService {
           pickerConfig: AssetPickerConfig(
             maxAssets: request.allowMultiple ? (request.maxCount ?? 9) : 1,
             requestType: RequestType.image,
+            textDelegate: const GotoImAssetPickerTextDelegate(),
           ),
         );
         if (result != null) {
@@ -243,6 +278,7 @@ class DefaultMediaService implements MediaService {
           pickerConfig: const AssetPickerConfig(
             maxAssets: 1,
             requestType: RequestType.video,
+            textDelegate: GotoImAssetPickerTextDelegate(),
           ),
         );
         if (result != null && result.isNotEmpty) {
