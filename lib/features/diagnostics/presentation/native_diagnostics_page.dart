@@ -8,16 +8,16 @@ import '../../../core/native/native.dart';
 /// Development Diagnostics Center - Native / Device Capabilities Page.
 ///
 /// Features:
-/// - Screen Capture (Screenshot) event detection
+/// - Screen Capture (Screenshot) event detection & subscription lifecycle
 /// - Vibration / Haptic Feedback (timed and semantic impacts)
-/// - System Theme brightness changes
-/// - System Memory Pressure warnings
-/// - Accelerometer (~5 times/second live values)
-/// - Gyroscope (live rotation values)
-/// - Proximity Sensor (near/far status)
+/// - System Theme brightness changes & subscription lifecycle
+/// - System Memory Pressure warnings & subscription lifecycle
+/// - Accelerometer (~5 times/second live values) & subscription lifecycle
+/// - Gyroscope (live rotation values) & subscription lifecycle
+/// - Proximity Sensor (near/far status) & subscription lifecycle
 /// - Screen Brightness adjustment & query
 /// - Battery Info & charging state
-/// - Window Resize & orientation changes
+/// - Window Resize & orientation changes & subscription lifecycle
 /// - Phone Call dialer launch
 class NativeDiagnosticsPage extends ConsumerStatefulWidget {
   const NativeDiagnosticsPage({super.key});
@@ -36,6 +36,15 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
   final List<String> _themeEvents = [];
   final List<String> _resizeEvents = [];
 
+  // Subscription Statuses
+  bool _listeningTheme = true;
+  bool _listeningResize = true;
+  bool _listeningMemory = true;
+  bool _listeningScreenshot = true;
+  bool _listeningAccelerometer = false;
+  bool _listeningGyroscope = false;
+  bool _listeningProximity = false;
+
   // Device State
   BatteryInfo? _batteryInfo;
   double _screenBrightness = 1.0;
@@ -46,10 +55,6 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
   AccelerometerEvent? _accelerometerEvent;
   GyroscopeEvent? _gyroscopeEvent;
   ProximityEvent? _proximityEvent;
-
-  bool _listeningAccelerometer = false;
-  bool _listeningGyroscope = false;
-  bool _listeningProximity = false;
 
   // Subscriptions
   StreamSubscription<Brightness>? _themeSub;
@@ -66,61 +71,98 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
     _currentBrightness = Native.system.currentBrightness;
     _currentWindowSize = Native.system.currentWindowSize;
 
-    _subscribeSystemEvents();
+    _toggleTheme(true);
+    _toggleResize(true);
+    _toggleMemory(true);
+    _toggleScreenshot(true);
     _fetchDeviceStatus();
   }
 
-  void _subscribeSystemEvents() {
-    // Theme
-    _themeSub = Native.system.onThemeChange.listen((brightness) {
-      if (mounted) {
-        setState(() {
-          _currentBrightness = brightness;
-          _themeEvents.insert(0, '${_formatTime(DateTime.now())} - 切换为 ${brightness.name.toUpperCase()}');
-          if (_themeEvents.length > 10) _themeEvents.removeLast();
-        });
-      }
-    });
+  void _toggleTheme(bool enable) {
+    if (enable) {
+      _themeSub?.cancel();
+      _themeSub = Native.system.onThemeChange.listen((brightness) {
+        if (mounted) {
+          setState(() {
+            _currentBrightness = brightness;
+            _themeEvents.insert(0, '${_formatTime(DateTime.now())} - 切换为 ${brightness.name.toUpperCase()}');
+            if (_themeEvents.length > 10) _themeEvents.removeLast();
+          });
+        }
+      });
+      setState(() => _listeningTheme = true);
+    } else {
+      _themeSub?.cancel();
+      _themeSub = null;
+      setState(() => _listeningTheme = false);
+    }
+  }
 
-    // Resize
-    _resizeSub = Native.system.onResize.listen((size) {
-      if (mounted) {
-        setState(() {
-          _currentWindowSize = size;
-          _resizeEvents.insert(
-            0,
-            '${_formatTime(DateTime.now())} - 尺寸 ${size.width.toInt()}x${size.height.toInt()}',
+  void _toggleResize(bool enable) {
+    if (enable) {
+      _resizeSub?.cancel();
+      _resizeSub = Native.system.onResize.listen((size) {
+        if (mounted) {
+          setState(() {
+            _currentWindowSize = size;
+            _resizeEvents.insert(
+              0,
+              '${_formatTime(DateTime.now())} - 尺寸 ${size.width.toInt()}x${size.height.toInt()}',
+            );
+            if (_resizeEvents.length > 10) _resizeEvents.removeLast();
+          });
+        }
+      });
+      setState(() => _listeningResize = true);
+    } else {
+      _resizeSub?.cancel();
+      _resizeSub = null;
+      setState(() => _listeningResize = false);
+    }
+  }
+
+  void _toggleMemory(bool enable) {
+    if (enable) {
+      _memorySub?.cancel();
+      _memorySub = Native.system.onMemoryWarning.listen((timestamp) {
+        if (mounted) {
+          setState(() {
+            _memoryWarningCount++;
+            _lastMemoryWarning = timestamp;
+          });
+        }
+      });
+      setState(() => _listeningMemory = true);
+    } else {
+      _memorySub?.cancel();
+      _memorySub = null;
+      setState(() => _listeningMemory = false);
+    }
+  }
+
+  void _toggleScreenshot(bool enable) {
+    if (enable) {
+      _screenshotSub?.cancel();
+      _screenshotSub = Native.system.onUserCaptureScreen.listen((timestamp) {
+        if (mounted) {
+          setState(() {
+            _screenshotEvents.insert(0, '${_formatTime(timestamp)} - 检测到主动截屏');
+            if (_screenshotEvents.length > 10) _screenshotEvents.removeLast();
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('📸 捕获到用户截屏事件！'),
+              duration: Duration(seconds: 2),
+            ),
           );
-          if (_resizeEvents.length > 10) _resizeEvents.removeLast();
-        });
-      }
-    });
-
-    // Memory warning
-    _memorySub = Native.system.onMemoryWarning.listen((timestamp) {
-      if (mounted) {
-        setState(() {
-          _memoryWarningCount++;
-          _lastMemoryWarning = timestamp;
-        });
-      }
-    });
-
-    // Screenshot
-    _screenshotSub = Native.system.onUserCaptureScreen.listen((timestamp) {
-      if (mounted) {
-        setState(() {
-          _screenshotEvents.insert(0, '${_formatTime(timestamp)} - 检测到主动截屏');
-          if (_screenshotEvents.length > 10) _screenshotEvents.removeLast();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('📸 捕获到用户截屏事件！'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    });
+        }
+      });
+      setState(() => _listeningScreenshot = true);
+    } else {
+      _screenshotSub?.cancel();
+      _screenshotSub = null;
+      setState(() => _listeningScreenshot = false);
+    }
   }
 
   Future<void> _fetchDeviceStatus() async {
@@ -136,6 +178,7 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
 
   void _toggleAccelerometer(bool enable) {
     if (enable) {
+      _accelerometerSub?.cancel();
       _accelerometerSub = Native.onAccelerometerChange((event) {
         if (mounted) {
           setState(() => _accelerometerEvent = event);
@@ -152,6 +195,7 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
 
   void _toggleGyroscope(bool enable) {
     if (enable) {
+      _gyroscopeSub?.cancel();
       _gyroscopeSub = Native.onGyroscopeChange((event) {
         if (mounted) {
           setState(() => _gyroscopeEvent = event);
@@ -168,6 +212,7 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
 
   void _toggleProximity(bool enable) {
     if (enable) {
+      _proximitySub?.cancel();
       _proximitySub = Native.onProximityChange((event) {
         if (mounted) {
           setState(() => _proximityEvent = event);
@@ -271,73 +316,109 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               children: [
                 Icon(Icons.tune, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 8),
-                Text('系统事件监听 (System Events)', style: Theme.of(context).textTheme.titleMedium),
+                Text('系统事件监听与生命周期 (System Events)', style: Theme.of(context).textTheme.titleMedium),
               ],
             ),
+            const SizedBox(height: 4),
+            const Text('支持随时开启订阅与取消订阅：', style: TextStyle(fontSize: 12, color: Colors.grey)),
             const Divider(),
             const SizedBox(height: 8),
 
-            // Theme & Resize Status
+            // 1. Theme & Resize Row with toggles
             Row(
               children: [
                 Expanded(
-                  child: _infoTile(
-                    '系统主题 (Theme)',
-                    _currentBrightness.name.toUpperCase(),
+                  child: _subscriptionToggleTile(
+                    title: '系统主题 (Theme)',
+                    subtitle: _currentBrightness.name.toUpperCase(),
+                    isListening: _listeningTheme,
                     icon: _currentBrightness == Brightness.dark ? Icons.dark_mode : Icons.light_mode,
+                    onToggle: _toggleTheme,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _infoTile(
-                    '窗口尺寸 (Size)',
-                    '${_currentWindowSize.width.toInt()} x ${_currentWindowSize.height.toInt()}',
+                  child: _subscriptionToggleTile(
+                    title: '窗口尺寸 (Size)',
+                    subtitle: '${_currentWindowSize.width.toInt()} x ${_currentWindowSize.height.toInt()}',
+                    isListening: _listeningResize,
                     icon: Icons.aspect_ratio,
+                    onToggle: _toggleResize,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
-            // Memory Warning Status
-            _infoTile(
-              '内存不足告警 (Memory Pressure)',
-              _memoryWarningCount > 0
+            // 2. Memory Warning
+            _subscriptionToggleTile(
+              title: '内存告警 (Memory Pressure)',
+              subtitle: _memoryWarningCount > 0
                   ? '触发 $_memoryWarningCount 次 (最后: ${_formatTime(_lastMemoryWarning!)})'
-                  : '正常 (未收到内存告警)',
+                  : '未收到内存告警',
+              isListening: _listeningMemory,
               icon: Icons.memory,
-              color: _memoryWarningCount > 0 ? Colors.orange : Colors.green,
+              onToggle: _toggleMemory,
+              color: _memoryWarningCount > 0 ? Colors.orange : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
-            // Screenshot Events
-            Text('截屏监听 (onUserCaptureScreen):', style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: 4),
-            if (_screenshotEvents.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text('暂未检测到截屏事件（在手机上截图即可实时触发）', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              )
-            else
-              Column(
-                children: _screenshotEvents
-                    .map((event) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
+            // 3. Screenshot Events
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.camera_alt, size: 20, color: _listeningScreenshot ? Colors.green : Colors.grey),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.camera_alt, size: 14, color: Colors.blue),
-                              const SizedBox(width: 6),
-                              Text(event, style: const TextStyle(fontSize: 13, fontFamily: 'monospace')),
+                              const Text('截屏监听 (onUserCaptureScreen)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text(
+                                _listeningScreenshot ? '🟢 已开启订阅' : '⚪ 未订阅 / 已注销',
+                                style: TextStyle(fontSize: 11, color: _listeningScreenshot ? Colors.green.shade700 : Colors.grey),
+                              ),
                             ],
                           ),
-                        ))
-                    .toList(),
+                        ],
+                      ),
+                      Switch(
+                        value: _listeningScreenshot,
+                        onChanged: _toggleScreenshot,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (_screenshotEvents.isEmpty)
+                    const Text('暂无截屏记录（开启后在手机上截图即可实时捕获）', style: TextStyle(fontSize: 12, color: Colors.grey))
+                  else
+                    Column(
+                      children: _screenshotEvents
+                          .map((event) => Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.check, size: 14, color: Colors.blue),
+                                    const SizedBox(width: 6),
+                                    Text(event, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),
@@ -504,6 +585,8 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                 Text('运动与环境传感器 (Sensors)', style: Theme.of(context).textTheme.titleMedium),
               ],
             ),
+            const SizedBox(height: 4),
+            const Text('传感器实时监听与生命周期注销（offSensor）：', style: TextStyle(fontSize: 12, color: Colors.grey)),
             const Divider(),
             const SizedBox(height: 8),
 
@@ -518,7 +601,7 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                       'Z: ${_accelerometerEvent!.z.toStringAsFixed(2)} m/s²'
                   : '等待数据...',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
             // Gyroscope
             _sensorSection(
@@ -531,7 +614,7 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                       'Z: ${_gyroscopeEvent!.z.toStringAsFixed(2)} rad/s'
                   : '等待数据...',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
             // Proximity
             _sensorSection(
@@ -566,10 +649,33 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              Switch(
-                value: isListening,
-                onChanged: onToggle,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(
+                    isListening ? '🟢 已订阅 (监听中)' : '⚪ 未订阅 (已注销)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isListening ? Colors.green.shade700 : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isListening)
+                    TextButton(
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      onPressed: () => onToggle(false),
+                      child: const Text('注销'),
+                    ),
+                  Switch(
+                    value: isListening,
+                    onChanged: onToggle,
+                  ),
+                ],
               ),
             ],
           ),
@@ -588,33 +694,48 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
     );
   }
 
-  Widget _infoTile(String label, String value, {IconData? icon, Color? color}) {
+  Widget _subscriptionToggleTile({
+    required String title,
+    required String subtitle,
+    required bool isListening,
+    required void Function(bool) onToggle,
+    IconData? icon,
+    Color? color,
+  }) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 20, color: color ?? Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: color,
-                  ),
-                ),
-              ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 18, color: isListening ? (color ?? Theme.of(context).colorScheme.primary) : Colors.grey),
+                    const SizedBox(width: 6),
+                  ],
+                  Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Switch(
+                value: isListening,
+                onChanged: onToggle,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            isListening ? subtitle : '未订阅',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: isListening ? color : Colors.grey,
             ),
           ),
         ],
