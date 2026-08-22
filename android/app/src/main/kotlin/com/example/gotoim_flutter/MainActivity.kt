@@ -7,6 +7,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.example.gotoim_flutter.native.NativeDevicePlugin
 import com.example.gotoim_flutter.task.MiniAppActivity
 
 class MainActivity : FlutterActivity() {
@@ -18,9 +19,15 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL_NAME = "com.gotoim.task_manager"
     }
 
+    private var nativeDevicePlugin: NativeDevicePlugin? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        // Register Native / Device capabilities plugin
+        nativeDevicePlugin = NativeDevicePlugin.register(flutterEngine, applicationContext, this)
+
+        // Register Task Manager Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_NAME)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -67,5 +74,11 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onDestroy() {
+        nativeDevicePlugin?.onDestroy()
+        nativeDevicePlugin = null
+        super.onDestroy()
     }
 }

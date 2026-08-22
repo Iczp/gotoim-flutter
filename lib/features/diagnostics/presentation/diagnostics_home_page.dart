@@ -93,6 +93,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             subtitle: 'URI 解析、聊天/用户/群组/扫码/工作台/OAuth 协议、执行与事件日志',
             onTap: () => context.push('/diagnostics/deep-link'),
           ),
+          _Item(
+            icon: Icons.developer_mode_outlined,
+            title: 'Native / Device 设备能力',
+            subtitle: '截屏监听、振动反馈、系统主题、内存告警、加速度计、陀螺仪、距离传感器、亮度与电量',
+            onTap: () => context.push('/diagnostics/native'),
+          ),
         ],
       ),
     );
