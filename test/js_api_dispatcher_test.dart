@@ -10,6 +10,7 @@ import 'package:gotoim_flutter/core/notifications/local_notification_contract.da
 import 'package:gotoim_flutter/core/platform/platform_contract.dart';
 import 'package:gotoim_flutter/core/services/file/file_picker_service.dart';
 import 'package:gotoim_flutter/core/services/file/file_upload_service.dart';
+import 'package:gotoim_flutter/core/services/media/media_service.dart';
 import 'package:gotoim_flutter/core/services/scan/scan_code_service.dart';
 
 void main() {
@@ -265,15 +266,50 @@ void main() {
     ) as Map<String, dynamic>;
     expect(memSubRes['success'], isTrue);
   });
+
+  test('dispatches chooseFile and chooseImage with multi-selection, maxCount, and file types', () async {
+    final fileRes = jsonDecode(
+      await dispatcher.handleRaw(
+        '{"id":"pick-files","action":"chooseFile","data":{"allowMultiple":true,"maxCount":5,"allowedExtensions":["pdf","docx"],"fileType":"custom"}}',
+      ),
+    ) as Map<String, dynamic>;
+    expect(fileRes['success'], isTrue);
+    expect(capabilities.lastFilePickerRequest?.allowMultiple, isTrue);
+    expect(capabilities.lastFilePickerRequest?.maxCount, 5);
+    expect(capabilities.lastFilePickerRequest?.allowedExtensions, ['pdf', 'docx']);
+    expect(capabilities.lastFilePickerRequest?.fileType, FileTypeCategory.custom);
+
+    final imgRes = jsonDecode(
+      await dispatcher.handleRaw(
+        '{"id":"pick-img","action":"chooseImage","data":{"allowMultiple":true,"maxCount":9,"preserveOriginal":false,"imageQuality":80}}',
+      ),
+    ) as Map<String, dynamic>;
+    expect(imgRes['success'], isTrue);
+    expect(capabilities.lastMediaPickRequest?.allowMultiple, isTrue);
+    expect(capabilities.lastMediaPickRequest?.maxCount, 9);
+    expect(capabilities.lastMediaPickRequest?.preserveOriginal, isFalse);
+    expect(capabilities.lastMediaPickRequest?.imageQuality, 80);
+  });
 }
 
 class _FakeCapabilities implements ClientCapabilityService {
   final StreamController<ClientNetworkStatus> _networkController =
       StreamController<ClientNetworkStatus>.broadcast();
 
+  FilePickerRequest? lastFilePickerRequest;
+  MediaPickRequest? lastMediaPickRequest;
+
   @override
-  Future<List<SelectedFile>> chooseFile(FilePickerRequest request) async =>
-      const <SelectedFile>[];
+  Future<List<SelectedFile>> chooseFile(FilePickerRequest request) async {
+    lastFilePickerRequest = request;
+    return const <SelectedFile>[];
+  }
+
+  @override
+  Future<List<SelectedFile>> chooseImage(MediaPickRequest request) async {
+    lastMediaPickRequest = request;
+    return const <SelectedFile>[];
+  }
 
   @override
   Future<ScanCodeResult?> decodeImage(DecodeImageRequest request) async => null;

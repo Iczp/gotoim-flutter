@@ -18,6 +18,7 @@ enum ImageOutputFormat { jpeg, png, webp }
 class MediaPickRequest {
   const MediaPickRequest({
     this.allowMultiple = false,
+    this.maxCount,
     this.preserveOriginal = true,
     this.imageQuality,
     this.maxWidth,
@@ -26,6 +27,7 @@ class MediaPickRequest {
   });
 
   final bool allowMultiple;
+  final int? maxCount;
   final bool preserveOriginal;
   final int? imageQuality;
   final double? maxWidth;
@@ -155,13 +157,17 @@ class DefaultMediaService implements MediaService {
   Future<List<SelectedFile>> chooseImage(MediaPickRequest request) async {
     final files = <XFile>[];
     if (request.allowMultiple) {
-      files.addAll(
-        await _imagePicker.pickMultiImage(
-          maxWidth: request.preserveOriginal ? null : request.maxWidth,
-          maxHeight: request.preserveOriginal ? null : request.maxHeight,
-          imageQuality: request.effectiveImageQuality,
-        ),
+      final picked = await _imagePicker.pickMultiImage(
+        maxWidth: request.preserveOriginal ? null : request.maxWidth,
+        maxHeight: request.preserveOriginal ? null : request.maxHeight,
+        imageQuality: request.effectiveImageQuality,
+        limit: request.maxCount,
       );
+      if (request.maxCount != null && request.maxCount! > 0 && picked.length > request.maxCount!) {
+        files.addAll(picked.take(request.maxCount!));
+      } else {
+        files.addAll(picked);
+      }
     } else {
       final file = await _imagePicker.pickImage(
         source: ImageSource.gallery,

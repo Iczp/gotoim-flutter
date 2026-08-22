@@ -18,15 +18,28 @@ abstract class FilePickerService {
   Future<bool> clearTemporaryFiles();
 }
 
+enum FileTypeCategory {
+  any,
+  image,
+  video,
+  audio,
+  media,
+  custom,
+}
+
 class FilePickerRequest {
   const FilePickerRequest({
     this.allowMultiple = false,
+    this.maxCount,
     this.allowedExtensions = const <String>[],
+    this.fileType = FileTypeCategory.any,
     this.dialogTitle,
   });
 
   final bool allowMultiple;
+  final int? maxCount;
   final List<String> allowedExtensions;
+  final FileTypeCategory fileType;
   final String? dialogTitle;
 }
 
@@ -162,20 +175,30 @@ class SystemFilePickerService implements FilePickerService {
 
   @override
   Future<List<SelectedFile>> chooseFile(FilePickerRequest request) async {
-    final type =
-        request.allowedExtensions.isEmpty ? FileType.any : FileType.custom;
+    final type = switch (request.fileType) {
+      FileTypeCategory.image => FileType.image,
+      FileTypeCategory.video => FileType.video,
+      FileTypeCategory.audio => FileType.audio,
+      FileTypeCategory.media => FileType.media,
+      FileTypeCategory.custom => FileType.custom,
+      FileTypeCategory.any =>
+        request.allowedExtensions.isEmpty ? FileType.any : FileType.custom,
+    };
     final files = <PlatformFile>[];
     if (request.allowMultiple) {
-      files.addAll(
-        await FilePicker.pickFiles(
-          dialogTitle: request.dialogTitle,
-          type: type,
-          allowedExtensions:
-              request.allowedExtensions.isEmpty
-                  ? null
-                  : request.allowedExtensions,
-        ),
+      final picked = await FilePicker.pickFiles(
+        dialogTitle: request.dialogTitle,
+        type: type,
+        allowedExtensions:
+            request.allowedExtensions.isEmpty
+                ? null
+                : request.allowedExtensions,
       );
+      if (request.maxCount != null && request.maxCount! > 0 && picked.length > request.maxCount!) {
+        files.addAll(picked.take(request.maxCount!));
+      } else {
+        files.addAll(picked);
+      }
     } else {
       final file = await FilePicker.pickFile(
         dialogTitle: request.dialogTitle,

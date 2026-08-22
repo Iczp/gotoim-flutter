@@ -155,11 +155,7 @@ class JsApiDispatcher {
       case 'chooseFile':
       case 'file.chooseFile':
         final files = await _capabilities.chooseFile(
-          FilePickerRequest(
-            allowMultiple: request.data['allowMultiple'] == true,
-            allowedExtensions: _stringList(request.data['allowedExtensions']),
-            dialogTitle: _optionalString(request.data, 'title'),
-          ),
+          _filePickerRequest(request.data),
         );
         return <String, Object>{'files': _storeFiles(files)};
       case 'saveFile':
@@ -843,18 +839,43 @@ class JsApiDispatcher {
     }
   }
 
-  MediaPickRequest _mediaPickRequest(Map<String, dynamic> data) =>
-      MediaPickRequest(
-        allowMultiple: data['allowMultiple'] == true,
-        preserveOriginal: data['preserveOriginal'] != false,
-        imageQuality: _optionalInt(data, 'imageQuality'),
-        maxWidth: _optionalDouble(data, 'maxWidth'),
-        maxHeight: _optionalDouble(data, 'maxHeight'),
-        maxDuration:
-            _optionalInt(data, 'maxDurationSeconds') == null
-                ? null
-                : Duration(seconds: _optionalInt(data, 'maxDurationSeconds')!),
-      );
+  MediaPickRequest _mediaPickRequest(Map<String, dynamic> data) {
+    final count = _optionalInt(data, 'count') ?? _optionalInt(data, 'maxCount');
+    return MediaPickRequest(
+      allowMultiple: data['allowMultiple'] == true || (count != null && count > 1),
+      maxCount: count,
+      preserveOriginal: data['preserveOriginal'] != false,
+      imageQuality: _optionalInt(data, 'imageQuality'),
+      maxWidth: _optionalDouble(data, 'maxWidth'),
+      maxHeight: _optionalDouble(data, 'maxHeight'),
+      maxDuration:
+          _optionalInt(data, 'maxDurationSeconds') == null
+              ? null
+              : Duration(seconds: _optionalInt(data, 'maxDurationSeconds')!),
+    );
+  }
+
+  FilePickerRequest _filePickerRequest(Map<String, dynamic> data) {
+    final count = _optionalInt(data, 'count') ?? _optionalInt(data, 'maxCount');
+    final rawExt = data['allowedExtensions'] ?? data['extensions'];
+    final extensions = rawExt is List ? _stringList(rawExt) : <String>[];
+    final typeString = _optionalString(data, 'fileType') ?? _optionalString(data, 'type');
+    final category = switch (typeString?.toLowerCase()) {
+      'image' || 'images' => FileTypeCategory.image,
+      'video' || 'videos' => FileTypeCategory.video,
+      'audio' || 'audios' => FileTypeCategory.audio,
+      'media' => FileTypeCategory.media,
+      'custom' => FileTypeCategory.custom,
+      _ => extensions.isNotEmpty ? FileTypeCategory.custom : FileTypeCategory.any,
+    };
+    return FilePickerRequest(
+      allowMultiple: data['allowMultiple'] == true || (count != null && count > 1),
+      maxCount: count,
+      allowedExtensions: extensions,
+      fileType: category,
+      dialogTitle: _optionalString(data, 'title') ?? _optionalString(data, 'dialogTitle'),
+    );
+  }
 
   int _int(Map<String, dynamic> data, String key, {required int fallback}) =>
       _optionalInt(data, key) ?? fallback;

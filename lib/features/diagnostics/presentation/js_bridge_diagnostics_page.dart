@@ -507,12 +507,24 @@ class _JsBridgeDiagnosticsPageState
               child: const Text('拨打电话'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('file', 'chooseFile', <String, Object?>{'allowMultiple': false}),
-              child: const Text('选择文件'),
+              onPressed: () => _preset('file-single', 'chooseFile', <String, Object?>{'allowMultiple': false}),
+              child: const Text('单选文件'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('img', 'chooseImage', <String, Object?>{'allowMultiple': false}),
-              child: const Text('选择图片'),
+              onPressed: () => _preset('file-multi', 'chooseFile', <String, Object?>{
+                'allowMultiple': true,
+                'maxCount': 5,
+                'allowedExtensions': ['pdf', 'docx', 'xlsx', 'txt'],
+              }),
+              child: const Text('多选文件 (限5/文档)'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('img-single', 'chooseImage', <String, Object?>{'allowMultiple': false}),
+              child: const Text('单选图片'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('img-multi', 'chooseImage', <String, Object?>{'allowMultiple': true, 'maxCount': 9}),
+              child: const Text('多选图片 (限9张)'),
             ),
             OutlinedButton(onPressed: () => _preset('photo', 'takePhoto'), child: const Text('拍照')),
             OutlinedButton(onPressed: () => _preset('audio', 'startAudioRecording'), child: const Text('开始录音')),
