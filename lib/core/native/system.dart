@@ -89,7 +89,9 @@ class NativeSystem with WidgetsBindingObserver {
         }
       },
       onCancel: () {
-        sub?.cancel();
+        try {
+          sub?.cancel();
+        } catch (_) {}
         sub = null;
       },
     );

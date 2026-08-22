@@ -79,6 +79,25 @@ JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议
 | `offNetworkStatusChange` | `network.offStatusChange` | `{subscriptionId:string}` | `{removed:boolean}` |
 | `notification.getSupport` | — | `{}` | `{platform,isSupported,message}` |
 | `notification.requestPermission` | — | `{}` | `{status,message}` |
+| `vibrate` | `device.vibrate` | `{style?:light\|medium\|heavy\|selection\|vibrate,duration?:int}` | `{ok:true}` |
+| `getBatteryInfo` | `device.getBatteryInfo` | `{}` | `{level:int,isCharging:boolean,status:string}` |
+| `getScreenBrightness` | `device.getScreenBrightness` | `{}` | `{value:double}`（0.0 ~ 1.0） |
+| `setScreenBrightness` | `device.setScreenBrightness` | `{value:double}`（0.0 ~ 1.0） | `{ok:boolean,value:double}` |
+| `makePhoneCall` | `system.makePhoneCall` | `{phoneNumber:string}` | `{ok:boolean}` |
+| `onUserCaptureScreen` | `system.onUserCaptureScreen` | `{subscriptionId?:string}` | `{subscriptionId:string}` |
+| `offUserCaptureScreen` | `system.offUserCaptureScreen` | `{subscriptionId:string}` | `{removed:boolean}` |
+| `onThemeChange` | `system.onThemeChange` | `{subscriptionId?:string}` | `{subscriptionId,currentBrightness:light\|dark}` |
+| `offThemeChange` | `system.offThemeChange` | `{subscriptionId:string}` | `{removed:boolean}` |
+| `onResize` | `system.onResize` | `{subscriptionId?:string}` | `{subscriptionId,currentSize:{width,height}}` |
+| `offResize` | `system.offResize` | `{subscriptionId:string}` | `{removed:boolean}` |
+| `onMemoryWarning` | `system.onMemoryWarning` | `{subscriptionId?:string}` | `{subscriptionId:string}` |
+| `offMemoryWarning` | `system.offMemoryWarning` | `{subscriptionId:string}` | `{removed:boolean}` |
+| `onAccelerometerChange` | `sensor.onAccelerometerChange` | `{subscriptionId?:string,interval?:int}` | `{subscriptionId:string}` |
+| `offAccelerometerChange` | `sensor.offAccelerometerChange` | `{subscriptionId?:string}` | `{ok:true}` |
+| `onGyroscopeChange` | `sensor.onGyroscopeChange` | `{subscriptionId?:string,interval?:int}` | `{subscriptionId:string}` |
+| `offGyroscopeChange` | `sensor.offGyroscopeChange` | `{subscriptionId?:string}` | `{ok:true}` |
+| `onProximityChange` | `sensor.onProximityChange` | `{subscriptionId?:string}` | `{subscriptionId:string}` |
+| `offProximityChange` | `sensor.offProximityChange` | `{subscriptionId?:string}` | `{ok:true}` |
 | `diagnostics.reportHostPing` | — | `{pingId:string,receivedAt:string,success:boolean,systemInfo?:object,error?:object}` | `{received:true}`；仅 Debug Harness 用于上报主动调用回执 |
 
 `formats` 使用 Flutter 枚举名，例如 `qrCode`、`code128`、`ean13`；空数组表示默认全部。`decodeImage.base64` 可以是纯 base64，也可以是 `data:image/png;base64,...`，最大解码后大小为 10 MiB。文件选择结果包含平台可用的原始 URI/路径；`fileId` 只在当前宿主会话有效。URI/path 不是 H5 可直接访问的地址，后续操作必须传 `fileId`。媒体能力、上传白名单与平台限制见 [媒体与文件能力](media_and_files.md)。

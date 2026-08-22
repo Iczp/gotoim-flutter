@@ -45,7 +45,7 @@
 
 ### 附件打印方案
 
-### Native
+### Native（完成）
 
 实现 AGENTS.md 中的 Native / Device 能力：
 

@@ -13,6 +13,7 @@ import 'package:gotoim_flutter/core/services/file/file_upload_service.dart';
 import 'package:gotoim_flutter/core/services/scan/scan_code_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late _FakeCapabilities capabilities;
   late _FakeUploadService uploadService;
   late JsApiDispatcher dispatcher;
@@ -190,6 +191,80 @@ void main() {
       expect(response['success'], isTrue);
     },
   );
+
+  test('handles Native device JSAPIs (battery, brightness, vibrate, makePhoneCall)', () async {
+    final batteryRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"bat-1","action":"getBatteryInfo","data":{}}'),
+    ) as Map<String, dynamic>;
+    expect(batteryRes['success'], isTrue);
+    expect(batteryRes['data']['level'], isNotNull);
+
+    final brightRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"bri-1","action":"getScreenBrightness","data":{}}'),
+    ) as Map<String, dynamic>;
+    expect(brightRes['success'], isTrue);
+    expect(brightRes['data']['value'], isNotNull);
+
+    final setBrightRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"bri-2","action":"setScreenBrightness","data":{"value":0.7}}'),
+    ) as Map<String, dynamic>;
+    expect(setBrightRes['success'], isTrue);
+
+    final vibRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"vib-1","action":"vibrate","data":{"style":"light","duration":100}}'),
+    ) as Map<String, dynamic>;
+    expect(vibRes['success'], isTrue);
+
+    final callRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"call-1","action":"makePhoneCall","data":{"phoneNumber":"10086"}}'),
+    ) as Map<String, dynamic>;
+    expect(callRes['success'], isTrue);
+  });
+
+  test('manages Native sensor & system event subscriptions and unsubscriptions via JSAPI', () async {
+    final accSubRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"sub-acc","action":"onAccelerometerChange","data":{"subscriptionId":"acc-1"}}'),
+    ) as Map<String, dynamic>;
+    expect(accSubRes['success'], isTrue);
+    expect(accSubRes['data']['subscriptionId'], 'acc-1');
+
+    final accOffRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"off-acc","action":"offAccelerometerChange","data":{"subscriptionId":"acc-1"}}'),
+    ) as Map<String, dynamic>;
+    expect(accOffRes['success'], isTrue);
+
+    final gyroSubRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"sub-gyro","action":"onGyroscopeChange","data":{"subscriptionId":"gyro-1"}}'),
+    ) as Map<String, dynamic>;
+    expect(gyroSubRes['success'], isTrue);
+
+    final proxSubRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"sub-prox","action":"onProximityChange","data":{"subscriptionId":"prox-1"}}'),
+    ) as Map<String, dynamic>;
+    expect(proxSubRes['success'], isTrue);
+
+    final screenshotSubRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"sub-ss","action":"onUserCaptureScreen","data":{"subscriptionId":"ss-1"}}'),
+    ) as Map<String, dynamic>;
+    expect(screenshotSubRes['success'], isTrue);
+
+    final themeSubRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"sub-theme","action":"onThemeChange","data":{"subscriptionId":"theme-1"}}'),
+    ) as Map<String, dynamic>;
+    expect(themeSubRes['success'], isTrue);
+    expect(themeSubRes['data']['currentBrightness'], isNotNull);
+
+    final resizeSubRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"sub-resize","action":"onResize","data":{"subscriptionId":"resize-1"}}'),
+    ) as Map<String, dynamic>;
+    expect(resizeSubRes['success'], isTrue);
+    expect(resizeSubRes['data']['currentSize'], isNotNull);
+
+    final memSubRes = jsonDecode(
+      await dispatcher.handleRaw('{"id":"sub-mem","action":"onMemoryWarning","data":{"subscriptionId":"mem-1"}}'),
+    ) as Map<String, dynamic>;
+    expect(memSubRes['success'], isTrue);
+  });
 }
 
 class _FakeCapabilities implements ClientCapabilityService {

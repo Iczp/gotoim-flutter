@@ -237,6 +237,79 @@ class _JsBridgeDiagnosticsPageState
                 onPressed: () => _preset('audio', 'startAudioRecording'),
                 child: const Text('开始录音'),
               ),
+              OutlinedButton(
+                onPressed: () => _preset('battery', 'getBatteryInfo'),
+                child: const Text('电量查询'),
+              ),
+              OutlinedButton(
+                onPressed:
+                    () => _preset('vibrate', 'vibrate', <String, Object?>{
+                      'style': 'medium',
+                      'duration': 200,
+                    }),
+                child: const Text('设备振动'),
+              ),
+              OutlinedButton(
+                onPressed: () => _preset('brightness', 'getScreenBrightness'),
+                child: const Text('读取亮度'),
+              ),
+              OutlinedButton(
+                onPressed:
+                    () => _preset(
+                      'set-brightness',
+                      'setScreenBrightness',
+                      <String, Object?>{'value': 0.8},
+                    ),
+                child: const Text('设置亮度'),
+              ),
+              OutlinedButton(
+                onPressed:
+                    () => _preset(
+                      'call',
+                      'makePhoneCall',
+                      <String, Object?>{'phoneNumber': '10086'},
+                    ),
+                child: const Text('拨打电话'),
+              ),
+              OutlinedButton(
+                onPressed:
+                    () => _preset('screenshot', 'onUserCaptureScreen'),
+                child: const Text('截屏监听'),
+              ),
+              OutlinedButton(
+                onPressed:
+                    () => _preset(
+                      'acc',
+                      'onAccelerometerChange',
+                      <String, Object?>{'interval': 200},
+                    ),
+                child: const Text('加速度计'),
+              ),
+              OutlinedButton(
+                onPressed:
+                    () => _preset(
+                      'gyro',
+                      'onGyroscopeChange',
+                      <String, Object?>{'interval': 200},
+                    ),
+                child: const Text('陀螺仪'),
+              ),
+              OutlinedButton(
+                onPressed: () => _preset('prox', 'onProximityChange'),
+                child: const Text('距离传感器'),
+              ),
+              OutlinedButton(
+                onPressed: () => _preset('theme', 'onThemeChange'),
+                child: const Text('主题变化'),
+              ),
+              OutlinedButton(
+                onPressed: () => _preset('memory', 'onMemoryWarning'),
+                child: const Text('内存告警'),
+              ),
+              OutlinedButton(
+                onPressed: () => _preset('resize', 'onResize'),
+                child: const Text('窗口尺寸'),
+              ),
             ],
           ),
           const SizedBox(height: 12),

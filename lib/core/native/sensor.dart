@@ -155,7 +155,9 @@ class NativeSensor {
         }
       },
       onCancel: () {
-        sub?.cancel();
+        try {
+          sub?.cancel();
+        } catch (_) {}
         sub = null;
       },
     );
