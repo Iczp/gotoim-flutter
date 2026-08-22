@@ -174,10 +174,11 @@ class _ScanLoginConfirmationPageState
                       )
                       : request == null
                       ? const SizedBox.shrink()
-                      : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
+                      : SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                           if (_remainingSeconds != null)
                             Center(
                               child: AnimatedContainer(
@@ -305,6 +306,7 @@ class _ScanLoginConfirmationPageState
                           ),
                         ],
                       ),
+                    ),
             ),
           ),
         ),

@@ -122,11 +122,12 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
         platform == PlatformKind.macos ||
         platform == PlatformKind.windows;
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(title: const Text('JS Bridge Harness')),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Row(
               children: [
                 Expanded(
@@ -136,10 +137,8 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                     onSubmitted: (_) => _load(),
                     decoration: InputDecoration(
                       labelText: 'Harness 地址',
-                      helperText:
-                          platform == PlatformKind.android
-                              ? 'Android 模拟器默认 10.0.2.2；真机请填电脑局域网 IP。'
-                              : '本机服务可填 http://127.0.0.1:4173。',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       errorText: _inputError,
                       border: const OutlineInputBorder(),
                     ),
@@ -231,10 +230,15 @@ class _HostPingResult extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: SelectionArea(
-                  child: Text(
-                    'Flutter → H5 Ping 回执\n$value',
-                    style: const TextStyle(fontFamily: 'monospace'),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 70),
+                  child: SingleChildScrollView(
+                    child: SelectionArea(
+                      child: Text(
+                        'Flutter → H5 Ping 回执\n$value',
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                      ),
+                    ),
                   ),
                 ),
               ),
