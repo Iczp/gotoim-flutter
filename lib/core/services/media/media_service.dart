@@ -5,7 +5,9 @@ import 'package:image/image.dart' as image;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
+import '../../../app/app_navigation.dart';
 import '../../platform/platform_contract.dart';
 import '../file/file_picker_service.dart';
 import 'video_processing.dart';
@@ -69,13 +71,16 @@ class ProcessedImage {
   final int height;
   final int originalSize;
 
-  Map<String, Object> toJson() => <String, Object>{
+  int get size => bytes.lengthInBytes;
+
+  Map<String, Object?> toJson() => <String, Object?>{
     'fileName': fileName,
     'mimeType': mimeType,
-    'size': bytes.lengthInBytes,
-    'originalSize': originalSize,
     'width': width,
     'height': height,
+    'size': size,
+    'originalSize': originalSize,
+    'ratio': originalSize > 0 ? (size / originalSize) : 1,
   };
 }
 
@@ -155,6 +160,46 @@ class DefaultMediaService implements MediaService {
 
   @override
   Future<List<SelectedFile>> chooseImage(MediaPickRequest request) async {
+    final context = rootNavigatorKey.currentContext;
+    if (context != null &&
+        (_platformFacade.kind == PlatformKind.android ||
+            _platformFacade.kind == PlatformKind.ios)) {
+      try {
+        final result = await AssetPicker.pickAssets(
+          context,
+          pickerConfig: AssetPickerConfig(
+            maxAssets: request.allowMultiple ? (request.maxCount ?? 9) : 1,
+            requestType: RequestType.image,
+          ),
+        );
+        if (result != null) {
+          final xFiles = <XFile>[];
+          for (final asset in result) {
+            final file = request.preserveOriginal
+                ? await asset.originFile
+                : await asset.file;
+            if (file != null) {
+              xFiles.add(
+                XFile(
+                  file.path,
+                  name: asset.title,
+                  mimeType: asset.mimeType,
+                ),
+              );
+            }
+          }
+          if (xFiles.isNotEmpty) {
+            return Future.wait(xFiles.map(SelectedFile.fromXFile));
+          }
+          return const <SelectedFile>[];
+        } else {
+          return const <SelectedFile>[];
+        }
+      } catch (_) {
+        // Fallback to ImagePicker
+      }
+    }
+
     final files = <XFile>[];
     if (request.allowMultiple) {
       final picked = await _imagePicker.pickMultiImage(
@@ -163,7 +208,9 @@ class DefaultMediaService implements MediaService {
         imageQuality: request.effectiveImageQuality,
         limit: request.maxCount,
       );
-      if (request.maxCount != null && request.maxCount! > 0 && picked.length > request.maxCount!) {
+      if (request.maxCount != null &&
+          request.maxCount! > 0 &&
+          picked.length > request.maxCount!) {
         files.addAll(picked.take(request.maxCount!));
       } else {
         files.addAll(picked);
@@ -185,8 +232,39 @@ class DefaultMediaService implements MediaService {
       _pickOneImage(ImageSource.camera, request);
 
   @override
-  Future<SelectedFile?> chooseVideo(MediaPickRequest request) =>
-      _pickVideo(ImageSource.gallery, request);
+  Future<SelectedFile?> chooseVideo(MediaPickRequest request) async {
+    final context = rootNavigatorKey.currentContext;
+    if (context != null &&
+        (_platformFacade.kind == PlatformKind.android ||
+            _platformFacade.kind == PlatformKind.ios)) {
+      try {
+        final result = await AssetPicker.pickAssets(
+          context,
+          pickerConfig: const AssetPickerConfig(
+            maxAssets: 1,
+            requestType: RequestType.video,
+          ),
+        );
+        if (result != null && result.isNotEmpty) {
+          final file =
+              await result.first.originFile ?? await result.first.file;
+          if (file != null) {
+            return SelectedFile.fromXFile(
+              XFile(
+                file.path,
+                name: result.first.title,
+                mimeType: result.first.mimeType,
+              ),
+            );
+          }
+        }
+        return null;
+      } catch (_) {
+        // Fallback to ImagePicker
+      }
+    }
+    return _pickVideo(ImageSource.gallery, request);
+  }
 
   @override
   Future<SelectedFile?> recordVideo(MediaPickRequest request) =>
