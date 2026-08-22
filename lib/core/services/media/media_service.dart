@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as image;
 import 'package:image_picker/image_picker.dart';
@@ -138,38 +139,10 @@ abstract class MediaService {
   Future<void> cancelAudioRecording();
 }
 
-class GotoImAssetPickerTextDelegate extends AssetPickerTextDelegate {
-  const GotoImAssetPickerTextDelegate();
-
-  @override
-  String get confirm => '完成';
-
-  @override
-  String get preview => '预览';
-
-  @override
-  String get edit => '编辑';
-
-  @override
-  String get original => '原图';
-
-  @override
-  String get cancel => '取消';
-
-  @override
-  String get loadFailed => '加载失败';
-
-  @override
-  String get emptyList => '暂无可选择的图片或视频';
-
-  @override
-  String get unSupportedAssetType => '不支持的格式';
-
-  @override
-  String get unableToAccessAll => '无法访问所有相册资源';
-
-  @override
-  String get goToSystemSettings => '前往系统设置';
+AssetPickerTextDelegate _resolveAssetPickerTextDelegate(BuildContext context) {
+  final locale = Localizations.maybeLocaleOf(context) ??
+      WidgetsBinding.instance.platformDispatcher.locale;
+  return assetPickerTextDelegateFromLocale(locale);
 }
 
 class DefaultMediaService implements MediaService {
@@ -204,7 +177,7 @@ class DefaultMediaService implements MediaService {
           pickerConfig: AssetPickerConfig(
             maxAssets: request.allowMultiple ? (request.maxCount ?? 9) : 1,
             requestType: RequestType.image,
-            textDelegate: const GotoImAssetPickerTextDelegate(),
+            textDelegate: _resolveAssetPickerTextDelegate(context),
           ),
         );
         if (result != null) {
@@ -275,10 +248,10 @@ class DefaultMediaService implements MediaService {
       try {
         final result = await AssetPicker.pickAssets(
           context,
-          pickerConfig: const AssetPickerConfig(
+          pickerConfig: AssetPickerConfig(
             maxAssets: 1,
             requestType: RequestType.video,
-            textDelegate: GotoImAssetPickerTextDelegate(),
+            textDelegate: _resolveAssetPickerTextDelegate(context),
           ),
         );
         if (result != null && result.isNotEmpty) {
