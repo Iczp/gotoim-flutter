@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:app_settings/app_settings.dart';
+import 'package:network_info_plus/network_info_plus.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/capabilities/client_capability_models.dart';
@@ -21,12 +22,14 @@ class LocalFileServerPage extends ConsumerStatefulWidget {
 class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
   late final LocalFileServerService _service;
   String _selectedPath = '/';
+  Future<String?>? _wifiName;
 
   @override
   void initState() {
     super.initState();
     _service = ref.read(localFileServerProvider)
       ..addListener(_onServiceChanged);
+    _wifiName = NetworkInfo().getWifiName();
   }
 
   @override
@@ -74,7 +77,15 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
                         : Icons.wifi_off_outlined,
                   ),
                   title: Text(_networkLabel(status)),
-                  subtitle: const Text('请让访问设备连接到同一个 Wi‑Fi 网络。'),
+                  subtitle: FutureBuilder<String?>(
+                    future: _wifiName,
+                    builder:
+                        (context, ssid) => Text(
+                          status.types.contains(ClientNetworkType.wifi)
+                              ? '当前连接：${ssid.data?.replaceAll('"', '') ?? '已连接 Wi‑Fi'} · 访问设备也需连接此网络'
+                              : '请连接 Wi‑Fi 后再开启文件共享',
+                        ),
+                  ),
                   trailing: TextButton(
                     onPressed:
                         () => AppSettings.openAppSettings(

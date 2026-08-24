@@ -291,7 +291,7 @@
     },
     {
       "name": "flutter",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/packages/flutter",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -441,13 +441,13 @@
     },
     {
       "name": "flutter_test",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter_test",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/packages/flutter_test",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
     {
       "name": "flutter_web_plugins",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter_web_plugins",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -680,6 +680,18 @@
       "languageVersion": "2.12"
     },
     {
+      "name": "network_info_plus",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/network_info_plus-8.2.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.10"
+    },
+    {
+      "name": "network_info_plus_platform_interface",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/network_info_plus_platform_interface-3.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.10"
+    },
+    {
       "name": "nm",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/nm-0.5.0",
       "packageUri": "lib/",
@@ -909,7 +921,7 @@
     },
     {
       "name": "sky_engine",
-      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/bin/cache/pkg/sky_engine",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-staged/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -1180,7 +1192,7 @@
   ],
   "generator": "pub",
   "generatorVersion": "3.13.0",
-  "flutterRoot": "file:///E:/sdk/flutter-3.47.0-active",
+  "flutterRoot": "file:///E:/sdk/flutter-3.47.0-staged/flutter",
   "flutterVersion": "3.47.0",
   "pubCache": "file:///C:/Users/ZP/AppData/Local/Pub/Cache"
 }

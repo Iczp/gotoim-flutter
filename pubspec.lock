@@ -896,6 +896,22 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.0.0"
+  network_info_plus:
+    dependency: "direct main"
+    description:
+      name: network_info_plus
+      sha256: "096a700e2321507e2e587487a442b9baa7ba6cd4e70e3cc1ebbb8327d2632c2d"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "8.2.1"
+  network_info_plus_platform_interface:
+    dependency: transitive
+    description:
+      name: network_info_plus_platform_interface
+      sha256: "210b58064bc08e04b3a2b608f1f999cf768871fbd531961dc33a91720869d182"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "3.1.0"
   nm:
     dependency: transitive
     description:

@@ -18,6 +18,7 @@ class SharedFileManagerPage extends ConsumerStatefulWidget {
 class _SharedFileManagerPageState extends ConsumerState<SharedFileManagerPage> {
   late final LocalFileServerService _service;
   String _path = '/';
+  bool _showFolders = true;
 
   @override
   void initState() {
@@ -137,41 +138,56 @@ class _SharedFileManagerPageState extends ConsumerState<SharedFileManagerPage> {
                 },
                 child: const Icon(CupertinoIcons.back),
               ),
-      trailing: CupertinoButton(
-        padding: EdgeInsets.zero,
-        onPressed:
-            () => _nameDialog(
-              '新建文件夹',
-              (name) => _service.createSharedDirectory(_path, name),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: () => setState(() => _showFolders = !_showFolders),
+            child: Icon(
+              _showFolders
+                  ? CupertinoIcons.sidebar_left
+                  : CupertinoIcons.sidebar_right,
             ),
-        child: const Icon(CupertinoIcons.folder_badge_plus),
+          ),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed:
+                () => _nameDialog(
+                  '新建文件夹',
+                  (name) => _service.createSharedDirectory(_path, name),
+                ),
+            child: const Icon(CupertinoIcons.folder_badge_plus),
+          ),
+        ],
       ),
     ),
     child: SafeArea(
       child: Row(
         children: [
-          SizedBox(
-            width: 116,
-            child: ListView(
-              children:
-                  ['/', '/图片', '/视频', '/文档', '/下载', '/聊天文件']
-                      .map(
-                        (folder) => CupertinoButton(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 12,
+          if (_showFolders)
+            SizedBox(
+              width: 116,
+              child: ListView(
+                children:
+                    ['/', '/图片', '/视频', '/文档', '/下载', '/聊天文件']
+                        .map(
+                          (folder) => CupertinoButton(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 12,
+                            ),
+                            alignment: Alignment.centerLeft,
+                            onPressed: () => setState(() => _path = folder),
+                            child: Text(
+                              folder == '/' ? '全部文件' : folder.substring(1),
+                            ),
                           ),
-                          alignment: Alignment.centerLeft,
-                          onPressed: () => setState(() => _path = folder),
-                          child: Text(
-                            folder == '/' ? '全部文件' : folder.substring(1),
-                          ),
-                        ),
-                      )
-                      .toList(),
+                        )
+                        .toList(),
+              ),
             ),
-          ),
-          const VerticalDivider(width: 1),
+          if (_showFolders) const VerticalDivider(width: 1),
           Expanded(
             child: FutureBuilder<List<SharedFile>>(
               future: _service.listSharedFiles(_path),
@@ -203,14 +219,25 @@ class _SharedFileManagerPageState extends ConsumerState<SharedFileManagerPage> {
                                 itemBuilder: (context, index) {
                                   final file = files[index];
                                   return CupertinoListTile(
-                                    leading: Icon(
-                                      file.isDirectory
-                                          ? CupertinoIcons.folder_fill
-                                          : CupertinoIcons.doc,
-                                      color:
-                                          file.isDirectory
-                                              ? CupertinoColors.systemYellow
-                                              : CupertinoColors.activeBlue,
+                                    leading: Container(
+                                      width: 38,
+                                      height: 38,
+                                      decoration: BoxDecoration(
+                                        color: (file.isDirectory
+                                                ? CupertinoColors.systemYellow
+                                                : CupertinoColors.activeBlue)
+                                            .withValues(alpha: .18),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        file.isDirectory
+                                            ? CupertinoIcons.folder_fill
+                                            : CupertinoIcons.doc_fill,
+                                        color:
+                                            file.isDirectory
+                                                ? CupertinoColors.systemYellow
+                                                : CupertinoColors.activeBlue,
+                                      ),
                                     ),
                                     title: Text(file.name),
                                     subtitle: Text(
