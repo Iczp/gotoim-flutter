@@ -20,6 +20,7 @@ import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/app_task_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/deep_link_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/native_diagnostics_page.dart';
+import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/workbench/presentation/workbench_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
@@ -43,6 +44,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/', builder: (context, state) => const ApplicationShell()),
+      GoRoute(
+        path: '/local-file-server',
+        builder: (context, state) => const LocalFileServerPage(),
+      ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(
         path: '/scan-login',
@@ -110,6 +115,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/deep-link',
         builder: (context, state) => const DeepLinkDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/local-file-server',
+        builder: (context, state) => const LocalFileServerPage(),
       ),
       GoRoute(
         path: '/diagnostics/native',

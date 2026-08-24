@@ -94,6 +94,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/deep-link'),
           ),
           _Item(
+            icon: Icons.folder_shared_outlined,
+            title: '局域网文件管理',
+            subtitle: '本地 HTTP 服务、验证码认证、浏览器终端、分片上传与 Range 下载',
+            onTap: () => context.push('/diagnostics/local-file-server'),
+          ),
+          _Item(
             icon: Icons.developer_mode_outlined,
             title: 'Native / Device 设备能力',
             subtitle: '截屏监听、振动反馈、系统主题、内存告警、加速度计、陀螺仪、距离传感器、亮度与电量',
@@ -120,10 +126,10 @@ class _Item extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      );
+    leading: Icon(icon),
+    title: Text(title),
+    subtitle: Text(subtitle),
+    trailing: const Icon(Icons.chevron_right),
+    onTap: onTap,
+  );
 }

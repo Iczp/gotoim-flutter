@@ -26,6 +26,11 @@ class ApplicationShell extends ConsumerWidget {
           appBar: AppBar(
             title: const Text('Goto IM'),
             actions: [
+              IconButton(
+                tooltip: '局域网文件管理',
+                icon: const Icon(Icons.folder_shared_outlined),
+                onPressed: () => context.push('/local-file-server'),
+              ),
               if (kDebugMode)
                 IconButton(
                   tooltip: '开发诊断中心',

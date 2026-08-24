@@ -112,3 +112,27 @@
 
 ### 桌面角标
 
+
+
+当前未完成的主要功能：
+
+- IM 主链路：会话列表、聊天页、消息分页、发送队列、失败重试、撤回/删除/已读、未读数。
+- 本地优先数据层：业务 Model、DAO、Repository、监听流、增量同步；当前数据库主要是 schema 和诊断 CRUD。
+- SignalR → Repository → Drift → Riverpod 的真实同步链路。
+- 联系人、群组创建与管理、成员、会话设置、资料/个人中心、设备管理。
+- 附件上传下载、消息媒体渲染、图片预览、视频播放、语音播放、HTML 消息渲染。
+- 推送/离线通知、设备注册、桌面角标与独立聊天窗口。
+- 生物认证、分享、统计、统一日志、头像裁剪、地图/位置等 [`TODO.md`](F:\\Dev\\GotoIM\\gotoim-flutter\\TODO.md) 项目。
+- `freezed`、`json_serializable`、`build_runner` 尚未接入；这与项目规范中的 DTO/Model 生成要求不一致。
+- 工作台应从 Mock 数据源替换为 API + Drift 缓存。
+- Auth 配置允许可选 `AUTH_CLIENT_SECRET` 打包进 `.env`；生产环境必须改为公开客户端 / PKCE，不能在客户端保存真实 secret。
+
+建议下一步先做“会话与消息数据主链路”，先不急着堆聊天 UI：
+
+1. 建立 `features/session` 和 `features/chat` 的 DTO、领域模型、Drift 表/DAO；补齐 `localId / serverId / clientMessageId / sessionId / sessionMessageId` 与消息状态。
+2. 实现 `SessionRepository`、`MessageRepository`：本地先展示、HTTP 增量拉取、SignalR 事件落库、发送 Pending→Sent/Failed。
+3. 给这条链路补并发、去重、分页、401 刷新、SignalR 同步测试，并在诊断中心加入“会话/消息同步测试”。
+4. 再基于这些流构建响应式会话列表；聊天页随后用 `CustomScrollView/SliverList` 实现分页与稳定滚动。
+
+这条顺序最稳：先让 IM 数据可离线、可同步、可测试，再做页面，避免未来把 UI 与 HTTP/SignalR 直接绑死。
+

@@ -59,6 +59,8 @@ flutter:
     - .env.development
     - .env.staging
     - .env.production
+    - assets/file_web/
+    - assets/file_web/assets/
 
 # hooks:
 #   user_defines:
