@@ -220,6 +220,7 @@ class FlutterLocalNotificationService implements LocalNotificationService {
         importance: Importance.max,
         priority: Priority.high,
         ongoing: request.ongoing,
+        onlyAlertOnce: request.ongoing,
         autoCancel: !request.ongoing,
         actions:
             request.actions

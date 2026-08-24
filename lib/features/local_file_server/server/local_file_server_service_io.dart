@@ -45,6 +45,7 @@ class LocalFileServerService extends ChangeNotifier {
   HttpServer? _server;
   Directory? _shareRoot;
   Timer? _terminalSweeper;
+  int _lastNotifiedConnectionCount = -1;
 
   LocalFileServerState get state => _state;
   int get uploadChunkSize => _chunkSize;
@@ -166,7 +167,7 @@ class LocalFileServerService extends ChangeNotifier {
           terminals: const [],
         ),
       );
-      await _refreshShareNotification();
+      await _refreshShareNotification(force: true);
     } catch (error) {
       _setState(
         LocalFileServerState(
@@ -194,6 +195,7 @@ class LocalFileServerService extends ChangeNotifier {
     _uploads.clear();
     _terminalSweeper?.cancel();
     _terminalSweeper = null;
+    _lastNotifiedConnectionCount = -1;
     await server?.close(force: true);
     await _notifications.cancel(_notificationId);
     _setState(const LocalFileServerState.stopped());
@@ -238,7 +240,7 @@ class LocalFileServerService extends ChangeNotifier {
     }
   }
 
-  Future<void> _refreshShareNotification() async {
+  Future<void> _refreshShareNotification({bool force = false}) async {
     if (_state.status != LocalFileServerStatus.running) {
       return;
     }
@@ -248,6 +250,13 @@ class LocalFileServerService extends ChangeNotifier {
       return;
     }
     final connected = _sockets.length;
+    if (!force && connected == _lastNotifiedConnectionCount) {
+      return;
+    }
+    // Heartbeats update terminal activity, but should never make Android show
+    // the same foreground notification again. Only an actual connection-count
+    // change updates its text/actions.
+    _lastNotifiedConnectionCount = connected;
     await _notifications.show(
       LocalNotificationRequest(
         id: _notificationId,
