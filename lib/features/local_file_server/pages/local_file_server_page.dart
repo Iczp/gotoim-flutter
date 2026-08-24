@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/services/clipboard_service.dart';
@@ -141,7 +142,10 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
                   onPressed: () => service.disconnectTerminal(terminal.id),
                   child: const Text('断开'),
                 ),
-                onTap: () => _showTerminalDetails(context, terminal),
+                onTap:
+                    () => context.push(
+                      '/local-file-server/terminal/${Uri.encodeComponent(terminal.id)}',
+                    ),
               ),
             ),
           ),
@@ -176,59 +180,6 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
         ? '在线 · 空闲'
         : terminal.status.name;
   }
-
-  void _showTerminalDetails(BuildContext context, ConnectedTerminal terminal) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder:
-          (context) => _TerminalDetailsSheet(
-            terminal: terminal,
-            activities: _service.activitiesFor(terminal.id),
-          ),
-    );
-  }
-}
-
-class _TerminalDetailsSheet extends StatelessWidget {
-  const _TerminalDetailsSheet({
-    required this.terminal,
-    required this.activities,
-  });
-
-  final ConnectedTerminal terminal;
-  final List<TerminalActivity> activities;
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    child: SizedBox(
-      height: MediaQuery.sizeOf(context).height * .72,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(terminal.name, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text('${terminal.platform} · ${terminal.ip}'),
-          Text('连接时间：${terminal.connectedAt.toLocal()}'),
-          const SizedBox(height: 20),
-          Text(
-            '操作日志（最多保留 200 条）',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          if (activities.isEmpty) const Text('暂未记录到操作。'),
-          ...activities.map(
-            (entry) => ListTile(
-              dense: true,
-              leading: const Icon(Icons.history_outlined),
-              title: Text(entry.description),
-              subtitle: Text('${entry.action} · ${entry.occurredAt.toLocal()}'),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 class _CopyField extends ConsumerWidget {

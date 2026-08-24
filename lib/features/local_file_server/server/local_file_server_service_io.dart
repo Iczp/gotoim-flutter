@@ -30,6 +30,7 @@ class LocalFileServerService extends ChangeNotifier {
   _notificationSubscription;
   final Random _random = Random.secure();
   final Map<String, _TerminalSocket> _sockets = {};
+  final Map<String, ConnectedTerminal> _knownTerminals = {};
   final Map<String, _Upload> _uploads = {};
   final Map<String, String?> _sessions = {};
   final Map<String, List<TerminalActivity>> _activities = {};
@@ -43,6 +44,8 @@ class LocalFileServerService extends ChangeNotifier {
   int get uploadChunkSize => _chunkSize;
   List<TerminalActivity> activitiesFor(String terminalId) =>
       List.unmodifiable(_activities[terminalId] ?? const []);
+  ConnectedTerminal? terminalFor(String terminalId) =>
+      _sockets[terminalId]?.terminal ?? _knownTerminals[terminalId];
 
   Future<void> start() async {
     if (_server != null) {
@@ -110,6 +113,7 @@ class LocalFileServerService extends ChangeNotifier {
       await item.socket.close(WebSocketStatus.goingAway, 'Server stopped');
     }
     _sockets.clear();
+    _knownTerminals.clear();
     _sessions.clear();
     _activities.clear();
     _qrTokens.clear();
@@ -123,6 +127,12 @@ class LocalFileServerService extends ChangeNotifier {
 
   Future<void> disconnectTerminal(String terminalId) async {
     final terminal = _sockets.remove(terminalId);
+    if (terminal != null) {
+      _knownTerminals[terminalId] = terminal.terminal.copyWith(
+        lastActiveAt: DateTime.now(),
+        status: TerminalStatus.offline,
+      );
+    }
     _recordActivity(terminalId, 'disconnect', '已由 App 断开连接');
     await terminal?.socket.close(
       WebSocketStatus.policyViolation,
@@ -599,6 +609,7 @@ class LocalFileServerService extends ChangeNotifier {
             status: TerminalStatus.idle,
           );
           _sockets[id!] = _TerminalSocket(socket, terminal);
+          _knownTerminals[id!] = terminal;
           final sessionToken = _sessionToken(request);
           if (sessionToken != null) {
             _sessions[sessionToken] = id;
@@ -620,13 +631,20 @@ class LocalFileServerService extends ChangeNotifier {
                 totalBytes: total is num ? total.toInt() : null,
               ),
             );
+            _knownTerminals[id!] = _sockets[id!]!.terminal;
           }
           _publishTerminals();
         }
       },
       onDone: () {
         if (id != null) {
-          _sockets.remove(id);
+          final terminal = _sockets.remove(id);
+          if (terminal != null) {
+            _knownTerminals[id!] = terminal.terminal.copyWith(
+              lastActiveAt: DateTime.now(),
+              status: TerminalStatus.offline,
+            );
+          }
           _recordActivity(id, 'disconnect', '浏览器已断开连接');
         }
         _publishTerminals();
