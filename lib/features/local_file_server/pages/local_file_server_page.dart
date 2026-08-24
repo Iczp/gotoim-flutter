@@ -283,6 +283,8 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
         : terminal.status.name;
   }
 
+  // Kept temporarily while the standalone resource-manager route rolls out.
+  // ignore: unused_element
   Widget _buildFileManager(BuildContext context) {
     const folders = ['/', '/图片', '/视频', '/文档', '/下载', '/聊天文件'];
     return Card(

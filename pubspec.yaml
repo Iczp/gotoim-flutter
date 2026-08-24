@@ -34,6 +34,7 @@ dependencies:
   network_info_plus: ^8.2.1
   app_settings: ^9.0.0
   open_filex: ^4.7.0
+  permission_handler: ^12.0.1
   device_info_plus: ^13.2.0
   # Media/file capability adapters. Video processing is mobile/macOS only;
   # other platforms keep the contract and return an explicit unsupported result.
