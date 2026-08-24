@@ -363,24 +363,37 @@ class _CopyField extends ConsumerWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => TextField(
-    controller: TextEditingController(text: value),
-    readOnly: true,
-    decoration: InputDecoration(
-      labelText: label,
-      border: const OutlineInputBorder(),
-      suffixIcon: IconButton(
-        tooltip: '复制',
-        icon: const Icon(Icons.copy_outlined),
-        onPressed: () async {
-          await ref.read(clipboardServiceProvider).copy(value);
-          if (context.mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('已复制。')));
-          }
-        },
-      ),
+  Widget build(BuildContext context, WidgetRef ref) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+    decoration: BoxDecoration(
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 4),
+              SelectableText(value),
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: '复制',
+          icon: const Icon(Icons.copy_outlined),
+          onPressed: () async {
+            await ref.read(clipboardServiceProvider).copy(value);
+            if (context.mounted)
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('已复制。')));
+          },
+        ),
+      ],
     ),
   );
 }
