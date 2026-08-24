@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../../../core/notifications/local_notification_contract.dart';
 import '../models/connected_terminal.dart';
@@ -85,6 +86,39 @@ class LocalFileServerService extends ChangeNotifier {
               : (a.isDirectory ? -1 : 1),
     );
     return result;
+  }
+
+  Future<void> createSharedDirectory(String parentPath, String name) async {
+    final parent = _resolve(parentPath);
+    await Directory(
+      '${parent.path}${Platform.pathSeparator}${_segment(name)}',
+    ).create();
+    _broadcast({'type': 'files.changed'});
+    notifyListeners();
+  }
+
+  Future<void> renameSharedEntry(String path, String name) async {
+    final source = _entity(path);
+    await source.rename(
+      '${_parent(source.path)}${Platform.pathSeparator}${_segment(name)}',
+    );
+    _broadcast({'type': 'files.changed'});
+    notifyListeners();
+  }
+
+  Future<void> deleteSharedEntry(String path) async {
+    final entity = _entity(path);
+    if (_virtual(entity.path) == '/') throw FormatException('不能删除共享根目录');
+    await entity.delete(recursive: entity is Directory);
+    _broadcast({'type': 'files.changed'});
+    notifyListeners();
+  }
+
+  Future<void> openSharedFile(String path) async {
+    final file = File(_resolvePath(path));
+    if (!await file.exists()) throw FileSystemException('文件不存在');
+    final result = await OpenFilex.open(file.path);
+    if (result.type != ResultType.done) throw StateError(result.message);
   }
 
   Future<void> start() async {
