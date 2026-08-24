@@ -76,7 +76,7 @@
 
 ### 生物认证
 
-### 开始 SOTER 生物认证。 startSoterAuthentication
+开始 SOTER 生物认证。 startSoterAuthentication
 
 获取本机支持的 SOTER 生物认证方式
 

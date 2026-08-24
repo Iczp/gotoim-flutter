@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/notifications/local_notification_contract.dart';
 import '../models/connected_terminal.dart';
 import '../models/local_file_server_state.dart';
+import '../models/shared_file.dart';
 
 /// Native-only LAN file server. All caller-provided paths are virtual paths
 /// validated segment-by-segment before they are resolved beneath [_shareRoot].
@@ -50,6 +51,31 @@ class LocalFileServerService extends ChangeNotifier {
       List.unmodifiable(_activities[terminalId] ?? const []);
   ConnectedTerminal? terminalFor(String terminalId) =>
       _sockets[terminalId]?.terminal ?? _knownTerminals[terminalId];
+  Future<List<SharedFile>> listSharedFiles(String path) async {
+    if (_shareRoot == null) return const [];
+    final dir = _resolve(path);
+    if (!await dir.exists()) return const [];
+    final result = <SharedFile>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      final stat = await entity.stat();
+      result.add(
+        SharedFile(
+          name: _name(entity.path),
+          path: _virtual(entity.path),
+          isDirectory: entity is Directory,
+          size: stat.size,
+          modifiedAt: stat.modified,
+        ),
+      );
+    }
+    result.sort(
+      (a, b) =>
+          a.isDirectory == b.isDirectory
+              ? a.name.compareTo(b.name)
+              : (a.isDirectory ? -1 : 1),
+    );
+    return result;
+  }
 
   Future<void> start() async {
     if (_server != null) {

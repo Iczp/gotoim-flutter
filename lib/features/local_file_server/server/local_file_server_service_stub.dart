@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/notifications/local_notification_contract.dart';
 import '../models/connected_terminal.dart';
+import '../models/shared_file.dart';
 
 import '../models/local_file_server_state.dart';
 
@@ -27,4 +28,5 @@ class LocalFileServerService extends ChangeNotifier {
   Future<void> close() => stop();
   List<TerminalActivity> activitiesFor(String terminalId) => const [];
   ConnectedTerminal? terminalFor(String terminalId) => null;
+  Future<List<SharedFile>> listSharedFiles(String path) async => const [];
 }

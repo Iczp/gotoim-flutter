@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:app_settings/app_settings.dart';
 
+import '../../../app/application_providers.dart';
+import '../../../core/capabilities/client_capability_models.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../local_file_server.dart';
 import '../local_file_server_controller.dart';
@@ -17,6 +20,7 @@ class LocalFileServerPage extends ConsumerStatefulWidget {
 
 class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
   late final LocalFileServerService _service;
+  String _selectedPath = '/';
 
   @override
   void initState() {
@@ -37,16 +41,52 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
     }
   }
 
+  String _networkLabel(ClientNetworkStatus status) {
+    if (!status.isConnected) return '未连接网络';
+    if (status.types.contains(ClientNetworkType.wifi)) return '已连接 Wi‑Fi';
+    return '当前网络：${status.types.map((item) => item.name).join('、')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final service = _service;
     final state = service.state;
     final running = state.status == LocalFileServerStatus.running;
+    final capabilities = ref.read(clientCapabilityServiceProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('局域网文件管理')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          StreamBuilder<ClientNetworkStatus>(
+            stream: capabilities.networkStatusChanges,
+            initialData: ClientNetworkStatus(
+              types: [ClientNetworkType.none],
+              observedAt: DateTime.now(),
+            ),
+            builder: (context, snapshot) {
+              final status = snapshot.data!;
+              return Card(
+                child: ListTile(
+                  leading: Icon(
+                    status.types.contains(ClientNetworkType.wifi)
+                        ? Icons.wifi
+                        : Icons.wifi_off_outlined,
+                  ),
+                  title: Text(_networkLabel(status)),
+                  subtitle: const Text('请让访问设备连接到同一个 Wi‑Fi 网络。'),
+                  trailing: TextButton(
+                    onPressed:
+                        () => AppSettings.openAppSettings(
+                          type: AppSettingsType.wifi,
+                        ),
+                    child: const Text('打开 Wi‑Fi 设置'),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -117,6 +157,8 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
             ),
           ),
           const SizedBox(height: 16),
+          if (running) _buildFileManager(context),
+          if (running) const SizedBox(height: 16),
           Text(
             '已连接终端 ${state.terminals.length}',
             style: Theme.of(context).textTheme.titleMedium,
@@ -179,6 +221,77 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
     return terminal.status == TerminalStatus.idle
         ? '在线 · 空闲'
         : terminal.status.name;
+  }
+
+  Widget _buildFileManager(BuildContext context) {
+    const folders = ['/', '/图片', '/视频', '/文档', '/下载', '/聊天文件'];
+    return Card(
+      child: SizedBox(
+        height: 300,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 112,
+              child: ListView(
+                children:
+                    folders
+                        .map(
+                          (path) => ListTile(
+                            dense: true,
+                            selected: path == _selectedPath,
+                            title: Text(
+                              path == '/' ? '全部文件' : path.substring(1),
+                            ),
+                            onTap: () => setState(() => _selectedPath = path),
+                          ),
+                        )
+                        .toList(),
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(
+              child: FutureBuilder<List<SharedFile>>(
+                future: _service.listSharedFiles(_selectedPath),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final files = snapshot.data!;
+                  if (files.isEmpty) {
+                    return const Center(child: Text('当前文件夹为空'));
+                  }
+                  return ListView(
+                    children:
+                        files
+                            .map(
+                              (item) => ListTile(
+                                dense: true,
+                                leading: Icon(
+                                  item.isDirectory
+                                      ? Icons.folder
+                                      : Icons.insert_drive_file_outlined,
+                                ),
+                                title: Text(item.name),
+                                subtitle: Text(
+                                  item.isDirectory ? '文件夹' : '${item.size} B',
+                                ),
+                                onTap:
+                                    item.isDirectory
+                                        ? () => setState(
+                                          () => _selectedPath = item.path,
+                                        )
+                                        : null,
+                              ),
+                            )
+                            .toList(),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
