@@ -48,7 +48,7 @@ class _State extends ConsumerState<SharedFileManagerPage> {
     appBar: AppBar(
       leading: const BackButton(),
       title: const Text('资源管理器'),
-      centerTitle: true,
+      centerTitle: false,
       actions: [
         IconButton(
           tooltip: '新建文件夹',
@@ -86,6 +86,24 @@ class _State extends ConsumerState<SharedFileManagerPage> {
                                   icon: const Icon(Icons.menu),
                                   tooltip: '打开目录树',
                                 ),
+                          ),
+                          IconButton(
+                            tooltip: '返回上级',
+                            onPressed:
+                                path == '/'
+                                    ? null
+                                    : () {
+                                      final parts = path.split('/')
+                                        ..removeLast();
+                                      setState(
+                                        () =>
+                                            path =
+                                                parts.join('/').isEmpty
+                                                    ? '/'
+                                                    : parts.join('/'),
+                                      );
+                                    },
+                            icon: const Icon(Icons.arrow_upward_outlined),
                           ),
                           Expanded(
                             child: Text(
@@ -290,7 +308,7 @@ class _Row extends StatelessWidget {
       subtitle: compact ? null : Text(info(file)),
       trailing: IconButton(
         onPressed: () => onMenu(file),
-        icon: const Icon(Icons.more_horiz),
+        icon: const Icon(Icons.more_vert),
       ),
       onTap: () => onOpen(file),
     ),
@@ -318,7 +336,7 @@ class _Grid extends StatelessWidget {
                 const Spacer(),
                 IconButton(
                   onPressed: () => onMenu(file),
-                  icon: const Icon(Icons.more_horiz),
+                  icon: const Icon(Icons.more_vert),
                 ),
               ],
             ),
