@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../local_file_server.dart';
@@ -45,13 +46,12 @@ class _State extends ConsumerState<SharedFileManagerPage> {
       ),
     ),
     appBar: AppBar(
+      leading: const BackButton(),
       title: const Text('资源管理器'),
+      centerTitle: true,
       actions: [
         IconButton(
-          onPressed: () => setState(() => grid = !grid),
-          icon: Icon(grid ? Icons.view_list_outlined : Icons.grid_view_rounded),
-        ),
-        IconButton(
+          tooltip: '新建文件夹',
           onPressed: () => createFolder(context),
           icon: const Icon(Icons.create_new_folder_outlined),
         ),
@@ -92,6 +92,15 @@ class _State extends ConsumerState<SharedFileManagerPage> {
                               path,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: grid ? '切换为列表' : '切换为网格',
+                            onPressed: () => setState(() => grid = !grid),
+                            icon: Icon(
+                              grid
+                                  ? Icons.view_list_outlined
+                                  : Icons.grid_view_rounded,
                             ),
                           ),
                           if (!grid)
@@ -175,7 +184,11 @@ class _State extends ConsumerState<SharedFileManagerPage> {
       builder:
           (d) => AlertDialog(
             title: const Text('新建文件夹'),
-            content: TextField(controller: ctl, autofocus: true),
+            content: CupertinoTextField(
+              controller: ctl,
+              autofocus: true,
+              placeholder: '文件夹名称',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(d),
