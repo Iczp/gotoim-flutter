@@ -63,7 +63,7 @@ class LocalFileServerService extends ChangeNotifier {
   }
 
   Future<List<SharedFile>> listSharedFiles(String path) async {
-    if (_shareRoot == null) return const [];
+    await _ensureShareRoot();
     final dir = _resolve(path);
     if (!await dir.exists()) return const [];
     final result = <SharedFile>[];
@@ -89,6 +89,7 @@ class LocalFileServerService extends ChangeNotifier {
   }
 
   Future<void> createSharedDirectory(String parentPath, String name) async {
+    await _ensureShareRoot();
     final parent = _resolve(parentPath);
     await Directory(
       '${parent.path}${Platform.pathSeparator}${_segment(name)}',
@@ -98,6 +99,7 @@ class LocalFileServerService extends ChangeNotifier {
   }
 
   Future<void> renameSharedEntry(String path, String name) async {
+    await _ensureShareRoot();
     final source = _entity(path);
     await source.rename(
       '${_parent(source.path)}${Platform.pathSeparator}${_segment(name)}',
@@ -107,6 +109,7 @@ class LocalFileServerService extends ChangeNotifier {
   }
 
   Future<void> deleteSharedEntry(String path) async {
+    await _ensureShareRoot();
     final entity = _entity(path);
     if (_virtual(entity.path) == '/') throw FormatException('不能删除共享根目录');
     await entity.delete(recursive: entity is Directory);
@@ -115,6 +118,7 @@ class LocalFileServerService extends ChangeNotifier {
   }
 
   Future<void> openSharedFile(String path) async {
+    await _ensureShareRoot();
     final file = File(_resolvePath(path));
     if (!await file.exists()) throw FileSystemException('文件不存在');
     final result = await OpenFilex.open(file.path);
@@ -129,11 +133,7 @@ class LocalFileServerService extends ChangeNotifier {
       _state.copyWith(status: LocalFileServerStatus.starting, error: null),
     );
     try {
-      _shareRoot = Directory(
-        '${(await getApplicationDocumentsDirectory()).path}${Platform.pathSeparator}LocalShare',
-      );
-      await _shareRoot!.create(recursive: true);
-      await _createDefaultFolders();
+      await _ensureShareRoot();
       HttpServer? server;
       for (var port = 47832; port <= 47862; port++) {
         try {
@@ -292,6 +292,17 @@ class LocalFileServerService extends ChangeNotifier {
         '${_shareRoot!.path}${Platform.pathSeparator}$name',
       ).create();
     }
+  }
+
+  Future<void> _ensureShareRoot() async {
+    if (_shareRoot != null) {
+      return;
+    }
+    _shareRoot = Directory(
+      '${(await getApplicationDocumentsDirectory()).path}${Platform.pathSeparator}LocalShare',
+    );
+    await _shareRoot!.create(recursive: true);
+    await _createDefaultFolders();
   }
 
   Future<void> _handle(HttpRequest request) async {

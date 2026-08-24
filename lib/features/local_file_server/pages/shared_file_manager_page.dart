@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -146,68 +148,99 @@ class _SharedFileManagerPageState extends ConsumerState<SharedFileManagerPage> {
       ),
     ),
     child: SafeArea(
-      child: FutureBuilder<List<SharedFile>>(
-        future: _service.listSharedFiles(_path),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData)
-            return const Center(child: CupertinoActivityIndicator());
-          final files = snapshot.data!;
-          return Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                color: CupertinoColors.systemGroupedBackground,
-                child: Text(
-                  _path,
-                  style: const TextStyle(color: CupertinoColors.secondaryLabel),
-                ),
-              ),
-              Expanded(
-                child:
-                    files.isEmpty
-                        ? const Center(child: Text('此文件夹为空'))
-                        : ListView.separated(
-                          itemCount: files.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final file = files[index];
-                            return CupertinoListTile(
-                              leading: Icon(
-                                file.isDirectory
-                                    ? CupertinoIcons.folder_fill
-                                    : CupertinoIcons.doc,
-                                color:
-                                    file.isDirectory
-                                        ? CupertinoColors.systemYellow
-                                        : CupertinoColors.activeBlue,
-                              ),
-                              title: Text(file.name),
-                              subtitle: Text(
-                                file.isDirectory
-                                    ? '文件夹'
-                                    : _formatSize(file.size),
-                              ),
-                              trailing: CupertinoButton(
-                                padding: EdgeInsets.zero,
-                                onPressed: () => _entryMenu(file),
-                                child: const Icon(
-                                  CupertinoIcons.ellipsis_circle,
-                                ),
-                              ),
-                              onTap: () {
-                                if (file.isDirectory)
-                                  setState(() => _path = file.path);
-                                else
-                                  _service.openSharedFile(file.path);
-                              },
-                            );
-                          },
+      child: Row(
+        children: [
+          SizedBox(
+            width: 116,
+            child: ListView(
+              children:
+                  ['/', '/图片', '/视频', '/文档', '/下载', '/聊天文件']
+                      .map(
+                        (folder) => CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 12,
+                          ),
+                          alignment: Alignment.centerLeft,
+                          onPressed: () => setState(() => _path = folder),
+                          child: Text(
+                            folder == '/' ? '全部文件' : folder.substring(1),
+                          ),
                         ),
-              ),
-            ],
-          );
-        },
+                      )
+                      .toList(),
+            ),
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: FutureBuilder<List<SharedFile>>(
+              future: _service.listSharedFiles(_path),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData)
+                  return const Center(child: CupertinoActivityIndicator());
+                final files = snapshot.data!;
+                return Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      color: CupertinoColors.systemGroupedBackground,
+                      child: Text(
+                        _path,
+                        style: const TextStyle(
+                          color: CupertinoColors.secondaryLabel,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child:
+                          files.isEmpty
+                              ? const Center(child: Text('此文件夹为空'))
+                              : ListView.separated(
+                                itemCount: files.length,
+                                separatorBuilder:
+                                    (_, __) => const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final file = files[index];
+                                  return CupertinoListTile(
+                                    leading: Icon(
+                                      file.isDirectory
+                                          ? CupertinoIcons.folder_fill
+                                          : CupertinoIcons.doc,
+                                      color:
+                                          file.isDirectory
+                                              ? CupertinoColors.systemYellow
+                                              : CupertinoColors.activeBlue,
+                                    ),
+                                    title: Text(file.name),
+                                    subtitle: Text(
+                                      file.isDirectory
+                                          ? '文件夹'
+                                          : _formatSize(file.size),
+                                    ),
+                                    trailing: CupertinoButton(
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () => _entryMenu(file),
+                                      child: const Icon(
+                                        CupertinoIcons.ellipsis_circle,
+                                      ),
+                                    ),
+                                    onTap: () {
+                                      if (file.isDirectory)
+                                        setState(() => _path = file.path);
+                                      else
+                                        _service.openSharedFile(file.path);
+                                    },
+                                  );
+                                },
+                              ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     ),
   );

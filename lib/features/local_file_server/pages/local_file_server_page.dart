@@ -157,13 +157,12 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
             ),
           ),
           const SizedBox(height: 16),
-          if (running)
-            FilledButton.tonalIcon(
-              onPressed: () => context.push('/local-file-server/files'),
-              icon: const Icon(Icons.folder_open_outlined),
-              label: const Text('打开 App 资源管理器'),
-            ),
-          if (running) const SizedBox(height: 16),
+          FilledButton.tonalIcon(
+            onPressed: () => context.push('/local-file-server/files'),
+            icon: const Icon(Icons.folder_open_outlined),
+            label: const Text('打开 App 资源管理器'),
+          ),
+          const SizedBox(height: 16),
           Text(
             '已连接终端 ${state.terminals.length}',
             style: Theme.of(context).textTheme.titleMedium,
