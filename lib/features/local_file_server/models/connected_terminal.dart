@@ -1,5 +1,17 @@
 enum TerminalStatus { online, idle, uploading, downloading, offline }
 
+class TerminalActivity {
+  const TerminalActivity({
+    required this.occurredAt,
+    required this.action,
+    required this.description,
+  });
+
+  final DateTime occurredAt;
+  final String action;
+  final String description;
+}
+
 class ConnectedTerminal {
   const ConnectedTerminal({
     required this.id,

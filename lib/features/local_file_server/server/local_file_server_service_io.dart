@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/notifications/local_notification_contract.dart';
 import '../models/connected_terminal.dart';
 import '../models/local_file_server_state.dart';
 
@@ -14,10 +15,24 @@ import '../models/local_file_server_state.dart';
 /// validated segment-by-segment before they are resolved beneath [_shareRoot].
 class LocalFileServerService extends ChangeNotifier {
   static const _chunkSize = 4 * 1024 * 1024;
+  static const _notificationId = 4783201;
+  static const _stopActionId = 'local_file_server.stop';
+  static const _disconnectActionId = 'local_file_server.disconnect_all';
+  LocalFileServerService({required LocalNotificationService notifications})
+    : _notifications = notifications {
+    _notificationSubscription = _notifications.tapEvents.listen(
+      _handleNotificationAction,
+    );
+  }
+
+  final LocalNotificationService _notifications;
+  late final StreamSubscription<LocalNotificationTapEvent>
+  _notificationSubscription;
   final Random _random = Random.secure();
   final Map<String, _TerminalSocket> _sockets = {};
   final Map<String, _Upload> _uploads = {};
-  final Set<String> _sessions = {};
+  final Map<String, String?> _sessions = {};
+  final Map<String, List<TerminalActivity>> _activities = {};
   final Map<String, DateTime> _qrTokens = {};
   LocalFileServerState _state = const LocalFileServerState.stopped();
   HttpServer? _server;
@@ -26,6 +41,8 @@ class LocalFileServerService extends ChangeNotifier {
 
   LocalFileServerState get state => _state;
   int get uploadChunkSize => _chunkSize;
+  List<TerminalActivity> activitiesFor(String terminalId) =>
+      List.unmodifiable(_activities[terminalId] ?? const []);
 
   Future<void> start() async {
     if (_server != null) {
@@ -72,6 +89,7 @@ class LocalFileServerService extends ChangeNotifier {
           terminals: const [],
         ),
       );
+      await _refreshShareNotification();
     } catch (error) {
       _setState(
         LocalFileServerState(
@@ -93,21 +111,73 @@ class LocalFileServerService extends ChangeNotifier {
     }
     _sockets.clear();
     _sessions.clear();
+    _activities.clear();
     _qrTokens.clear();
     _uploads.clear();
     _terminalSweeper?.cancel();
     _terminalSweeper = null;
     await server?.close(force: true);
+    await _notifications.cancel(_notificationId);
     _setState(const LocalFileServerState.stopped());
   }
 
   Future<void> disconnectTerminal(String terminalId) async {
     final terminal = _sockets.remove(terminalId);
+    _recordActivity(terminalId, 'disconnect', '已由 App 断开连接');
     await terminal?.socket.close(
       WebSocketStatus.policyViolation,
       'Disconnected by owner',
     );
     _publishTerminals();
+  }
+
+  Future<void> disconnectAllTerminals() async {
+    final terminalIds = _sockets.keys.toList();
+    for (final terminalId in terminalIds) {
+      await disconnectTerminal(terminalId);
+    }
+  }
+
+  Future<void> close() async {
+    await _notificationSubscription.cancel();
+    await stop();
+  }
+
+  Future<void> _handleNotificationAction(
+    LocalNotificationTapEvent event,
+  ) async {
+    if (event.actionId == _stopActionId) {
+      await stop();
+    } else if (event.actionId == _disconnectActionId) {
+      await disconnectAllTerminals();
+    }
+  }
+
+  Future<void> _refreshShareNotification() async {
+    if (_state.status != LocalFileServerStatus.running) {
+      return;
+    }
+    final permission = await _notifications.requestPermission();
+    if (permission.status == LocalNotificationPermissionStatus.denied ||
+        permission.status == LocalNotificationPermissionStatus.unsupported) {
+      return;
+    }
+    final connected = _sockets.length;
+    await _notifications.show(
+      LocalNotificationRequest(
+        id: _notificationId,
+        channelId: 'local_file_sharing',
+        channelName: '局域网文件共享',
+        title: '局域网文件共享已开启',
+        body: connected == 0 ? '暂无设备连接' : '已有 $connected 台设备连接',
+        payload: 'local-file-server',
+        ongoing: true,
+        actions: const [
+          LocalNotificationAction(id: _disconnectActionId, title: '断开全部'),
+          LocalNotificationAction(id: _stopActionId, title: '关闭共享'),
+        ],
+      ),
+    );
   }
 
   void _expireInactiveTerminals() {
@@ -161,36 +231,37 @@ class LocalFileServerService extends ChangeNotifier {
         });
         return;
       }
+      final terminalId = _terminalId(request);
       if (path == '/api/files' && request.method == 'GET') {
-        await _listFiles(request);
+        await _listFiles(request, terminalId: terminalId);
         return;
       }
       if (path == '/api/files/info' && request.method == 'GET') {
-        await _fileInfo(request);
+        await _fileInfo(request, terminalId: terminalId);
         return;
       }
       if (path == '/api/files/content' && request.method == 'GET') {
-        await _content(request);
+        await _content(request, terminalId: terminalId);
         return;
       }
       if (path == '/api/files/mkdir' && request.method == 'POST') {
-        await _mkdir(request);
+        await _mkdir(request, terminalId: terminalId);
         return;
       }
       if (path == '/api/files/rename' && request.method == 'PUT') {
-        await _rename(request);
+        await _rename(request, terminalId: terminalId);
         return;
       }
       if (path == '/api/files/move' && request.method == 'PUT') {
-        await _move(request);
+        await _move(request, terminalId: terminalId);
         return;
       }
       if (path == '/api/files' && request.method == 'DELETE') {
-        await _delete(request);
+        await _delete(request, terminalId: terminalId);
         return;
       }
       if (path == '/api/uploads' && request.method == 'POST') {
-        await _createUpload(request);
+        await _createUpload(request, terminalId: terminalId);
         return;
       }
       final match = RegExp(
@@ -212,7 +283,7 @@ class LocalFileServerService extends ChangeNotifier {
   Future<bool> _authorized(HttpRequest request) async {
     return request.cookies.any(
       (cookie) =>
-          cookie.name == 'lf_session' && _sessions.contains(cookie.value),
+          cookie.name == 'lf_session' && _sessions.containsKey(cookie.value),
     );
   }
 
@@ -228,7 +299,7 @@ class LocalFileServerService extends ChangeNotifier {
       return;
     }
     final token = _token();
-    _sessions.add(token);
+    _sessions[token] = null;
     request.response.cookies.add(
       Cookie('lf_session', token)
         ..httpOnly = true
@@ -260,7 +331,7 @@ class LocalFileServerService extends ChangeNotifier {
     await request.response.close();
   }
 
-  Future<void> _listFiles(HttpRequest request) async {
+  Future<void> _listFiles(HttpRequest request, {String? terminalId}) async {
     final relative = request.uri.queryParameters['path'] ?? '/';
     final dir = _resolve(relative);
     if (!await dir.exists()) {
@@ -286,7 +357,7 @@ class LocalFileServerService extends ChangeNotifier {
     _json(request.response, HttpStatus.ok, {'path': relative, 'items': values});
   }
 
-  Future<void> _fileInfo(HttpRequest request) async {
+  Future<void> _fileInfo(HttpRequest request, {String? terminalId}) async {
     final file = File(_resolvePath(request.uri.queryParameters['path']));
     final stat = await file.stat();
     _json(request.response, HttpStatus.ok, {
@@ -296,12 +367,13 @@ class LocalFileServerService extends ChangeNotifier {
     });
   }
 
-  Future<void> _content(HttpRequest request) async {
+  Future<void> _content(HttpRequest request, {String? terminalId}) async {
     final file = File(_resolvePath(request.uri.queryParameters['path']));
     if (!await file.exists()) {
       _json(request.response, HttpStatus.notFound, {'error': 'NOT_FOUND'});
       return;
     }
+    _recordActivity(terminalId, 'download', '请求下载 / ${_name(file.path)}');
     final total = await file.length();
     var start = 0;
     var end = total - 1;
@@ -334,50 +406,62 @@ class LocalFileServerService extends ChangeNotifier {
     await request.response.close();
   }
 
-  Future<void> _mkdir(HttpRequest request) async {
+  Future<void> _mkdir(HttpRequest request, {String? terminalId}) async {
     final body = await _body(request);
     final parent = _resolve(body['parentPath'] as String? ?? '/');
     final name = _segment(body['name'] as String?);
     await Directory('${parent.path}${Platform.pathSeparator}$name').create();
+    _recordActivity(terminalId, 'mkdir', '新建文件夹 $name');
     _broadcast({'type': 'files.changed'});
     _json(request.response, HttpStatus.created, {
       'path': _virtual('${parent.path}${Platform.pathSeparator}$name'),
     });
   }
 
-  Future<void> _rename(HttpRequest request) async {
+  Future<void> _rename(HttpRequest request, {String? terminalId}) async {
     final body = await _body(request);
     final source = _entity(body['path'] as String?);
     final target =
         '${_parent(source.path)}${Platform.pathSeparator}${_segment(body['name'] as String?)}';
     await source.rename(target);
+    _recordActivity(
+      terminalId,
+      'rename',
+      '重命名 ${_name(source.path)} 为 ${_name(target)}',
+    );
     _broadcast({'type': 'files.changed'});
     _json(request.response, HttpStatus.ok, {'path': _virtual(target)});
   }
 
-  Future<void> _move(HttpRequest request) async {
+  Future<void> _move(HttpRequest request, {String? terminalId}) async {
     final body = await _body(request);
     final source = _entity(body['path'] as String?);
     final targetDir = _resolve(body['targetPath'] as String? ?? '/');
     final target =
         '${targetDir.path}${Platform.pathSeparator}${_name(source.path)}';
     await source.rename(target);
+    _recordActivity(
+      terminalId,
+      'move',
+      '移动 ${_name(source.path)} 至 ${_virtual(targetDir.path)}',
+    );
     _broadcast({'type': 'files.changed'});
     _json(request.response, HttpStatus.ok, {'path': _virtual(target)});
   }
 
-  Future<void> _delete(HttpRequest request) async {
+  Future<void> _delete(HttpRequest request, {String? terminalId}) async {
     final path = request.uri.queryParameters['path'];
     final entity = _entity(path);
     if (_virtual(entity.path) == '/') {
       throw FormatException('不能删除共享根目录');
     }
     await entity.delete(recursive: entity is Directory);
+    _recordActivity(terminalId, 'delete', '删除 ${_virtual(entity.path)}');
     _broadcast({'type': 'files.changed'});
     _json(request.response, HttpStatus.ok, {'ok': true});
   }
 
-  Future<void> _createUpload(HttpRequest request) async {
+  Future<void> _createUpload(HttpRequest request, {String? terminalId}) async {
     final body = await _body(request);
     final id = _token();
     final name = _segment(body['name'] as String?);
@@ -401,6 +485,7 @@ class LocalFileServerService extends ChangeNotifier {
       total: total,
       chunks: chunks,
       temp: temp,
+      terminalId: terminalId,
     );
     _json(request.response, HttpStatus.created, {
       'id': id,
@@ -483,6 +568,7 @@ class LocalFileServerService extends ChangeNotifier {
     await sink.close();
     _uploads.remove(upload.id);
     await upload.temp.delete(recursive: true);
+    _recordActivity(upload.terminalId, 'upload', '上传完成 ${upload.name}');
     _broadcast({'type': 'files.changed'});
     _json(request.response, HttpStatus.created, {
       'path': _virtual(destination.path),
@@ -513,6 +599,11 @@ class LocalFileServerService extends ChangeNotifier {
             status: TerminalStatus.idle,
           );
           _sockets[id!] = _TerminalSocket(socket, terminal);
+          final sessionToken = _sessionToken(request);
+          if (sessionToken != null) {
+            _sessions[sessionToken] = id;
+          }
+          _recordActivity(id, 'connect', '已连接到文件共享服务');
           _publishTerminals();
         } else if (id != null) {
           final current = _sockets[id!];
@@ -536,6 +627,7 @@ class LocalFileServerService extends ChangeNotifier {
       onDone: () {
         if (id != null) {
           _sockets.remove(id);
+          _recordActivity(id, 'disconnect', '浏览器已断开连接');
         }
         _publishTerminals();
       },
@@ -559,11 +651,51 @@ class LocalFileServerService extends ChangeNotifier {
     }
   }
 
-  void _publishTerminals() => _setState(
-    _state.copyWith(
-      terminals: _sockets.values.map((item) => item.terminal).toList(),
-    ),
-  );
+  void _publishTerminals() {
+    _setState(
+      _state.copyWith(
+        terminals: _sockets.values.map((item) => item.terminal).toList(),
+      ),
+    );
+    unawaited(_refreshShareNotification());
+  }
+
+  String? _sessionToken(HttpRequest request) {
+    for (final cookie in request.cookies) {
+      if (cookie.name == 'lf_session' && _sessions.containsKey(cookie.value)) {
+        return cookie.value;
+      }
+    }
+    return null;
+  }
+
+  String? _terminalId(HttpRequest request) {
+    final sessionToken = _sessionToken(request);
+    return sessionToken == null ? null : _sessions[sessionToken];
+  }
+
+  void _recordActivity(String? terminalId, String action, String description) {
+    if (terminalId == null) {
+      return;
+    }
+    final entries = _activities.putIfAbsent(
+      terminalId,
+      () => <TerminalActivity>[],
+    );
+    entries.insert(
+      0,
+      TerminalActivity(
+        occurredAt: DateTime.now(),
+        action: action,
+        description: description,
+      ),
+    );
+    if (entries.length > 200) {
+      entries.removeRange(200, entries.length);
+    }
+    notifyListeners();
+  }
+
   void _setState(LocalFileServerState value) {
     _state = value;
     notifyListeners();
@@ -691,10 +823,12 @@ class _Upload {
     required this.total,
     required this.chunks,
     required this.temp,
+    required this.terminalId,
   });
   final String id, name, parentPath;
   final int total, chunks;
   final Directory temp;
+  final String? terminalId;
   final Set<int> received = {};
   Map<String, Object?> json() => {
     'id': id,
