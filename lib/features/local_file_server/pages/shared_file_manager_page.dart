@@ -1,279 +1,355 @@
 import 'dart:ui';
-
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../local_file_server.dart';
 import '../local_file_server_controller.dart';
 
 class SharedFileManagerPage extends ConsumerStatefulWidget {
   const SharedFileManagerPage({super.key});
-
   @override
-  ConsumerState<SharedFileManagerPage> createState() =>
-      _SharedFileManagerPageState();
+  ConsumerState<SharedFileManagerPage> createState() => _State();
 }
 
-class _SharedFileManagerPageState extends ConsumerState<SharedFileManagerPage> {
-  late final LocalFileServerService _service;
-  String _path = '/';
-  bool _showFolders = true;
-
+class _State extends ConsumerState<SharedFileManagerPage> {
+  static const folders = ['/', '/图片', '/视频', '/文档', '/下载', '/聊天文件'];
+  late final LocalFileServerService service;
+  String path = '/';
+  bool foldersShown = true, grid = false, compact = false;
   @override
   void initState() {
     super.initState();
-    _service = ref.read(localFileServerProvider)..addListener(_refresh);
+    service = ref.read(localFileServerProvider)..addListener(refresh);
   }
 
   @override
   void dispose() {
-    _service.removeListener(_refresh);
+    service.removeListener(refresh);
     super.dispose();
   }
 
-  void _refresh() {
+  void refresh() {
     if (mounted) setState(() {});
   }
 
-  Future<void> _nameDialog(
-    String title,
-    Future<void> Function(String) action, {
-    String value = '',
-  }) async {
-    final controller = TextEditingController(text: value);
-    await showCupertinoDialog<void>(
-      context: context,
-      builder:
-          (dialogContext) => CupertinoAlertDialog(
-            title: Text(title),
-            content: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: CupertinoTextField(
-                controller: controller,
-                placeholder: '名称',
-                autofocus: true,
-              ),
-            ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('取消'),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: () async {
-                  final name = controller.text.trim();
-                  if (name.isEmpty) return;
-                  Navigator.pop(dialogContext);
-                  await action(name);
-                },
-                child: const Text('确定'),
-              ),
-            ],
-          ),
-    );
-    controller.dispose();
-  }
-
-  Future<void> _entryMenu(SharedFile file) async {
-    await showCupertinoModalPopup<void>(
-      context: context,
-      builder:
-          (context) => CupertinoActionSheet(
-            title: Text(file.name),
-            actions: [
-              if (!file.isDirectory)
-                CupertinoActionSheetAction(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await _service.openSharedFile(file.path);
-                  },
-                  child: const Text('使用系统应用打开'),
-                ),
-              CupertinoActionSheetAction(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await _nameDialog(
-                    '重命名',
-                    (name) => _service.renameSharedEntry(file.path, name),
-                    value: file.name,
-                  );
-                },
-                child: const Text('重命名'),
-              ),
-              CupertinoActionSheetAction(
-                isDestructiveAction: true,
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await _service.deleteSharedEntry(file.path);
-                },
-                child: const Text('删除'),
-              ),
-            ],
-            cancelButton: CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-          ),
-    );
-  }
-
   @override
-  Widget build(BuildContext context) => CupertinoPageScaffold(
-    navigationBar: CupertinoNavigationBar(
-      middle: const Text('资源管理器'),
-      leading: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => setState(() => _showFolders = !_showFolders),
-            child: Icon(_showFolders ? Icons.menu_open : Icons.menu),
-          ),
-          if (_path != '/')
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: () {
-                final pieces = _path.split('/')..removeLast();
-                setState(
-                  () =>
-                      _path = pieces.join('/').isEmpty ? '/' : pieces.join('/'),
-                );
-              },
-              child: const Icon(Icons.arrow_back),
-            ),
-        ],
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed:
-                () => _nameDialog(
-                  '新建文件夹',
-                  (name) => _service.createSharedDirectory(_path, name),
-                ),
-            child: const Icon(CupertinoIcons.folder_badge_plus),
-          ),
-        ],
-      ),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('资源管理器'),
+      actions: [
+        IconButton(
+          onPressed: () => setState(() => grid = !grid),
+          icon: Icon(grid ? Icons.view_list_outlined : Icons.grid_view_rounded),
+        ),
+        IconButton(
+          onPressed: () => createFolder(context),
+          icon: const Icon(Icons.create_new_folder_outlined),
+        ),
+      ],
     ),
-    child: SafeArea(
-      child: Row(
-        children: [
-          if (_showFolders)
-            SizedBox(
-              width: 116,
-              child: ListView(
-                children:
-                    ['/', '/图片', '/视频', '/文档', '/下载', '/聊天文件']
-                        .map(
-                          (folder) => CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 12,
+    body: Row(
+      children: [
+        if (foldersShown)
+          _Folders(selected: path, onSelect: (v) => setState(() => path = v)),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(topLeft: Radius.circular(24)),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              child: Container(
+                color: Theme.of(
+                  context,
+                ).colorScheme.surface.withValues(alpha: .86),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 10, 16, 6),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            onPressed:
+                                () => setState(
+                                  () => foldersShown = !foldersShown,
+                                ),
+                            icon: Icon(
+                              foldersShown
+                            ? Icons.menu_open
+                            : Icons.menu,
                             ),
-                            alignment: Alignment.centerLeft,
-                            onPressed: () => setState(() => _path = folder),
+                            tooltip: foldersShown ? '隐藏目录树' : '显示目录树',
+                          ),
+                          Expanded(
                             child: Text(
-                              folder == '/' ? '全部文件' : folder.substring(1),
+                              path,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleSmall,
                             ),
                           ),
-                        )
-                        .toList(),
-              ),
-            ),
-          if (_showFolders) const VerticalDivider(width: 1),
-          Expanded(
-            child: FutureBuilder<List<SharedFile>>(
-              future: _service.listSharedFiles(_path),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData)
-                  return const Center(child: CupertinoActivityIndicator());
-                final files = snapshot.data!;
-                return Column(
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      color: CupertinoColors.systemGroupedBackground,
-                      child: Text(
-                        _path,
-                        style: const TextStyle(
-                          color: CupertinoColors.secondaryLabel,
-                        ),
+                          if (!grid)
+                            IconButton(
+                              onPressed:
+                                  () => setState(() => compact = !compact),
+                              icon: Icon(
+                                compact
+                                    ? Icons.view_headline
+                                    : Icons.view_agenda,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     Expanded(
-                      child:
-                          files.isEmpty
-                              ? const Center(child: Text('此文件夹为空'))
+                      child: FutureBuilder<List<SharedFile>>(
+                        future: service.listSharedFiles(path),
+                        builder: (context, snap) {
+                          if (!snap.hasData)
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          final files = snap.data!;
+                          if (files.isEmpty)
+                            return const Center(child: Text('此文件夹为空'));
+                          return grid
+                              ? GridView.builder(
+                                padding: const EdgeInsets.all(12),
+                                gridDelegate:
+                                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 180,
+                                      mainAxisExtent: 168,
+                                      crossAxisSpacing: 10,
+                                      mainAxisSpacing: 10,
+                                    ),
+                                itemCount: files.length,
+                                itemBuilder:
+                                    (_, i) => _Grid(
+                                      file: files[i],
+                                      onOpen: open,
+                                      onMenu: menu,
+                                    ),
+                              )
                               : ListView.separated(
+                                padding: const EdgeInsets.all(12),
                                 itemCount: files.length,
                                 separatorBuilder:
-                                    (_, __) => const Divider(height: 1),
-                                itemBuilder: (context, index) {
-                                  final file = files[index];
-                                  return CupertinoListTile(
-                                    leading: Container(
-                                      width: 38,
-                                      height: 38,
-                                      decoration: BoxDecoration(
-                                        color: (file.isDirectory
-                                                ? CupertinoColors.systemYellow
-                                                : CupertinoColors.activeBlue)
-                                            .withValues(alpha: .18),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Icon(
-                                        file.isDirectory
-                                            ? Icons.folder
-                                            : Icons.insert_drive_file,
-                                        color:
-                                            file.isDirectory
-                                                ? CupertinoColors.systemYellow
-                                                : CupertinoColors.activeBlue,
-                                      ),
+                                    (_, __) => const SizedBox(height: 6),
+                                itemBuilder:
+                                    (_, i) => _Row(
+                                      file: files[i],
+                                      compact: compact,
+                                      onOpen: open,
+                                      onMenu: menu,
                                     ),
-                                    title: Text(file.name),
-                                    subtitle: Text(
-                                      file.isDirectory
-                                          ? '文件夹'
-                                          : _formatSize(file.size),
-                                    ),
-                                    trailing: CupertinoButton(
-                                      padding: EdgeInsets.zero,
-                                      onPressed: () => _entryMenu(file),
-                                      child: const Icon(
-                                        CupertinoIcons.ellipsis_circle,
-                                      ),
-                                    ),
-                                    onTap: () {
-                                      if (file.isDirectory)
-                                        setState(() => _path = file.path);
-                                      else
-                                        _service.openSharedFile(file.path);
-                                    },
-                                  );
-                                },
-                              ),
+                              );
+                        },
+                      ),
                     ),
                   ],
-                );
-              },
+                ),
+              ),
             ),
           ),
-        ],
+        ),
+      ],
+    ),
+  );
+  void open(SharedFile file) {
+    if (file.isDirectory)
+      setState(() => path = file.path);
+    else
+      service.openSharedFile(file.path);
+  }
+
+  Future<void> createFolder(BuildContext c) async {
+    final ctl = TextEditingController();
+    await showDialog<void>(
+      context: c,
+      builder:
+          (d) => AlertDialog(
+            title: const Text('新建文件夹'),
+            content: TextField(controller: ctl, autofocus: true),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(d),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  if (ctl.text.trim().isEmpty) return;
+                  Navigator.pop(d);
+                  await service.createSharedDirectory(path, ctl.text.trim());
+                },
+                child: const Text('创建'),
+              ),
+            ],
+          ),
+    );
+    ctl.dispose();
+  }
+
+  Future<void> menu(SharedFile f) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder:
+          (s) => SafeArea(
+            child: Wrap(
+              children: [
+                if (!f.isDirectory)
+                  ListTile(
+                    leading: const Icon(Icons.open_in_new),
+                    title: const Text('系统方式打开'),
+                    onTap: () {
+                      Navigator.pop(s);
+                      service.openSharedFile(f.path);
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text('删除', style: TextStyle(color: Colors.red)),
+                  onTap: () {
+                    Navigator.pop(s);
+                    service.deleteSharedEntry(f.path);
+                  },
+                ),
+              ],
+            ),
+          ),
+    );
+  }
+}
+
+class _Folders extends StatelessWidget {
+  const _Folders({required this.selected, required this.onSelect});
+  final String selected;
+  final ValueChanged<String> onSelect;
+  @override
+  Widget build(BuildContext c) => Container(
+    width: 166,
+    color: Theme.of(c).colorScheme.surfaceContainerLow,
+    child: ListView(
+      padding: const EdgeInsets.all(10),
+      children:
+          _State.folders
+              .map(
+                (p) => ListTile(
+                  dense: true,
+                  selected: p == selected,
+                  selectedTileColor: Theme.of(c).colorScheme.primaryContainer,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  leading: Icon(
+                    p == '/' ? Icons.home_outlined : Icons.folder_outlined,
+                  ),
+                  title: Text(p == '/' ? '全部文件' : p.substring(1)),
+                  onTap: () => onSelect(p),
+                ),
+              )
+              .toList(),
+    ),
+  );
+}
+
+class _Row extends StatelessWidget {
+  const _Row({
+    required this.file,
+    required this.compact,
+    required this.onOpen,
+    required this.onMenu,
+  });
+  final SharedFile file;
+  final bool compact;
+  final ValueChanged<SharedFile> onOpen, onMenu;
+  @override
+  Widget build(BuildContext c) => Card(
+    elevation: 0,
+    child: ListTile(
+      leading: _Icon(file),
+      title: Text(file.name, overflow: TextOverflow.ellipsis),
+      subtitle: compact ? null : Text(info(file)),
+      trailing: IconButton(
+        onPressed: () => onMenu(file),
+        icon: const Icon(Icons.more_horiz),
+      ),
+      onTap: () => onOpen(file),
+    ),
+  );
+}
+
+class _Grid extends StatelessWidget {
+  const _Grid({required this.file, required this.onOpen, required this.onMenu});
+  final SharedFile file;
+  final ValueChanged<SharedFile> onOpen, onMenu;
+  @override
+  Widget build(BuildContext c) => Card(
+    elevation: 0,
+    child: InkWell(
+      onTap: () => onOpen(file),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _Icon(file, large: true),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => onMenu(file),
+                  icon: const Icon(Icons.more_horiz),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Text(
+              file.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              info(file),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(c).textTheme.bodySmall,
+            ),
+          ],
+        ),
       ),
     ),
   );
-
-  String _formatSize(int value) =>
-      value < 1024
-          ? '$value B'
-          : value < 1024 * 1024
-          ? '${(value / 1024).toStringAsFixed(1)} KB'
-          : '${(value / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
+
+class _Icon extends StatelessWidget {
+  const _Icon(this.file, {this.large = false});
+  final SharedFile file;
+  final bool large;
+  @override
+  Widget build(BuildContext c) {
+    final color =
+        file.isDirectory
+            ? Colors.amber.shade700
+            : Theme.of(c).colorScheme.primary;
+    return Container(
+      width: large ? 45 : 40,
+      height: large ? 45 : 40,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .16),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Icon(
+        file.isDirectory ? Icons.folder_rounded : Icons.description_rounded,
+        color: color,
+        size: large ? 28 : 24,
+      ),
+    );
+  }
+}
+
+String info(SharedFile f) =>
+    '${f.isDirectory ? '文件夹' : size(f.size)} · ${f.modifiedAt.year}-${f.modifiedAt.month.toString().padLeft(2, '0')}-${f.modifiedAt.day.toString().padLeft(2, '0')}';
+String size(int v) =>
+    v < 1024
+        ? '$v B'
+        : v < 1048576
+        ? '${(v / 1024).toStringAsFixed(1)} KB'
+        : '${(v / 1048576).toStringAsFixed(1)} MB';
