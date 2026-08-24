@@ -64,17 +64,48 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
     return '当前网络：${status.types.map((item) => item.name).join('、')}';
   }
 
-  String _wifiDetails(ClientWifiInfo? info) {
-    final lines = <String>['SSID：${info?.ssid ?? '暂不可用'}'];
-    if (info?.ipAddress case final address?) lines.add('IPv4：$address');
-    if (info?.gatewayIp case final gateway?) lines.add('网关：$gateway');
-    if (info?.submask case final submask?) lines.add('子网掩码：$submask');
-    if (info?.bssid case final bssid?) lines.add('BSSID：$bssid');
-    if (info?.ipv6Address case final ipv6?) lines.add('IPv6：$ipv6');
-    if (info?.broadcast case final broadcast?) lines.add('广播地址：$broadcast');
-    if (info?.warning case final warning?) lines.add('提示：$warning');
-    lines.add('访问设备必须连接到同一个 Wi‑Fi');
-    return lines.join('\n');
+  Future<void> _copyNetworkValue(String label, String value) async {
+    await ref.read(clipboardServiceProvider).copy(value);
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已复制$label。')));
+    }
+  }
+
+  List<Widget> _networkDetails(ClientWifiInfo? info) {
+    final items = <(String, String?)>[
+      ('SSID', info?.ssid),
+      ('IPv4 地址', info?.ipAddress),
+      ('网关', info?.gatewayIp),
+      ('子网掩码', info?.submask),
+      ('BSSID', info?.bssid),
+      ('IPv6 地址', info?.ipv6Address),
+      ('广播地址', info?.broadcast),
+    ];
+    final available = items.where((item) => item.$2 != null).toList();
+    if (available.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Text(info?.warning ?? '系统暂未提供当前 Wi‑Fi 的详细信息。'),
+        ),
+      ];
+    }
+    return available
+        .map(
+          (item) => _NetworkDetailTile(
+            label: item.$1,
+            value: item.$2!,
+            onCopy: () => _copyNetworkValue(item.$1, item.$2!),
+          ),
+        )
+        .toList();
+  }
+
+  String _sharingGuide(String? ssid) {
+    final suffix = ssid == null ? '' : '（$ssid）';
+    return '访问说明\n请让要访问文件的设备连接到同一个 Wi‑Fi$suffix，然后在浏览器打开下方地址或扫描二维码。';
   }
 
   @override
@@ -97,31 +128,55 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
             builder: (context, snapshot) {
               final status = snapshot.data!;
               return Card(
-                child: ListTile(
-                  leading: Icon(
-                    status.types.contains(ClientNetworkType.wifi)
-                        ? Icons.wifi
-                        : Icons.wifi_off_outlined,
-                  ),
-                  title: Text(
-                    status.types.contains(ClientNetworkType.wifi)
-                        ? '当前 Wi‑Fi 网络'
-                        : _networkLabel(status),
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: FutureBuilder<ClientWifiInfo>(
-                    future: _wifiInfo,
-                    builder:
-                        (context, wifi) => Text(
-                          status.types.contains(ClientNetworkType.wifi)
-                              ? _wifiDetails(wifi.data)
-                              : '请连接 Wi‑Fi 后再开启文件共享',
+                clipBehavior: Clip.antiAlias,
+                child: FutureBuilder<ClientWifiInfo>(
+                  future: _wifiInfo,
+                  builder: (context, wifi) {
+                    final isWifi = status.types.contains(
+                      ClientNetworkType.wifi,
+                    );
+                    final info = wifi.data;
+                    return ExpansionTile(
+                      leading: Icon(
+                        isWifi ? Icons.wifi_rounded : Icons.wifi_off_outlined,
+                      ),
+                      title: Text(
+                        isWifi ? '网络信息' : _networkLabel(status),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        isWifi
+                            ? '当前 Wi‑Fi · ${info?.ssid ?? 'SSID 暂不可用'}'
+                            : '请连接 Wi‑Fi 后再开启文件共享',
+                      ),
+                      children: [
+                        if (isWifi) ..._networkDetails(info),
+                        if (!isWifi)
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: Text('局域网文件共享需要设备处于同一 Wi‑Fi 网络。'),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: Row(
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: _refreshWifiInfo,
+                                icon: const Icon(Icons.refresh, size: 18),
+                                label: const Text('刷新'),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                onPressed:
+                                    () => capabilities.openWifiSettings(),
+                                child: const Text('打开 Wi‑Fi 设置'),
+                              ),
+                            ],
+                          ),
                         ),
-                  ),
-                  trailing: TextButton(
-                    onPressed: () => capabilities.openWifiSettings(),
-                    child: const Text('打开 Wi‑Fi 设置'),
-                  ),
+                      ],
+                    );
+                  },
                 ),
               );
             },
@@ -161,6 +216,46 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
                     ),
                   ],
                   if (running) ...[
+                    const SizedBox(height: 16),
+                    FutureBuilder<ClientWifiInfo>(
+                      future: _wifiInfo,
+                      builder:
+                          (context, wifi) => Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color:
+                                  Theme.of(
+                                    context,
+                                  ).colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.wifi_rounded,
+                                  color:
+                                      Theme.of(
+                                        context,
+                                      ).colorScheme.onPrimaryContainer,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _sharingGuide(wifi.data?.ssid),
+                                    style: TextStyle(
+                                      color:
+                                          Theme.of(
+                                            context,
+                                          ).colorScheme.onPrimaryContainer,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                    ),
                     const SizedBox(height: 16),
                     _CopyField(label: '访问地址', value: state.address!),
                     const SizedBox(height: 12),
@@ -370,6 +465,30 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
       ),
     );
   }
+}
+
+class _NetworkDetailTile extends StatelessWidget {
+  const _NetworkDetailTile({
+    required this.label,
+    required this.value,
+    required this.onCopy,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    dense: true,
+    title: Text(label),
+    subtitle: SelectableText(value),
+    trailing: IconButton(
+      tooltip: '复制$label',
+      icon: const Icon(Icons.copy_outlined, size: 20),
+      onPressed: onCopy,
+    ),
+  );
 }
 
 class _CopyField extends ConsumerWidget {
