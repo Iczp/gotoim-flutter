@@ -64,6 +64,19 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
     return '当前网络：${status.types.map((item) => item.name).join('、')}';
   }
 
+  String _wifiDetails(ClientWifiInfo? info) {
+    final lines = <String>['SSID：${info?.ssid ?? '暂不可用'}'];
+    if (info?.ipAddress case final address?) lines.add('IPv4：$address');
+    if (info?.gatewayIp case final gateway?) lines.add('网关：$gateway');
+    if (info?.submask case final submask?) lines.add('子网掩码：$submask');
+    if (info?.bssid case final bssid?) lines.add('BSSID：$bssid');
+    if (info?.ipv6Address case final ipv6?) lines.add('IPv6：$ipv6');
+    if (info?.broadcast case final broadcast?) lines.add('广播地址：$broadcast');
+    if (info?.warning case final warning?) lines.add('提示：$warning');
+    lines.add('访问设备必须连接到同一个 Wi‑Fi');
+    return lines.join('\n');
+  }
+
   @override
   Widget build(BuildContext context) {
     final service = _service;
@@ -99,9 +112,9 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
                   subtitle: FutureBuilder<ClientWifiInfo>(
                     future: _wifiInfo,
                     builder:
-                        (context, ssid) => Text(
+                        (context, wifi) => Text(
                           status.types.contains(ClientNetworkType.wifi)
-                              ? 'SSID：${ssid.data?.ssid ?? '暂不可用'}\n访问设备必须连接到同一个 Wi‑Fi'
+                              ? _wifiDetails(wifi.data)
                               : '请连接 Wi‑Fi 后再开启文件共享',
                         ),
                   ),

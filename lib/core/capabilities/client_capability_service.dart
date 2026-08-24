@@ -237,37 +237,46 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
 
   @override
   Future<ClientWifiInfo> getWifiInfo() async {
-    try {
-      final values = await Future.wait<String?>(<Future<String?>>[
-        _networkInfo.getWifiName(),
-        _networkInfo.getWifiBSSID(),
-        _networkInfo.getWifiIP(),
-        _networkInfo.getWifiIPv6(),
-        _networkInfo.getWifiGatewayIP(),
-        _networkInfo.getWifiSubmask(),
-        _networkInfo.getWifiBroadcast(),
-      ]);
-      return ClientWifiInfo(
-        ssid: _cleanSsid(values[0]),
-        bssid: values[1],
-        ipAddress: values[2],
-        ipv6Address: values[3],
-        gatewayIp: values[4],
-        submask: values[5],
-        broadcast: values[6],
-      );
-    } catch (error) {
-      return ClientWifiInfo(
-        ssid: null,
-        bssid: null,
-        ipAddress: null,
-        ipv6Address: null,
-        gatewayIp: null,
-        submask: null,
-        broadcast: null,
-        warning: '无法读取 Wi-Fi 信息：$error',
-      );
+    // NetworkInfo exposes a different field set on different Android ROMs and
+    // desktop platforms. A missing IPv6/gateway implementation must not hide
+    // the SSID or IPv4 result that is still available.
+    final values = await Future.wait<String?>(<Future<String?>>[
+      _readWifiValue(_networkInfo.getWifiName),
+      _readWifiValue(_networkInfo.getWifiBSSID),
+      _readWifiValue(_networkInfo.getWifiIP),
+      _readWifiValue(_networkInfo.getWifiIPv6),
+      _readWifiValue(_networkInfo.getWifiGatewayIP),
+      _readWifiValue(_networkInfo.getWifiSubmask),
+      _readWifiValue(_networkInfo.getWifiBroadcast),
+    ]);
+    final info = ClientWifiInfo(
+      ssid: _cleanSsid(values[0]),
+      bssid: values[1],
+      ipAddress: values[2],
+      ipv6Address: values[3],
+      gatewayIp: values[4],
+      submask: values[5],
+      broadcast: values[6],
+    );
+    if (info.ssid != null ||
+        info.bssid != null ||
+        info.ipAddress != null ||
+        info.ipv6Address != null ||
+        info.gatewayIp != null ||
+        info.submask != null ||
+        info.broadcast != null) {
+      return info;
     }
+    return ClientWifiInfo(
+      ssid: null,
+      bssid: null,
+      ipAddress: null,
+      ipv6Address: null,
+      gatewayIp: null,
+      submask: null,
+      broadcast: null,
+      warning: '系统暂未提供当前 Wi-Fi 的详细信息。',
+    );
   }
 
   @override
@@ -603,4 +612,12 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
         ClientPermissionKind.microphone => '麦克风',
         ClientPermissionKind.wifiInfo => 'Wi-Fi 信息',
       };
+
+  Future<String?> _readWifiValue(Future<String?> Function() read) async {
+    try {
+      return await read();
+    } catch (_) {
+      return null;
+    }
+  }
 }
