@@ -14,7 +14,7 @@ class _State extends ConsumerState<SharedFileManagerPage> {
   static const folders = ['/', '/图片', '/视频', '/文档', '/下载', '/聊天文件'];
   late final LocalFileServerService service;
   String path = '/';
-  bool foldersShown = true, grid = false, compact = false;
+  bool grid = false, compact = false;
   @override
   void initState() {
     super.initState();
@@ -33,6 +33,17 @@ class _State extends ConsumerState<SharedFileManagerPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    drawer: Drawer(
+      child: SafeArea(
+        child: _Folders(
+          selected: path,
+          onSelect: (value) {
+            setState(() => path = value);
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    ),
     appBar: AppBar(
       title: const Text('资源管理器'),
       actions: [
@@ -48,8 +59,7 @@ class _State extends ConsumerState<SharedFileManagerPage> {
     ),
     body: Row(
       children: [
-        if (foldersShown)
-          _Folders(selected: path, onSelect: (v) => setState(() => path = v)),
+        const SizedBox.shrink(),
         Expanded(
           child: ClipRRect(
             borderRadius: const BorderRadius.only(topLeft: Radius.circular(24)),
@@ -65,17 +75,17 @@ class _State extends ConsumerState<SharedFileManagerPage> {
                       padding: const EdgeInsets.fromLTRB(10, 10, 16, 6),
                       child: Row(
                         children: [
-                          IconButton(
-                            onPressed:
-                                () => setState(
-                                  () => foldersShown = !foldersShown,
+                          Builder(
+                            builder:
+                                (drawerContext) => IconButton(
+                                  onPressed:
+                                      () =>
+                                          Scaffold.of(
+                                            drawerContext,
+                                          ).openDrawer(),
+                                  icon: const Icon(Icons.menu),
+                                  tooltip: '打开目录树',
                                 ),
-                            icon: Icon(
-                              foldersShown
-                            ? Icons.menu_open
-                            : Icons.menu,
-                            ),
-                            tooltip: foldersShown ? '隐藏目录树' : '显示目录树',
                           ),
                           Expanded(
                             child: Text(
