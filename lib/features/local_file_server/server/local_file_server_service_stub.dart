@@ -6,7 +6,10 @@ import '../models/connected_terminal.dart';
 import '../models/local_file_server_state.dart';
 
 class LocalFileServerService extends ChangeNotifier {
-  LocalFileServerService({required LocalNotificationService notifications});
+  LocalFileServerService({
+    required LocalNotificationService notifications,
+    required String shareName,
+  });
   LocalFileServerState _state = const LocalFileServerState.stopped();
   LocalFileServerState get state => _state;
 

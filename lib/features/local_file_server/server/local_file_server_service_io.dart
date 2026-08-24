@@ -18,14 +18,18 @@ class LocalFileServerService extends ChangeNotifier {
   static const _notificationId = 4783201;
   static const _stopActionId = 'local_file_server.stop';
   static const _disconnectActionId = 'local_file_server.disconnect_all';
-  LocalFileServerService({required LocalNotificationService notifications})
-    : _notifications = notifications {
+  LocalFileServerService({
+    required LocalNotificationService notifications,
+    required String shareName,
+  }) : _notifications = notifications,
+       _shareName = shareName {
     _notificationSubscription = _notifications.tapEvents.listen(
       _handleNotificationAction,
     );
   }
 
   final LocalNotificationService _notifications;
+  final String _shareName;
   late final StreamSubscription<LocalNotificationTapEvent>
   _notificationSubscription;
   final Random _random = Random.secure();
@@ -229,6 +233,12 @@ class LocalFileServerService extends ChangeNotifier {
       }
       if (path == '/api/auth/login' && request.method == 'POST') {
         await _login(request);
+        return;
+      }
+      if (path == '/api/share-info' && request.method == 'GET') {
+        _json(request.response, HttpStatus.ok, {
+          'title': '$_shareName 的${_hostDeviceLabel()}文件',
+        });
         return;
       }
       if (path == '/' || path.startsWith('/assets/')) {
@@ -720,6 +730,12 @@ class LocalFileServerService extends ChangeNotifier {
   }
 
   String _verificationCode() => (1000 + _random.nextInt(9000)).toString();
+  String _hostDeviceLabel() {
+    if (Platform.isAndroid) return '手机';
+    if (Platform.isIOS) return '苹果设备';
+    return '电脑';
+  }
+
   String _token() =>
       List.generate(32, (_) => _random.nextInt(16).toRadixString(16)).join();
   Future<String> _lanAddress() async {
