@@ -273,35 +273,18 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
   @override
   Future<ClientNativeActionResult> requestWifiInfoPermission() async {
     if (_platformFacade.kind == PlatformKind.android) {
-      final statuses =
-          await <Permission>[
-            Permission.locationWhenInUse,
-            Permission.nearbyWifiDevices,
-          ].request();
-      final granted = statuses.values.every((status) => status.isGranted);
-      return ClientNativeActionResult(
-        ok: granted,
-        status:
-            statuses
-                .map((key, value) => MapEntry(key.toString(), value.name))
-                .toString(),
-        message: granted ? '已授予读取 Wi-Fi 信息所需权限。' : '未取得全部 Wi-Fi 信息权限。',
-        shouldOpenSettings: statuses.values.any(_shouldOpenSettings),
-      );
-    }
-    if (_platformFacade.kind == PlatformKind.ios) {
-      final status = await Permission.locationWhenInUse.request();
+      final status = await Permission.nearbyWifiDevices.request();
       return ClientNativeActionResult(
         ok: status.isGranted,
         status: status.name,
-        message: status.isGranted ? '位置权限已授予。' : 'iOS 未授予位置权限。',
+        message: status.isGranted ? '已授予附近 Wi-Fi 设备权限。' : '未授予附近 Wi-Fi 设备权限。',
         shouldOpenSettings: _shouldOpenSettings(status),
       );
     }
     return const ClientNativeActionResult(
       ok: true,
       status: 'notRequired',
-      message: '此平台读取 Wi-Fi 信息无需应用位置权限。',
+      message: '此平台读取 Wi-Fi 信息不需要应用运行时权限。',
     );
   }
 
@@ -316,7 +299,6 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
       ClientPermissionKind.photos => Permission.photos,
       ClientPermissionKind.camera => Permission.camera,
       ClientPermissionKind.microphone => Permission.microphone,
-      ClientPermissionKind.location => Permission.locationWhenInUse,
       ClientPermissionKind.wifiInfo => throw StateError('unreachable'),
     };
     try {
@@ -422,12 +404,12 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
           isSupported:
               _platformFacade.kind == PlatformKind.android ||
               _platformFacade.kind == PlatformKind.ios,
-          message: 'Android/iOS 用于读取受保护的 Wi-Fi SSID 信息。',
+          message: '仅 Android 请求“附近 Wi-Fi 设备”权限；iOS 不会申请定位权限。',
         ),
         ClientCapabilitySupport(
           name: 'permission.request',
           isSupported: !_platformFacade.isWeb,
-          message: '可请求相册、相机、麦克风、位置与 Wi-Fi 信息权限；永久拒绝时返回设置引导。',
+          message: '可请求相册、相机、麦克风与 Wi-Fi 信息权限；永久拒绝时返回设置引导。',
         ),
         ClientCapabilitySupport(
           name: 'system.openWifiSettings',
@@ -631,7 +613,6 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
         ClientPermissionKind.photos => '相册',
         ClientPermissionKind.camera => '相机',
         ClientPermissionKind.microphone => '麦克风',
-        ClientPermissionKind.location => '位置',
         ClientPermissionKind.wifiInfo => 'Wi-Fi 信息',
       };
 }

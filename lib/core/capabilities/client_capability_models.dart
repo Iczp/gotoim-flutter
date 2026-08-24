@@ -15,7 +15,7 @@ enum ClientNetworkType {
 ///
 /// This deliberately uses application-oriented names rather than plugin
 /// permission constants.
-enum ClientPermissionKind { photos, camera, microphone, location, wifiInfo }
+enum ClientPermissionKind { photos, camera, microphone, wifiInfo }
 
 class ClientSystemInfo {
   const ClientSystemInfo({

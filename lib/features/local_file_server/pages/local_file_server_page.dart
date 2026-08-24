@@ -27,7 +27,7 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
     super.initState();
     _service = ref.read(localFileServerProvider)
       ..addListener(_onServiceChanged);
-    _loadWifiName();
+    _refreshWifiInfo();
   }
 
   @override
@@ -42,16 +42,24 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
     }
   }
 
-  Future<void> _loadWifiName() async {
+  /// Reads visible Wi-Fi data without asking for a new system permission.
+  /// Permission is requested only when the user starts LAN sharing.
+  Future<void> _refreshWifiInfo() async {
+    final capabilities = ref.read(clientCapabilityServiceProvider);
+    final info = await capabilities.getWifiInfo();
+    if (mounted) {
+      setState(() => _wifiInfo = Future.value(info));
+    }
+  }
+
+  Future<void> _startSharing() async {
     final capabilities = ref.read(clientCapabilityServiceProvider);
     final permission = await capabilities.requestWifiInfoPermission();
     if (!permission.ok && mounted) {
       await _showPermissionSettingsPrompt(permission.message);
     }
-    final info = await capabilities.getWifiInfo();
-    if (mounted) {
-      setState(() => _wifiInfo = Future.value(info));
-    }
+    await _refreshWifiInfo();
+    await _service.start();
   }
 
   Future<void> _showPermissionSettingsPrompt(String message) async {
@@ -61,7 +69,7 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
       builder:
           (dialogContext) => AlertDialog(
             title: const Text('需要 Wi-Fi 信息权限'),
-            content: Text('$message\n\n请到系统设置中允许位置或附近设备权限后重试。'),
+            content: Text('$message\n\n请到系统设置中允许“附近 Wi-Fi 设备”权限后重试。'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
@@ -188,7 +196,7 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
                     onPressed:
                         state.status == LocalFileServerStatus.starting
                             ? null
-                            : (running ? service.stop : service.start),
+                            : (running ? service.stop : _startSharing),
                     icon: Icon(
                       running
                           ? Icons.stop_circle_outlined
