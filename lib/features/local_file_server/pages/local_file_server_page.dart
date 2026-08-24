@@ -42,49 +42,20 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
     }
   }
 
-  /// Reads visible Wi-Fi data without asking for a new system permission.
-  /// Permission is requested only when the user starts LAN sharing.
+  /// Reads visible Wi-Fi data without requesting any system permission.
   Future<void> _refreshWifiInfo() async {
     final capabilities = ref.read(clientCapabilityServiceProvider);
     final info = await capabilities.getWifiInfo();
     if (mounted) {
-      setState(() => _wifiInfo = Future.value(info));
+      setState(() {
+        _wifiInfo = Future.value(info);
+      });
     }
   }
 
   Future<void> _startSharing() async {
-    final capabilities = ref.read(clientCapabilityServiceProvider);
-    final permission = await capabilities.requestWifiInfoPermission();
-    if (!permission.ok && mounted) {
-      await _showPermissionSettingsPrompt(permission.message);
-    }
     await _refreshWifiInfo();
     await _service.start();
-  }
-
-  Future<void> _showPermissionSettingsPrompt(String message) async {
-    final capabilities = ref.read(clientCapabilityServiceProvider);
-    await showDialog<void>(
-      context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            title: const Text('需要 Wi-Fi 信息权限'),
-            content: Text('$message\n\n请到系统设置中允许“附近 Wi-Fi 设备”权限后重试。'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('暂不设置'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  Navigator.of(dialogContext).pop();
-                  await capabilities.openAppSettings();
-                },
-                child: const Text('打开设置'),
-              ),
-            ],
-          ),
-    );
   }
 
   String _networkLabel(ClientNetworkStatus status) {
@@ -130,7 +101,7 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
                     builder:
                         (context, ssid) => Text(
                           status.types.contains(ClientNetworkType.wifi)
-                              ? 'SSID：${ssid.data?.ssid ?? '未授权读取（请允许位置权限）'}\n访问设备必须连接到同一个 Wi‑Fi'
+                              ? 'SSID：${ssid.data?.ssid ?? '暂不可用'}\n访问设备必须连接到同一个 Wi‑Fi'
                               : '请连接 Wi‑Fi 后再开启文件共享',
                         ),
                   ),

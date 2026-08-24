@@ -271,22 +271,12 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
   }
 
   @override
-  Future<ClientNativeActionResult> requestWifiInfoPermission() async {
-    if (_platformFacade.kind == PlatformKind.android) {
-      final status = await Permission.nearbyWifiDevices.request();
-      return ClientNativeActionResult(
-        ok: status.isGranted,
-        status: status.name,
-        message: status.isGranted ? '已授予附近 Wi-Fi 设备权限。' : '未授予附近 Wi-Fi 设备权限。',
-        shouldOpenSettings: _shouldOpenSettings(status),
+  Future<ClientNativeActionResult> requestWifiInfoPermission() async =>
+      const ClientNativeActionResult(
+        ok: true,
+        status: 'notRequired',
+        message: '局域网文件共享不会申请系统定位或 Wi-Fi 运行时权限；SSID 不可用时会留空。',
       );
-    }
-    return const ClientNativeActionResult(
-      ok: true,
-      status: 'notRequired',
-      message: '此平台读取 Wi-Fi 信息不需要应用运行时权限。',
-    );
-  }
 
   @override
   Future<ClientNativeActionResult> requestPermission(
@@ -401,10 +391,8 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
         ),
         ClientCapabilitySupport(
           name: 'permission.requestWifiInfo',
-          isSupported:
-              _platformFacade.kind == PlatformKind.android ||
-              _platformFacade.kind == PlatformKind.ios,
-          message: '仅 Android 请求“附近 Wi-Fi 设备”权限；iOS 不会申请定位权限。',
+          isSupported: true,
+          message: '局域网文件共享不依赖运行时权限；SSID 字段会按系统可用性读取。',
         ),
         ClientCapabilitySupport(
           name: 'permission.request',
