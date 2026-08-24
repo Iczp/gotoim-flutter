@@ -83,6 +83,26 @@ class Native {
     return device.setScreenBrightness(brightness);
   }
 
+  /// Enables/disables the rear-camera flashlight when supported.
+  static Future<bool> setFlashlight(bool enabled) {
+    return device.setFlashlight(enabled);
+  }
+
+  /// Returns media output volume (0.0-1.0), or -1 when unsupported.
+  static Future<double> getSystemVolume() {
+    return device.getSystemVolume();
+  }
+
+  /// Sets media output volume (0.0-1.0).
+  static Future<bool> setSystemVolume(double volume) {
+    return device.setSystemVolume(volume);
+  }
+
+  /// Sets the desktop app-icon badge; currently supported by macOS Dock.
+  static Future<bool> setDesktopBadge(int? count) {
+    return system.setDesktopBadge(count);
+  }
+
   // --- Sensor Capabilities ---
 
   /// Listens to accelerometer sensor data (~5 times/second).

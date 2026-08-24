@@ -409,11 +409,34 @@ class JsApiDispatcher {
         final value = (request.data['value'] as num?)?.toDouble() ?? 1.0;
         final ok = await Native.setScreenBrightness(value);
         return <String, Object>{'ok': ok, 'value': value.clamp(0.0, 1.0)};
+      case 'setFlashlight':
+      case 'device.setFlashlight':
+        final enabled = request.data['enabled'] as bool? ?? false;
+        final ok = await Native.setFlashlight(enabled);
+        return <String, Object>{'ok': ok, 'enabled': enabled};
+      case 'getSystemVolume':
+      case 'device.getSystemVolume':
+        final value = await Native.getSystemVolume();
+        return <String, Object>{
+          'supported': value >= 0,
+          if (value >= 0) 'value': value,
+        };
+      case 'setSystemVolume':
+      case 'device.setSystemVolume':
+        final value =
+            _requiredDouble(request.data, 'value').clamp(0.0, 1.0).toDouble();
+        final ok = await Native.setSystemVolume(value);
+        return <String, Object>{'ok': ok, 'value': value};
       case 'makePhoneCall':
       case 'system.makePhoneCall':
         final phoneNumber = _requiredString(request.data, 'phoneNumber');
         final ok = await Native.makePhoneCall(phoneNumber);
         return <String, bool>{'ok': ok};
+      case 'setDesktopBadge':
+      case 'desktop.setBadge':
+        final count = _optionalInt(request.data, 'count') ?? 0;
+        final ok = await Native.setDesktopBadge(count);
+        return <String, Object>{'ok': ok, 'count': count > 0 ? count : 0};
       case 'onUserCaptureScreen':
       case 'system.onUserCaptureScreen':
         final subId =
@@ -893,6 +916,14 @@ class JsApiDispatcher {
     if (value == null) return null;
     if (value is num) return value.toDouble();
     throw JsBridgeException('INVALID_ARGUMENT', '$key 必须是数字。');
+  }
+
+  double _requiredDouble(Map<String, dynamic> data, String key) {
+    final value = _optionalDouble(data, key);
+    if (value == null) {
+      throw JsBridgeException('INVALID_ARGUMENT', '$key 必须是数字。');
+    }
+    return value;
   }
 
   ImageOutputFormat _imageFormat(Object? value) => switch (value) {

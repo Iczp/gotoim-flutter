@@ -222,6 +222,40 @@ void main() {
     expect(callRes['success'], isTrue);
   });
 
+  test('handles flashlight, volume, and desktop badge JSAPIs', () async {
+    final flashlight = jsonDecode(
+      await dispatcher.handleRaw(
+        '{"id":"flash-1","action":"device.setFlashlight","data":{"enabled":true}}',
+      ),
+    ) as Map<String, dynamic>;
+    expect(flashlight['success'], isTrue);
+    expect(flashlight['data']['enabled'], isTrue);
+
+    final volume = jsonDecode(
+      await dispatcher.handleRaw(
+        '{"id":"volume-1","action":"device.getSystemVolume","data":{}}',
+      ),
+    ) as Map<String, dynamic>;
+    expect(volume['success'], isTrue);
+    expect(volume['data']['supported'], isA<bool>());
+
+    final setVolume = jsonDecode(
+      await dispatcher.handleRaw(
+        '{"id":"volume-2","action":"device.setSystemVolume","data":{"value":0.6}}',
+      ),
+    ) as Map<String, dynamic>;
+    expect(setVolume['success'], isTrue);
+    expect(setVolume['data']['value'], 0.6);
+
+    final badge = jsonDecode(
+      await dispatcher.handleRaw(
+        '{"id":"badge-1","action":"desktop.setBadge","data":{"count":7}}',
+      ),
+    ) as Map<String, dynamic>;
+    expect(badge['success'], isTrue);
+    expect(badge['data']['count'], 7);
+  });
+
   test('manages Native sensor & system event subscriptions and unsubscriptions via JSAPI', () async {
     final accSubRes = jsonDecode(
       await dispatcher.handleRaw('{"id":"sub-acc","action":"onAccelerometerChange","data":{"subscriptionId":"acc-1"}}'),

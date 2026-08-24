@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.database.ContentObserver
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -17,6 +19,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.media.AudioManager
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
@@ -233,6 +236,63 @@ class NativeDevicePlugin(
                     result.success(true)
                 } catch (e: Exception) {
                     Log.e(TAG, "makePhoneCall error", e)
+                    result.success(false)
+                }
+            }
+
+            "setFlashlight" -> {
+                val enabled = call.argument<Boolean>("enabled") ?: false
+                try {
+                    val cameraManager =
+                        context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+                    val cameraId = cameraManager?.cameraIdList?.firstOrNull { id ->
+                        cameraManager.getCameraCharacteristics(id)
+                            .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+                    }
+                    if (cameraManager == null || cameraId == null) {
+                        result.success(false)
+                    } else {
+                        cameraManager.setTorchMode(cameraId, enabled)
+                        result.success(true)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "setFlashlight error", e)
+                    result.success(false)
+                }
+            }
+
+            "getSystemVolume" -> {
+                try {
+                    val audioManager =
+                        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    val maximum = audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 0
+                    val current = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+                    result.success(if (maximum > 0) current.toDouble() / maximum else 0.0)
+                } catch (e: Exception) {
+                    Log.e(TAG, "getSystemVolume error", e)
+                    result.success(null)
+                }
+            }
+
+            "setSystemVolume" -> {
+                val normalized = (call.argument<Double>("volume") ?: 0.0)
+                    .coerceIn(0.0, 1.0)
+                try {
+                    val audioManager =
+                        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    val maximum = audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 0
+                    if (audioManager == null || maximum <= 0) {
+                        result.success(false)
+                    } else {
+                        audioManager.setStreamVolume(
+                            AudioManager.STREAM_MUSIC,
+                            (maximum * normalized).toInt(),
+                            0
+                        )
+                        result.success(true)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "setSystemVolume error", e)
                     result.success(false)
                 }
             }

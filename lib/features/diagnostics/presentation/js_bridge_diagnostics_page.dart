@@ -503,6 +503,23 @@ class _JsBridgeDiagnosticsPageState
               child: const Text('设置亮度 (0.8)'),
             ),
             OutlinedButton(
+              onPressed: () => _preset('flash-on', 'setFlashlight', <String, Object?>{'enabled': true}),
+              child: const Text('开启闪光灯'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('flash-off', 'setFlashlight', <String, Object?>{'enabled': false}),
+              child: const Text('关闭闪光灯'),
+            ),
+            OutlinedButton(onPressed: () => _preset('volume', 'getSystemVolume'), child: const Text('读取音量')),
+            OutlinedButton(
+              onPressed: () => _preset('set-volume', 'setSystemVolume', <String, Object?>{'value': 0.5}),
+              child: const Text('设置音量 (0.5)'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('desktop-badge', 'setDesktopBadge', <String, Object?>{'count': 7}),
+              child: const Text('桌面角标 (7)'),
+            ),
+            OutlinedButton(
               onPressed: () => _preset('call', 'makePhoneCall', <String, Object?>{'phoneNumber': '10086'}),
               child: const Text('拨打电话'),
             ),

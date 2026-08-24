@@ -39,6 +39,13 @@ void main() {
       await expectLater(Native.vibrate(HapticFeedbackType.heavy), completes);
       await expectLater(Native.vibrate(HapticFeedbackType.selection), completes);
     });
+
+    test('new device controls safely report unsupported in a test runtime', () async {
+      expect(await Native.setFlashlight(true), isFalse);
+      expect(await Native.getSystemVolume(), -1);
+      expect(await Native.setSystemVolume(0.5), isFalse);
+      expect(await Native.setDesktopBadge(7), isFalse);
+    });
   });
 
   group('Native Sensor Lifecycle & Cancellation', () {

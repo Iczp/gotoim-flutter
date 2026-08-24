@@ -117,6 +117,21 @@ class NativeSystem with WidgetsBindingObserver {
     }
   }
 
+  /// Sets the macOS Dock badge. A null or non-positive [count] clears it.
+  /// Other platforms return false and leave their app icon unchanged.
+  Future<bool> setDesktopBadge(int? count) async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>(
+        'setDesktopBadge',
+        <String, dynamic>{'count': count ?? 0},
+      );
+      return result ?? false;
+    } catch (error) {
+      debugPrint('[NativeSystem] setDesktopBadge unsupported: $error');
+      return false;
+    }
+  }
+
   @override
   void didChangePlatformBrightness() {
     _themeController.add(currentBrightness);

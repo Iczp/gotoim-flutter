@@ -163,4 +163,50 @@ class NativeDevice {
       return false;
     }
   }
+
+  /// Enables or disables the rear-camera torch where the device exposes one.
+  ///
+  /// This is intentionally separate from the scanner torch: it can be used by
+  /// a native page or a JSAPI without requiring an active camera preview.
+  Future<bool> setFlashlight(bool enabled) async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>(
+        'setFlashlight',
+        <String, dynamic>{'enabled': enabled},
+      );
+      return result ?? false;
+    } catch (error) {
+      debugPrint('[NativeDevice] setFlashlight unsupported: $error');
+      return false;
+    }
+  }
+
+  /// Returns the current media-output volume normalized to 0.0 through 1.0.
+  /// Unsupported platforms return -1 instead of a fabricated volume value.
+  Future<double> getSystemVolume() async {
+    try {
+      final result = await _methodChannel.invokeMethod<double>(
+        'getSystemVolume',
+      );
+      if (result != null) return result.clamp(0.0, 1.0).toDouble();
+    } catch (error) {
+      debugPrint('[NativeDevice] getSystemVolume unsupported: $error');
+    }
+    return -1;
+  }
+
+  /// Sets media-output volume as a normalized 0.0 through 1.0 value.
+  Future<bool> setSystemVolume(double volume) async {
+    final normalized = volume.clamp(0.0, 1.0).toDouble();
+    try {
+      final result = await _methodChannel.invokeMethod<bool>(
+        'setSystemVolume',
+        <String, dynamic>{'volume': normalized},
+      );
+      return result ?? false;
+    } catch (error) {
+      debugPrint('[NativeDevice] setSystemVolume unsupported: $error');
+      return false;
+    }
+  }
 }

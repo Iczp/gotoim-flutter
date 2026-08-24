@@ -82,6 +82,19 @@ lib/core/native/
   { "ok": true, "value": 0.8 }
   ```
 
+#### 5. 后置闪光灯 (`setFlashlight`)
+- **说明**：独立于扫码页的闪光灯控制，打开或关闭设备后置摄像头 Torch。
+- **Dart 调用**：`await Native.setFlashlight(true);`
+- **JSBridge Action**：`setFlashlight` 或 `device.setFlashlight`
+- **平台**：Android、iOS；没有后置闪光灯或未获相机访问许可时返回 `false`。
+- **入参 / 出参**：`{ "enabled": true }` → `{ "ok": true, "enabled": true }`
+
+#### 6. 媒体音量 (`getSystemVolume` / `setSystemVolume`)
+- **说明**：读取或设置媒体输出音量，范围为 `0.0 ~ 1.0`。
+- **Dart 调用**：`await Native.getSystemVolume();`、`await Native.setSystemVolume(0.5);`
+- **JSBridge Action**：`device.getSystemVolume`、`device.setSystemVolume`
+- **平台**：Android、iOS；其他平台读取返回 `-1`，设置返回 `false`。
+
 ---
 
 ### 2.2 系统能力与事件 (System)
@@ -99,7 +112,13 @@ lib/core/native/
   { "ok": true }
   ```
 
-#### 2. 用户截屏监听 (`onUserCaptureScreen` / `offUserCaptureScreen`)
+#### 2. 桌面角标 (`setDesktopBadge`)
+- **说明**：设置 macOS Dock 中的应用角标，传 `0`、负数或 `null` 清除角标。
+- **Dart 调用**：`await Native.setDesktopBadge(12);`
+- **JSBridge Action**：`setDesktopBadge` 或 `desktop.setBadge`
+- **平台**：当前仅 macOS；Windows、Linux、Web 和移动端安全返回 `false`。
+
+#### 3. 用户截屏监听 (`onUserCaptureScreen` / `offUserCaptureScreen`)
 - **说明**：监听用户在 App 内主动执行的截屏操作。
 - **Dart 调用**：
   ```dart
@@ -124,7 +143,7 @@ lib/core/native/
   - 入参：`{ "subscriptionId": "ss-1" }`
   - 出参：`{ "removed": true }`
 
-#### 3. 系统主题变化监听 (`onThemeChange` / `offThemeChange`)
+#### 4. 系统主题变化监听 (`onThemeChange` / `offThemeChange`)
 - **说明**：监听系统明暗模式（Light / Dark）切换。
 - **Dart 调用**：
   ```dart
@@ -146,7 +165,7 @@ lib/core/native/
   ```
 - **JSBridge 取消订阅 Action**：`offThemeChange`
 
-#### 4. 窗口尺寸与旋转监听 (`onResize` / `offResize`)
+#### 5. 窗口尺寸与旋转监听 (`onResize` / `offResize`)
 - **说明**：监听窗口大小改变、平板折叠屏展开或屏幕横竖屏旋转。
 - **Dart 调用**：
   ```dart
@@ -169,7 +188,7 @@ lib/core/native/
   ```
 - **JSBridge 取消订阅 Action**：`offResize`
 
-#### 5. 内存不足告警监听 (`onMemoryWarning` / `offMemoryWarning`)
+#### 6. 内存不足告警监听 (`onMemoryWarning` / `offMemoryWarning`)
 - **说明**：监听系统低内存压力警告，用于触发缓存清理。
 - **Dart 调用**：
   ```dart
@@ -290,12 +309,15 @@ lib/core/native/
 | 系统主题 (`onThemeChange`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | 窗口尺寸 (`onResize`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | 内存告警 (`onMemoryWarning`) | ✓ | ✓ | ✓ | ✓ | ✓ | 降级 |
-| 加速度计 (`onAccelerometerChange`) | ✓ (SensorManager) | ✓ (CMMotionManager) | 降级 | 降级 | 降级 | ✓ (DeviceMotionEvent) |
-| 陀螺仪 (`onGyroscopeChange`) | ✓ (SensorManager) | ✓ (CMMotionManager) | 降级 | 降级 | 降级 | ✓ (DeviceOrientation) |
+| 加速度计 (`onAccelerometerChange`) | ✓ (SensorManager) | ✓ (CMMotionManager) | 降级 | 降级 | 降级 | 降级 |
+| 陀螺仪 (`onGyroscopeChange`) | ✓ (SensorManager) | ✓ (CMMotionManager) | 降级 | 降级 | 降级 | 降级 |
 | 距离传感器 (`onProximityChange`) | ✓ (SensorManager) | ✓ (proximityMonitoring) | 降级 | 降级 | 降级 | 降级 |
 | 拨打电话 (`makePhoneCall`) | ✓ (ACTION_DIAL) | ✓ (tel: URL) | 降级 | 降级 | 降级 | ✓ (tel: link) |
 | 屏幕亮度 (`get/setScreenBrightness`)| ✓ (Window Attributes) | ✓ (UIScreen) | 降级 | 降级 | 降级 | 降级 |
 | 电量信息 (`getBatteryInfo`) | ✓ (BatteryManager) | ✓ (UIDevice.battery) | 降级 (100%) | 降级 (100%) | 降级 (100%) | ✓ (getBattery) |
+| 后置闪光灯 (`setFlashlight`) | ✓ (CameraManager) | ✓ (AVCaptureDevice) | 降级 | 降级 | 降级 | 降级 |
+| 媒体音量 (`get/setSystemVolume`) | ✓ (AudioManager) | ✓ (AVAudioSession / MPVolumeView) | 降级 | 降级 | 降级 | 降级 |
+| 桌面角标 (`setDesktopBadge`) | 降级 | 降级 | 降级 | ✓ (Dock badge) | 降级 | 降级 |
 
 ---
 

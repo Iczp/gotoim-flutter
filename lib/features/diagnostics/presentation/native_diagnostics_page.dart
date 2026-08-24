@@ -48,8 +48,13 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
   // Device State
   BatteryInfo? _batteryInfo;
   double _screenBrightness = 1.0;
+  double? _systemVolume;
+  bool _flashlightEnabled = false;
+  bool _flashlightBusy = false;
   final TextEditingController _phoneController = TextEditingController(text: '10086');
+  final TextEditingController _desktopBadgeController = TextEditingController(text: '7');
   String _vibrateStatus = '就绪';
+  String _deviceControlStatus = '未执行';
 
   // Sensor State
   AccelerometerEvent? _accelerometerEvent;
@@ -168,12 +173,49 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
   Future<void> _fetchDeviceStatus() async {
     final battery = await Native.getBatteryInfo();
     final brightness = await Native.getScreenBrightness();
+    final volume = await Native.getSystemVolume();
     if (mounted) {
       setState(() {
         _batteryInfo = battery;
         _screenBrightness = brightness;
+        _systemVolume = volume >= 0 ? volume : null;
       });
     }
+  }
+
+  Future<void> _setFlashlight(bool enabled) async {
+    setState(() => _flashlightBusy = true);
+    final ok = await Native.setFlashlight(enabled);
+    if (!mounted) return;
+    setState(() {
+      _flashlightBusy = false;
+      if (ok) _flashlightEnabled = enabled;
+      _deviceControlStatus = ok
+          ? '闪光灯已${enabled ? '开启' : '关闭'}'
+          : '闪光灯不可用：请确认设备有后置闪光灯并允许相机访问';
+    });
+  }
+
+  Future<void> _setSystemVolume(double value) async {
+    final ok = await Native.setSystemVolume(value);
+    if (!mounted) return;
+    setState(() {
+      if (ok) _systemVolume = value;
+      _deviceControlStatus = ok
+          ? '媒体音量已设置为 ${(value * 100).round()}%'
+          : '当前平台不支持设置媒体音量';
+    });
+  }
+
+  Future<void> _setDesktopBadge() async {
+    final count = int.tryParse(_desktopBadgeController.text.trim()) ?? 0;
+    final ok = await Native.setDesktopBadge(count);
+    if (!mounted) return;
+    setState(() {
+      _deviceControlStatus = ok
+          ? (count > 0 ? 'Dock 桌面角标已设置为 $count' : 'Dock 桌面角标已清除')
+          : '当前平台不支持桌面角标（目前仅 macOS Dock 支持）';
+    });
   }
 
   void _toggleAccelerometer(bool enable) {
@@ -237,6 +279,7 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
     _gyroscopeSub?.cancel();
     _proximitySub?.cancel();
     _phoneController.dispose();
+    _desktopBadgeController.dispose();
     super.dispose();
   }
 
@@ -496,6 +539,60 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                 Native.setScreenBrightness(val);
               },
             ),
+            const SizedBox(height: 12),
+
+            // Flashlight
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(_flashlightEnabled ? Icons.flash_on : Icons.flash_off),
+              title: const Text('后置闪光灯'),
+              subtitle: const Text('Android / iOS；与扫码页闪光灯独立控制'),
+              value: _flashlightEnabled,
+              onChanged: _flashlightBusy ? null : _setFlashlight,
+            ),
+            const SizedBox(height: 8),
+
+            // Media volume
+            Text(
+              _systemVolume == null
+                  ? '媒体音量：当前平台不支持读取'
+                  : '媒体音量: ${(_systemVolume! * 100).round()}%',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            Slider(
+              value: _systemVolume ?? 0,
+              min: 0,
+              max: 1,
+              onChanged: _systemVolume == null
+                  ? null
+                  : (value) => setState(() => _systemVolume = value),
+              onChangeEnd: _systemVolume == null ? null : _setSystemVolume,
+            ),
+            const SizedBox(height: 8),
+
+            // Desktop badge
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _desktopBadgeController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'macOS Dock 角标数（0 清除）',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: _setDesktopBadge,
+                  child: const Text('设置角标'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('设备控制：$_deviceControlStatus', style: const TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 12),
 
             // Vibration & Haptic
