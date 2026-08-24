@@ -599,7 +599,9 @@ class LocalFileServerService extends ChangeNotifier {
 
   Directory _resolve(String relative) => Directory(_resolvePath(relative));
   String _resolvePath(String? relative) {
-    final raw = Uri.decodeComponent(relative ?? '/').replaceAll('\\', '/');
+    // HttpRequest.uri.queryParameters and JSON bodies are already decoded.
+    // Decoding again corrupts valid non-ASCII virtual paths such as /图片.
+    final raw = (relative ?? '/').replaceAll('\\', '/');
     final parts = raw.split('/').where((part) => part.isNotEmpty).map(_segment);
     return '${_shareRoot!.path}${parts.isEmpty ? '' : '${Platform.pathSeparator}${parts.join(Platform.pathSeparator)}'}';
   }
