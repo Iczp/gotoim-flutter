@@ -11,6 +11,12 @@ enum ClientNetworkType {
   other,
 }
 
+/// Permission groups exposed to features and JSBridge.
+///
+/// This deliberately uses application-oriented names rather than plugin
+/// permission constants.
+enum ClientPermissionKind { photos, camera, microphone, location, wifiInfo }
+
 class ClientSystemInfo {
   const ClientSystemInfo({
     required this.platform,
@@ -171,16 +177,19 @@ class ClientNativeActionResult {
     required this.ok,
     required this.message,
     this.status,
+    this.shouldOpenSettings = false,
   });
 
   final bool ok;
   final String message;
   final String? status;
+  final bool shouldOpenSettings;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'ok': ok,
     'message': message,
     'status': status,
+    'shouldOpenSettings': shouldOpenSettings,
   };
 }
 

@@ -34,7 +34,13 @@ abstract class ClientCapabilityService {
 
   Future<ClientNativeActionResult> requestWifiInfoPermission();
 
+  Future<ClientNativeActionResult> requestPermission(
+    ClientPermissionKind permission,
+  );
+
   Future<ClientNativeActionResult> openWifiSettings();
+
+  Future<ClientNativeActionResult> openAppSettings();
 
   Stream<ClientNetworkStatus> get networkStatusChanges;
 
@@ -280,6 +286,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
                 .map((key, value) => MapEntry(key.toString(), value.name))
                 .toString(),
         message: granted ? '已授予读取 Wi-Fi 信息所需权限。' : '未取得全部 Wi-Fi 信息权限。',
+        shouldOpenSettings: statuses.values.any(_shouldOpenSettings),
       );
     }
     if (_platformFacade.kind == PlatformKind.ios) {
@@ -288,6 +295,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
         ok: status.isGranted,
         status: status.name,
         message: status.isGranted ? '位置权限已授予。' : 'iOS 未授予位置权限。',
+        shouldOpenSettings: _shouldOpenSettings(status),
       );
     }
     return const ClientNativeActionResult(
@@ -295,6 +303,43 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
       status: 'notRequired',
       message: '此平台读取 Wi-Fi 信息无需应用位置权限。',
     );
+  }
+
+  @override
+  Future<ClientNativeActionResult> requestPermission(
+    ClientPermissionKind permission,
+  ) async {
+    if (permission == ClientPermissionKind.wifiInfo) {
+      return requestWifiInfoPermission();
+    }
+    final nativePermission = switch (permission) {
+      ClientPermissionKind.photos => Permission.photos,
+      ClientPermissionKind.camera => Permission.camera,
+      ClientPermissionKind.microphone => Permission.microphone,
+      ClientPermissionKind.location => Permission.locationWhenInUse,
+      ClientPermissionKind.wifiInfo => throw StateError('unreachable'),
+    };
+    try {
+      final status = await nativePermission.request();
+      final granted = status.isGranted || status.isLimited;
+      return ClientNativeActionResult(
+        ok: granted,
+        status: status.name,
+        shouldOpenSettings: _shouldOpenSettings(status),
+        message:
+            granted
+                ? '${_permissionLabel(permission)}权限已授予。'
+                : _shouldOpenSettings(status)
+                ? '${_permissionLabel(permission)}权限已被系统永久拒绝，请前往应用设置开启。'
+                : '${_permissionLabel(permission)}权限未授予，可以再次请求或前往应用设置开启。',
+      );
+    } catch (error) {
+      return ClientNativeActionResult(
+        ok: false,
+        status: 'error',
+        message: '请求${_permissionLabel(permission)}权限失败：$error',
+      );
+    }
   }
 
   @override
@@ -317,6 +362,23 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
         ok: false,
         message: '无法打开系统 Wi-Fi 设置：$error',
       );
+    }
+  }
+
+  @override
+  Future<ClientNativeActionResult> openAppSettings() async {
+    if (_platformFacade.isWeb) {
+      return const ClientNativeActionResult(
+        ok: false,
+        status: 'unsupported',
+        message: '浏览器无法打开应用系统设置。',
+      );
+    }
+    try {
+      await AppSettings.openAppSettings(type: AppSettingsType.settings);
+      return const ClientNativeActionResult(ok: true, message: '已请求打开应用系统设置。');
+    } catch (error) {
+      return ClientNativeActionResult(ok: false, message: '无法打开应用系统设置：$error');
     }
   }
 
@@ -363,9 +425,19 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
           message: 'Android/iOS 用于读取受保护的 Wi-Fi SSID 信息。',
         ),
         ClientCapabilitySupport(
+          name: 'permission.request',
+          isSupported: !_platformFacade.isWeb,
+          message: '可请求相册、相机、麦克风、位置与 Wi-Fi 信息权限；永久拒绝时返回设置引导。',
+        ),
+        ClientCapabilitySupport(
           name: 'system.openWifiSettings',
           isSupported: _platformFacade.kind == PlatformKind.android,
           message: '仅 Android 可直接跳转到系统 Wi-Fi 设置。',
+        ),
+        ClientCapabilitySupport(
+          name: 'system.openAppSettings',
+          isSupported: !_platformFacade.isWeb,
+          message: '打开当前应用的系统设置，用于恢复被拒绝的权限。',
         ),
         const ClientCapabilitySupport(
           name: 'clipboard.getData/setData',
@@ -550,4 +622,16 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
         ? null
         : result;
   }
+
+  bool _shouldOpenSettings(PermissionStatus status) =>
+      status.isPermanentlyDenied || status.isRestricted;
+
+  String _permissionLabel(ClientPermissionKind permission) =>
+      switch (permission) {
+        ClientPermissionKind.photos => '相册',
+        ClientPermissionKind.camera => '相机',
+        ClientPermissionKind.microphone => '麦克风',
+        ClientPermissionKind.location => '位置',
+        ClientPermissionKind.wifiInfo => 'Wi-Fi 信息',
+      };
 }

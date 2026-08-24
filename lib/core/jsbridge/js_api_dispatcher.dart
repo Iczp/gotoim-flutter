@@ -136,9 +136,27 @@ class JsApiDispatcher {
       case 'requestWifiInfoPermission':
       case 'permission.requestWifiInfo':
         return (await _capabilities.requestWifiInfoPermission()).toJson();
+      case 'requestPermission':
+      case 'permission.request':
+        final value = _requiredString(request.data, 'permission');
+        final permission = switch (value) {
+          'photos' => ClientPermissionKind.photos,
+          'camera' => ClientPermissionKind.camera,
+          'microphone' => ClientPermissionKind.microphone,
+          'location' => ClientPermissionKind.location,
+          'wifiInfo' => ClientPermissionKind.wifiInfo,
+          _ => null,
+        };
+        if (permission == null) {
+          throw JsBridgeException('INVALID_ARGUMENT', '不支持的权限类型：$value');
+        }
+        return (await _capabilities.requestPermission(permission)).toJson();
       case 'openWifiSettings':
       case 'system.openWifiSettings':
         return (await _capabilities.openWifiSettings()).toJson();
+      case 'openAppSettings':
+      case 'system.openAppSettings':
+        return (await _capabilities.openAppSettings()).toJson();
       case 'onNetworkStatusChange':
       case 'network.onStatusChange':
         return _subscribeNetworkStatus(request.data);

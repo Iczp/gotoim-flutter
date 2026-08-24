@@ -44,11 +44,39 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
 
   Future<void> _loadWifiName() async {
     final capabilities = ref.read(clientCapabilityServiceProvider);
-    await capabilities.requestWifiInfoPermission();
+    final permission = await capabilities.requestWifiInfoPermission();
+    if (!permission.ok && mounted) {
+      await _showPermissionSettingsPrompt(permission.message);
+    }
     final info = await capabilities.getWifiInfo();
     if (mounted) {
       setState(() => _wifiInfo = Future.value(info));
     }
+  }
+
+  Future<void> _showPermissionSettingsPrompt(String message) async {
+    final capabilities = ref.read(clientCapabilityServiceProvider);
+    await showDialog<void>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('需要 Wi-Fi 信息权限'),
+            content: Text('$message\n\n请到系统设置中允许位置或附近设备权限后重试。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('暂不设置'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.of(dialogContext).pop();
+                  await capabilities.openAppSettings();
+                },
+                child: const Text('打开设置'),
+              ),
+            ],
+          ),
+    );
   }
 
   String _networkLabel(ClientNetworkStatus status) {

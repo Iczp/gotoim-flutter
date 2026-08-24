@@ -71,11 +71,19 @@ void main() {
               ),
             )
             as Map<String, dynamic>;
+    final photos =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"photos","action":"permission.request","data":{"permission":"photos"}}',
+              ),
+            )
+            as Map<String, dynamic>;
 
     expect(info['success'], isTrue);
     expect(info['data']['ssid'], 'GotoIM-Test');
     expect(permission['data']['status'], 'granted');
     expect(settings['data']['ok'], isTrue);
+    expect(photos['data']['status'], 'granted');
   });
 
   test('returns a structured error for an unsupported action', () async {
@@ -222,137 +230,216 @@ void main() {
     },
   );
 
-  test('handles Native device JSAPIs (battery, brightness, vibrate, makePhoneCall)', () async {
-    final batteryRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"bat-1","action":"getBatteryInfo","data":{}}'),
-    ) as Map<String, dynamic>;
-    expect(batteryRes['success'], isTrue);
-    expect(batteryRes['data']['level'], isNotNull);
+  test(
+    'handles Native device JSAPIs (battery, brightness, vibrate, makePhoneCall)',
+    () async {
+      final batteryRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"bat-1","action":"getBatteryInfo","data":{}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(batteryRes['success'], isTrue);
+      expect(batteryRes['data']['level'], isNotNull);
 
-    final brightRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"bri-1","action":"getScreenBrightness","data":{}}'),
-    ) as Map<String, dynamic>;
-    expect(brightRes['success'], isTrue);
-    expect(brightRes['data']['value'], isNotNull);
+      final brightRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"bri-1","action":"getScreenBrightness","data":{}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(brightRes['success'], isTrue);
+      expect(brightRes['data']['value'], isNotNull);
 
-    final setBrightRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"bri-2","action":"setScreenBrightness","data":{"value":0.7}}'),
-    ) as Map<String, dynamic>;
-    expect(setBrightRes['success'], isTrue);
+      final setBrightRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"bri-2","action":"setScreenBrightness","data":{"value":0.7}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(setBrightRes['success'], isTrue);
 
-    final vibRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"vib-1","action":"vibrate","data":{"style":"light","duration":100}}'),
-    ) as Map<String, dynamic>;
-    expect(vibRes['success'], isTrue);
+      final vibRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"vib-1","action":"vibrate","data":{"style":"light","duration":100}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(vibRes['success'], isTrue);
 
-    final callRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"call-1","action":"makePhoneCall","data":{"phoneNumber":"10086"}}'),
-    ) as Map<String, dynamic>;
-    expect(callRes['success'], isTrue);
-  });
+      final callRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"call-1","action":"makePhoneCall","data":{"phoneNumber":"10086"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(callRes['success'], isTrue);
+    },
+  );
 
   test('handles flashlight, volume, and desktop badge JSAPIs', () async {
-    final flashlight = jsonDecode(
-      await dispatcher.handleRaw(
-        '{"id":"flash-1","action":"device.setFlashlight","data":{"enabled":true}}',
-      ),
-    ) as Map<String, dynamic>;
+    final flashlight =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"flash-1","action":"device.setFlashlight","data":{"enabled":true}}',
+              ),
+            )
+            as Map<String, dynamic>;
     expect(flashlight['success'], isTrue);
     expect(flashlight['data']['enabled'], isTrue);
 
-    final volume = jsonDecode(
-      await dispatcher.handleRaw(
-        '{"id":"volume-1","action":"device.getSystemVolume","data":{}}',
-      ),
-    ) as Map<String, dynamic>;
+    final volume =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"volume-1","action":"device.getSystemVolume","data":{}}',
+              ),
+            )
+            as Map<String, dynamic>;
     expect(volume['success'], isTrue);
     expect(volume['data']['supported'], isA<bool>());
 
-    final setVolume = jsonDecode(
-      await dispatcher.handleRaw(
-        '{"id":"volume-2","action":"device.setSystemVolume","data":{"value":0.6}}',
-      ),
-    ) as Map<String, dynamic>;
+    final setVolume =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"volume-2","action":"device.setSystemVolume","data":{"value":0.6}}',
+              ),
+            )
+            as Map<String, dynamic>;
     expect(setVolume['success'], isTrue);
     expect(setVolume['data']['value'], 0.6);
 
-    final badge = jsonDecode(
-      await dispatcher.handleRaw(
-        '{"id":"badge-1","action":"desktop.setBadge","data":{"count":7}}',
-      ),
-    ) as Map<String, dynamic>;
+    final badge =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"badge-1","action":"desktop.setBadge","data":{"count":7}}',
+              ),
+            )
+            as Map<String, dynamic>;
     expect(badge['success'], isTrue);
     expect(badge['data']['count'], 7);
   });
 
-  test('manages Native sensor & system event subscriptions and unsubscriptions via JSAPI', () async {
-    final accSubRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"sub-acc","action":"onAccelerometerChange","data":{"subscriptionId":"acc-1"}}'),
-    ) as Map<String, dynamic>;
-    expect(accSubRes['success'], isTrue);
-    expect(accSubRes['data']['subscriptionId'], 'acc-1');
+  test(
+    'manages Native sensor & system event subscriptions and unsubscriptions via JSAPI',
+    () async {
+      final accSubRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"sub-acc","action":"onAccelerometerChange","data":{"subscriptionId":"acc-1"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(accSubRes['success'], isTrue);
+      expect(accSubRes['data']['subscriptionId'], 'acc-1');
 
-    final accOffRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"off-acc","action":"offAccelerometerChange","data":{"subscriptionId":"acc-1"}}'),
-    ) as Map<String, dynamic>;
-    expect(accOffRes['success'], isTrue);
+      final accOffRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"off-acc","action":"offAccelerometerChange","data":{"subscriptionId":"acc-1"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(accOffRes['success'], isTrue);
 
-    final gyroSubRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"sub-gyro","action":"onGyroscopeChange","data":{"subscriptionId":"gyro-1"}}'),
-    ) as Map<String, dynamic>;
-    expect(gyroSubRes['success'], isTrue);
+      final gyroSubRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"sub-gyro","action":"onGyroscopeChange","data":{"subscriptionId":"gyro-1"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(gyroSubRes['success'], isTrue);
 
-    final proxSubRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"sub-prox","action":"onProximityChange","data":{"subscriptionId":"prox-1"}}'),
-    ) as Map<String, dynamic>;
-    expect(proxSubRes['success'], isTrue);
+      final proxSubRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"sub-prox","action":"onProximityChange","data":{"subscriptionId":"prox-1"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(proxSubRes['success'], isTrue);
 
-    final screenshotSubRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"sub-ss","action":"onUserCaptureScreen","data":{"subscriptionId":"ss-1"}}'),
-    ) as Map<String, dynamic>;
-    expect(screenshotSubRes['success'], isTrue);
+      final screenshotSubRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"sub-ss","action":"onUserCaptureScreen","data":{"subscriptionId":"ss-1"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(screenshotSubRes['success'], isTrue);
 
-    final themeSubRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"sub-theme","action":"onThemeChange","data":{"subscriptionId":"theme-1"}}'),
-    ) as Map<String, dynamic>;
-    expect(themeSubRes['success'], isTrue);
-    expect(themeSubRes['data']['currentBrightness'], isNotNull);
+      final themeSubRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"sub-theme","action":"onThemeChange","data":{"subscriptionId":"theme-1"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(themeSubRes['success'], isTrue);
+      expect(themeSubRes['data']['currentBrightness'], isNotNull);
 
-    final resizeSubRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"sub-resize","action":"onResize","data":{"subscriptionId":"resize-1"}}'),
-    ) as Map<String, dynamic>;
-    expect(resizeSubRes['success'], isTrue);
-    expect(resizeSubRes['data']['currentSize'], isNotNull);
+      final resizeSubRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"sub-resize","action":"onResize","data":{"subscriptionId":"resize-1"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(resizeSubRes['success'], isTrue);
+      expect(resizeSubRes['data']['currentSize'], isNotNull);
 
-    final memSubRes = jsonDecode(
-      await dispatcher.handleRaw('{"id":"sub-mem","action":"onMemoryWarning","data":{"subscriptionId":"mem-1"}}'),
-    ) as Map<String, dynamic>;
-    expect(memSubRes['success'], isTrue);
-  });
+      final memSubRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"sub-mem","action":"onMemoryWarning","data":{"subscriptionId":"mem-1"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(memSubRes['success'], isTrue);
+    },
+  );
 
-  test('dispatches chooseFile and chooseImage with multi-selection, maxCount, and file types', () async {
-    final fileRes = jsonDecode(
-      await dispatcher.handleRaw(
-        '{"id":"pick-files","action":"chooseFile","data":{"allowMultiple":true,"maxCount":5,"allowedExtensions":["pdf","docx"],"fileType":"custom"}}',
-      ),
-    ) as Map<String, dynamic>;
-    expect(fileRes['success'], isTrue);
-    expect(capabilities.lastFilePickerRequest?.allowMultiple, isTrue);
-    expect(capabilities.lastFilePickerRequest?.maxCount, 5);
-    expect(capabilities.lastFilePickerRequest?.allowedExtensions, ['pdf', 'docx']);
-    expect(capabilities.lastFilePickerRequest?.fileType, FileTypeCategory.custom);
+  test(
+    'dispatches chooseFile and chooseImage with multi-selection, maxCount, and file types',
+    () async {
+      final fileRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"pick-files","action":"chooseFile","data":{"allowMultiple":true,"maxCount":5,"allowedExtensions":["pdf","docx"],"fileType":"custom"}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(fileRes['success'], isTrue);
+      expect(capabilities.lastFilePickerRequest?.allowMultiple, isTrue);
+      expect(capabilities.lastFilePickerRequest?.maxCount, 5);
+      expect(capabilities.lastFilePickerRequest?.allowedExtensions, [
+        'pdf',
+        'docx',
+      ]);
+      expect(
+        capabilities.lastFilePickerRequest?.fileType,
+        FileTypeCategory.custom,
+      );
 
-    final imgRes = jsonDecode(
-      await dispatcher.handleRaw(
-        '{"id":"pick-img","action":"chooseImage","data":{"allowMultiple":true,"maxCount":9,"preserveOriginal":false,"imageQuality":80}}',
-      ),
-    ) as Map<String, dynamic>;
-    expect(imgRes['success'], isTrue);
-    expect(capabilities.lastMediaPickRequest?.allowMultiple, isTrue);
-    expect(capabilities.lastMediaPickRequest?.maxCount, 9);
-    expect(capabilities.lastMediaPickRequest?.preserveOriginal, isFalse);
-    expect(capabilities.lastMediaPickRequest?.imageQuality, 80);
-  });
+      final imgRes =
+          jsonDecode(
+                await dispatcher.handleRaw(
+                  '{"id":"pick-img","action":"chooseImage","data":{"allowMultiple":true,"maxCount":9,"preserveOriginal":false,"imageQuality":80}}',
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(imgRes['success'], isTrue);
+      expect(capabilities.lastMediaPickRequest?.allowMultiple, isTrue);
+      expect(capabilities.lastMediaPickRequest?.maxCount, 9);
+      expect(capabilities.lastMediaPickRequest?.preserveOriginal, isFalse);
+      expect(capabilities.lastMediaPickRequest?.imageQuality, 80);
+    },
+  );
 }
 
 class _FakeCapabilities implements ClientCapabilityService {
@@ -430,7 +517,20 @@ class _FakeCapabilities implements ClientCapabilityService {
       );
 
   @override
+  Future<ClientNativeActionResult> requestPermission(
+    ClientPermissionKind permission,
+  ) async => const ClientNativeActionResult(
+    ok: true,
+    status: 'granted',
+    message: 'ok',
+  );
+
+  @override
   Future<ClientNativeActionResult> openWifiSettings() async =>
+      const ClientNativeActionResult(ok: true, message: 'ok');
+
+  @override
+  Future<ClientNativeActionResult> openAppSettings() async =>
       const ClientNativeActionResult(ok: true, message: 'ok');
 
   @override

@@ -557,6 +557,28 @@ class _JsBridgeDiagnosticsPageState
               child: const Text('Wi-Fi 设置'),
             ),
             OutlinedButton(
+              onPressed:
+                  () => _preset(
+                    'photo-permission',
+                    'requestPermission',
+                    <String, Object?>{'permission': 'photos'},
+                  ),
+              child: const Text('相册权限'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset(
+                    'camera-permission',
+                    'requestPermission',
+                    <String, Object?>{'permission': 'camera'},
+                  ),
+              child: const Text('相机权限'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('app-settings', 'openAppSettings'),
+              child: const Text('应用设置'),
+            ),
+            OutlinedButton(
               onPressed: () => _preset('battery', 'getBatteryInfo'),
               child: const Text('电池电量'),
             ),

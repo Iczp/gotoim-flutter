@@ -138,6 +138,39 @@ class _ClientCapabilitiesDiagnosticsPageState
                 ),
               ),
               _button(
+                'requestPermission（相册）',
+                () => _run(
+                  () async =>
+                      (await capabilities.requestPermission(
+                        ClientPermissionKind.photos,
+                      )).toJson(),
+                ),
+              ),
+              _button(
+                'requestPermission（相机）',
+                () => _run(
+                  () async =>
+                      (await capabilities.requestPermission(
+                        ClientPermissionKind.camera,
+                      )).toJson(),
+                ),
+              ),
+              _button(
+                'requestPermission（麦克风）',
+                () => _run(
+                  () async =>
+                      (await capabilities.requestPermission(
+                        ClientPermissionKind.microphone,
+                      )).toJson(),
+                ),
+              ),
+              _button(
+                'openAppSettings',
+                () => _run(
+                  () async => (await capabilities.openAppSettings()).toJson(),
+                ),
+              ),
+              _button(
                 _watchingNetwork
                     ? '停止 onNetworkStatusChange'
                     : '开始 onNetworkStatusChange',
