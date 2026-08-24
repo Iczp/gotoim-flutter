@@ -127,6 +127,63 @@ class ClientNetworkStatus {
   };
 }
 
+/// Wi-Fi metadata obtained from the operating system.
+///
+/// Values are nullable because a platform may not expose a specific field, the
+/// device may not be connected to Wi-Fi, or the user may decline the required
+/// permission. This model intentionally contains no network scan results.
+class ClientWifiInfo {
+  const ClientWifiInfo({
+    required this.ssid,
+    required this.bssid,
+    required this.ipAddress,
+    required this.ipv6Address,
+    required this.gatewayIp,
+    required this.submask,
+    required this.broadcast,
+    this.warning,
+  });
+
+  final String? ssid;
+  final String? bssid;
+  final String? ipAddress;
+  final String? ipv6Address;
+  final String? gatewayIp;
+  final String? submask;
+  final String? broadcast;
+  final String? warning;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'ssid': ssid,
+    'bssid': bssid,
+    'ipAddress': ipAddress,
+    'ipv6Address': ipv6Address,
+    'gatewayIp': gatewayIp,
+    'submask': submask,
+    'broadcast': broadcast,
+    'warning': warning,
+  };
+}
+
+/// Result of a permission or system-settings operation.
+class ClientNativeActionResult {
+  const ClientNativeActionResult({
+    required this.ok,
+    required this.message,
+    this.status,
+  });
+
+  final bool ok;
+  final String message;
+  final String? status;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'ok': ok,
+    'message': message,
+    'status': status,
+  };
+}
+
 class ClientCapabilitySupport {
   const ClientCapabilitySupport({
     required this.name,

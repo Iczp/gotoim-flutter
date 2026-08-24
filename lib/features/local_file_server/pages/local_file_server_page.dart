@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:app_settings/app_settings.dart';
-import 'package:network_info_plus/network_info_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/capabilities/client_capability_models.dart';
@@ -23,7 +20,7 @@ class LocalFileServerPage extends ConsumerStatefulWidget {
 class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
   late final LocalFileServerService _service;
   String _selectedPath = '/';
-  Future<String?>? _wifiName;
+  Future<ClientWifiInfo>? _wifiInfo;
 
   @override
   void initState() {
@@ -46,10 +43,11 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
   }
 
   Future<void> _loadWifiName() async {
-    await Permission.locationWhenInUse.request();
-    final name = await NetworkInfo().getWifiName();
+    final capabilities = ref.read(clientCapabilityServiceProvider);
+    await capabilities.requestWifiInfoPermission();
+    final info = await capabilities.getWifiInfo();
     if (mounted) {
-      setState(() => _wifiName = Future.value(name));
+      setState(() => _wifiInfo = Future.value(info));
     }
   }
 
@@ -91,20 +89,17 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
                         : _networkLabel(status),
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  subtitle: FutureBuilder<String?>(
-                    future: _wifiName,
+                  subtitle: FutureBuilder<ClientWifiInfo>(
+                    future: _wifiInfo,
                     builder:
                         (context, ssid) => Text(
                           status.types.contains(ClientNetworkType.wifi)
-                              ? 'SSID：${ssid.data?.replaceAll('"', '') ?? '未授权读取（请允许位置权限）'}\n访问设备必须连接到同一个 Wi‑Fi'
+                              ? 'SSID：${ssid.data?.ssid ?? '未授权读取（请允许位置权限）'}\n访问设备必须连接到同一个 Wi‑Fi'
                               : '请连接 Wi‑Fi 后再开启文件共享',
                         ),
                   ),
                   trailing: TextButton(
-                    onPressed:
-                        () => AppSettings.openAppSettings(
-                          type: AppSettingsType.wifi,
-                        ),
+                    onPressed: () => capabilities.openWifiSettings(),
                     child: const Text('打开 Wi‑Fi 设置'),
                   ),
                 ),
@@ -387,10 +382,11 @@ class _CopyField extends ConsumerWidget {
           icon: const Icon(Icons.copy_outlined),
           onPressed: () async {
             await ref.read(clipboardServiceProvider).copy(value);
-            if (context.mounted)
+            if (context.mounted) {
               ScaffoldMessenger.of(
                 context,
               ).showSnackBar(const SnackBar(content: Text('已复制。')));
+            }
           },
         ),
       ],

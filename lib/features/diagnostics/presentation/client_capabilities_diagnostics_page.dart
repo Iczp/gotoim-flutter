@@ -110,12 +110,31 @@ class _ClientCapabilitiesDiagnosticsPageState
           ),
           _Section(
             title: '一级：网络',
-            description: '当前网络类型，以及可取消的状态变化监听。',
+            description: '当前网络类型、Wi-Fi 名称/地址、权限和可取消的状态变化监听。SSID 受系统权限限制。',
             children: [
               _button(
                 'getNetworkType',
                 () => _run(
                   () async => (await capabilities.getNetworkType()).toJson(),
+                ),
+              ),
+              _button(
+                'getWifiInfo',
+                () => _run(
+                  () async => (await capabilities.getWifiInfo()).toJson(),
+                ),
+              ),
+              _button(
+                'requestWifiInfoPermission',
+                () => _run(
+                  () async =>
+                      (await capabilities.requestWifiInfoPermission()).toJson(),
+                ),
+              ),
+              _button(
+                'openWifiSettings',
+                () => _run(
+                  () async => (await capabilities.openWifiSettings()).toJson(),
                 ),
               ),
               _button(

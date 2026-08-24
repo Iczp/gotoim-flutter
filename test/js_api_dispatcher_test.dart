@@ -49,6 +49,35 @@ void main() {
     expect(response['data']['platform'], 'windows');
   });
 
+  test('dispatches Wi-Fi information, permission, and settings actions', () async {
+    final info =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"wifi-info","action":"network.getWifiInfo","data":{}}',
+              ),
+            )
+            as Map<String, dynamic>;
+    final permission =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"wifi-permission","action":"permission.requestWifiInfo","data":{}}',
+              ),
+            )
+            as Map<String, dynamic>;
+    final settings =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"wifi-settings","action":"system.openWifiSettings","data":{}}',
+              ),
+            )
+            as Map<String, dynamic>;
+
+    expect(info['success'], isTrue);
+    expect(info['data']['ssid'], 'GotoIM-Test');
+    expect(permission['data']['status'], 'granted');
+    expect(settings['data']['ok'], isTrue);
+  });
+
   test('returns a structured error for an unsupported action', () async {
     final response =
         jsonDecode(
@@ -380,6 +409,29 @@ class _FakeCapabilities implements ClientCapabilityService {
     types: const <ClientNetworkType>[ClientNetworkType.wifi],
     observedAt: DateTime.utc(2026, 8, 19),
   );
+
+  @override
+  Future<ClientWifiInfo> getWifiInfo() async => const ClientWifiInfo(
+    ssid: 'GotoIM-Test',
+    bssid: '00:11:22:33:44:55',
+    ipAddress: '192.168.1.20',
+    ipv6Address: null,
+    gatewayIp: '192.168.1.1',
+    submask: '255.255.255.0',
+    broadcast: '192.168.1.255',
+  );
+
+  @override
+  Future<ClientNativeActionResult> requestWifiInfoPermission() async =>
+      const ClientNativeActionResult(
+        ok: true,
+        status: 'granted',
+        message: 'ok',
+      );
+
+  @override
+  Future<ClientNativeActionResult> openWifiSettings() async =>
+      const ClientNativeActionResult(ok: true, message: 'ok');
 
   @override
   Future<ClientSystemInfo> getSystemInfo() async => const ClientSystemInfo(

@@ -4,6 +4,9 @@ import 'dart:typed_data';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/widgets.dart';
+import 'package:app_settings/app_settings.dart';
+import 'package:network_info_plus/network_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../config/app_environment.dart';
 import '../device/client_device_context.dart';
@@ -26,6 +29,12 @@ abstract class ClientCapabilityService {
   Future<ClientDeviceInfo> getDeviceInfo();
 
   Future<ClientNetworkStatus> getNetworkType();
+
+  Future<ClientWifiInfo> getWifiInfo();
+
+  Future<ClientNativeActionResult> requestWifiInfoPermission();
+
+  Future<ClientNativeActionResult> openWifiSettings();
 
   Stream<ClientNetworkStatus> get networkStatusChanges;
 
@@ -108,6 +117,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
     required LocalNotificationService localNotificationService,
     Connectivity? connectivity,
     DeviceInfoPlugin? deviceInfoPlugin,
+    NetworkInfo? networkInfo,
   }) : _environment = environment,
        _deviceContext = deviceContext,
        _platformFacade = platformFacade,
@@ -118,7 +128,8 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
        _mediaService = mediaService,
        _localNotificationService = localNotificationService,
        _connectivity = connectivity ?? Connectivity(),
-       _deviceInfoPlugin = deviceInfoPlugin ?? DeviceInfoPlugin();
+       _deviceInfoPlugin = deviceInfoPlugin ?? DeviceInfoPlugin(),
+       _networkInfo = networkInfo ?? NetworkInfo();
 
   final AppEnvironment _environment;
   final ClientDeviceContext _deviceContext;
@@ -131,6 +142,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
   final LocalNotificationService _localNotificationService;
   final Connectivity _connectivity;
   final DeviceInfoPlugin _deviceInfoPlugin;
+  final NetworkInfo _networkInfo;
 
   @override
   Future<ClientSystemInfo> getSystemInfo() async {
@@ -218,6 +230,97 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
       _networkStatus(await _connectivity.checkConnectivity());
 
   @override
+  Future<ClientWifiInfo> getWifiInfo() async {
+    try {
+      final values = await Future.wait<String?>(<Future<String?>>[
+        _networkInfo.getWifiName(),
+        _networkInfo.getWifiBSSID(),
+        _networkInfo.getWifiIP(),
+        _networkInfo.getWifiIPv6(),
+        _networkInfo.getWifiGatewayIP(),
+        _networkInfo.getWifiSubmask(),
+        _networkInfo.getWifiBroadcast(),
+      ]);
+      return ClientWifiInfo(
+        ssid: _cleanSsid(values[0]),
+        bssid: values[1],
+        ipAddress: values[2],
+        ipv6Address: values[3],
+        gatewayIp: values[4],
+        submask: values[5],
+        broadcast: values[6],
+      );
+    } catch (error) {
+      return ClientWifiInfo(
+        ssid: null,
+        bssid: null,
+        ipAddress: null,
+        ipv6Address: null,
+        gatewayIp: null,
+        submask: null,
+        broadcast: null,
+        warning: '无法读取 Wi-Fi 信息：$error',
+      );
+    }
+  }
+
+  @override
+  Future<ClientNativeActionResult> requestWifiInfoPermission() async {
+    if (_platformFacade.kind == PlatformKind.android) {
+      final statuses =
+          await <Permission>[
+            Permission.locationWhenInUse,
+            Permission.nearbyWifiDevices,
+          ].request();
+      final granted = statuses.values.every((status) => status.isGranted);
+      return ClientNativeActionResult(
+        ok: granted,
+        status:
+            statuses
+                .map((key, value) => MapEntry(key.toString(), value.name))
+                .toString(),
+        message: granted ? '已授予读取 Wi-Fi 信息所需权限。' : '未取得全部 Wi-Fi 信息权限。',
+      );
+    }
+    if (_platformFacade.kind == PlatformKind.ios) {
+      final status = await Permission.locationWhenInUse.request();
+      return ClientNativeActionResult(
+        ok: status.isGranted,
+        status: status.name,
+        message: status.isGranted ? '位置权限已授予。' : 'iOS 未授予位置权限。',
+      );
+    }
+    return const ClientNativeActionResult(
+      ok: true,
+      status: 'notRequired',
+      message: '此平台读取 Wi-Fi 信息无需应用位置权限。',
+    );
+  }
+
+  @override
+  Future<ClientNativeActionResult> openWifiSettings() async {
+    if (_platformFacade.kind != PlatformKind.android) {
+      return const ClientNativeActionResult(
+        ok: false,
+        status: 'unsupported',
+        message: '当前平台不支持直接打开系统 Wi-Fi 设置。',
+      );
+    }
+    try {
+      await AppSettings.openAppSettings(type: AppSettingsType.wifi);
+      return const ClientNativeActionResult(
+        ok: true,
+        message: '已请求打开系统 Wi-Fi 设置。',
+      );
+    } catch (error) {
+      return ClientNativeActionResult(
+        ok: false,
+        message: '无法打开系统 Wi-Fi 设置：$error',
+      );
+    }
+  }
+
+  @override
   Stream<ClientNetworkStatus> get networkStatusChanges =>
       _connectivity.onConnectivityChanged.map(_networkStatus);
 
@@ -243,6 +346,26 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
           name: 'network.getNetworkType',
           isSupported: true,
           message: '返回网络传输类型，不验证互联网可达性。',
+        ),
+        ClientCapabilitySupport(
+          name: 'network.getWifiInfo',
+          isSupported: !_platformFacade.isWeb,
+          message:
+              _platformFacade.isWeb
+                  ? '浏览器不暴露当前 Wi-Fi SSID。'
+                  : '读取当前连接的 Wi-Fi 元数据；字段受系统权限限制。',
+        ),
+        ClientCapabilitySupport(
+          name: 'permission.requestWifiInfo',
+          isSupported:
+              _platformFacade.kind == PlatformKind.android ||
+              _platformFacade.kind == PlatformKind.ios,
+          message: 'Android/iOS 用于读取受保护的 Wi-Fi SSID 信息。',
+        ),
+        ClientCapabilitySupport(
+          name: 'system.openWifiSettings',
+          isSupported: _platformFacade.kind == PlatformKind.android,
+          message: '仅 Android 可直接跳转到系统 Wi-Fi 设置。',
         ),
         const ClientCapabilitySupport(
           name: 'clipboard.getData/setData',
@@ -419,5 +542,12 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
   bool? _bool(Map<String, dynamic> data, String key) {
     final value = data[key];
     return value is bool ? value : null;
+  }
+
+  String? _cleanSsid(String? value) {
+    final result = value?.trim().replaceAll('"', '');
+    return result == null || result.isEmpty || result == '<unknown ssid>'
+        ? null
+        : result;
   }
 }

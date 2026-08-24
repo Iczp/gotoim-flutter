@@ -130,6 +130,15 @@ class JsApiDispatcher {
       case 'getNetworkType':
       case 'network.getNetworkType':
         return (await _capabilities.getNetworkType()).toJson();
+      case 'getWifiInfo':
+      case 'network.getWifiInfo':
+        return (await _capabilities.getWifiInfo()).toJson();
+      case 'requestWifiInfoPermission':
+      case 'permission.requestWifiInfo':
+        return (await _capabilities.requestWifiInfoPermission()).toJson();
+      case 'openWifiSettings':
+      case 'system.openWifiSettings':
+        return (await _capabilities.openWifiSettings()).toJson();
       case 'onNetworkStatusChange':
       case 'network.onStatusChange':
         return _subscribeNetworkStatus(request.data);
@@ -865,7 +874,8 @@ class JsApiDispatcher {
   MediaPickRequest _mediaPickRequest(Map<String, dynamic> data) {
     final count = _optionalInt(data, 'count') ?? _optionalInt(data, 'maxCount');
     return MediaPickRequest(
-      allowMultiple: data['allowMultiple'] == true || (count != null && count > 1),
+      allowMultiple:
+          data['allowMultiple'] == true || (count != null && count > 1),
       maxCount: count,
       preserveOriginal: data['preserveOriginal'] != false,
       imageQuality: _optionalInt(data, 'imageQuality'),
@@ -882,21 +892,26 @@ class JsApiDispatcher {
     final count = _optionalInt(data, 'count') ?? _optionalInt(data, 'maxCount');
     final rawExt = data['allowedExtensions'] ?? data['extensions'];
     final extensions = rawExt is List ? _stringList(rawExt) : <String>[];
-    final typeString = _optionalString(data, 'fileType') ?? _optionalString(data, 'type');
+    final typeString =
+        _optionalString(data, 'fileType') ?? _optionalString(data, 'type');
     final category = switch (typeString?.toLowerCase()) {
       'image' || 'images' => FileTypeCategory.image,
       'video' || 'videos' => FileTypeCategory.video,
       'audio' || 'audios' => FileTypeCategory.audio,
       'media' => FileTypeCategory.media,
       'custom' => FileTypeCategory.custom,
-      _ => extensions.isNotEmpty ? FileTypeCategory.custom : FileTypeCategory.any,
+      _ =>
+        extensions.isNotEmpty ? FileTypeCategory.custom : FileTypeCategory.any,
     };
     return FilePickerRequest(
-      allowMultiple: data['allowMultiple'] == true || (count != null && count > 1),
+      allowMultiple:
+          data['allowMultiple'] == true || (count != null && count > 1),
       maxCount: count,
       allowedExtensions: extensions,
       fileType: category,
-      dialogTitle: _optionalString(data, 'title') ?? _optionalString(data, 'dialogTitle'),
+      dialogTitle:
+          _optionalString(data, 'title') ??
+          _optionalString(data, 'dialogTitle'),
     );
   }
 
