@@ -227,7 +227,7 @@ class FlutterLocalNotificationService implements LocalNotificationService {
                   (action) => AndroidNotificationAction(
                     action.id,
                     action.title,
-                    showsUserInterface: false,
+                    showsUserInterface: action.showsUserInterface,
                     cancelNotification: false,
                   ),
                 )

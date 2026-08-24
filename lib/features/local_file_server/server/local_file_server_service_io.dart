@@ -230,6 +230,7 @@ class LocalFileServerService extends ChangeNotifier {
   Future<void> _handleNotificationAction(
     LocalNotificationTapEvent event,
   ) async {
+    if (event.payload != 'local-file-server') return;
     if (event.actionId == _stopActionId) {
       await stop();
     } else if (event.actionId == _disconnectActionId) {
@@ -256,9 +257,18 @@ class LocalFileServerService extends ChangeNotifier {
         body: connected == 0 ? '暂无设备连接' : '已有 $connected 台设备连接',
         payload: 'local-file-server',
         ongoing: true,
-        actions: const [
-          LocalNotificationAction(id: _disconnectActionId, title: '断开全部'),
-          LocalNotificationAction(id: _stopActionId, title: '关闭共享'),
+        actions: [
+          if (connected > 0)
+            LocalNotificationAction(
+              id: _disconnectActionId,
+              title: '断开全部（$connected）',
+              showsUserInterface: true,
+            ),
+          const LocalNotificationAction(
+            id: _stopActionId,
+            title: '关闭共享',
+            showsUserInterface: true,
+          ),
         ],
       ),
     );

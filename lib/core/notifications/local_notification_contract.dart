@@ -87,10 +87,18 @@ class LocalNotificationRequest {
 }
 
 class LocalNotificationAction {
-  const LocalNotificationAction({required this.id, required this.title});
+  const LocalNotificationAction({
+    required this.id,
+    required this.title,
+    this.showsUserInterface = false,
+  });
 
   final String id;
   final String title;
+
+  /// Android actions that must execute application state changes should bring
+  /// the app to foreground unless a dedicated background callback is supplied.
+  final bool showsUserInterface;
 }
 
 enum LocalNotificationDispatchStatus { shown, queued, unsupported }
