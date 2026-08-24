@@ -28,5 +28,6 @@ class LocalFileServerService extends ChangeNotifier {
   Future<void> close() => stop();
   List<TerminalActivity> activitiesFor(String terminalId) => const [];
   ConnectedTerminal? terminalFor(String terminalId) => null;
+  List<ConnectedTerminal> get recentTerminals => const [];
   Future<List<SharedFile>> listSharedFiles(String path) async => const [];
 }

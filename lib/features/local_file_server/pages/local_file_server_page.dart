@@ -180,9 +180,15 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
                   '${terminal.platform} · ${terminal.ip}\n${_terminalState(terminal)}',
                 ),
                 isThreeLine: true,
-                trailing: TextButton(
-                  onPressed: () => service.disconnectTerminal(terminal.id),
-                  child: const Text('断开'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton(
+                      onPressed: () => service.disconnectTerminal(terminal.id),
+                      child: const Text('断开'),
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ],
                 ),
                 onTap:
                     () => context.push(
@@ -191,6 +197,31 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
               ),
             ),
           ),
+          if (service.recentTerminals.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              '最近终端 ${service.recentTerminals.length}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            ...service.recentTerminals.map(
+              (terminal) => Card(
+                child: ListTile(
+                  leading: const Icon(Icons.devices_outlined),
+                  title: Text(terminal.name),
+                  subtitle: Text(
+                    '${terminal.platform} · ${terminal.ip}\n已断开 · 最后活动 ${terminal.lastActiveAt.toLocal()}',
+                  ),
+                  isThreeLine: true,
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap:
+                      () => context.push(
+                        '/local-file-server/terminal/${Uri.encodeComponent(terminal.id)}',
+                      ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

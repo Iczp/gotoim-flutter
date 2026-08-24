@@ -51,6 +51,16 @@ class LocalFileServerService extends ChangeNotifier {
       List.unmodifiable(_activities[terminalId] ?? const []);
   ConnectedTerminal? terminalFor(String terminalId) =>
       _sockets[terminalId]?.terminal ?? _knownTerminals[terminalId];
+  List<ConnectedTerminal> get recentTerminals {
+    final activeIds = _sockets.keys.toSet();
+    final result =
+        _knownTerminals.values
+            .where((terminal) => !activeIds.contains(terminal.id))
+            .toList();
+    result.sort((a, b) => b.lastActiveAt.compareTo(a.lastActiveAt));
+    return List.unmodifiable(result);
+  }
+
   Future<List<SharedFile>> listSharedFiles(String path) async {
     if (_shareRoot == null) return const [];
     final dir = _resolve(path);
