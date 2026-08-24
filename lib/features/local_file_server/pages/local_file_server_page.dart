@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:app_settings/app_settings.dart';
 import 'package:network_info_plus/network_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/capabilities/client_capability_models.dart';
@@ -29,7 +30,7 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
     super.initState();
     _service = ref.read(localFileServerProvider)
       ..addListener(_onServiceChanged);
-    _wifiName = NetworkInfo().getWifiName();
+    _loadWifiName();
   }
 
   @override
@@ -41,6 +42,14 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
   void _onServiceChanged() {
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _loadWifiName() async {
+    await Permission.locationWhenInUse.request();
+    final name = await NetworkInfo().getWifiName();
+    if (mounted) {
+      setState(() => _wifiName = Future.value(name));
     }
   }
 
@@ -76,13 +85,18 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
                         ? Icons.wifi
                         : Icons.wifi_off_outlined,
                   ),
-                  title: Text(_networkLabel(status)),
+                  title: Text(
+                    status.types.contains(ClientNetworkType.wifi)
+                        ? '当前 Wi‑Fi 网络'
+                        : _networkLabel(status),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   subtitle: FutureBuilder<String?>(
                     future: _wifiName,
                     builder:
                         (context, ssid) => Text(
                           status.types.contains(ClientNetworkType.wifi)
-                              ? '当前连接：${ssid.data?.replaceAll('"', '') ?? '已连接 Wi‑Fi'} · 访问设备也需连接此网络'
+                              ? 'SSID：${ssid.data?.replaceAll('"', '') ?? '未授权读取（请允许位置权限）'}\n访问设备必须连接到同一个 Wi‑Fi'
                               : '请连接 Wi‑Fi 后再开启文件共享',
                         ),
                   ),

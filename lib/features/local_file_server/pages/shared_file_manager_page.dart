@@ -123,33 +123,31 @@ class _SharedFileManagerPageState extends ConsumerState<SharedFileManagerPage> {
   Widget build(BuildContext context) => CupertinoPageScaffold(
     navigationBar: CupertinoNavigationBar(
       middle: const Text('资源管理器'),
-      leading:
-          _path == '/'
-              ? null
-              : CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: () {
-                  final pieces = _path.split('/')..removeLast();
-                  setState(
-                    () =>
-                        _path =
-                            pieces.join('/').isEmpty ? '/' : pieces.join('/'),
-                  );
-                },
-                child: const Icon(CupertinoIcons.back),
-              ),
-      trailing: Row(
+      leading: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed: () => setState(() => _showFolders = !_showFolders),
-            child: Icon(
-              _showFolders
-                  ? CupertinoIcons.sidebar_left
-                  : CupertinoIcons.sidebar_right,
-            ),
+            child: Icon(_showFolders ? Icons.menu_open : Icons.menu),
           ),
+          if (_path != '/')
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: () {
+                final pieces = _path.split('/')..removeLast();
+                setState(
+                  () =>
+                      _path = pieces.join('/').isEmpty ? '/' : pieces.join('/'),
+                );
+              },
+              child: const Icon(Icons.arrow_back),
+            ),
+        ],
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed:
@@ -231,8 +229,8 @@ class _SharedFileManagerPageState extends ConsumerState<SharedFileManagerPage> {
                                       ),
                                       child: Icon(
                                         file.isDirectory
-                                            ? CupertinoIcons.folder_fill
-                                            : CupertinoIcons.doc_fill,
+                                            ? Icons.folder
+                                            : Icons.insert_drive_file,
                                         color:
                                             file.isDirectory
                                                 ? CupertinoColors.systemYellow
