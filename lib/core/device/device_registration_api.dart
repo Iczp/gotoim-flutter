@@ -84,7 +84,9 @@ class DeviceRegistrationApi {
       'language': system.locale,
       'model': device.model ?? _deviceContext.model,
       'osName': device.systemName ?? platform,
-      'osVersion': device.systemVersion ?? '',
+      // The backend DTO constrains both fields to 64 chars. Native plugins can
+      // expose long marketing/build strings, especially on desktop systems.
+      'osVersion': _maxLength(device.systemVersion ?? '', 64),
       'osLanguage': system.locale,
       'osTheme': system.brightness,
       'pixelRatio': _toInt(system.devicePixelRatio),
@@ -93,9 +95,10 @@ class DeviceRegistrationApi {
       'statusBarHeight': _toInt(system.safeAreaTop),
       'storage': '',
       'swanNativeVersion': '',
-      'system':
-          '${device.systemName ?? platform} ${device.systemVersion ?? ''}'
-              .trim(),
+      'system': _maxLength(
+        '${device.systemName ?? platform} ${device.systemVersion ?? ''}'.trim(),
+        64,
+      ),
       'safeArea': safeAreaInsets,
       'safeAreaInsets': safeAreaInsets,
       'ua': device.browser ?? '',
@@ -125,6 +128,9 @@ class DeviceRegistrationApi {
   /// The ABP DTO declares these metrics as Int32. Flutter exposes logical
   /// pixels as doubles, so send an integer rather than JSON `393.0`.
   int _toInt(double value) => value.round();
+
+  String _maxLength(String value, int maxLength) =>
+      value.length <= maxLength ? value : value.substring(0, maxLength);
 
   Future<Object?> register({String? name}) async {
     final accessToken = await _readClientCredentialsToken();
