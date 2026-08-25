@@ -58,6 +58,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/capabilities'),
           ),
           _Item(
+            icon: Icons.devices_outlined,
+            title: '设备注册与信息采集',
+            subtitle: 'Basic 验证、实际请求、完整 Payload、返回结果与异常',
+            onTap: () => context.push('/diagnostics/device-registration'),
+          ),
+          _Item(
             icon: Icons.javascript_outlined,
             title: 'JS Bridge 测试',
             subtitle: 'JSON 请求/响应、能力 API、上传任务、订阅与事件',
@@ -126,10 +132,10 @@ class _Item extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: Icon(icon),
-    title: Text(title),
-    subtitle: Text(subtitle),
-    trailing: const Icon(Icons.chevron_right),
-    onTap: onTap,
-  );
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      );
 }

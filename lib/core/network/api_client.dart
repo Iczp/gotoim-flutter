@@ -11,6 +11,7 @@ abstract class ApiClient {
     String path, {
     Map<String, Object?>? query,
     Object? data,
+    Map<String, String>? headers,
     bool retryOnUnauthorized = true,
   });
 

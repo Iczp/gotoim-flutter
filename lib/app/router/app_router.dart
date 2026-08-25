@@ -20,6 +20,7 @@ import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/app_task_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/deep_link_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/native_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/device_registration_diagnostics_page.dart';
 import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/local_file_server/pages/terminal_details_page.dart';
 import '../../features/local_file_server/pages/shared_file_manager_page.dart';
@@ -56,10 +57,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/local-file-server/terminal/:terminalId',
-        builder:
-            (context, state) => TerminalDetailsPage(
-              terminalId: state.pathParameters['terminalId']!,
-            ),
+        builder: (context, state) => TerminalDetailsPage(
+          terminalId: state.pathParameters['terminalId']!,
+        ),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(
@@ -136,6 +136,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/native',
         builder: (context, state) => const NativeDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/device-registration',
+        builder: (context, state) => const DeviceRegistrationDiagnosticsPage(),
       ),
       GoRoute(
         path: '/workbench',
