@@ -298,6 +298,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
       ClientPermissionKind.photos => Permission.photos,
       ClientPermissionKind.camera => Permission.camera,
       ClientPermissionKind.microphone => Permission.microphone,
+      ClientPermissionKind.location => Permission.locationWhenInUse,
       ClientPermissionKind.wifiInfo => throw StateError('unreachable'),
     };
     try {
@@ -406,7 +407,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
         ClientCapabilitySupport(
           name: 'permission.request',
           isSupported: !_platformFacade.isWeb,
-          message: '可请求相册、相机、麦克风与 Wi-Fi 信息权限；永久拒绝时返回设置引导。',
+          message: '可请求相册、相机、麦克风、位置与 Wi-Fi 信息权限；永久拒绝时返回设置引导。',
         ),
         ClientCapabilitySupport(
           name: 'system.openWifiSettings',
@@ -610,6 +611,7 @@ class DefaultClientCapabilityService implements ClientCapabilityService {
         ClientPermissionKind.photos => '相册',
         ClientPermissionKind.camera => '相机',
         ClientPermissionKind.microphone => '麦克风',
+        ClientPermissionKind.location => '位置',
         ClientPermissionKind.wifiInfo => 'Wi-Fi 信息',
       };
 

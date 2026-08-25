@@ -58,6 +58,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>用于向同一局域网内的设备共享选定的应用文件。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>仅在您主动获取当前 Wi-Fi 名称时用于读取该网络名称，不会追踪或记录您的位置。</string>
 	<key>FlutterDeepLinkingEnabled</key>
 	<false/>
 	<key>CFBundleURLTypes</key>

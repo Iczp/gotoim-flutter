@@ -143,6 +143,7 @@ class JsApiDispatcher {
           'photos' => ClientPermissionKind.photos,
           'camera' => ClientPermissionKind.camera,
           'microphone' => ClientPermissionKind.microphone,
+          'location' => ClientPermissionKind.location,
           'wifiInfo' => ClientPermissionKind.wifiInfo,
           _ => null,
         };

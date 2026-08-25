@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,19 +23,41 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
   late final LocalFileServerService _service;
   String _selectedPath = '/';
   Future<ClientWifiInfo>? _wifiInfo;
+  late ClientNetworkStatus _networkStatus;
+  StreamSubscription<ClientNetworkStatus>? _networkSubscription;
 
   @override
   void initState() {
     super.initState();
     _service = ref.read(localFileServerProvider)
       ..addListener(_onServiceChanged);
+    _networkStatus = ClientNetworkStatus(
+      types: const [ClientNetworkType.none],
+      observedAt: DateTime.now(),
+    );
+    final capabilities = ref.read(clientCapabilityServiceProvider);
+    _networkSubscription = capabilities.networkStatusChanges.listen((status) {
+      if (mounted) {
+        setState(() => _networkStatus = status);
+      }
+    });
+    _refreshNetworkStatus();
     _refreshWifiInfo();
   }
 
   @override
   void dispose() {
     _service.removeListener(_onServiceChanged);
+    _networkSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _refreshNetworkStatus() async {
+    final status =
+        await ref.read(clientCapabilityServiceProvider).getNetworkType();
+    if (mounted) {
+      setState(() => _networkStatus = status);
+    }
   }
 
   void _onServiceChanged() {
@@ -54,15 +78,69 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
   }
 
   Future<void> _startSharing() async {
-    await _refreshWifiInfo();
+    await _refreshNetworkInfo();
     await _service.start();
   }
+
+  Future<void> _refreshNetworkInfo() async {
+    await Future.wait<void>([_refreshNetworkStatus(), _refreshWifiInfo()]);
+  }
+
+  /// SSID is protected by Android/iOS. This is intentionally invoked only
+  /// after the user explicitly asks to reveal the current Wi-Fi name.
+  Future<void> _requestSsidPermission() async {
+    final result = await ref
+        .read(clientCapabilityServiceProvider)
+        .requestPermission(ClientPermissionKind.location);
+    if (!result.ok && mounted) {
+      if (result.shouldOpenSettings) {
+        await _showSsidSettingsPrompt(result.message);
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result.message)));
+      }
+      return;
+    }
+    await _refreshNetworkInfo();
+  }
+
+  Future<void> _showSsidSettingsPrompt(String message) => showDialog<void>(
+    context: context,
+    builder:
+        (dialogContext) => AlertDialog(
+          title: const Text('无法读取 Wi-Fi 名称'),
+          content: Text('$message\n\n请在应用设置中允许位置权限后重试。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await ref
+                    .read(clientCapabilityServiceProvider)
+                    .openAppSettings();
+              },
+              child: const Text('打开设置'),
+            ),
+          ],
+        ),
+  );
 
   String _networkLabel(ClientNetworkStatus status) {
     if (!status.isConnected) return '未连接网络';
     if (status.types.contains(ClientNetworkType.wifi)) return '已连接 Wi‑Fi';
     return '当前网络：${status.types.map((item) => item.name).join('、')}';
   }
+
+  bool _isWifiConnected(ClientWifiInfo? info) =>
+      _networkStatus.types.contains(ClientNetworkType.wifi) ||
+      info?.ssid != null ||
+      info?.bssid != null ||
+      info?.ipAddress != null ||
+      info?.gatewayIp != null;
 
   Future<void> _copyNetworkValue(String label, String value) async {
     await ref.read(clipboardServiceProvider).copy(value);
@@ -119,67 +197,67 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          StreamBuilder<ClientNetworkStatus>(
-            stream: capabilities.networkStatusChanges,
-            initialData: ClientNetworkStatus(
-              types: [ClientNetworkType.none],
-              observedAt: DateTime.now(),
-            ),
-            builder: (context, snapshot) {
-              final status = snapshot.data!;
-              return Card(
-                clipBehavior: Clip.antiAlias,
-                child: FutureBuilder<ClientWifiInfo>(
-                  future: _wifiInfo,
-                  builder: (context, wifi) {
-                    final isWifi = status.types.contains(
-                      ClientNetworkType.wifi,
-                    );
-                    final info = wifi.data;
-                    return ExpansionTile(
-                      leading: Icon(
-                        isWifi ? Icons.wifi_rounded : Icons.wifi_off_outlined,
-                      ),
-                      title: Text(
-                        isWifi ? '网络信息' : _networkLabel(status),
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(
-                        isWifi
-                            ? '当前 Wi‑Fi · ${info?.ssid ?? 'SSID 暂不可用'}'
-                            : '请连接 Wi‑Fi 后再开启文件共享',
-                      ),
-                      children: [
-                        if (isWifi) ..._networkDetails(info),
-                        if (!isWifi)
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                            child: Text('局域网文件共享需要设备处于同一 Wi‑Fi 网络。'),
-                          ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: Row(
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: _refreshWifiInfo,
-                                icon: const Icon(Icons.refresh, size: 18),
-                                label: const Text('刷新'),
-                              ),
-                              const SizedBox(width: 8),
-                              TextButton(
-                                onPressed:
-                                    () => capabilities.openWifiSettings(),
-                                child: const Text('打开 Wi‑Fi 设置'),
-                              ),
-                            ],
-                          ),
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: FutureBuilder<ClientWifiInfo>(
+              future: _wifiInfo,
+              builder: (context, wifi) {
+                final info = wifi.data;
+                final isWifi = _isWifiConnected(info);
+                return ExpansionTile(
+                  leading: Icon(
+                    isWifi ? Icons.wifi_rounded : Icons.wifi_off_outlined,
+                  ),
+                  title: Text(
+                    '网络信息',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          isWifi
+                              ? '当前 Wi‑Fi · ${info?.ssid ?? 'SSID 暂不可用'}'
+                              : '${_networkLabel(_networkStatus)} · 未确认 Wi‑Fi 连接',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                    );
-                  },
-                ),
-              );
-            },
+                      ),
+                      if (info?.ssid == null)
+                        TextButton(
+                          onPressed: _requestSsidPermission,
+                          child: const Text('获取权限'),
+                        ),
+                    ],
+                  ),
+                  children: [
+                    ..._networkDetails(info),
+                    if (!isWifi)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: Text('局域网文件共享需要设备处于同一 Wi‑Fi 网络。'),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: Row(
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _refreshNetworkInfo,
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('刷新'),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: () => capabilities.openWifiSettings(),
+                            child: const Text('打开 Wi‑Fi 设置'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
           const SizedBox(height: 12),
           Card(
