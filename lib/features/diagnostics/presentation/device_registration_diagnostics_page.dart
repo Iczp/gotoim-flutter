@@ -28,17 +28,21 @@ class _DeviceRegistrationDiagnosticsPageState
   }
 
   Future<void> _collect() async {
-    await _run(() async => ref
-        .read(deviceRegistrationApiProvider)
-        .collectPayload(name: _name.text));
+    await _run(
+      () async => ref
+          .read(deviceRegistrationApiProvider)
+          .collectPayload(name: _name.text),
+    );
   }
 
   Future<void> _register() async {
-    await _run(() async => <String, Object?>{
-          'response': await ref
-              .read(deviceRegistrationApiProvider)
-              .register(name: _name.text),
-        });
+    await _run(
+      () async => <String, Object?>{
+        'response': await ref
+            .read(deviceRegistrationApiProvider)
+            .register(name: _name.text),
+      },
+    );
   }
 
   Future<void> _run(Future<Object?> Function() action) async {
@@ -47,21 +51,27 @@ class _DeviceRegistrationDiagnosticsPageState
     try {
       final value = await action();
       if (mounted) {
-        setState(() => _result = const JsonEncoder.withIndent('  ').convert({
-              'status': '成功',
-              'elapsedMs': DateTime.now().difference(started).inMilliseconds,
-              'data': value,
-            }));
+        setState(
+          () =>
+              _result = const JsonEncoder.withIndent('  ').convert({
+                'status': '成功',
+                'elapsedMs': DateTime.now().difference(started).inMilliseconds,
+                'data': value,
+              }),
+        );
       }
     } catch (error, stackTrace) {
       if (mounted) {
-        setState(() => _result = const JsonEncoder.withIndent('  ').convert({
-              'status': '失败',
-              'elapsedMs': DateTime.now().difference(started).inMilliseconds,
-              'exceptionType': error.runtimeType.toString(),
-              'message': error.toString(),
-              'stackTrace': stackTrace.toString(),
-            }));
+        setState(
+          () =>
+              _result = const JsonEncoder.withIndent('  ').convert({
+                'status': '失败',
+                'elapsedMs': DateTime.now().difference(started).inMilliseconds,
+                'exceptionType': error.runtimeType.toString(),
+                'message': error.toString(),
+                'stackTrace': stackTrace.toString(),
+              }),
+        );
       }
     } finally {
       if (mounted) setState(() => _working = false);
@@ -79,7 +89,7 @@ class _DeviceRegistrationDiagnosticsPageState
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
-            'POST /api/chat/device/register；Android、iOS、Windows、macOS、Linux、Web 均可调用。使用 Basic 验证，不会显示或复制密码。',
+            'POST /api/chat/device/register；Android、iOS、Windows、macOS、Linux、Web 均可调用。先使用 client_credentials（scope=IM）获取独立 Token，再以 Bearer 调用注册接口。',
           ),
           const SizedBox(height: 16),
           TextField(
@@ -103,17 +113,18 @@ class _DeviceRegistrationDiagnosticsPageState
                 child: Text(_working ? '执行中…' : '实际注册设备'),
               ),
               TextButton(
-                onPressed: _working
-                    ? null
-                    : () => setState(() {
+                onPressed:
+                    _working
+                        ? null
+                        : () => setState(() {
                           _name.text = 'Goto IM';
                           _result = '未执行';
                         }),
                 child: const Text('恢复默认'),
               ),
               TextButton.icon(
-                onPressed: () =>
-                    Clipboard.setData(ClipboardData(text: _result)),
+                onPressed:
+                    () => Clipboard.setData(ClipboardData(text: _result)),
                 icon: const Icon(Icons.copy_outlined),
                 label: const Text('复制结果'),
               ),

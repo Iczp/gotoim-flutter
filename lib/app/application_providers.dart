@@ -38,33 +38,40 @@ final deviceRegistrationApiProvider = Provider<DeviceRegistrationApi>((ref) {
     capabilities: ref.watch(clientCapabilityServiceProvider),
     deviceContext: ref.watch(clientDeviceContextProvider),
     environment: ref.watch(appEnvironmentProvider),
+    readClientCredentialsToken:
+        (ref.watch(authRepositoryProvider) as OpenIdConnectAuthRepository)
+            .getDeviceRegistrationAccessToken,
   );
 });
 
 /// 由 bootstrap 创建并覆写，保证通知点击回调在应用启动时即可注册。
 final localNotificationServiceProvider = Provider<LocalNotificationService>(
-  (ref) => throw UnimplementedError(
-    'LocalNotificationService must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'LocalNotificationService must be provided at bootstrap.',
+      ),
 );
 
 /// Unified application entry point for client/platform APIs.
 final clientCapabilityServiceProvider = Provider<ClientCapabilityService>(
-  (ref) => throw UnimplementedError(
-    'ClientCapabilityService must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'ClientCapabilityService must be provided at bootstrap.',
+      ),
 );
 
 /// JSON request/response dispatcher used by WebView adapters and diagnostics.
 final jsApiDispatcherProvider = Provider<JsApiDispatcher>(
-  (ref) => throw UnimplementedError(
-    'JsApiDispatcher must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'JsApiDispatcher must be provided at bootstrap.',
+      ),
 );
 
 /// The single SQL database shared by native and Web clients.
 final unifiedDatabaseProvider = Provider<UnifiedDatabase>(
-  (ref) => throw UnimplementedError(
-    'UnifiedDatabase must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'UnifiedDatabase must be provided at bootstrap.',
+      ),
 );

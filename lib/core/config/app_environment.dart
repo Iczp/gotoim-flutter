@@ -20,8 +20,6 @@ class AppEnvironment {
     required this.authClientSecret,
     required this.authScope,
     required this.authLoginGrantType,
-    required this.deviceRegistrationBasicUsername,
-    required this.deviceRegistrationBasicPassword,
     required this.authUserInfoPath,
     required this.authIntrospectionPath,
     required this.authRevocationPath,
@@ -58,10 +56,6 @@ class AppEnvironment {
   final String authScope;
   final String authLoginGrantType;
 
-  /// Credentials for the unauthenticated device-registration endpoint. Empty
-  /// values intentionally fall back to the OAuth client credentials.
-  final String deviceRegistrationBasicUsername;
-  final String deviceRegistrationBasicPassword;
   final String authUserInfoPath;
   final String authIntrospectionPath;
   final String authRevocationPath;
@@ -119,14 +113,6 @@ class AppEnvironment {
         dotenv.get('AUTH_LOGIN_GRANT_TYPE', fallback: ''),
         fallback: 'password',
       ),
-      deviceRegistrationBasicUsername: dotenv.get(
-        'DEVICE_REGISTRATION_BASIC_USERNAME',
-        fallback: dotenv.get('AUTH_CLIENT_ID', fallback: ''),
-      ),
-      deviceRegistrationBasicPassword: dotenv.get(
-        'DEVICE_REGISTRATION_BASIC_PASSWORD',
-        fallback: dotenv.get('AUTH_CLIENT_SECRET', fallback: ''),
-      ),
       authUserInfoPath: dotenv.get(
         'AUTH_USER_INFO_PATH',
         fallback: '/connect/userinfo',
@@ -157,7 +143,8 @@ class AppEnvironment {
         fallback: 'gotoim://scan-login?code={code}',
       ),
       scanLoginFallbackExpires: Duration(
-        seconds: int.tryParse(
+        seconds:
+            int.tryParse(
               dotenv.get('SCAN_LOGIN_QR_EXPIRES_SECONDS', fallback: '90'),
             ) ??
             90,
@@ -249,9 +236,10 @@ class AppEnvironment {
 
   String get authUserInfoUrl {
     final baseUrl = authBaseUrl.replaceFirst(RegExp(r'/+$'), '');
-    final path = authUserInfoPath.startsWith('/')
-        ? authUserInfoPath
-        : '/$authUserInfoPath';
+    final path =
+        authUserInfoPath.startsWith('/')
+            ? authUserInfoPath
+            : '/$authUserInfoPath';
     return '$baseUrl$path';
   }
 
@@ -286,7 +274,8 @@ class AppEnvironment {
 
 final Provider<AppEnvironment> appEnvironmentProvider =
     Provider<AppEnvironment>(
-  (ref) => throw UnimplementedError(
-    'AppEnvironment must be provided during bootstrap.',
-  ),
-);
+      (ref) =>
+          throw UnimplementedError(
+            'AppEnvironment must be provided during bootstrap.',
+          ),
+    );

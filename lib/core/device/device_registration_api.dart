@@ -6,23 +6,26 @@ import '../config/app_environment.dart';
 import '../network/api_client.dart';
 import 'client_device_context.dart';
 
-/// Registers the current installation with the chat backend.  This endpoint
-/// is authenticated with HTTP Basic, rather than the user's Bearer token.
+/// Registers the current installation with the chat backend using a dedicated
+/// client-credentials Bearer token, never the signed-in user's token.
 class DeviceRegistrationApi {
   DeviceRegistrationApi({
     required ApiClient apiClient,
     required ClientCapabilityService capabilities,
     required ClientDeviceContext deviceContext,
     required AppEnvironment environment,
-  })  : _apiClient = apiClient,
-        _capabilities = capabilities,
-        _deviceContext = deviceContext,
-        _environment = environment;
+    required Future<String> Function() readClientCredentialsToken,
+  }) : _apiClient = apiClient,
+       _capabilities = capabilities,
+       _deviceContext = deviceContext,
+       _environment = environment,
+       _readClientCredentialsToken = readClientCredentialsToken;
 
   final ApiClient _apiClient;
   final ClientCapabilityService _capabilities;
   final ClientDeviceContext _deviceContext;
   final AppEnvironment _environment;
+  final Future<String> Function() _readClientCredentialsToken;
 
   Future<Map<String, Object?>> collectPayload({String? name}) async {
     final results = await Future.wait<Object>([
@@ -34,23 +37,22 @@ class DeviceRegistrationApi {
     final device = results[1] as ClientDeviceInfo;
     final network = results[2] as ClientNetworkStatus;
     final safeAreaInsets = jsonEncode(<String, num>{
-      'top': system.safeAreaTop,
-      'right': system.safeAreaRight,
-      'bottom': system.safeAreaBottom,
-      'left': system.safeAreaLeft,
+      'top': _toInt(system.safeAreaTop),
+      'right': _toInt(system.safeAreaRight),
+      'bottom': _toInt(system.safeAreaBottom),
+      'left': _toInt(system.safeAreaLeft),
     });
     final platform = _deviceContext.platform;
-    final appVersionCode = int.tryParse(
-          _environment.appVersion.split('.').first,
-        ) ??
-        0;
+    final appVersionCode =
+        int.tryParse(_environment.appVersion.split('.').first) ?? 0;
 
     // Keep UniApp-compatible names. Values unavailable to Flutter on a given
     // platform are sent as empty values instead of inventing device metadata.
     return <String, Object?>{
-      'name': name?.trim().isNotEmpty == true
-          ? name!.trim()
-          : (_deviceContext.appName),
+      'name':
+          name?.trim().isNotEmpty == true
+              ? name!.trim()
+              : (_deviceContext.appName),
       'deviceId': _deviceContext.deviceId,
       'platform': platform,
       'appId': _environment.appId,
@@ -67,7 +69,7 @@ class DeviceRegistrationApi {
       'deviceBrand': device.brand ?? _deviceContext.brand,
       'deviceModel': device.model ?? _deviceContext.model,
       'deviceType': _deviceContext.deviceType,
-      'devicePixelRatio': system.devicePixelRatio,
+      'devicePixelRatio': _toInt(system.devicePixelRatio),
       'deviceOrientation':
           system.windowWidth >= system.windowHeight ? 'landscape' : 'portrait',
       'fontSizeSetting': 0,
@@ -85,14 +87,15 @@ class DeviceRegistrationApi {
       'osVersion': device.systemVersion ?? '',
       'osLanguage': system.locale,
       'osTheme': system.brightness,
-      'pixelRatio': system.devicePixelRatio,
-      'screenWidth': system.screenWidth,
-      'screenHeight': system.screenHeight,
-      'statusBarHeight': system.safeAreaTop,
+      'pixelRatio': _toInt(system.devicePixelRatio),
+      'screenWidth': _toInt(system.screenWidth),
+      'screenHeight': _toInt(system.screenHeight),
+      'statusBarHeight': _toInt(system.safeAreaTop),
       'storage': '',
       'swanNativeVersion': '',
-      'system': '${device.systemName ?? platform} ${device.systemVersion ?? ''}'
-          .trim(),
+      'system':
+          '${device.systemName ?? platform} ${device.systemVersion ?? ''}'
+              .trim(),
       'safeArea': safeAreaInsets,
       'safeAreaInsets': safeAreaInsets,
       'ua': device.browser ?? '',
@@ -102,13 +105,13 @@ class DeviceRegistrationApi {
       'version': _environment.appVersion,
       'romName': '',
       'romVersion': '',
-      'windowWidth': system.windowWidth,
-      'windowHeight': system.windowHeight,
+      'windowWidth': _toInt(system.windowWidth),
+      'windowHeight': _toInt(system.windowHeight),
       'navigationBarHeight': 0,
       'titleBarHeight': 0,
       'appPlatform': platform,
-      'windowTop': system.safeAreaTop,
-      'windowBottom': system.safeAreaBottom,
+      'windowTop': _toInt(system.safeAreaTop),
+      'windowBottom': _toInt(system.safeAreaBottom),
       'bluetoothEnabled': network.types.any((item) => item.name == 'bluetooth'),
       'locationEnabled': false,
       'wifiEnabled': network.types.any((item) => item.name == 'wifi'),
@@ -119,18 +122,17 @@ class DeviceRegistrationApi {
     };
   }
 
+  /// The ABP DTO declares these metrics as Int32. Flutter exposes logical
+  /// pixels as doubles, so send an integer rather than JSON `393.0`.
+  int _toInt(double value) => value.round();
+
   Future<Object?> register({String? name}) async {
-    final username = _environment.deviceRegistrationBasicUsername;
-    final password = _environment.deviceRegistrationBasicPassword;
-    if (username.isEmpty || password.isEmpty) {
-      throw StateError('设备注册 Basic 凭据未配置。');
-    }
-    final basic = base64Encode(utf8.encode('$username:$password'));
+    final accessToken = await _readClientCredentialsToken();
     return _apiClient.post<Object?>(
       '/api/chat/device/register',
       data: await collectPayload(name: name),
-      headers: <String, String>{'Authorization': 'Basic $basic'},
-      // Basic endpoint must neither send a Bearer token nor invoke refresh.
+      headers: <String, String>{'Authorization': 'Bearer $accessToken'},
+      // This token is independently managed, so user-token refresh is invalid.
       retryOnUnauthorized: false,
     );
   }

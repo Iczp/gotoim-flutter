@@ -60,7 +60,7 @@ class DiagnosticsHomePage extends StatelessWidget {
           _Item(
             icon: Icons.devices_outlined,
             title: '设备注册与信息采集',
-            subtitle: 'Basic 验证、实际请求、完整 Payload、返回结果与异常',
+            subtitle: 'client_credentials、实际请求、完整 Payload、返回结果与异常',
             onTap: () => context.push('/diagnostics/device-registration'),
           ),
           _Item(

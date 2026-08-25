@@ -15,8 +15,8 @@ class _GotoImAppState extends ConsumerState<GotoImApp> {
   @override
   void initState() {
     super.initState();
-    // Device registration is independent of user login and uses its own Basic
-    // credentials. A failed background registration must never block startup.
+    // Device registration is independent of user login and uses a dedicated
+    // client-credentials token. A failed registration must never block startup.
     Future<void>.microtask(() async {
       try {
         await ref.read(deviceRegistrationApiProvider).register();
