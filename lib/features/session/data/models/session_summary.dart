@@ -5,6 +5,7 @@ class SessionSummary {
     required this.id,
     required this.ownerId,
     required this.score,
+    required this.ticks,
     required this.title,
     required this.preview,
     required this.updatedAt,
@@ -29,6 +30,7 @@ class SessionSummary {
       id: json['id']?.toString() ?? '',
       ownerId: asInt(json['ownerId']),
       score: asInt(json['score']) ?? asInt(json['ticks']) ?? 0,
+      ticks: asInt(json['ticks']) ?? 0,
       title: title.isEmpty ? '未命名会话' : title,
       preview: messagePreview(content),
       updatedAt:
@@ -53,6 +55,7 @@ class SessionSummary {
   final String id;
   final int? ownerId;
   final int score;
+  final int ticks;
   final String title;
   final String preview;
   final DateTime? updatedAt;
