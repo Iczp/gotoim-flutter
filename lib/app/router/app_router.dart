@@ -26,6 +26,7 @@ import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/local_file_server/pages/terminal_details_page.dart';
 import '../../features/local_file_server/pages/shared_file_manager_page.dart';
 import '../../features/workbench/presentation/workbench_page.dart';
+import '../../features/session/presentation/login_devices_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
@@ -150,6 +151,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/workbench',
         builder: (context, state) => const WorkbenchPage(),
+      ),
+      GoRoute(
+        path: '/devices',
+        builder: (context, state) => const LoginDevicesPage(),
       ),
     ],
   );

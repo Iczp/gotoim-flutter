@@ -1,12 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../app/application_providers.dart';
+import '../../../core/device/client_device_context.dart';
+import '../../../core/realtime/signalr_gateway.dart';
+import '../../auth/application/auth_controller.dart';
 import '../data/datasources/session_dao.dart';
 import '../data/datasources/session_unit_api.dart';
 import '../data/models/chat_owner.dart';
 import '../data/models/session_summary.dart';
+import '../data/models/logged_in_device.dart';
 import '../data/repositories/session_repository.dart';
 
 final sessionRepositoryProvider = Provider<SessionRepository>(
@@ -18,20 +24,42 @@ final sessionRepositoryProvider = Provider<SessionRepository>(
 
 final sessionListControllerProvider =
     ChangeNotifierProvider<SessionListController>(
-      (ref) => SessionListController(ref.watch(sessionRepositoryProvider)),
+      (ref) => SessionListController(
+        ref.watch(sessionRepositoryProvider),
+        ref.watch(signalRGatewayProvider),
+        ref.watch(clientDeviceContextProvider),
+      ),
     );
 
 class SessionListController extends ChangeNotifier {
-  SessionListController(this._repository);
+  SessionListController(
+    this._repository,
+    this._signalRGateway,
+    this._deviceContext,
+  ) : _connectionState = _signalRGateway.connectionState {
+    _signalSubscription = _signalRGateway.events.listen((event) {
+      if (event is SignalRConnectionEvent) {
+        _connectionState = event.state;
+        notifyListeners();
+      }
+    });
+  }
   static const pageSize = 50;
   final SessionRepository _repository;
+  final SignalRGateway _signalRGateway;
+  final ClientDeviceContext _deviceContext;
+  late final StreamSubscription<SignalRAppEvent> _signalSubscription;
   final List<SessionSummary> _sessions = [];
   List<ChatOwner> _owners = const [];
   ChatOwner? _currentOwner;
   bool _isLoading = false;
   bool _isRefreshing = false;
   bool _hasMore = true;
+  int? _totalCount;
   Object? _error;
+  List<LoggedInDevice> _devices = const [];
+  bool _isLoadingDevices = false;
+  late SignalRConnectionState _connectionState;
 
   List<SessionSummary> get sessions => List.unmodifiable(_sessions);
   List<ChatOwner> get owners => _owners;
@@ -39,7 +67,19 @@ class SessionListController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isRefreshing => _isRefreshing;
   bool get hasMore => _hasMore;
+  int? get totalCount => _totalCount;
   Object? get error => _error;
+  List<LoggedInDevice> get devices => _devices;
+  String get currentDeviceId => _deviceContext.deviceId;
+  String get currentDeviceLabel => [
+    _deviceContext.deviceType,
+    _deviceContext.brand,
+    _deviceContext.model,
+  ].where((value) => value.isNotEmpty).join(' · ');
+  bool get isLoadingDevices => _isLoadingDevices;
+  SignalRConnectionState get connectionState => _connectionState;
+
+  Future<void> reconnectSignalR() => _signalRGateway.connect();
 
   Future<void> initialize() async {
     if (_isLoading || _currentOwner != null) return;
@@ -55,6 +95,7 @@ class SessionListController extends ChangeNotifier {
         orElse: () => _owners.first,
       );
       await _repository.saveCurrentOwnerId(_currentOwner!.id);
+      unawaited(loadDevices(silent: true));
       await _loadNextPageInternal(reset: true);
     } catch (error) {
       _error = error;
@@ -64,12 +105,41 @@ class SessionListController extends ChangeNotifier {
     }
   }
 
+  Future<void> loadDevices({bool silent = false}) async {
+    if (_isLoadingDevices) return;
+    _isLoadingDevices = true;
+    if (!silent) notifyListeners();
+    try {
+      final devices = await _repository.loadDevices();
+      _devices = [...devices]..sort(
+        (a, b) =>
+            a.deviceId == _deviceContext.deviceId
+                ? -1
+                : b.deviceId == _deviceContext.deviceId
+                ? 1
+                : 0,
+      );
+    } catch (error) {
+      debugPrint('Load login devices failed: $error');
+    } finally {
+      _isLoadingDevices = false;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _signalSubscription.cancel();
+    super.dispose();
+  }
+
   Future<void> selectOwner(ChatOwner owner) async {
     if (_currentOwner?.id == owner.id) return;
     _currentOwner = owner;
     await _repository.saveCurrentOwnerId(owner.id);
     _sessions.clear();
     _hasMore = true;
+    _totalCount = null;
     _error = null;
     notifyListeners();
     await loadNextPage();
@@ -127,5 +197,6 @@ class SessionListController extends ChangeNotifier {
     final known = _sessions.map((item) => item.id).toSet();
     _sessions.addAll(result.items.where((item) => known.add(item.id)));
     _hasMore = result.hasMore;
+    _totalCount = result.totalCount;
   }
 }

@@ -2,6 +2,7 @@ import '../../../../core/network/api_client.dart';
 import '../models/paged_result_dto.dart';
 import '../models/chat_owner.dart';
 import '../models/session_summary.dart';
+import '../models/logged_in_device.dart';
 
 /// ABP session-unit cache endpoints used by the conversation list.
 class SessionUnitApi {
@@ -82,6 +83,16 @@ class SessionUnitApi {
     return PagedResultDto<SessionSummary>.fromJson(
       response,
       SessionSummary.fromJson,
+    );
+  }
+
+  Future<PagedResultDto<LoggedInDevice>> getDevices() async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/chat/device/by-current-user',
+    );
+    return PagedResultDto<LoggedInDevice>.fromJson(
+      response,
+      LoggedInDevice.fromJson,
     );
   }
 }

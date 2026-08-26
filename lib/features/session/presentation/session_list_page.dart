@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/realtime/signalr_gateway.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/chat_owner.dart';
 import 'chat_object_avatar.dart';
@@ -188,6 +189,17 @@ class _OwnerDrawer extends StatelessWidget {
               onPressed: () => Navigator.pop(context),
             ),
           ),
+          if (controller.connectionState != SignalRConnectionState.connected)
+            _SignalRStatusBar(
+              state: controller.connectionState,
+              onReconnect: controller.reconnectSignalR,
+            ),
+          _CurrentDeviceBar(
+            label: controller.currentDeviceLabel,
+            deviceCount: controller.devices.length,
+            isLoading: controller.isLoadingDevices,
+            onPressed: () => context.push('/devices'),
+          ),
           Expanded(
             child: ListView(
               children: [
@@ -274,6 +286,106 @@ class _OwnerDrawer extends StatelessWidget {
   );
 }
 
+class _SignalRStatusBar extends StatelessWidget {
+  const _SignalRStatusBar({required this.state, required this.onReconnect});
+  final SignalRConnectionState state;
+  final Future<void> Function() onReconnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final busy =
+        state == SignalRConnectionState.connecting ||
+        state == SignalRConnectionState.reconnecting;
+    final text = switch (state) {
+      SignalRConnectionState.connecting => 'SignalR 正在连接…',
+      SignalRConnectionState.reconnecting => 'SignalR 正在重新连接…',
+      SignalRConnectionState.disconnecting => 'SignalR 正在断开…',
+      SignalRConnectionState.disconnected => 'SignalR 已断开',
+      SignalRConnectionState.connected => '',
+    };
+    return Material(
+      color: Theme.of(context).colorScheme.errorContainer,
+      child: InkWell(
+        onTap: busy ? null : onReconnect,
+        child: SizedBox(
+          height: 36,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (busy)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                const Icon(Icons.cloud_off_outlined, size: 18),
+              const SizedBox(width: 8),
+              Text(text),
+              if (!busy) const Text('，点击重连'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CurrentDeviceBar extends StatelessWidget {
+  const _CurrentDeviceBar({
+    required this.label,
+    required this.deviceCount,
+    required this.isLoading,
+    required this.onPressed,
+  });
+  final String label;
+  final int deviceCount;
+  final bool isLoading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: const Color(0xFFF0F0F0),
+    child: InkWell(
+      onTap: onPressed,
+      child: SizedBox(
+        height: 48,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 48,
+                child: Icon(Icons.devices_outlined, color: Colors.lightBlue),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '当前设备：${label.isEmpty ? '未知设备' : label}'
+                  '${deviceCount > 1 ? ' · 多设备登录($deviceCount)' : ''}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              if (isLoading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 14,
+                  color: Colors.grey,
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class _LoadMoreFooter extends StatelessWidget {
   const _LoadMoreFooter({required this.controller});
   final SessionListController controller;
@@ -290,7 +402,7 @@ class _LoadMoreFooter extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Center(
           child: Text(
-            '共有 ${controller.sessions.length} 个会话',
+            '共有 ${controller.totalCount ?? controller.sessions.length} 个好友',
             style: const TextStyle(color: Colors.grey),
           ),
         ),

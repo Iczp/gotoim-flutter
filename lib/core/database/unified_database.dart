@@ -197,6 +197,15 @@ class UnifiedDatabase {
     return (rows.single['maxTicks'] as num?)?.toInt();
   }
 
+  Future<int> countFriendRows(int ownerId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT COUNT(*) AS count FROM Friends WHERE ownerId = ?',
+      <Object?>[ownerId],
+    );
+    return (rows.single['count'] as num?)?.toInt() ?? 0;
+  }
+
   Future<String?> readSettingValue(String id) async {
     await initialize();
     final rows = await _connection.runSelect(

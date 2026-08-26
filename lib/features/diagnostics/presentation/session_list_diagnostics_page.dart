@@ -32,6 +32,12 @@ class SessionListDiagnosticsPage extends ConsumerWidget {
         0,
         (value, item) => item.ticks > value ? item.ticks : value,
       ),
+      'avatarCache': {
+        'native': '系统应用缓存目录（flutter_cache_manager/libCachedImageData）',
+        'web': '不写本地文件，使用网络图片',
+        'envPathConfigured': false,
+        'relativeUrlBase': 'API_BASE_URL',
+      },
     });
     return Scaffold(
       appBar: AppBar(title: const Text('消息列表诊断')),

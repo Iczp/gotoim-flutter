@@ -1,6 +1,7 @@
 import '../datasources/session_dao.dart';
 import '../datasources/session_unit_api.dart';
 import '../models/session_summary.dart';
+import '../models/logged_in_device.dart';
 import '../models/chat_owner.dart';
 
 class SessionRepository {
@@ -17,6 +18,9 @@ class SessionRepository {
 
   Future<void> saveCurrentOwnerId(int ownerId) =>
       _dao.writeCurrentOwnerId(ownerId);
+
+  Future<List<LoggedInDevice>> loadDevices() async =>
+      (await _api.getDevices()).items;
 
   Future<ChatOwner> resolveCurrentOwner() async {
     final owners = await _api.getOwners();
@@ -40,7 +44,11 @@ class SessionRepository {
       return LoadFriendsResult(items: localItems, hasMore: true);
     }
     if (await _dao.isLoadedAll(ownerId)) {
-      return LoadFriendsResult(items: localItems, hasMore: false);
+      return LoadFriendsResult(
+        items: localItems,
+        hasMore: false,
+        totalCount: await _dao.count(ownerId),
+      );
     }
     final last = localItems.isNotEmpty ? localItems.last : null;
     final remote = await _api.getFriends(
@@ -56,7 +64,11 @@ class SessionRepository {
       for (final item in localItems) item.id: item,
       for (final item in remote.items) item.id: item,
     };
-    return LoadFriendsResult(items: unique.values.toList(), hasMore: hasMore);
+    return LoadFriendsResult(
+      items: unique.values.toList(),
+      hasMore: hasMore,
+      totalCount: hasMore ? null : await _dao.count(ownerId),
+    );
   }
 
   Future<List<SessionSummary>> loadLocalFriends({
@@ -88,7 +100,12 @@ class SessionRepository {
 }
 
 class LoadFriendsResult {
-  const LoadFriendsResult({required this.items, required this.hasMore});
+  const LoadFriendsResult({
+    required this.items,
+    required this.hasMore,
+    this.totalCount,
+  });
   final List<SessionSummary> items;
   final bool hasMore;
+  final int? totalCount;
 }

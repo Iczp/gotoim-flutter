@@ -34,6 +34,8 @@ class SessionDao {
   Future<int?> readMaxTicks(int ownerId) =>
       _database.readMaxFriendTicks(ownerId);
 
+  Future<int> count(int ownerId) => _database.countFriendRows(ownerId);
+
   Future<bool> isLoadedAll(int ownerId) async =>
       await _database.readSettingValue(_loadedAllKey(ownerId)) == 'true';
 
