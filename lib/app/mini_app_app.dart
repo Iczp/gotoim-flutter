@@ -50,9 +50,7 @@ class _MiniAppAppState extends State<MiniAppApp> {
           _currentRequest = MiniAppLaunchRequest(
             appId: args['appId'] as String? ?? _currentRequest?.appId ?? '',
             url: Uri.parse(
-              args['url'] as String? ??
-                  _currentRequest?.url.toString() ??
-                  '',
+              args['url'] as String? ?? _currentRequest?.url.toString() ?? '',
             ),
             title: args['title'] as String? ?? _currentRequest?.title,
           );
@@ -84,16 +82,15 @@ class _MiniAppAppState extends State<MiniAppApp> {
         useMaterial3: true,
         brightness: Brightness.dark,
       ),
-      home: _currentRequest != null
-          ? MiniAppHostPage(
-              request: _currentRequest!,
-              channel: widget.channel,
-            )
-          : const Scaffold(
-              body: Center(
-                child: Text('Waiting for launch payload...'),
+      home:
+          _currentRequest != null
+              ? MiniAppHostPage(
+                request: _currentRequest!,
+                channel: widget.channel,
+              )
+              : const Scaffold(
+                body: Center(child: Text('Waiting for launch payload...')),
               ),
-            ),
     );
   }
 }

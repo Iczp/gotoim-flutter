@@ -72,4 +72,3 @@ class SecureTokenStorage implements TokenStorage {
     } catch (_) {}
   }
 }
-

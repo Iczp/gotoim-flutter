@@ -79,19 +79,18 @@ class WorkbenchApp {
     MiniAppAuthMode? authMode,
     int? sort,
     bool? enabled,
-  }) =>
-      WorkbenchApp(
-        appId: appId ?? this.appId,
-        name: name ?? this.name,
-        url: url ?? this.url,
-        iconUrl: iconUrl ?? this.iconUrl,
-        type: type ?? this.type,
-        openMode: openMode ?? this.openMode,
-        reuseExisting: reuseExisting ?? this.reuseExisting,
-        authMode: authMode ?? this.authMode,
-        sort: sort ?? this.sort,
-        enabled: enabled ?? this.enabled,
-      );
+  }) => WorkbenchApp(
+    appId: appId ?? this.appId,
+    name: name ?? this.name,
+    url: url ?? this.url,
+    iconUrl: iconUrl ?? this.iconUrl,
+    type: type ?? this.type,
+    openMode: openMode ?? this.openMode,
+    reuseExisting: reuseExisting ?? this.reuseExisting,
+    authMode: authMode ?? this.authMode,
+    sort: sort ?? this.sort,
+    enabled: enabled ?? this.enabled,
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'appId': appId,

@@ -14,13 +14,8 @@ void main() {
         allowedCustomSchemes: ['gotoim-dev', 'gotoim'],
         allowedHosts: ['gotoim.com'],
       );
-      handler = DeepLinkHandler(
-        isAuthenticatedProvider: () => true,
-      );
-      service = DeepLinkService(
-        parser: parser,
-        handler: handler,
-      );
+      handler = DeepLinkHandler(isAuthenticatedProvider: () => true);
+      service = DeepLinkService(parser: parser, handler: handler);
     });
 
     test('records deep link events in eventLogs', () async {
@@ -36,7 +31,10 @@ void main() {
       expect(log.source, 'unit_test');
       expect(log.rawUri, uri);
       expect(log.parseResult.isSuccess, isTrue);
-      expect(log.executionResult?.status, DeepLinkExecutionStatus.notImplemented);
+      expect(
+        log.executionResult?.status,
+        DeepLinkExecutionStatus.notImplemented,
+      );
     });
 
     test('clears event logs', () async {

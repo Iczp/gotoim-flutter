@@ -364,6 +364,14 @@ F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\im\messages\MessageTab.vu
 
 3. 头像是否有存在本地文件夹，存哪个位置，是否配置了在Env里。
 
+4. 
+
+5. 
+
+6. 
+
+7.  tab 加   搜索Tab页，工作台放中心，  切换Tab，要有胶囊移动效果
+
    
 
 ---

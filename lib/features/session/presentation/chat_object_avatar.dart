@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_environment.dart';
 
+import '../../../core/theme/app_theme_tokens.dart';
+
 class ChatObjectAvatar extends ConsumerWidget {
   const ChatObjectAvatar({
     required this.name,
@@ -14,13 +16,14 @@ class ChatObjectAvatar extends ConsumerWidget {
   final String name;
   final String? imageUrl;
   final double radius;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final url = _resolveUrl(
       imageUrl?.trim() ?? '',
       ref.watch(appEnvironmentProvider).apiBaseUrl,
     );
-    if (url.isEmpty) return _fallback();
+    if (url.isEmpty) return _fallback(context);
     return ClipOval(
       child: CachedNetworkImage(
         imageUrl: url,
@@ -35,15 +38,47 @@ class ChatObjectAvatar extends ConsumerWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
-        errorWidget: (context, url, error) => _fallback(),
+        errorWidget: (context, url, error) => _fallback(context),
       ),
     );
   }
 
-  Widget _fallback() => CircleAvatar(
-    radius: radius,
-    child: Text(name.isEmpty ? '?' : name.characters.first),
-  );
+  Widget _fallback(BuildContext context) {
+    final tokens = context.appTokens;
+    final gradientColors = tokens.getAvatarGradient(name);
+    final initial =
+        name.trim().isEmpty ? '?' : name.trim().characters.first.toUpperCase();
+
+    return Container(
+      width: radius * 2,
+      height: radius * 2,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: gradientColors.first.withValues(alpha: 0.25),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: radius * 0.9,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
 }
 
 String _resolveUrl(String source, String baseUrl) {

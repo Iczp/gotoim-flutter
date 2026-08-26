@@ -47,9 +47,7 @@ class Native {
   }
 
   /// Listens to window size and orientation changes.
-  static StreamSubscription<Size> onResize(
-    void Function(Size size) callback,
-  ) {
+  static StreamSubscription<Size> onResize(void Function(Size size) callback) {
     return system.onResize.listen(callback);
   }
 

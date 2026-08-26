@@ -107,8 +107,6 @@ class _MiniAppHostPageState extends State<MiniAppHostPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -142,15 +140,16 @@ class _MiniAppHostPageState extends State<MiniAppHostPage> {
               onPressed: _closeTask,
             ),
           ],
-          bottom: _isLoading && _error == null
-              ? PreferredSize(
-                  preferredSize: const Size.fromHeight(2.0),
-                  child: LinearProgressIndicator(
-                    value: _progress > 0 ? _progress : null,
-                    minHeight: 2.0,
-                  ),
-                )
-              : null,
+          bottom:
+              _isLoading && _error == null
+                  ? PreferredSize(
+                    preferredSize: const Size.fromHeight(2.0),
+                    child: LinearProgressIndicator(
+                      value: _progress > 0 ? _progress : null,
+                      minHeight: 2.0,
+                    ),
+                  )
+                  : null,
         ),
         body: Stack(
           children: [
@@ -292,10 +291,7 @@ class _MiniAppLoadingOverlay extends StatelessWidget {
                 height: 80,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      colorScheme.primary,
-                      colorScheme.primaryContainer,
-                    ],
+                    colors: [colorScheme.primary, colorScheme.primaryContainer],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -333,9 +329,7 @@ class _MiniAppLoadingOverlay extends StatelessWidget {
               // Subtitle Domain
               Text(
                 url.host.isNotEmpty ? url.host : url.toString(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.grey,
-                ),
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
               ),
               const SizedBox(height: 32),
 
@@ -408,16 +402,16 @@ class _ErrorView extends StatelessWidget {
               const SizedBox(height: 16),
               Text(
                 '页面加载失败',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
                 url,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),

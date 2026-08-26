@@ -87,11 +87,12 @@ Future<void> bootstrap() async {
       navigatorProvider: () => rootNavigatorKey.currentState,
       uploadService: fileUploadService,
     );
-    final appTaskManager = platformFacade.kind == PlatformKind.android
-        ? AndroidAppTaskManager()
-        : StubAppTaskManager(
-            navigatorProvider: () => rootNavigatorKey.currentState,
-          );
+    final appTaskManager =
+        platformFacade.kind == PlatformKind.android
+            ? AndroidAppTaskManager()
+            : StubAppTaskManager(
+              navigatorProvider: () => rootNavigatorKey.currentState,
+            );
     final workbenchRepository = MockWorkbenchRepository();
     final deepLinkParser = DeepLinkParser(
       allowedCustomSchemes: environment.deepLinkCustomSchemes,
@@ -134,12 +135,6 @@ Future<void> bootstrap() async {
     );
   } catch (error, stackTrace) {
     debugPrint('Fatal bootstrap error: $error\n$stackTrace');
-    runApp(
-      BootstrapErrorApp(
-        error: error,
-        stackTrace: stackTrace,
-      ),
-    );
+    runApp(BootstrapErrorApp(error: error, stackTrace: stackTrace));
   }
 }
-

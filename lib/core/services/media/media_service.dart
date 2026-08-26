@@ -140,7 +140,8 @@ abstract class MediaService {
 }
 
 AssetPickerTextDelegate _resolveAssetPickerTextDelegate(BuildContext context) {
-  final locale = Localizations.maybeLocaleOf(context) ??
+  final locale =
+      Localizations.maybeLocaleOf(context) ??
       WidgetsBinding.instance.platformDispatcher.locale;
   return assetPickerTextDelegateFromLocale(locale);
 }
@@ -183,16 +184,13 @@ class DefaultMediaService implements MediaService {
         if (result != null) {
           final xFiles = <XFile>[];
           for (final asset in result) {
-            final file = request.preserveOriginal
-                ? await asset.originFile
-                : await asset.file;
+            final file =
+                request.preserveOriginal
+                    ? await asset.originFile
+                    : await asset.file;
             if (file != null) {
               xFiles.add(
-                XFile(
-                  file.path,
-                  name: asset.title,
-                  mimeType: asset.mimeType,
-                ),
+                XFile(file.path, name: asset.title, mimeType: asset.mimeType),
               );
             }
           }
@@ -255,8 +253,7 @@ class DefaultMediaService implements MediaService {
           ),
         );
         if (result != null && result.isNotEmpty) {
-          final file =
-              await result.first.originFile ?? await result.first.file;
+          final file = await result.first.originFile ?? await result.first.file;
           if (file != null) {
             return SelectedFile.fromXFile(
               XFile(

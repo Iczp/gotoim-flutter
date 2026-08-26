@@ -18,14 +18,7 @@ abstract class FilePickerService {
   Future<bool> clearTemporaryFiles();
 }
 
-enum FileTypeCategory {
-  any,
-  image,
-  video,
-  audio,
-  media,
-  custom,
-}
+enum FileTypeCategory { any, image, video, audio, media, custom }
 
 class FilePickerRequest {
   const FilePickerRequest({
@@ -194,7 +187,9 @@ class SystemFilePickerService implements FilePickerService {
                 ? null
                 : request.allowedExtensions,
       );
-      if (request.maxCount != null && request.maxCount! > 0 && picked.length > request.maxCount!) {
+      if (request.maxCount != null &&
+          request.maxCount! > 0 &&
+          picked.length > request.maxCount!) {
         files.addAll(picked.take(request.maxCount!));
       } else {
         files.addAll(picked);

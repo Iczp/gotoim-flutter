@@ -73,7 +73,8 @@ class MockWorkbenchRepository implements WorkbenchRepository {
 }
 
 final workbenchRepositoryProvider = Provider<WorkbenchRepository>(
-  (ref) => throw UnimplementedError(
-    'WorkbenchRepository must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'WorkbenchRepository must be provided at bootstrap.',
+      ),
 );

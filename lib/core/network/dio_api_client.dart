@@ -13,10 +13,10 @@ class DioApiClient implements ApiClient {
     required TokenStorage tokenStorage,
     required TokenRefresher tokenRefresher,
     required ClientDeviceContext deviceContext,
-  })  : _dio = dio,
-        _tokenStorage = tokenStorage,
-        _tokenRefresher = tokenRefresher,
-        _deviceContext = deviceContext;
+  }) : _dio = dio,
+       _tokenStorage = tokenStorage,
+       _tokenRefresher = tokenRefresher,
+       _deviceContext = deviceContext;
 
   final Dio _dio;
   final TokenStorage _tokenStorage;
@@ -116,26 +116,29 @@ class DioApiClient implements ApiClient {
   T _unwrap<T>(dynamic data) {
     if (data is Map && (data['success'] == false || data['error'] is Map)) {
       final error = data['error'];
-      final message = error is Map
-          ? (error['message'] ?? 'Request failed').toString()
-          : 'Request failed';
+      final message =
+          error is Map
+              ? (error['message'] ?? 'Request failed').toString()
+              : 'Request failed';
       throw ApiException(
         message,
         code: error is Map ? error['code']?.toString() : null,
       );
     }
-    final value = data is Map<String, dynamic> && data.containsKey('result')
-        ? data['result']
-        : data;
+    final value =
+        data is Map<String, dynamic> && data.containsKey('result')
+            ? data['result']
+            : data;
     return value as T;
   }
 
   ApiException _toApiException(DioException error) {
     final data = error.response?.data;
     final responseError = data is Map ? data['error'] : null;
-    final message = responseError is Map && responseError['message'] != null
-        ? responseError['message'].toString()
-        : data is Map && data['error_description'] != null
+    final message =
+        responseError is Map && responseError['message'] != null
+            ? responseError['message'].toString()
+            : data is Map && data['error_description'] != null
             ? data['error_description'].toString()
             : error.message ?? 'Network request failed';
     return ApiException(

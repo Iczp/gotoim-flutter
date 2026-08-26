@@ -112,6 +112,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/local-file-server'),
           ),
           _Item(
+            icon: Icons.palette_outlined,
+            title: '主题与暗黑模式',
+            subtitle: 'Material 3 调色板、语义 Token、字阶、组件展示与实时切换',
+            onTap: () => context.push('/diagnostics/theme'),
+          ),
+          _Item(
             icon: Icons.developer_mode_outlined,
             title: 'Native / Device 设备能力',
             subtitle: '截屏监听、振动反馈、系统主题、内存告警、加速度计、陀螺仪、距离传感器、亮度与电量',

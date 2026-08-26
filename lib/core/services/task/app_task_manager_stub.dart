@@ -20,8 +20,10 @@ class StubAppTaskManager implements AppTaskManager {
 
   @override
   Future<void> openMiniApp(MiniAppTaskRequest request) async {
-    debugPrint('[AppTask] stub open appId=${request.appId} '
-        '(platform does not support system tasks, opening as page)');
+    debugPrint(
+      '[AppTask] stub open appId=${request.appId} '
+      '(platform does not support system tasks, opening as page)',
+    );
     final navigator = navigatorProvider?.call();
     if (navigator == null) {
       debugPrint('[AppTask] no navigator available for page fallback');
@@ -29,14 +31,15 @@ class StubAppTaskManager implements AppTaskManager {
     }
     await navigator.push(
       MaterialPageRoute<void>(
-        builder: (context) => MiniAppHostPage(
-          request: MiniAppLaunchRequest(
-            appId: request.appId,
-            url: request.url,
-            title: request.title,
-            arguments: request.arguments,
-          ),
-        ),
+        builder:
+            (context) => MiniAppHostPage(
+              request: MiniAppLaunchRequest(
+                appId: request.appId,
+                url: request.url,
+                title: request.title,
+                arguments: request.arguments,
+              ),
+            ),
       ),
     );
   }

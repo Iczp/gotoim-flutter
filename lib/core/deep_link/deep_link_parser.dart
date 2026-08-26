@@ -78,13 +78,13 @@ class DeepLinkParseResult {
   bool get isInvalid => status == DeepLinkParseStatus.invalid;
 
   Map<String, dynamic> toMap() => {
-        'status': status.name,
-        'rawUri': rawUri.toString(),
-        'normalizedSegments': normalizedSegments,
-        if (target != null) 'target': target!.toMap(),
-        if (target != null) 'targetType': target!.targetType,
-        if (reason != null) 'reason': reason,
-      };
+    'status': status.name,
+    'rawUri': rawUri.toString(),
+    'normalizedSegments': normalizedSegments,
+    if (target != null) 'target': target!.toMap(),
+    if (target != null) 'targetType': target!.targetType,
+    if (reason != null) 'reason': reason,
+  };
 
   @override
   String toString() =>
@@ -185,7 +185,12 @@ class DeepLinkParser {
       }
 
       // Security check: sensitive credentials must not appear in deep link parameters
-      final forbiddenKeys = {'access_token', 'refresh_token', 'password', 'secret'};
+      final forbiddenKeys = {
+        'access_token',
+        'refresh_token',
+        'password',
+        'secret',
+      };
       for (final key in uri.queryParameters.keys) {
         if (forbiddenKeys.contains(key.toLowerCase())) {
           return DeepLinkParseResult.invalid(
@@ -282,8 +287,7 @@ class DeepLinkParser {
         return DeepLinkParseResult.invalid(
           rawUri: uri,
           normalizedSegments: segments,
-          reason:
-              'Invalid messageId "$messageIdStr": must be a valid integer.',
+          reason: 'Invalid messageId "$messageIdStr": must be a valid integer.',
         );
       }
 
@@ -341,7 +345,8 @@ class DeepLinkParser {
       return DeepLinkParseResult.unsupported(
         rawUri: uri,
         normalizedSegments: segments,
-        reason: 'Unsupported invite category "${segments.length > 1 ? segments[1] : ''}".',
+        reason:
+            'Unsupported invite category "${segments.length > 1 ? segments[1] : ''}".',
       );
     }
 
@@ -409,7 +414,8 @@ class DeepLinkParser {
       return DeepLinkParseResult.unsupported(
         rawUri: uri,
         normalizedSegments: segments,
-        reason: 'Unsupported OAuth endpoint "${segments.length > 1 ? segments[1] : ''}".',
+        reason:
+            'Unsupported OAuth endpoint "${segments.length > 1 ? segments[1] : ''}".',
       );
     }
 

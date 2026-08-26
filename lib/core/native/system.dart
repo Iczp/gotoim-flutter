@@ -12,20 +12,24 @@ import 'package:flutter/widgets.dart';
 /// - [onUserCaptureScreen]: Listens for user screenshots on supported platforms.
 /// - [makePhoneCall]: Launches phone dialer with specified number.
 class NativeSystem with WidgetsBindingObserver {
-  NativeSystem({
-    MethodChannel? methodChannel,
-    EventChannel? screenshotChannel,
-  })  : _methodChannel = methodChannel ?? const MethodChannel('com.gotoim.native/methods'),
-        _screenshotChannel = screenshotChannel ?? const EventChannel('com.gotoim.native/user_capture_screen') {
+  NativeSystem({MethodChannel? methodChannel, EventChannel? screenshotChannel})
+    : _methodChannel =
+          methodChannel ?? const MethodChannel('com.gotoim.native/methods'),
+      _screenshotChannel =
+          screenshotChannel ??
+          const EventChannel('com.gotoim.native/user_capture_screen') {
     _initObservers();
   }
 
   final MethodChannel _methodChannel;
   final EventChannel _screenshotChannel;
 
-  final StreamController<Brightness> _themeController = StreamController<Brightness>.broadcast();
-  final StreamController<Size> _resizeController = StreamController<Size>.broadcast();
-  final StreamController<DateTime> _memoryWarningController = StreamController<DateTime>.broadcast();
+  final StreamController<Brightness> _themeController =
+      StreamController<Brightness>.broadcast();
+  final StreamController<Size> _resizeController =
+      StreamController<Size>.broadcast();
+  final StreamController<DateTime> _memoryWarningController =
+      StreamController<DateTime>.broadcast();
   Stream<DateTime>? _screenshotStream;
 
   void _initObservers() {
@@ -51,7 +55,10 @@ class NativeSystem with WidgetsBindingObserver {
       final view = PlatformDispatcher.instance.implicitView;
       if (view != null) {
         final ratio = view.devicePixelRatio;
-        return Size(view.physicalSize.width / ratio, view.physicalSize.height / ratio);
+        return Size(
+          view.physicalSize.width / ratio,
+          view.physicalSize.height / ratio,
+        );
       }
     } catch (_) {}
     return Size.zero;

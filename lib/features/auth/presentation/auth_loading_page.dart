@@ -87,4 +87,3 @@ class _AuthLoadingPageState extends State<AuthLoadingPage> {
     );
   }
 }
-

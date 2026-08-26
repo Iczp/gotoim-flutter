@@ -38,11 +38,12 @@ class _DatabaseDiagnosticsPageState
     } catch (error, stackTrace) {
       if (mounted) {
         setState(
-          () => _result = _pretty(<String, Object?>{
-            'success': false,
-            'error': error.toString(),
-            'stack': stackTrace.toString(),
-          }),
+          () =>
+              _result = _pretty(<String, Object?>{
+                'success': false,
+                'error': error.toString(),
+                'stack': stackTrace.toString(),
+              }),
         );
       }
     } finally {
@@ -50,7 +51,8 @@ class _DatabaseDiagnosticsPageState
     }
   }
 
-  Future<void> _inspect() => _run(() async => (await _database.inspect()).toJson());
+  Future<void> _inspect() =>
+      _run(() async => (await _database.inspect()).toJson());
 
   Future<void> _insert() => _run(() async {
     final id = 'diagnostic-${DateTime.now().microsecondsSinceEpoch}';
@@ -66,18 +68,20 @@ class _DatabaseDiagnosticsPageState
     return <String, Object?>{
       'operation': 'insert',
       'id': id,
-      'records': (await _database.readDiagnosticRecords())
-          .map((record) => record.toJson())
-          .toList(),
+      'records':
+          (await _database.readDiagnosticRecords())
+              .map((record) => record.toJson())
+              .toList(),
     };
   });
 
   Future<void> _read() => _run(
     () async => <String, Object?>{
       'operation': 'select',
-      'records': (await _database.readDiagnosticRecords())
-          .map((record) => record.toJson())
-          .toList(),
+      'records':
+          (await _database.readDiagnosticRecords())
+              .map((record) => record.toJson())
+              .toList(),
     },
   );
 
@@ -92,7 +96,11 @@ class _DatabaseDiagnosticsPageState
         'updatedAt': DateTime.now().toIso8601String(),
       },
     );
-    return <String, Object?>{'operation': 'update', 'id': id, 'affected': affected};
+    return <String, Object?>{
+      'operation': 'update',
+      'id': id,
+      'affected': affected,
+    };
   });
 
   Future<void> _delete() => _run(() async {
@@ -100,11 +108,17 @@ class _DatabaseDiagnosticsPageState
     if (id == null) throw StateError('请先插入一条诊断记录。');
     final affected = await _database.deleteDiagnosticRecord(id);
     _lastRecordId = null;
-    return <String, Object?>{'operation': 'delete', 'id': id, 'affected': affected};
+    return <String, Object?>{
+      'operation': 'delete',
+      'id': id,
+      'affected': affected,
+    };
   });
 
   Future<void> _clear() => _run(() async {
-    final affected = await _database.clearTable(UnifiedDatabase.diagnosticsTable);
+    final affected = await _database.clearTable(
+      UnifiedDatabase.diagnosticsTable,
+    );
     _lastRecordId = null;
     return <String, Object?>{
       'operation': 'clearTable',
@@ -166,7 +180,8 @@ class _DatabaseDiagnosticsPageState
           ),
           _Section(
             title: 'diagnostic_records CRUD',
-            description: '此表是正式 schema 的诊断记录表，用来验证 INSERT、SELECT、UPDATE、DELETE 与清表。',
+            description:
+                '此表是正式 schema 的诊断记录表，用来验证 INSERT、SELECT、UPDATE、DELETE 与清表。',
             children: [
               _button('INSERT 样本记录', _insert),
               _button('SELECT 诊断记录', _read),
@@ -233,4 +248,5 @@ class _Section extends StatelessWidget {
   );
 }
 
-String _pretty(Object? value) => const JsonEncoder.withIndent('  ').convert(value);
+String _pretty(Object? value) =>
+    const JsonEncoder.withIndent('  ').convert(value);

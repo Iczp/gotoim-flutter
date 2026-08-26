@@ -21,13 +21,7 @@ enum HapticFeedbackType {
 }
 
 /// Device battery charging status.
-enum BatteryStatus {
-  charging,
-  discharging,
-  full,
-  notCharging,
-  unknown,
-}
+enum BatteryStatus { charging, discharging, full, notCharging, unknown }
 
 /// Structured battery information.
 @immutable
@@ -62,10 +56,10 @@ class BatteryInfo {
   }
 
   Map<String, dynamic> toMap() => {
-        'level': level,
-        'isCharging': isCharging,
-        'status': status.name,
-      };
+    'level': level,
+    'isCharging': isCharging,
+    'status': status.name,
+  };
 
   @override
   String toString() =>
@@ -74,9 +68,9 @@ class BatteryInfo {
 
 /// Device hardware capabilities (vibration, battery, screen brightness).
 class NativeDevice {
-  NativeDevice({
-    MethodChannel? methodChannel,
-  }) : _methodChannel = methodChannel ?? const MethodChannel('com.gotoim.native/methods');
+  NativeDevice({MethodChannel? methodChannel})
+    : _methodChannel =
+          methodChannel ?? const MethodChannel('com.gotoim.native/methods');
 
   final MethodChannel _methodChannel;
 
@@ -90,10 +84,9 @@ class NativeDevice {
   }) async {
     if (durationMs != null && durationMs > 0) {
       try {
-        await _methodChannel.invokeMethod<void>(
-          'vibrate',
-          <String, dynamic>{'duration': durationMs},
-        );
+        await _methodChannel.invokeMethod<void>('vibrate', <String, dynamic>{
+          'duration': durationMs,
+        });
         return;
       } catch (_) {
         // Fallback to Flutter HapticFeedback if custom timed vibration fails or is unsupported
@@ -117,7 +110,9 @@ class NativeDevice {
   /// Retrieves the current device battery information.
   Future<BatteryInfo> getBatteryInfo() async {
     try {
-      final result = await _methodChannel.invokeMapMethod<dynamic, dynamic>('getBatteryInfo');
+      final result = await _methodChannel.invokeMapMethod<dynamic, dynamic>(
+        'getBatteryInfo',
+      );
       if (result != null) {
         return BatteryInfo.fromMap(result);
       }
@@ -137,7 +132,9 @@ class NativeDevice {
   /// Retrieves the current screen/window brightness level (0.0 to 1.0).
   Future<double> getScreenBrightness() async {
     try {
-      final result = await _methodChannel.invokeMethod<double>('getScreenBrightness');
+      final result = await _methodChannel.invokeMethod<double>(
+        'getScreenBrightness',
+      );
       if (result != null) {
         return result.clamp(0.0, 1.0);
       }

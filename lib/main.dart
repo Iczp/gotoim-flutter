@@ -33,4 +33,3 @@ Future<void> miniAppMain() async {
     runApp(BootstrapErrorApp(error: error, stackTrace: stackTrace));
   }
 }
-

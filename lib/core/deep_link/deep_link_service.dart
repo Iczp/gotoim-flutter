@@ -26,13 +26,12 @@ class DeepLinkEventLog {
   final DeepLinkExecutionResult? executionResult;
 
   Map<String, dynamic> toMap() => {
-        'timestamp': timestamp.toIso8601String(),
-        'source': source,
-        'rawUri': rawUri.toString(),
-        'parseResult': parseResult.toMap(),
-        if (executionResult != null)
-          'executionResult': executionResult!.toMap(),
-      };
+    'timestamp': timestamp.toIso8601String(),
+    'source': source,
+    'rawUri': rawUri.toString(),
+    'parseResult': parseResult.toMap(),
+    if (executionResult != null) 'executionResult': executionResult!.toMap(),
+  };
 
   @override
   String toString() =>
@@ -144,9 +143,10 @@ class DeepLinkService extends ChangeNotifier {
 
     return executionResult ??
         DeepLinkExecutionResult(
-          status: parseResult.isSuccess
-              ? DeepLinkExecutionStatus.success
-              : DeepLinkExecutionStatus.failed,
+          status:
+              parseResult.isSuccess
+                  ? DeepLinkExecutionStatus.success
+                  : DeepLinkExecutionStatus.failed,
           target: parseResult.target,
           message: parseResult.reason ?? 'Parsed only without execution.',
         );
@@ -193,10 +193,7 @@ final deepLinkHandlerProvider = Provider<DeepLinkHandler>((ref) {
 final deepLinkServiceProvider = ChangeNotifierProvider<DeepLinkService>((ref) {
   final parser = ref.watch(deepLinkParserProvider);
   final handler = ref.watch(deepLinkHandlerProvider);
-  final service = DeepLinkService(
-    parser: parser,
-    handler: handler,
-  );
+  final service = DeepLinkService(parser: parser, handler: handler);
   ref.onDispose(service.dispose);
   return service;
 });

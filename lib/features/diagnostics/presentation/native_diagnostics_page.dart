@@ -1,29 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/native/native.dart';
 
 /// Development Diagnostics Center - Native / Device Capabilities Page.
-///
-/// Features:
-/// - Screen Capture (Screenshot) event detection & subscription lifecycle
-/// - Vibration / Haptic Feedback (timed and semantic impacts)
-/// - System Theme brightness changes & subscription lifecycle
-/// - System Memory Pressure warnings & subscription lifecycle
-/// - Accelerometer (~5 times/second live values) & subscription lifecycle
-/// - Gyroscope (live rotation values) & subscription lifecycle
-/// - Proximity Sensor (near/far status) & subscription lifecycle
-/// - Screen Brightness adjustment & query
-/// - Battery Info & charging state
-/// - Window Resize & orientation changes & subscription lifecycle
-/// - Phone Call dialer launch
 class NativeDiagnosticsPage extends ConsumerStatefulWidget {
   const NativeDiagnosticsPage({super.key});
 
   @override
-  ConsumerState<NativeDiagnosticsPage> createState() => _NativeDiagnosticsPageState();
+  ConsumerState<NativeDiagnosticsPage> createState() =>
+      _NativeDiagnosticsPageState();
 }
 
 class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
@@ -51,8 +38,12 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
   double? _systemVolume;
   bool _flashlightEnabled = false;
   bool _flashlightBusy = false;
-  final TextEditingController _phoneController = TextEditingController(text: '10086');
-  final TextEditingController _desktopBadgeController = TextEditingController(text: '7');
+  final TextEditingController _phoneController = TextEditingController(
+    text: '10086',
+  );
+  final TextEditingController _desktopBadgeController = TextEditingController(
+    text: '7',
+  );
   String _vibrateStatus = '就绪';
   String _deviceControlStatus = '未执行';
 
@@ -90,7 +81,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
         if (mounted) {
           setState(() {
             _currentBrightness = brightness;
-            _themeEvents.insert(0, '${_formatTime(DateTime.now())} - 切换为 ${brightness.name.toUpperCase()}');
+            _themeEvents.insert(
+              0,
+              '${_formatTime(DateTime.now())} - 切换为 ${brightness.name.toUpperCase()}',
+            );
             if (_themeEvents.length > 10) _themeEvents.removeLast();
           });
         }
@@ -190,9 +184,8 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
     setState(() {
       _flashlightBusy = false;
       if (ok) _flashlightEnabled = enabled;
-      _deviceControlStatus = ok
-          ? '闪光灯已${enabled ? '开启' : '关闭'}'
-          : '闪光灯不可用：请确认设备有后置闪光灯并允许相机访问';
+      _deviceControlStatus =
+          ok ? '闪光灯已${enabled ? '开启' : '关闭'}' : '闪光灯不可用：请确认设备有后置闪光灯并允许相机访问';
     });
   }
 
@@ -201,9 +194,8 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
     if (!mounted) return;
     setState(() {
       if (ok) _systemVolume = value;
-      _deviceControlStatus = ok
-          ? '媒体音量已设置为 ${(value * 100).round()}%'
-          : '当前平台不支持设置媒体音量';
+      _deviceControlStatus =
+          ok ? '媒体音量已设置为 ${(value * 100).round()}%' : '当前平台不支持设置媒体音量';
     });
   }
 
@@ -212,9 +204,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
     final ok = await Native.setDesktopBadge(count);
     if (!mounted) return;
     setState(() {
-      _deviceControlStatus = ok
-          ? (count > 0 ? 'Dock 桌面角标已设置为 $count' : 'Dock 桌面角标已清除')
-          : '当前平台不支持桌面角标（目前仅 macOS Dock 支持）';
+      _deviceControlStatus =
+          ok
+              ? (count > 0 ? 'Dock 桌面角标已设置为 $count' : 'Dock 桌面角标已清除')
+              : '当前平台不支持桌面角标（目前仅 macOS Dock 支持）';
     });
   }
 
@@ -327,9 +320,15 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.devices, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.devices,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
-                Text('原生能力支持矩阵', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  '原生能力支持矩阵',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -337,9 +336,21 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _StatusChip(platform: 'Android', supported: true, label: '全套传感器 / 电量 / 截屏 / 振动 / 亮度'),
-                _StatusChip(platform: 'iOS', supported: true, label: '传感器 / 截屏通知 / 触觉反馈 / 电量 / 亮度'),
-                _StatusChip(platform: 'Desktop / Web', supported: true, label: '主题 / 窗口尺寸 / 内存 / 安全降级'),
+                _StatusChip(
+                  platform: 'Android',
+                  supported: true,
+                  label: '全套传感器 / 电量 / 截屏 / 振动 / 亮度',
+                ),
+                _StatusChip(
+                  platform: 'iOS',
+                  supported: true,
+                  label: '传感器 / 截屏通知 / 触觉反馈 / 电量 / 亮度',
+                ),
+                _StatusChip(
+                  platform: 'Desktop / Web',
+                  supported: true,
+                  label: '主题 / 窗口尺寸 / 内存 / 安全降级',
+                ),
               ],
             ),
           ],
@@ -369,7 +380,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               ],
             ),
             const SizedBox(height: 4),
-            const Text('支持随时开启订阅与取消订阅：', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const Text(
+              '支持随时开启订阅与取消订阅：',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const Divider(),
             const SizedBox(height: 8),
 
@@ -378,7 +392,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               title: '系统主题 (Theme)',
               subtitle: '当前: ${_currentBrightness.name.toUpperCase()}',
               isListening: _listeningTheme,
-              icon: _currentBrightness == Brightness.dark ? Icons.dark_mode : Icons.light_mode,
+              icon:
+                  _currentBrightness == Brightness.dark
+                      ? Icons.dark_mode
+                      : Icons.light_mode,
               onToggle: _toggleTheme,
             ),
             const SizedBox(height: 8),
@@ -386,7 +403,8 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
             // 2. Resize
             _subscriptionToggleTile(
               title: '窗口尺寸 (Size)',
-              subtitle: '当前: ${_currentWindowSize.width.toInt()} x ${_currentWindowSize.height.toInt()}',
+              subtitle:
+                  '当前: ${_currentWindowSize.width.toInt()} x ${_currentWindowSize.height.toInt()}',
               isListening: _listeningResize,
               icon: Icons.aspect_ratio,
               onToggle: _toggleResize,
@@ -396,9 +414,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
             // 3. Memory Warning
             _subscriptionToggleTile(
               title: '内存告警 (Memory Pressure)',
-              subtitle: _memoryWarningCount > 0
-                  ? '触发 $_memoryWarningCount 次 (最后: ${_formatTime(_lastMemoryWarning!)})'
-                  : '正常 (未收到内存告警)',
+              subtitle:
+                  _memoryWarningCount > 0
+                      ? '触发 $_memoryWarningCount 次 (最后: ${_formatTime(_lastMemoryWarning!)})'
+                      : '正常 (未收到内存告警)',
               isListening: _listeningMemory,
               icon: Icons.memory,
               onToggle: _toggleMemory,
@@ -418,7 +437,12 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.camera_alt, size: 20, color: _listeningScreenshot ? Colors.green : Colors.grey),
+                      Icon(
+                        Icons.camera_alt,
+                        size: 20,
+                        color:
+                            _listeningScreenshot ? Colors.green : Colors.grey,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Column(
@@ -426,12 +450,21 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                           children: [
                             const Text(
                               '截屏监听 (onUserCaptureScreen)',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
                               _listeningScreenshot ? '🟢 已开启订阅' : '⚪ 未订阅 / 已注销',
-                              style: TextStyle(fontSize: 11, color: _listeningScreenshot ? Colors.green.shade700 : Colors.grey),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color:
+                                    _listeningScreenshot
+                                        ? Colors.green.shade700
+                                        : Colors.grey,
+                              ),
                             ),
                           ],
                         ),
@@ -445,27 +478,42 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                   ),
                   const SizedBox(height: 8),
                   if (_screenshotEvents.isEmpty)
-                    const Text('暂无截屏记录（开启后在手机上截图即可实时捕获）', style: TextStyle(fontSize: 12, color: Colors.grey))
+                    const Text(
+                      '暂无截屏记录（开启后在手机上截图即可实时捕获）',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    )
                   else
                     Column(
-                      children: _screenshotEvents
-                          .map((event) => Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 2),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.check, size: 14, color: Colors.blue),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        event,
-                                        style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                                        overflow: TextOverflow.ellipsis,
+                      children:
+                          _screenshotEvents
+                              .map(
+                                (event) => Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.check,
+                                        size: 14,
+                                        color: Colors.blue,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          event,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontFamily: 'monospace',
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ))
-                          .toList(),
+                              )
+                              .toList(),
                     ),
                 ],
               ),
@@ -485,9 +533,15 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.smartphone, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.smartphone,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
-                Text('设备硬件控制 (Device Controls)', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  '设备硬件控制 (Device Controls)',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ],
             ),
             const Divider(),
@@ -497,7 +551,9 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
             Row(
               children: [
                 Icon(
-                  _batteryInfo?.isCharging == true ? Icons.battery_charging_full : Icons.battery_std,
+                  _batteryInfo?.isCharging == true
+                      ? Icons.battery_charging_full
+                      : Icons.battery_std,
                   color: Colors.green,
                   size: 28,
                 ),
@@ -513,7 +569,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                       ),
                       Text(
                         '状态: ${_batteryInfo?.status.name ?? 'unknown'}',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -529,7 +588,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
             const SizedBox(height: 16),
 
             // Screen Brightness
-            Text('屏幕亮度: ${(_screenBrightness * 100).toInt()}%', style: Theme.of(context).textTheme.labelLarge),
+            Text(
+              '屏幕亮度: ${(_screenBrightness * 100).toInt()}%',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
             Slider(
               value: _screenBrightness,
               min: 0.0,
@@ -544,7 +606,9 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
             // Flashlight
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              secondary: Icon(_flashlightEnabled ? Icons.flash_on : Icons.flash_off),
+              secondary: Icon(
+                _flashlightEnabled ? Icons.flash_on : Icons.flash_off,
+              ),
               title: const Text('后置闪光灯'),
               subtitle: const Text('Android / iOS；与扫码页闪光灯独立控制'),
               value: _flashlightEnabled,
@@ -563,9 +627,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               value: _systemVolume ?? 0,
               min: 0,
               max: 1,
-              onChanged: _systemVolume == null
-                  ? null
-                  : (value) => setState(() => _systemVolume = value),
+              onChanged:
+                  _systemVolume == null
+                      ? null
+                      : (value) => setState(() => _systemVolume = value),
               onChangeEnd: _systemVolume == null ? null : _setSystemVolume,
             ),
             const SizedBox(height: 8),
@@ -592,11 +657,17 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               ],
             ),
             const SizedBox(height: 8),
-            Text('设备控制：$_deviceControlStatus', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(
+              '设备控制：$_deviceControlStatus',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const SizedBox(height: 12),
 
             // Vibration & Haptic
-            Text('振动与触觉反馈 (Vibration & Haptics):', style: Theme.of(context).textTheme.labelLarge),
+            Text(
+              '振动与触觉反馈 (Vibration & Haptics):',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -645,11 +716,17 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               ],
             ),
             const SizedBox(height: 4),
-            Text('执行状态: $_vibrateStatus', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(
+              '执行状态: $_vibrateStatus',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const SizedBox(height: 16),
 
             // Phone Call
-            Text('拨打电话 (Make Phone Call):', style: Theme.of(context).textTheme.labelLarge),
+            Text(
+              '拨打电话 (Make Phone Call):',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -688,7 +765,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.sensors, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.sensors,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -700,7 +780,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               ],
             ),
             const SizedBox(height: 4),
-            const Text('传感器实时监听与生命周期注销（offSensor）：', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const Text(
+              '传感器实时监听与生命周期注销（offSensor）：',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const Divider(),
             const SizedBox(height: 8),
 
@@ -709,11 +792,12 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               title: '加速度计 (Accelerometer, ~5次/秒)',
               isListening: _listeningAccelerometer,
               onToggle: _toggleAccelerometer,
-              valueText: _accelerometerEvent != null
-                  ? 'X: ${_accelerometerEvent!.x.toStringAsFixed(2)}  '
-                      'Y: ${_accelerometerEvent!.y.toStringAsFixed(2)}  '
-                      'Z: ${_accelerometerEvent!.z.toStringAsFixed(2)} m/s²'
-                  : '等待数据...',
+              valueText:
+                  _accelerometerEvent != null
+                      ? 'X: ${_accelerometerEvent!.x.toStringAsFixed(2)}  '
+                          'Y: ${_accelerometerEvent!.y.toStringAsFixed(2)}  '
+                          'Z: ${_accelerometerEvent!.z.toStringAsFixed(2)} m/s²'
+                      : '等待数据...',
             ),
             const SizedBox(height: 12),
 
@@ -722,11 +806,12 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               title: '陀螺仪 (Gyroscope)',
               isListening: _listeningGyroscope,
               onToggle: _toggleGyroscope,
-              valueText: _gyroscopeEvent != null
-                  ? 'X: ${_gyroscopeEvent!.x.toStringAsFixed(2)}  '
-                      'Y: ${_gyroscopeEvent!.y.toStringAsFixed(2)}  '
-                      'Z: ${_gyroscopeEvent!.z.toStringAsFixed(2)} rad/s'
-                  : '等待数据...',
+              valueText:
+                  _gyroscopeEvent != null
+                      ? 'X: ${_gyroscopeEvent!.x.toStringAsFixed(2)}  '
+                          'Y: ${_gyroscopeEvent!.y.toStringAsFixed(2)}  '
+                          'Z: ${_gyroscopeEvent!.z.toStringAsFixed(2)} rad/s'
+                      : '等待数据...',
             ),
             const SizedBox(height: 12),
 
@@ -735,9 +820,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               title: '距离传感器 (Proximity)',
               isListening: _listeningProximity,
               onToggle: _toggleProximity,
-              valueText: _proximityEvent != null
-                  ? '${_proximityEvent!.isNear ? '🔴 靠近 (Near)' : '🟢 远离 (Far)'} (距离: ${_proximityEvent!.distance}cm)'
-                  : '等待数据...',
+              valueText:
+                  _proximityEvent != null
+                      ? '${_proximityEvent!.isNear ? '🔴 靠近 (Near)' : '🟢 远离 (Far)'} (距离: ${_proximityEvent!.distance}cm)'
+                      : '等待数据...',
             ),
           ],
         ),
@@ -768,14 +854,18 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       isListening ? '🟢 已订阅 (监听中)' : '⚪ 未订阅 (已注销)',
                       style: TextStyle(
                         fontSize: 11,
-                        color: isListening ? Colors.green.shade700 : Colors.grey,
+                        color:
+                            isListening ? Colors.green.shade700 : Colors.grey,
                       ),
                     ),
                   ],
@@ -792,10 +882,7 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                   onPressed: () => onToggle(false),
                   child: const Text('注销'),
                 ),
-              Switch(
-                value: isListening,
-                onChanged: onToggle,
-              ),
+              Switch(value: isListening, onChanged: onToggle),
             ],
           ),
           const SizedBox(height: 4),
@@ -804,7 +891,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
             style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 13,
-              color: isListening ? Theme.of(context).colorScheme.primary : Colors.grey,
+              color:
+                  isListening
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -830,7 +920,14 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
       child: Row(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 20, color: isListening ? (color ?? Theme.of(context).colorScheme.primary) : Colors.grey),
+            Icon(
+              icon,
+              size: 20,
+              color:
+                  isListening
+                      ? (color ?? Theme.of(context).colorScheme.primary)
+                      : Colors.grey,
+            ),
             const SizedBox(width: 10),
           ],
           Expanded(
@@ -839,7 +936,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
@@ -848,7 +948,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: isListening ? color ?? Colors.green.shade700 : Colors.grey,
+                    color:
+                        isListening
+                            ? color ?? Colors.green.shade700
+                            : Colors.grey,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -856,10 +959,7 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
             ),
           ),
           const SizedBox(width: 8),
-          Switch(
-            value: isListening,
-            onChanged: onToggle,
-          ),
+          Switch(value: isListening, onChanged: onToggle),
         ],
       ),
     );

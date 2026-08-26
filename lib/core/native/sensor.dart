@@ -27,11 +27,11 @@ class AccelerometerEvent {
   }
 
   Map<String, dynamic> toMap() => {
-        'x': x,
-        'y': y,
-        'z': z,
-        'timestamp': timestamp.toIso8601String(),
-      };
+    'x': x,
+    'y': y,
+    'z': z,
+    'timestamp': timestamp.toIso8601String(),
+  };
 
   @override
   String toString() =>
@@ -63,11 +63,11 @@ class GyroscopeEvent {
   }
 
   Map<String, dynamic> toMap() => {
-        'x': x,
-        'y': y,
-        'z': z,
-        'timestamp': timestamp.toIso8601String(),
-      };
+    'x': x,
+    'y': y,
+    'z': z,
+    'timestamp': timestamp.toIso8601String(),
+  };
 
   @override
   String toString() =>
@@ -77,10 +77,7 @@ class GyroscopeEvent {
 /// Proximity sensor data.
 @immutable
 class ProximityEvent {
-  const ProximityEvent({
-    required this.distance,
-    required this.isNear,
-  });
+  const ProximityEvent({required this.distance, required this.isNear});
 
   /// Distance in centimeters (or sensor max range if far).
   final double distance;
@@ -91,19 +88,14 @@ class ProximityEvent {
   factory ProximityEvent.fromMap(Map<dynamic, dynamic> map) {
     final distance = (map['distance'] as num?)?.toDouble() ?? 0.0;
     final isNear = map['isNear'] as bool? ?? (distance < 5.0);
-    return ProximityEvent(
-      distance: distance,
-      isNear: isNear,
-    );
+    return ProximityEvent(distance: distance, isNear: isNear);
   }
 
-  Map<String, dynamic> toMap() => {
-        'distance': distance,
-        'isNear': isNear,
-      };
+  Map<String, dynamic> toMap() => {'distance': distance, 'isNear': isNear};
 
   @override
-  String toString() => 'ProximityEvent(isNear: $isNear, distance: ${distance}cm)';
+  String toString() =>
+      'ProximityEvent(isNear: $isNear, distance: ${distance}cm)';
 }
 
 /// Hardware motion and environmental sensor management.
@@ -112,9 +104,15 @@ class NativeSensor {
     EventChannel? accelerometerChannel,
     EventChannel? gyroscopeChannel,
     EventChannel? proximityChannel,
-  })  : _accelerometerChannel = accelerometerChannel ?? const EventChannel('com.gotoim.native/accelerometer'),
-        _gyroscopeChannel = gyroscopeChannel ?? const EventChannel('com.gotoim.native/gyroscope'),
-        _proximityChannel = proximityChannel ?? const EventChannel('com.gotoim.native/proximity');
+  }) : _accelerometerChannel =
+           accelerometerChannel ??
+           const EventChannel('com.gotoim.native/accelerometer'),
+       _gyroscopeChannel =
+           gyroscopeChannel ??
+           const EventChannel('com.gotoim.native/gyroscope'),
+       _proximityChannel =
+           proximityChannel ??
+           const EventChannel('com.gotoim.native/proximity');
 
   final EventChannel _accelerometerChannel;
   final EventChannel _gyroscopeChannel;
@@ -199,16 +197,14 @@ class NativeSensor {
 
   /// Stream of gyroscope updates.
   Stream<GyroscopeEvent> get onGyroscopeChange {
-    _gyroscopeStream ??= _createSafeStream<GyroscopeEvent>(
-      _gyroscopeChannel,
-      (dynamic event) {
-        if (event is Map) {
-          return GyroscopeEvent.fromMap(event);
-        }
-        return GyroscopeEvent(x: 0, y: 0, z: 0, timestamp: DateTime.now());
-      },
-      'NativeSensor:Gyroscope',
-    );
+    _gyroscopeStream ??= _createSafeStream<GyroscopeEvent>(_gyroscopeChannel, (
+      dynamic event,
+    ) {
+      if (event is Map) {
+        return GyroscopeEvent.fromMap(event);
+      }
+      return GyroscopeEvent(x: 0, y: 0, z: 0, timestamp: DateTime.now());
+    }, 'NativeSensor:Gyroscope');
     return _gyroscopeStream!;
   }
 
@@ -231,16 +227,14 @@ class NativeSensor {
 
   /// Stream of proximity sensor events.
   Stream<ProximityEvent> get onProximityChange {
-    _proximityStream ??= _createSafeStream<ProximityEvent>(
-      _proximityChannel,
-      (dynamic event) {
-        if (event is Map) {
-          return ProximityEvent.fromMap(event);
-        }
-        return const ProximityEvent(distance: 5.0, isNear: false);
-      },
-      'NativeSensor:Proximity',
-    );
+    _proximityStream ??= _createSafeStream<ProximityEvent>(_proximityChannel, (
+      dynamic event,
+    ) {
+      if (event is Map) {
+        return ProximityEvent.fromMap(event);
+      }
+      return const ProximityEvent(distance: 5.0, isNear: false);
+    }, 'NativeSensor:Proximity');
     return _proximityStream!;
   }
 

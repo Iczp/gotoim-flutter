@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme_tokens.dart';
 import '../data/models/session_summary.dart';
 import 'chat_object_avatar.dart';
 
@@ -17,6 +18,8 @@ class SessionUnitItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
     final raw = item.raw;
     final setting = _map(raw['setting']);
     final destination = _map(raw['destination']);
@@ -37,21 +40,26 @@ class SessionUnitItem extends StatelessWidget {
         senderName.isNotEmpty &&
         lastMessage['messageType'] != 1 &&
         senderOwnerId != destinationId;
+
     return Material(
-      color: item.isPinned ? const Color(0xFFF0F0F0) : null,
+      color:
+          item.isPinned ? tokens.sessionPinnedBackground : Colors.transparent,
       child: InkWell(
         onTap:
             () => ScaffoldMessenger.of(
               context,
             ).showSnackBar(const SnackBar(content: Text('聊天页面正在迁移中'))),
         child: Container(
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          height: 68,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration:
               showDivider
-                  ? const BoxDecoration(
+                  ? BoxDecoration(
                     border: Border(
-                      bottom: BorderSide(color: Color(0x33000000)),
+                      bottom: BorderSide(
+                        color: tokens.dividerBorder,
+                        width: 0.6,
+                      ),
                     ),
                   )
                   : null,
@@ -62,11 +70,13 @@ class SessionUnitItem extends StatelessWidget {
                 imageUrl:
                     (destination['thumbnail'] ?? destination['portrait'])
                         ?.toString(),
+                radius: 24,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Row(
                       children: [
@@ -75,14 +85,19 @@ class SessionUnitItem extends StatelessWidget {
                             item.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
                           ),
                         ),
                         if (item.updatedAt != null)
                           Text(
                             _time(item.updatedAt!),
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: Colors.grey,
+                              color: colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.8,
+                              ),
                             ),
                           ),
                       ],
@@ -97,35 +112,41 @@ class SessionUnitItem extends StatelessWidget {
                                 if (immersed && badge > 0)
                                   TextSpan(
                                     text: '[$badge条] ',
-                                    style: const TextStyle(color: Colors.grey),
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 if (remind > 0)
                                   TextSpan(
                                     text:
                                         '[ ${remind > 99 ? '99+' : remind} 人@我 ] ',
-                                    style: const TextStyle(
-                                      color: Color(0xFFEC0101),
+                                    style: TextStyle(
+                                      color: tokens.mentionBadgeColor,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 if (following > 0)
                                   TextSpan(
                                     text: '关注 $following ',
-                                    style: const TextStyle(
-                                      color: Color(0xFFF64DFF),
+                                    style: TextStyle(
+                                      color: tokens.followBadgeColor,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 if (showSender)
                                   TextSpan(
                                     text: '$senderName: ',
-                                    style: const TextStyle(
-                                      color: Color(0xFF757575),
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 if (messageType.isNotEmpty)
                                   TextSpan(
                                     text: '$messageType ',
-                                    style: const TextStyle(
-                                      color: Color(0xFF666666),
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                                 TextSpan(
@@ -137,25 +158,58 @@ class SessionUnitItem extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.grey,
+                              color: colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.9,
+                              ),
                             ),
                           ),
                         ),
                         if (immersed)
-                          const Icon(
-                            Icons.notifications_off_outlined,
-                            size: 17,
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Icon(
+                              Icons.notifications_off_outlined,
+                              size: 16,
+                              color: colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
                           ),
                         if (item.isPinned)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Icon(Icons.star_outline, size: 17),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Icon(
+                              Icons.push_pin_rounded,
+                              size: 15,
+                              color: colorScheme.primary.withValues(alpha: 0.8),
+                            ),
                           ),
                         if (badge > 0)
                           Padding(
-                            padding: const EdgeInsets.only(left: 6),
-                            child: Badge(
-                              label: Text(badge > 99 ? '99+' : '$badge'),
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    immersed
+                                        ? colorScheme.outlineVariant
+                                        : tokens.unreadBadgeColor,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                badge > 99 ? '99+' : '$badge',
+                                style: TextStyle(
+                                  color:
+                                      immersed
+                                          ? colorScheme.onSurfaceVariant
+                                          : Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
                       ],

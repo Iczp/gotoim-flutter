@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/realtime/signalr_gateway.dart';
+import '../../../core/theme/app_theme_tokens.dart';
+import '../../../core/theme/theme_mode_controller.dart';
+import '../../../core/widgets/glass_container.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/chat_owner.dart';
 import 'chat_object_avatar.dart';
@@ -135,155 +138,227 @@ class _CurrentOwnerHeader extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surfaceContainerLowest,
-    child: InkWell(
-      onTap: onPressed,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            ChatObjectAvatar(
-              name: owner?.name ?? '-',
-              imageUrl: owner?.imageUrl,
-              radius: 16,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                owner?.name ?? '-',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return GlassContainer(
+      borderRadius: BorderRadius.zero,
+      borderWidth: 0.8,
+      child: InkWell(
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              ChatObjectAvatar(
+                name: owner?.name ?? '-',
+                imageUrl: owner?.imageUrl,
+                radius: 18,
               ),
-            ),
-            if (isConnecting) ...[
-              const SizedBox(width: 8),
-              const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  owner?.name ?? 'Goto IM',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
+              if (isConnecting) ...[
+                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+              if (hasMultiple)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
             ],
-            if (hasMultiple) const Icon(Icons.keyboard_arrow_down),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
-class _OwnerDrawer extends StatelessWidget {
+class _OwnerDrawer extends ConsumerWidget {
   const _OwnerDrawer({required this.controller});
   final SessionListController controller;
 
   @override
-  Widget build(BuildContext context) => Drawer(
-    child: SafeArea(
-      child: Column(
-        children: [
-          ListTile(
-            title: const Text('切换聊天'),
-            trailing: IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-          if (controller.connectionState != SignalRConnectionState.connected)
-            _SignalRStatusBar(
-              state: controller.connectionState,
-              onReconnect: controller.reconnectSignalR,
-            ),
-          _CurrentDeviceBar(
-            label: controller.currentDeviceLabel,
-            deviceCount: controller.devices.length,
-            isLoading: controller.isLoadingDevices,
-            onPressed: () => context.push('/devices'),
-          ),
-          Expanded(
-            child: ListView(
-              children: [
-                for (final owner in controller.owners)
-                  ListTile(
-                    leading: ChatObjectAvatar(
-                      name: owner.name,
-                      imageUrl: owner.imageUrl,
-                      radius: 22,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final themeMode = ref.watch(themeModeProvider);
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Row(
+                children: [
+                  Text(
+                    '切换聊天身份',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
-                    title: Text(owner.name),
-                    subtitle:
-                        owner.typeDescription.isEmpty
-                            ? null
-                            : Text(owner.typeDescription),
-                    trailing:
-                        controller.currentOwner?.id == owner.id
-                            ? const Icon(
-                              Icons.check_circle,
-                              color: Colors.green,
-                            )
-                            : owner.unreadCount > 0
-                            ? Badge(
-                              label: Text(
-                                owner.unreadCount > 99
-                                    ? '99+'
-                                    : '${owner.unreadCount}',
-                              ),
-                            )
-                            : owner.immersedCount > 0
-                            ? const Badge()
-                            : const Icon(Icons.arrow_forward_ios, size: 16),
-                    selected: controller.currentOwner?.id == owner.id,
-                    onTap: () async {
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '快速切换深浅主题',
+                    icon: Icon(
+                      themeMode == ThemeMode.dark
+                          ? Icons.dark_mode_rounded
+                          : themeMode == ThemeMode.light
+                          ? Icons.light_mode_rounded
+                          : Icons.brightness_auto_rounded,
+                      size: 20,
+                    ),
+                    onPressed:
+                        () =>
+                            ref
+                                .read(themeModeControllerProvider.notifier)
+                                .toggleTheme(),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            if (controller.connectionState != SignalRConnectionState.connected)
+              _SignalRStatusBar(
+                state: controller.connectionState,
+                onReconnect: controller.reconnectSignalR,
+              ),
+            _CurrentDeviceBar(
+              label: controller.currentDeviceLabel,
+              deviceCount: controller.devices.length,
+              isLoading: controller.isLoadingDevices,
+              onPressed: () => context.push('/devices'),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                children: [
+                  for (final owner in controller.owners)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: ListTile(
+                        leading: ChatObjectAvatar(
+                          name: owner.name,
+                          imageUrl: owner.imageUrl,
+                          radius: 20,
+                        ),
+                        title: Text(
+                          owner.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle:
+                            owner.typeDescription.isEmpty
+                                ? null
+                                : Text(owner.typeDescription),
+                        trailing:
+                            controller.currentOwner?.id == owner.id
+                                ? Icon(
+                                  Icons.check_circle_rounded,
+                                  color: colorScheme.primary,
+                                )
+                                : owner.unreadCount > 0
+                                ? Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.error,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    owner.unreadCount > 99
+                                        ? '99+'
+                                        : '${owner.unreadCount}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                                : owner.immersedCount > 0
+                                ? const Badge()
+                                : const Icon(Icons.chevron_right, size: 18),
+                        selected: controller.currentOwner?.id == owner.id,
+                        selectedTileColor: colorScheme.primaryContainer
+                            .withValues(alpha: 0.3),
+                        onTap: () async {
+                          Navigator.pop(context);
+                          await controller.selectOwner(owner);
+                        },
+                      ),
+                    ),
+                  const Divider(height: 16),
+                  ListTile(
+                    leading: const Icon(Icons.qr_code_scanner_rounded),
+                    title: const Text('扫一扫'),
+                    trailing: const Icon(Icons.chevron_right, size: 18),
+                    onTap: () {
                       Navigator.pop(context);
-                      await controller.selectOwner(owner);
+                      context.push('/scan-login/scan');
                     },
                   ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.qr_code_scanner),
-                  title: const Text('扫一扫'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.pop(context);
-                    context.push('/scan-login/scan');
-                  },
-                ),
-                const ListTile(
-                  leading: Icon(Icons.person_add_alt_1),
-                  title: Text('添加朋友'),
-                  trailing: Icon(Icons.chevron_right),
-                  enabled: false,
-                ),
-                const ListTile(
-                  leading: Icon(Icons.group_add),
-                  title: Text('新建群聊'),
-                  trailing: Icon(Icons.chevron_right),
-                  enabled: false,
-                ),
-              ],
+                  const ListTile(
+                    leading: Icon(Icons.person_add_alt_1_outlined),
+                    title: Text('添加朋友'),
+                    trailing: Icon(Icons.chevron_right, size: 18),
+                    enabled: false,
+                  ),
+                  const ListTile(
+                    leading: Icon(Icons.group_add_outlined),
+                    title: Text('新建群聊'),
+                    trailing: Icon(Icons.chevron_right, size: 18),
+                    enabled: false,
+                  ),
+                ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.account_circle),
-            title: const Text('账号'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.pop(context);
-              context.push('/diagnostics/auth');
-            },
-          ),
-          const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text(
-              'Goto IM',
-              style: TextStyle(color: Colors.grey, fontSize: 11),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('账号与设置'),
+              trailing: const Icon(Icons.chevron_right, size: 18),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/diagnostics/auth');
+              },
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                'Goto IM Cross-Platform',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _SignalRStatusBar extends StatelessWidget {
@@ -293,6 +368,8 @@ class _SignalRStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final busy =
         state == SignalRConnectionState.connecting ||
         state == SignalRConnectionState.reconnecting;
@@ -304,11 +381,11 @@ class _SignalRStatusBar extends StatelessWidget {
       SignalRConnectionState.connected => '',
     };
     return Material(
-      color: Theme.of(context).colorScheme.errorContainer,
+      color: colorScheme.errorContainer,
       child: InkWell(
         onTap: busy ? null : onReconnect,
         child: SizedBox(
-          height: 36,
+          height: 38,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -319,10 +396,28 @@ class _SignalRStatusBar extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               else
-                const Icon(Icons.cloud_off_outlined, size: 18),
+                Icon(
+                  Icons.cloud_off_outlined,
+                  size: 18,
+                  color: colorScheme.onErrorContainer,
+                ),
               const SizedBox(width: 8),
-              Text(text),
-              if (!busy) const Text('，点击重连'),
+              Text(
+                text,
+                style: TextStyle(
+                  color: colorScheme.onErrorContainer,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (!busy)
+                Text(
+                  '，点击重连',
+                  style: TextStyle(
+                    color: colorScheme.onErrorContainer,
+                    fontSize: 13,
+                  ),
+                ),
             ],
           ),
         ),
@@ -344,26 +439,31 @@ class _CurrentDeviceBar extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: const Color(0xFFF0F0F0),
-    child: InkWell(
-      onTap: onPressed,
-      child: SizedBox(
-        height: 48,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
+
+    return GlassContainer(
+      borderRadius: BorderRadius.zero,
+      backgroundColor: tokens.glassSecondarySurface,
+      borderWidth: 0.6,
+      child: InkWell(
+        onTap: onPressed,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(
             children: [
-              const SizedBox(
-                width: 48,
-                child: Icon(Icons.devices_outlined, color: Colors.lightBlue),
-              ),
+              Icon(Icons.devices_rounded, size: 20, color: colorScheme.primary),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   '当前设备：${label.isEmpty ? '未知设备' : label}'
                   '${deviceCount > 1 ? ' · 多设备登录($deviceCount)' : ''}',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
               if (isLoading)
@@ -373,24 +473,28 @@ class _CurrentDeviceBar extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               else
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: Colors.grey,
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: colorScheme.onSurfaceVariant,
                 ),
             ],
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _LoadMoreFooter extends StatelessWidget {
   const _LoadMoreFooter({required this.controller});
   final SessionListController controller;
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     if (controller.isLoading && controller.sessions.isNotEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16),
@@ -403,7 +507,9 @@ class _LoadMoreFooter extends StatelessWidget {
         child: Center(
           child: Text(
             '共有 ${controller.totalCount ?? controller.sessions.length} 个好友',
-            style: const TextStyle(color: Colors.grey),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
           ),
         ),
       );
@@ -415,29 +521,63 @@ class _LoadMoreFooter extends StatelessWidget {
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.onRetry});
   final Future<void> Function() onRetry;
+
   @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.forum_outlined, size: 56),
-        const SizedBox(height: 12),
-        const Text('暂无会话'),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh),
-          label: const Text('重新加载'),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 40,
+                color: colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '暂无会话',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '好友和最近消息将在此处显示',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('重新加载'),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner({required this.error, required this.onRetry});
   final Object error;
   final Future<void> Function() onRetry;
+
   @override
   Widget build(BuildContext context) => MaterialBanner(
     content: Text('加载失败：$error', maxLines: 2, overflow: TextOverflow.ellipsis),

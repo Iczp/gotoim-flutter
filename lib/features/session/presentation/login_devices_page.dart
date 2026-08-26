@@ -53,35 +53,117 @@ class _DeviceCard extends StatelessWidget {
   final bool isCurrent;
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.devices_outlined),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  [
-                    device.deviceType,
-                    device.brand,
-                    device.model,
-                  ].where((value) => value.isNotEmpty).join(' · '),
-                  style: Theme.of(context).textTheme.titleMedium,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final deviceTitle = [
+      device.deviceType,
+      device.brand,
+      device.model,
+    ].where((value) => value.isNotEmpty).join(' · ');
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color:
+                        isCurrent
+                            ? colorScheme.primaryContainer
+                            : colorScheme.surfaceContainerHighest.withValues(
+                              alpha: 0.5,
+                            ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.devices_rounded,
+                    size: 22,
+                    color:
+                        isCurrent
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant,
+                  ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        deviceTitle.isEmpty ? '未知设备' : deviceTitle,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (device.updatedAt != null)
+                        Text(
+                          '活跃时间：${device.updatedAt}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (isCurrent)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      '当前设备',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(8),
               ),
-              if (isCurrent) const Chip(label: Text('当前设备')),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SelectableText('deviceId: ${device.deviceId}'),
-          if (device.groups.isNotEmpty) Text('组：${device.groups.join('、')}'),
-          if (device.updatedAt != null) Text('最后更新：${device.updatedAt}'),
-        ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText(
+                    'Device ID: ${device.deviceId}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  if (device.groups.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '设备组：${device.groups.join('、')}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

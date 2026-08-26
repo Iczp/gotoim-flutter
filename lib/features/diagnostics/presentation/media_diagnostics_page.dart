@@ -21,7 +21,9 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
   bool _allowMultiple = true;
   int _maxCount = 9;
   String _selectedFileType = 'any';
-  final TextEditingController _customExtController = TextEditingController(text: 'pdf,docx,xlsx,txt');
+  final TextEditingController _customExtController = TextEditingController(
+    text: 'pdf,docx,xlsx,txt',
+  );
 
   List<SelectedFile> _selectedFiles = [];
   SelectedFile? _selected;
@@ -38,9 +40,12 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
 
   List<String> _parseExtensions() {
     if (_selectedFileType == 'any') return const [];
-    if (_selectedFileType == 'images') return const ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'];
-    if (_selectedFileType == 'videos') return const ['mp4', 'mov', 'avi', 'mkv'];
-    if (_selectedFileType == 'docs') return const ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'];
+    if (_selectedFileType == 'images')
+      return const ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'];
+    if (_selectedFileType == 'videos')
+      return const ['mp4', 'mov', 'avi', 'mkv'];
+    if (_selectedFileType == 'docs')
+      return const ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'];
     return _customExtController.text
         .split(',')
         .map((e) => e.trim().replaceAll('.', ''))
@@ -72,7 +77,9 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
   Future<void> _pickFiles() async {
     await _run(() async {
       final extensions = _parseExtensions();
-      final files = await ref.read(clientCapabilityServiceProvider).chooseFile(
+      final files = await ref
+          .read(clientCapabilityServiceProvider)
+          .chooseFile(
             FilePickerRequest(
               allowMultiple: _allowMultiple,
               maxCount: _allowMultiple ? _maxCount : 1,
@@ -98,7 +105,9 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
 
   Future<void> _pickImages({required bool preserveOriginal}) async {
     await _run(() async {
-      final files = await ref.read(clientCapabilityServiceProvider).chooseImage(
+      final files = await ref
+          .read(clientCapabilityServiceProvider)
+          .chooseImage(
             MediaPickRequest(
               allowMultiple: _allowMultiple,
               maxCount: _allowMultiple ? _maxCount : 1,
@@ -184,35 +193,36 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
                 _selected == null
                     ? null
                     : () => _run(() async {
-                          final image = await capabilities.compressImage(
-                            _selected!,
-                            const ImageCompressionRequest(
-                              quality: 80,
-                              maxWidth: 1920,
-                              maxHeight: 1920,
-                            ),
-                          );
-                          return image.toJson();
-                        }),
+                      final image = await capabilities.compressImage(
+                        _selected!,
+                        const ImageCompressionRequest(
+                          quality: 80,
+                          maxWidth: 1920,
+                          maxHeight: 1920,
+                        ),
+                      );
+                      return image.toJson();
+                    }),
               ),
               _button(
                 '图片识码（当前文件）',
                 _selected == null
                     ? null
                     : () => _run(() async {
-                          final result = await capabilities.decodeImageFile(
-                            _selected!,
-                          );
-                          return <String, Object?>{
-                            'result': result == null
+                      final result = await capabilities.decodeImageFile(
+                        _selected!,
+                      );
+                      return <String, Object?>{
+                        'result':
+                            result == null
                                 ? null
                                 : <String, Object?>{
-                                    'content': result.content,
-                                    'format': result.format?.name,
-                                    'source': result.source.name,
-                                  },
-                          };
-                        }),
+                                  'content': result.content,
+                                  'format': result.format?.name,
+                                  'source': result.source.name,
+                                },
+                      };
+                    }),
               ),
             ],
           ),
@@ -227,59 +237,59 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
                 _recording
                     ? null
                     : () => _run(() async {
-                          await capabilities.startAudioRecording(
-                            const AudioRecordingRequest(),
-                          );
-                          _recording = true;
-                          _paused = false;
-                          return const <String, bool>{'started': true};
-                        }),
+                      await capabilities.startAudioRecording(
+                        const AudioRecordingRequest(),
+                      );
+                      _recording = true;
+                      _paused = false;
+                      return const <String, bool>{'started': true};
+                    }),
               ),
               _button(
                 '暂停录音',
                 !_recording || _paused
                     ? null
                     : () => _run(() async {
-                          await capabilities.pauseAudioRecording();
-                          _paused = true;
-                          return const <String, bool>{'paused': true};
-                        }),
+                      await capabilities.pauseAudioRecording();
+                      _paused = true;
+                      return const <String, bool>{'paused': true};
+                    }),
               ),
               _button(
                 '继续录音',
                 !_recording || !_paused
                     ? null
                     : () => _run(() async {
-                          await capabilities.resumeAudioRecording();
-                          _paused = false;
-                          return const <String, bool>{'resumed': true};
-                        }),
+                      await capabilities.resumeAudioRecording();
+                      _paused = false;
+                      return const <String, bool>{'resumed': true};
+                    }),
               ),
               _button(
                 '停止录音',
                 !_recording
                     ? null
                     : () => _run(() async {
-                          final file = await capabilities.stopAudioRecording();
-                          _recording = false;
-                          _paused = false;
-                          if (file != null) {
-                            _selected = file;
-                            _selectedFiles = [file];
-                          }
-                          return <String, Object?>{'file': file?.toJson()};
-                        }),
+                      final file = await capabilities.stopAudioRecording();
+                      _recording = false;
+                      _paused = false;
+                      if (file != null) {
+                        _selected = file;
+                        _selectedFiles = [file];
+                      }
+                      return <String, Object?>{'file': file?.toJson()};
+                    }),
               ),
               _button(
                 '取消录音',
                 !_recording
                     ? null
                     : () => _run(() async {
-                          await capabilities.cancelAudioRecording();
-                          _recording = false;
-                          _paused = false;
-                          return const <String, bool>{'cancelled': true};
-                        }),
+                      await capabilities.cancelAudioRecording();
+                      _recording = false;
+                      _paused = false;
+                      return const <String, bool>{'cancelled': true};
+                    }),
               ),
             ],
           ),
@@ -306,7 +316,10 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
               children: [
                 Icon(Icons.tune, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 8),
-                Text('选择器配置 (单选/多选/文件类型/数量限制)', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  '选择器配置 (单选/多选/文件类型/数量限制)',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ],
             ),
             const Divider(height: 20),
@@ -318,10 +331,22 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('多选模式 (allowMultiple)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text(
+                      '多选模式 (allowMultiple)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
                     Text(
                       _allowMultiple ? '已开启多选（带复选框/限额）' : '单选模式（仅选择 1 个）',
-                      style: TextStyle(fontSize: 11, color: _allowMultiple ? Colors.green.shade700 : Colors.grey),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color:
+                            _allowMultiple
+                                ? Colors.green.shade700
+                                : Colors.grey,
+                      ),
                     ),
                   ],
                 ),
@@ -337,8 +362,17 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
             if (_allowMultiple) ...[
               Row(
                 children: [
-                  const Text('最大选择数 (maxCount): ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  Text('$_maxCount 个', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                  const Text(
+                    '最大选择数 (maxCount): ',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  Text(
+                    '$_maxCount 个',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
                 ],
               ),
               Slider(
@@ -353,7 +387,10 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
             ],
 
             // 3. File Type Category Selector
-            const Text('支持的文件类型 (File Type & Extensions):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const Text(
+              '支持的文件类型 (File Type & Extensions):',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
             const SizedBox(height: 6),
             Wrap(
               spacing: 6,
@@ -418,15 +455,25 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
                 FilledButton.icon(
                   onPressed: _working ? null : _pickFiles,
                   icon: const Icon(Icons.folder_open),
-                  label: Text(_allowMultiple ? '选择文件 (多选限 $_maxCount 个)' : '选择文件 (单选)'),
+                  label: Text(
+                    _allowMultiple ? '选择文件 (多选限 $_maxCount 个)' : '选择文件 (单选)',
+                  ),
                 ),
                 FilledButton.tonalIcon(
-                  onPressed: _working ? null : () => _pickImages(preserveOriginal: true),
+                  onPressed:
+                      _working
+                          ? null
+                          : () => _pickImages(preserveOriginal: true),
                   icon: const Icon(Icons.photo_library),
-                  label: Text(_allowMultiple ? '相册选图 (多选限 $_maxCount 张)' : '相册选图 (单选)'),
+                  label: Text(
+                    _allowMultiple ? '相册选图 (多选限 $_maxCount 张)' : '相册选图 (单选)',
+                  ),
                 ),
                 OutlinedButton.icon(
-                  onPressed: _working ? null : () => _pickImages(preserveOriginal: false),
+                  onPressed:
+                      _working
+                          ? null
+                          : () => _pickImages(preserveOriginal: false),
                   icon: const Icon(Icons.compress),
                   label: const Text('相册选图 (压缩)'),
                 ),
@@ -477,10 +524,11 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
                   ],
                 ),
                 TextButton(
-                  onPressed: () => setState(() {
-                    _selectedFiles = [];
-                    _selected = null;
-                  }),
+                  onPressed:
+                      () => setState(() {
+                        _selectedFiles = [];
+                        _selected = null;
+                      }),
                   child: const Text('清空'),
                 ),
               ],
@@ -497,31 +545,44 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
                 return ListTile(
                   dense: true,
                   leading: CircleAvatar(
-                    backgroundColor: isCurrent
-                        ? Theme.of(context).colorScheme.primaryContainer
-                        : Theme.of(context).colorScheme.surfaceContainerHighest,
+                    backgroundColor:
+                        isCurrent
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
                     child: Text(
                       '${index + 1}',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
-                        color: isCurrent ? Theme.of(context).colorScheme.primary : null,
+                        color:
+                            isCurrent
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
                       ),
                     ),
                   ),
-                  title: Text(file.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  title: Text(
+                    file.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
                   subtitle: Text(
                     '大小: ${_formatSize(file.size)} · 格式: ${file.extension ?? file.mimeType ?? 'unknown'}\n'
                     '路径: ${file.originalPath ?? file.originalUri.toString()}',
                     style: const TextStyle(fontSize: 11),
                   ),
-                  trailing: isCurrent
-                      ? const Chip(
-                          label: Text('当前选中', style: TextStyle(fontSize: 10)),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        )
-                      : null,
+                  trailing:
+                      isCurrent
+                          ? const Chip(
+                            label: Text('当前选中', style: TextStyle(fontSize: 10)),
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          )
+                          : null,
                   onTap: () => setState(() => _selected = file),
                 );
               },
@@ -539,9 +600,9 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
   }
 
   Widget _button(String title, VoidCallback? onPressed) => OutlinedButton(
-        onPressed: _working ? null : onPressed,
-        child: Text(title),
-      );
+    onPressed: _working ? null : onPressed,
+    child: Text(title),
+  );
 }
 
 class _Section extends StatelessWidget {
@@ -575,17 +636,17 @@ class _Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: SelectableText(
-          value,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-        ),
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: SelectableText(
+      value,
+      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+    ),
+  );
 }
 
 String _pretty(Object? value) =>

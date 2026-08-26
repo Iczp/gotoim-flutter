@@ -170,17 +170,15 @@ class _DeepLinkDiagnosticsPageState
 
   void _copy(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已复制 $label 到剪贴板')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('已复制 $label 到剪贴板')));
   }
 
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) {
-      return const Scaffold(
-        body: Center(child: Text('开发诊断仅在 Debug 模式可用。')),
-      );
+      return const Scaffold(body: Center(child: Text('开发诊断仅在 Debug 模式可用。')));
     }
 
     final service = ref.watch(deepLinkServiceProvider);
@@ -244,10 +242,7 @@ class _DeepLinkDiagnosticsPageState
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.link,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+                Icon(Icons.link, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
                   'Deep Link 平台支持情况',
@@ -260,12 +255,36 @@ class _DeepLinkDiagnosticsPageState
               spacing: 8,
               runSpacing: 8,
               children: const [
-                _StatusChip(platform: 'Android', supported: true, label: 'gotoim-dev:// (VIEW Intent)'),
-                _StatusChip(platform: 'iOS', supported: true, label: 'gotoim-dev:// (URL Scheme)'),
-                _StatusChip(platform: 'macOS', supported: true, label: 'gotoim-dev:// (URL Scheme)'),
-                _StatusChip(platform: 'Windows', supported: true, label: 'gotoim-dev:// (SendAppLink)'),
-                _StatusChip(platform: 'Linux', supported: true, label: 'gtk / desktop link'),
-                _StatusChip(platform: 'Web', supported: true, label: 'URL Stream / Manual'),
+                _StatusChip(
+                  platform: 'Android',
+                  supported: true,
+                  label: 'gotoim-dev:// (VIEW Intent)',
+                ),
+                _StatusChip(
+                  platform: 'iOS',
+                  supported: true,
+                  label: 'gotoim-dev:// (URL Scheme)',
+                ),
+                _StatusChip(
+                  platform: 'macOS',
+                  supported: true,
+                  label: 'gotoim-dev:// (URL Scheme)',
+                ),
+                _StatusChip(
+                  platform: 'Windows',
+                  supported: true,
+                  label: 'gotoim-dev:// (SendAppLink)',
+                ),
+                _StatusChip(
+                  platform: 'Linux',
+                  supported: true,
+                  label: 'gtk / desktop link',
+                ),
+                _StatusChip(
+                  platform: 'Web',
+                  supported: true,
+                  label: 'URL Stream / Manual',
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -286,8 +305,7 @@ class _DeepLinkDiagnosticsPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('URI 输入与测试',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text('URI 输入与测试', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             TextField(
               controller: _uriController,
@@ -335,8 +353,7 @@ class _DeepLinkDiagnosticsPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('预设测试案例',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text('预设测试案例', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             const Text(
               '点击预设案例快速填充输入框：',
@@ -346,18 +363,19 @@ class _DeepLinkDiagnosticsPageState
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _presets.map((preset) {
-                final isSelected = _uriController.text == preset.uri;
-                return ActionChip(
-                  avatar: Icon(
-                    isSelected ? Icons.check_circle : Icons.arrow_forward,
-                    size: 16,
-                  ),
-                  label: Text(preset.label),
-                  tooltip: '${preset.description}\n${preset.uri}',
-                  onPressed: () => _applyPreset(preset),
-                );
-              }).toList(),
+              children:
+                  _presets.map((preset) {
+                    final isSelected = _uriController.text == preset.uri;
+                    return ActionChip(
+                      avatar: Icon(
+                        isSelected ? Icons.check_circle : Icons.arrow_forward,
+                        size: 16,
+                      ),
+                      label: Text(preset.label),
+                      tooltip: '${preset.description}\n${preset.uri}',
+                      onPressed: () => _applyPreset(preset),
+                    );
+                  }).toList(),
             ),
           ],
         ),
@@ -366,9 +384,10 @@ class _DeepLinkDiagnosticsPageState
   }
 
   Widget _buildParseResultCard(DeepLinkParseResult result) {
-    final statusColor = result.isSuccess
-        ? Colors.green
-        : result.isUnsupported
+    final statusColor =
+        result.isSuccess
+            ? Colors.green
+            : result.isUnsupported
             ? Colors.orange
             : Colors.red;
 
@@ -385,8 +404,8 @@ class _DeepLinkDiagnosticsPageState
                   result.isSuccess
                       ? Icons.check_circle
                       : result.isUnsupported
-                          ? Icons.help_outline
-                          : Icons.error_outline,
+                      ? Icons.help_outline
+                      : Icons.error_outline,
                   color: statusColor,
                 ),
                 const SizedBox(width: 8),
@@ -394,32 +413,55 @@ class _DeepLinkDiagnosticsPageState
                   child: Text(
                     '解析结果: ${result.status.name.toUpperCase()}',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: statusColor,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 IconButton(
                   tooltip: '复制解析 JSON',
                   icon: const Icon(Icons.copy, size: 20),
-                  onPressed: () => _copy(
-                    const JsonEncoder.withIndent('  ').convert(result.toMap()),
-                    '解析结果',
-                  ),
+                  onPressed:
+                      () => _copy(
+                        const JsonEncoder.withIndent(
+                          '  ',
+                        ).convert(result.toMap()),
+                        '解析结果',
+                      ),
                 ),
               ],
             ),
             const Divider(),
             const SizedBox(height: 4),
             _infoRow('Raw URI', result.rawUri.toString()),
-            _infoRow('Scheme', result.rawUri.scheme.isEmpty ? '(none)' : result.rawUri.scheme),
-            _infoRow('Host', result.rawUri.host.isEmpty ? '(none)' : result.rawUri.host),
-            _infoRow('Path', result.rawUri.path.isEmpty ? '(none)' : result.rawUri.path),
-            _infoRow('Normalized Segments', '[${result.normalizedSegments.join(', ')}]'),
+            _infoRow(
+              'Scheme',
+              result.rawUri.scheme.isEmpty ? '(none)' : result.rawUri.scheme,
+            ),
+            _infoRow(
+              'Host',
+              result.rawUri.host.isEmpty ? '(none)' : result.rawUri.host,
+            ),
+            _infoRow(
+              'Path',
+              result.rawUri.path.isEmpty ? '(none)' : result.rawUri.path,
+            ),
+            _infoRow(
+              'Normalized Segments',
+              '[${result.normalizedSegments.join(', ')}]',
+            ),
             if (result.target != null) ...[
               _infoRow('Target Type', result.target!.targetType),
-              _infoRow('Requires Auth', result.target!.requiresAuth ? '是 (true)' : '否 (false)'),
-              _infoRow('Target Details', const JsonEncoder.withIndent('  ').convert(result.target!.toMap())),
+              _infoRow(
+                'Requires Auth',
+                result.target!.requiresAuth ? '是 (true)' : '否 (false)',
+              ),
+              _infoRow(
+                'Target Details',
+                const JsonEncoder.withIndent(
+                  '  ',
+                ).convert(result.target!.toMap()),
+              ),
             ],
             if (result.reason != null)
               _infoRow('Reason / Error', result.reason!, color: statusColor),
@@ -430,13 +472,14 @@ class _DeepLinkDiagnosticsPageState
   }
 
   Widget _buildExecutionResultCard(DeepLinkExecutionResult result) {
-    final statusColor = result.isSuccess
-        ? Colors.green
-        : result.isNeedsAuth
+    final statusColor =
+        result.isSuccess
+            ? Colors.green
+            : result.isNeedsAuth
             ? Colors.blue
             : result.isNotImplemented
-                ? Colors.orange
-                : Colors.red;
+            ? Colors.orange
+            : Colors.red;
 
     return Card(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -451,10 +494,10 @@ class _DeepLinkDiagnosticsPageState
                   result.isSuccess
                       ? Icons.check_circle
                       : result.isNeedsAuth
-                          ? Icons.lock_clock
-                          : result.isNotImplemented
-                              ? Icons.construction
-                              : Icons.cancel,
+                      ? Icons.lock_clock
+                      : result.isNotImplemented
+                      ? Icons.construction
+                      : Icons.cancel,
                   color: statusColor,
                 ),
                 const SizedBox(width: 8),
@@ -462,13 +505,15 @@ class _DeepLinkDiagnosticsPageState
                   child: Text(
                     '执行结果: ${result.status.name.toUpperCase()}',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: statusColor,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                Text('耗时: ${result.elapsedMs} ms',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(
+                  '耗时: ${result.elapsedMs} ms',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ],
             ),
             const Divider(),
@@ -497,12 +542,17 @@ class _DeepLinkDiagnosticsPageState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('真实 App Links 事件日志',
-                          style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        '真实 App Links 事件日志',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         '系统冷启动 / 实时链接流 / 诊断记录 (共 ${eventLogs.length} 条)',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
                       ),
                     ],
                   ),
@@ -540,9 +590,10 @@ class _DeepLinkDiagnosticsPageState
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final log = eventLogs[index];
-                  final statusColor = log.parseResult.isSuccess
-                      ? Colors.green
-                      : log.parseResult.isUnsupported
+                  final statusColor =
+                      log.parseResult.isSuccess
+                          ? Colors.green
+                          : log.parseResult.isUnsupported
                           ? Colors.orange
                           : Colors.red;
 
@@ -553,8 +604,8 @@ class _DeepLinkDiagnosticsPageState
                       log.source.contains('stream')
                           ? Icons.stream
                           : log.source.contains('cold')
-                              ? Icons.ac_unit
-                              : Icons.touch_app,
+                          ? Icons.ac_unit
+                          : Icons.touch_app,
                       color: statusColor,
                       size: 20,
                     ),
@@ -570,7 +621,10 @@ class _DeepLinkDiagnosticsPageState
                       children: [
                         Text(
                           '${_formatTime(log.timestamp)}  •  源: ${log.source}  •  状态: ${log.parseResult.status.name}',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[600],
+                          ),
                         ),
                         if (log.executionResult != null)
                           Text(
@@ -582,10 +636,13 @@ class _DeepLinkDiagnosticsPageState
                     trailing: IconButton(
                       icon: const Icon(Icons.copy, size: 16),
                       tooltip: '复制事件数据',
-                      onPressed: () => _copy(
-                        const JsonEncoder.withIndent('  ').convert(log.toMap()),
-                        '事件记录',
-                      ),
+                      onPressed:
+                          () => _copy(
+                            const JsonEncoder.withIndent(
+                              '  ',
+                            ).convert(log.toMap()),
+                            '事件记录',
+                          ),
                     ),
                   );
                 },
@@ -610,8 +667,10 @@ class _DeepLinkDiagnosticsPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('外部系统唤醒命令 (直接复制)',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              '外部系统唤醒命令 (直接复制)',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 4),
             const Text(
               '在终端执行以下命令，测试操作系统级 Deep Link 唤醒：',
@@ -655,10 +714,7 @@ class _DeepLinkDiagnosticsPageState
                 const SizedBox(height: 2),
                 SelectableText(
                   command,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 ),
               ],
             ),
@@ -683,10 +739,7 @@ class _DeepLinkDiagnosticsPageState
             width: 110,
             child: Text(
               label,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
             ),
           ),
           Expanded(

@@ -47,22 +47,33 @@ class _DividerRow extends StatelessWidget {
   final String text;
   final int count;
   final bool hasMore;
+
   @override
-  Widget build(BuildContext context) => Container(
-    color: Theme.of(context).colorScheme.surfaceContainerLowest,
-    height: 30,
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.grey),
-        const SizedBox(width: 8),
-        Text(
-          '$text (${hasMore ? '$count+' : count})',
-          style: Theme.of(
-            context,
-          ).textTheme.labelSmall?.copyWith(color: Colors.grey),
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      color: colorScheme.surfaceContainerLowest,
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$text (${hasMore ? '$count+' : count})',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
