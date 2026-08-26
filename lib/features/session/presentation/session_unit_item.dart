@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/models/session_summary.dart';
+import 'chat_object_avatar.dart';
 
 /// Flutter counterpart of UniApp SessionUnitItem.vue.
 class SessionUnitItem extends StatelessWidget {
@@ -13,6 +14,7 @@ class SessionUnitItem extends StatelessWidget {
     final theme = Theme.of(context);
     final raw = item.raw;
     final setting = _map(raw['setting']);
+    final destination = _map(raw['destination']);
     final badge = _number(raw['publicBadge']);
     final remind =
         _number(raw['remindMeCount']) + _number(raw['remindAllCount']);
@@ -29,10 +31,7 @@ class SessionUnitItem extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                child: Text(item.title.characters.first),
-              ),
+              ChatObjectAvatar(name: item.title, imageUrl: (destination['thumbnail'] ?? destination['portrait'])?.toString()),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
