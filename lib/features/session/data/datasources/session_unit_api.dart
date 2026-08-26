@@ -48,7 +48,7 @@ class SessionUnitApi {
 
   Future<PagedResultDto<SessionSummary>> getFriends({
     required int ownerId,
-    int maxResultCount = 50,
+    int maxResultCount = 100,
     int? maxScore,
     String? cursorId,
   }) async {
