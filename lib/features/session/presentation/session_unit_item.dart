@@ -5,9 +5,14 @@ import 'chat_object_avatar.dart';
 
 /// Flutter counterpart of UniApp SessionUnitItem.vue.
 class SessionUnitItem extends StatelessWidget {
-  const SessionUnitItem({required this.item, super.key});
+  const SessionUnitItem({
+    required this.item,
+    required this.showDivider,
+    super.key,
+  });
 
   final SessionSummary item;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
@@ -15,11 +20,23 @@ class SessionUnitItem extends StatelessWidget {
     final raw = item.raw;
     final setting = _map(raw['setting']);
     final destination = _map(raw['destination']);
+    final lastMessage = _map(raw['lastMessage']);
+    final senderSessionUnit = _map(lastMessage['senderSessionUnit']);
     final badge = _number(raw['publicBadge']);
     final remind =
         _number(raw['remindMeCount']) + _number(raw['remindAllCount']);
     final following = _number(raw['followingCount']);
     final immersed = setting['isImmersed'] == true;
+    final rawSenderName = _senderName(lastMessage, senderSessionUnit);
+    final senderName =
+        senderSessionUnit['id']?.toString() == item.id ? '我' : rawSenderName;
+    final senderOwnerId = _number(senderSessionUnit['ownerId']);
+    final destinationId = _number(destination['id']);
+    final messageType = item.messageTypeLabel;
+    final showSender =
+        senderName.isNotEmpty &&
+        lastMessage['messageType'] != 1 &&
+        senderOwnerId != destinationId;
     return Material(
       color: item.isPinned ? const Color(0xFFF0F0F0) : null,
       child: InkWell(
@@ -27,11 +44,25 @@ class SessionUnitItem extends StatelessWidget {
             () => ScaffoldMessenger.of(
               context,
             ).showSnackBar(const SnackBar(content: Text('聊天页面正在迁移中'))),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Container(
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration:
+              showDivider
+                  ? const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Color(0x33000000)),
+                    ),
+                  )
+                  : null,
           child: Row(
             children: [
-              ChatObjectAvatar(name: item.title, imageUrl: (destination['thumbnail'] ?? destination['portrait'])?.toString()),
+              ChatObjectAvatar(
+                name: item.title,
+                imageUrl:
+                    (destination['thumbnail'] ?? destination['portrait'])
+                        ?.toString(),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -83,6 +114,20 @@ class SessionUnitItem extends StatelessWidget {
                                       color: Color(0xFFF64DFF),
                                     ),
                                   ),
+                                if (showSender)
+                                  TextSpan(
+                                    text: '$senderName: ',
+                                    style: const TextStyle(
+                                      color: Color(0xFF757575),
+                                    ),
+                                  ),
+                                if (messageType.isNotEmpty)
+                                  TextSpan(
+                                    text: '$messageType ',
+                                    style: const TextStyle(
+                                      color: Color(0xFF666666),
+                                    ),
+                                  ),
                                 TextSpan(
                                   text:
                                       item.preview.isEmpty ? '-' : item.preview,
@@ -130,5 +175,42 @@ Map<String, dynamic> _map(Object? value) =>
     value is Map ? value.cast<String, dynamic>() : const <String, dynamic>{};
 int _number(Object? value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
-String _time(DateTime value) =>
-    '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+String _time(DateTime value) {
+  final now = DateTime.now();
+  final hhmm =
+      '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+  final difference = now.difference(value);
+  if (difference.inMinutes < 1) return '刚刚 $hhmm';
+  if (now.year == value.year &&
+      now.month == value.month &&
+      now.day == value.day) {
+    final hour = value.hour;
+    final period =
+        hour < 6
+            ? '凌晨'
+            : hour < 12
+            ? '上午'
+            : hour < 18
+            ? '下午'
+            : '晚上';
+    return '$period $hhmm';
+  }
+  if (difference.inHours < 24) return '昨天 $hhmm';
+  if (difference.inDays < 7) {
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    return '星期${weekdays[value.weekday % 7]} $hhmm';
+  }
+  if (now.year == value.year) return '${value.month}月${value.day}日 $hhmm';
+  return '${value.year}年${value.month}月${value.day}日';
+}
+
+String _senderName(
+  Map<String, dynamic> message,
+  Map<String, dynamic> senderSessionUnit,
+) =>
+    (senderSessionUnit['displayName'] ??
+            senderSessionUnit['memberName'] ??
+            _map(message['sender'])['displayName'] ??
+            _map(message['sender'])['name'] ??
+            '')
+        .toString();

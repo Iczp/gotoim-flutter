@@ -355,6 +355,17 @@ F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\im\services\friendService
 
 F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\im\messages\MessageTab.vue
 
+分组的时间也要参数原来的实现
+
+1. 消息的左上角是 当前的聊天对象，点开显示左侧的抽屉，内容也要参考原来的设计，内容 有其他的聊天对象，点了是可以切换为当前聊天对象，好友列表重新获取，
+
+2. 标题栏下是  Signalr的连接状态，连接成功后消失，显示的当前登录的设备，点进去是登录的设备列表。
+3. 分页加载完，底部是有 总 好友数的。
+
+3. 头像是否有存在本地文件夹，存哪个位置，是否配置了在Env里。
+
+   
+
 ---
 
 ## 8. 消息发送与同步

@@ -25,20 +25,22 @@ class SessionSummary {
       destination['nickName'],
       json['displayName'],
     ]);
-    final content = lastMessage['content'];
     return SessionSummary(
       id: json['id']?.toString() ?? '',
       ownerId: asInt(json['ownerId']),
       score: asInt(json['score']) ?? asInt(json['ticks']) ?? 0,
       ticks: asInt(json['ticks']) ?? 0,
       title: title.isEmpty ? '未命名会话' : title,
-      preview: messagePreview(content),
+      preview: messageContentText(lastMessage),
       updatedAt:
           asDate(json['lastMessageTime']) ??
           asDate(lastMessage['creationTime']) ??
           asDate(json['lastModificationTime']),
       unreadCount: asInt(json['publicBadge']) ?? 0,
-      isPinned: setting['isTopping'] == true || setting['isTop'] == true,
+      isPinned:
+          (asInt(json['sorting']) ?? 0) > 0 ||
+          setting['isTopping'] == true ||
+          setting['isTop'] == true,
       raw: Map<String, dynamic>.unmodifiable(json),
     );
   }
@@ -62,6 +64,8 @@ class SessionSummary {
   final int unreadCount;
   final bool isPinned;
   final Map<String, dynamic> raw;
+
+  String get messageTypeLabel => messageContentType(asMap(raw['lastMessage']));
 
   Map<String, Object?> toDatabaseValues() => <String, Object?>{
     'id': id,

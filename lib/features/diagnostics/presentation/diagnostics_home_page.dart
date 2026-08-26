@@ -82,6 +82,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/database'),
           ),
           _Item(
+            icon: Icons.forum_outlined,
+            title: '消息列表数据流',
+            subtitle: 'Owner、本地好友分页、线上补页、changes 增量与游标',
+            onTap: () => context.push('/diagnostics/session-list'),
+          ),
+          _Item(
             icon: Icons.perm_media_outlined,
             title: '媒体与文件测试',
             subtitle: '相册、拍照、视频、缩略图、压缩、录音、图片识码与另存为',
@@ -132,10 +138,10 @@ class _Item extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      );
+    leading: Icon(icon),
+    title: Text(title),
+    subtitle: Text(subtitle),
+    trailing: const Icon(Icons.chevron_right),
+    onTap: onTap,
+  );
 }

@@ -29,18 +29,19 @@ void main() {
   });
 
   test('paged result accepts an empty ABP page', () {
-    final page = PagedResultDto<SessionSummary>.fromJson(
-      <String, dynamic>{'items': <Object?>[], 'totalCount': 0},
-      SessionSummary.fromJson,
-    );
+    final page = PagedResultDto<SessionSummary>.fromJson(<String, dynamic>{
+      'items': <Object?>[],
+      'totalCount': 0,
+    }, SessionSummary.fromJson);
 
     expect(page.items, isEmpty);
     expect(page.totalCount, 0);
   });
 
   test('session DAO persists and restores a session summary', () async {
-    final database =
-        UnifiedDatabase(DatabaseConnection(NativeDatabase.memory()));
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
     addTearDown(database.close);
     final dao = SessionDao(database);
     final summary = SessionSummary.fromJson(<String, dynamic>{
@@ -53,7 +54,7 @@ void main() {
     });
 
     await dao.upsertAll(<SessionSummary>[summary]);
-    final cached = await dao.readRecent();
+    final cached = await dao.readPage(ownerId: 42);
 
     expect(cached, hasLength(1));
     expect(cached.single.id, summary.id);

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../application/session_list_controller.dart';
-import '../data/models/session_summary.dart';
+import '../data/models/chat_owner.dart';
+import 'chat_object_avatar.dart';
+import 'session_dividers.dart';
+import 'session_list_item.dart';
 import 'session_unit_item.dart';
 
 class SessionListPage extends ConsumerStatefulWidget {
@@ -17,174 +21,98 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   void initState() {
     super.initState();
     Future<void>.microtask(
-      () => ref.read(sessionListControllerProvider).load(),
+      () => ref.read(sessionListControllerProvider).initialize(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = ref.watch(sessionListControllerProvider);
-    final sessions = controller.sessions;
-    final entries = _buildEntries(sessions);
-
-    return RefreshIndicator(
-      onRefresh: controller.sync,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: SearchBar(
-                enabled: false,
-                leading: const Icon(Icons.search),
-                hintText: '搜索会话（即将支持）',
-                trailing: [
-                  if (controller.isSyncing)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          if (controller.error != null)
-            SliverToBoxAdapter(
-              child: _SyncErrorBanner(
-                onRetry: controller.sync,
-                message: controller.error.toString(),
-              ),
-            ),
-          if (sessions.isEmpty && controller.isLoading)
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (sessions.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _EmptySessions(onRetry: controller.sync),
-            )
-          else
-            SliverList.builder(
-              itemCount: entries.length,
-              itemBuilder: (context, index) {
-                final entry = entries[index];
-                if (entry.title != null) {
-                  return Container(
-                    color: Theme.of(context).colorScheme.surfaceContainerLowest,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Text(
-                      entry.title!,
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                  );
-                }
-                return Column(
-                  children: [
-                    SessionUnitItem(item: entry.session!),
-                    if (index + 1 < entries.length &&
-                        entries[index + 1].title == null)
-                      const Divider(height: 1, indent: 80),
-                  ],
-                );
-              },
-            ),
-        ],
-      ),
+    final listItems = buildSessionListItems(
+      controller.sessions,
+      hasMore: controller.hasMore,
     );
-  }
-}
-
-class _SessionListTile extends StatelessWidget {
-  const _SessionListTile({required this.session});
-
-  final SessionSummary session;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      leading: CircleAvatar(
-        child: Text(session.title.characters.first.toUpperCase()),
-      ),
-      title: Row(
-        children: [
-          if (session.isPinned) ...[
-            Icon(
-              Icons.push_pin_outlined,
-              size: 16,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(width: 4),
-          ],
-          Expanded(
-            child: Text(
-              session.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (session.updatedAt != null)
-            Text(
-              _formatTime(session.updatedAt!),
-              style: theme.textTheme.labelSmall,
-            ),
-        ],
-      ),
-      subtitle: Text(
-        session.preview.isEmpty ? '暂无消息' : session.preview,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing:
-          session.unreadCount > 0
-              ? Badge(
-                label: Text(
-                  session.unreadCount > 99 ? '99+' : '${session.unreadCount}',
-                ),
-              )
-              : null,
-      onTap:
-          () => ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('聊天页面正在迁移中'))),
-    );
-  }
-}
-
-class _EmptySessions extends StatelessWidget {
-  const _EmptySessions({required this.onRetry});
-
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
+    return Scaffold(
+      drawer: _OwnerDrawer(controller: controller),
+      body: SafeArea(
+        bottom: false,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.forum_outlined, size: 56),
-            const SizedBox(height: 16),
-            Text('暂无会话', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            const Text('下拉刷新，或检查网络连接后重试。'),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('同步会话'),
+            Builder(
+              builder:
+                  (context) => _CurrentOwnerHeader(
+                    owner: controller.currentOwner,
+                    hasMultiple: controller.owners.length > 1,
+                    isConnecting: controller.isRefreshing,
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                  ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: controller.refreshChanges,
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification.metrics.extentAfter < 240 &&
+                        controller.hasMore &&
+                        !controller.isLoading) {
+                      controller.loadNextPage();
+                    }
+                    return false;
+                  },
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      if (controller.error != null)
+                        SliverToBoxAdapter(
+                          child: _ErrorBanner(
+                            error: controller.error!,
+                            onRetry: controller.loadNextPage,
+                          ),
+                        ),
+                      if (controller.sessions.isEmpty && controller.isLoading)
+                        const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (controller.sessions.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _EmptyState(onRetry: controller.loadNextPage),
+                        )
+                      else
+                        SliverList.builder(
+                          itemCount: listItems.length,
+                          itemBuilder: (context, index) {
+                            final item = listItems[index];
+                            return switch (item.kind) {
+                              SessionListItemKind.session => SessionUnitItem(
+                                item: item.session!,
+                                showDivider:
+                                    index + 1 < listItems.length &&
+                                    listItems[index + 1].kind ==
+                                        SessionListItemKind.session,
+                              ),
+                              SessionListItemKind.pinnedDivider =>
+                                PinnedDividerItem(
+                                  count: item.count,
+                                  hasMore: item.hasMore,
+                                ),
+                              SessionListItemKind.timeDivider =>
+                                TimeDividerItem(
+                                  text: item.title!,
+                                  count: item.count,
+                                  hasMore: item.hasMore,
+                                ),
+                            };
+                          },
+                        ),
+                      SliverToBoxAdapter(
+                        child: _LoadMoreFooter(controller: controller),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -193,103 +121,214 @@ class _EmptySessions extends StatelessWidget {
   }
 }
 
-class _SyncErrorBanner extends StatelessWidget {
-  const _SyncErrorBanner({required this.onRetry, required this.message});
-
-  final Future<void> Function() onRetry;
-  final String message;
+class _CurrentOwnerHeader extends StatelessWidget {
+  const _CurrentOwnerHeader({
+    required this.owner,
+    required this.hasMultiple,
+    required this.isConnecting,
+    required this.onPressed,
+  });
+  final ChatOwner? owner;
+  final bool hasMultiple;
+  final bool isConnecting;
+  final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(12),
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.surfaceContainerLowest,
+    child: InkWell(
+      onTap: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            ChatObjectAvatar(
+              name: owner?.name ?? '-',
+              imageUrl: owner?.imageUrl,
+              radius: 16,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                owner?.name ?? '-',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            if (isConnecting) ...[
+              const SizedBox(width: 8),
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ],
+            if (hasMultiple) const Icon(Icons.keyboard_arrow_down),
+          ],
+        ),
       ),
-      child: Row(
+    ),
+  );
+}
+
+class _OwnerDrawer extends StatelessWidget {
+  const _OwnerDrawer({required this.controller});
+  final SessionListController controller;
+
+  @override
+  Widget build(BuildContext context) => Drawer(
+    child: SafeArea(
+      child: Column(
         children: [
-          Icon(
-            Icons.sync_problem_outlined,
-            color: colorScheme.onErrorContainer,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '同步失败：$message',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: colorScheme.onErrorContainer),
+          ListTile(
+            title: const Text('切换聊天'),
+            trailing: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
             ),
           ),
-          TextButton(onPressed: onRetry, child: const Text('重试')),
+          Expanded(
+            child: ListView(
+              children: [
+                for (final owner in controller.owners)
+                  ListTile(
+                    leading: ChatObjectAvatar(
+                      name: owner.name,
+                      imageUrl: owner.imageUrl,
+                      radius: 22,
+                    ),
+                    title: Text(owner.name),
+                    subtitle:
+                        owner.typeDescription.isEmpty
+                            ? null
+                            : Text(owner.typeDescription),
+                    trailing:
+                        controller.currentOwner?.id == owner.id
+                            ? const Icon(
+                              Icons.check_circle,
+                              color: Colors.green,
+                            )
+                            : owner.unreadCount > 0
+                            ? Badge(
+                              label: Text(
+                                owner.unreadCount > 99
+                                    ? '99+'
+                                    : '${owner.unreadCount}',
+                              ),
+                            )
+                            : owner.immersedCount > 0
+                            ? const Badge()
+                            : const Icon(Icons.arrow_forward_ios, size: 16),
+                    selected: controller.currentOwner?.id == owner.id,
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await controller.selectOwner(owner);
+                    },
+                  ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.qr_code_scanner),
+                  title: const Text('扫一扫'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/scan-login/scan');
+                  },
+                ),
+                const ListTile(
+                  leading: Icon(Icons.person_add_alt_1),
+                  title: Text('添加朋友'),
+                  trailing: Icon(Icons.chevron_right),
+                  enabled: false,
+                ),
+                const ListTile(
+                  leading: Icon(Icons.group_add),
+                  title: Text('新建群聊'),
+                  trailing: Icon(Icons.chevron_right),
+                  enabled: false,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.account_circle),
+            title: const Text('账号'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.pop(context);
+              context.push('/diagnostics/auth');
+            },
+          ),
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              'Goto IM',
+              style: TextStyle(color: Colors.grey, fontSize: 11),
+            ),
+          ),
         ],
       ),
-    );
-  }
+    ),
+  );
 }
 
-String _formatTime(DateTime value) {
-  final now = DateTime.now();
-  if (now.year == value.year &&
-      now.month == value.month &&
-      now.day == value.day) {
-    return '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
-  }
-  return '${value.month}/${value.day}';
-}
-
-class _SessionEntry {
-  const _SessionEntry.session(this.session) : title = null;
-  const _SessionEntry.divider(this.title) : session = null;
-
-  final SessionSummary? session;
-  final String? title;
-}
-
-List<_SessionEntry> _buildEntries(List<SessionSummary> sessions) {
-  final ordered = List<SessionSummary>.of(sessions)..sort((a, b) {
-    final pin = (b.isPinned ? 1 : 0).compareTo(a.isPinned ? 1 : 0);
-    return pin != 0 ? pin : b.score.compareTo(a.score);
-  });
-  final entries = <_SessionEntry>[];
-  String? previous;
-  var hadPinned = false;
-  for (final session in ordered) {
-    if (session.isPinned) {
-      hadPinned = true;
-    } else {
-      if (hadPinned) {
-        entries.add(const _SessionEntry.divider('以上是置顶会话'));
-        hadPinned = false;
-      }
-      final bucket = _timeBucket(session.updatedAt);
-      if (bucket != previous) entries.add(_SessionEntry.divider(bucket));
-      previous = bucket;
+class _LoadMoreFooter extends StatelessWidget {
+  const _LoadMoreFooter({required this.controller});
+  final SessionListController controller;
+  @override
+  Widget build(BuildContext context) {
+    if (controller.isLoading && controller.sessions.isNotEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
-    entries.add(_SessionEntry.session(session));
+    if (!controller.hasMore && controller.sessions.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: Text(
+            '共有 ${controller.sessions.length} 个会话',
+            style: const TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
   }
-  return entries;
 }
 
-String _timeBucket(DateTime? value) {
-  if (value == null) return '很久以前';
-  final date = DateTime(value.year, value.month, value.day);
-  final days = DateTime.now().difference(date).inDays;
-  if (days <= 0) return '今天';
-  if (days == 1) return '昨天';
-  if (days < 3) return '三天前';
-  if (days < 7) return '近一周';
-  if (days < 14) return '两周前';
-  if (days < 30) return '一个月前';
-  if (days < 60) return '两个月前';
-  if (days < 90) return '三个月前';
-  if (days < 180) return '半年前';
-  if (days < 365) return '1年前';
-  if (days < 730) return '2年前';
-  if (days < 1095) return '3年前';
-  if (days < 1460) return '4年前';
-  return '很久以前（5年前以上）';
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.onRetry});
+  final Future<void> Function() onRetry;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.forum_outlined, size: 56),
+        const SizedBox(height: 12),
+        const Text('暂无会话'),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh),
+          label: const Text('重新加载'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.error, required this.onRetry});
+  final Object error;
+  final Future<void> Function() onRetry;
+  @override
+  Widget build(BuildContext context) => MaterialBanner(
+    content: Text('加载失败：$error', maxLines: 2, overflow: TextOverflow.ellipsis),
+    actions: [TextButton(onPressed: onRetry, child: const Text('重试'))],
+  );
 }

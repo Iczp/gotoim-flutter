@@ -17,6 +17,7 @@ import '../../features/diagnostics/presentation/js_bridge_diagnostics_page.dart'
 import '../../features/diagnostics/presentation/media_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/js_bridge_harness_page.dart';
 import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/session_list_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/app_task_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/deep_link_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/native_diagnostics_page.dart';
@@ -57,9 +58,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/local-file-server/terminal/:terminalId',
-        builder: (context, state) => TerminalDetailsPage(
-          terminalId: state.pathParameters['terminalId']!,
-        ),
+        builder:
+            (context, state) => TerminalDetailsPage(
+              terminalId: state.pathParameters['terminalId']!,
+            ),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(
@@ -116,6 +118,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/database',
         builder: (context, state) => const DatabaseDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/session-list',
+        builder: (context, state) => const SessionListDiagnosticsPage(),
       ),
       GoRoute(
         path: '/diagnostics/js-bridge-harness',

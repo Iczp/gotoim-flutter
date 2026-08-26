@@ -16,14 +16,14 @@ class UnifiedDatabase {
   UnifiedDatabase(this._connection);
 
   factory UnifiedDatabase.openDefault() => UnifiedDatabase(
-        driftDatabase(
-          name: databaseName,
-          web: DriftWebOptions(
-            sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-            driftWorker: Uri.parse('drift_worker.js'),
-          ),
-        ),
-      );
+    driftDatabase(
+      name: databaseName,
+      web: DriftWebOptions(
+        sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+        driftWorker: Uri.parse('drift_worker.js'),
+      ),
+    ),
+  );
 
   static const databaseName = 'gotoim';
   static const schemaVersion = 1;
@@ -49,9 +49,10 @@ class UnifiedDatabase {
   bool get isInitialized =>
       _initializationError == null && _initialization != null;
 
-  String get storageDescription => kIsWeb
-      ? 'SQLite WASM（浏览器 OPFS / IndexedDB 持久化）'
-      : 'SQLite 文件（应用 Documents 目录）';
+  String get storageDescription =>
+      kIsWeb
+          ? 'SQLite WASM（浏览器 OPFS / IndexedDB 持久化）'
+          : 'SQLite 文件（应用 Documents 目录）';
 
   /// Runs idempotent schema creation on first open, and keeps a SQLite
   /// [schemaVersion] for later additive migrations.
@@ -139,8 +140,9 @@ class UnifiedDatabase {
     );
   }
 
-  Future<List<DatabaseDiagnosticRecord>> readDiagnosticRecords(
-      {int limit = 50}) async {
+  Future<List<DatabaseDiagnosticRecord>> readDiagnosticRecords({
+    int limit = 50,
+  }) async {
     await initialize();
     final normalizedLimit = limit.clamp(1, 200);
     final rows = await _connection.runSelect(
@@ -162,21 +164,66 @@ class UnifiedDatabase {
   /// Reads the locally persisted conversation summaries in display order.
   /// Feature code reaches this table through SessionDao rather than calling
   /// this database primitive directly.
-  Future<List<Map<String, Object?>>> readFriendRows({int limit = 50}) async {
+  Future<List<Map<String, Object?>>> readFriendRows({
+    required int ownerId,
+    int? cursorScore,
+    String? cursorId,
+    int limit = 50,
+  }) async {
     await initialize();
     final normalizedLimit = limit.clamp(1, 200);
+    final hasCursor = cursorScore != null && cursorId != null;
     return _connection.runSelect(
-      'SELECT id, ownerId, score, raw FROM Friends '
-      'ORDER BY ticks DESC, score DESC, id DESC LIMIT ?',
-      <Object?>[normalizedLimit],
+      'SELECT id, ownerId, score, ticks, raw FROM Friends '
+      'WHERE ownerId = ? '
+      '${hasCursor ? 'AND (score < ? OR (score = ? AND id < ?)) ' : ''}'
+      'ORDER BY score DESC, id DESC LIMIT ?',
+      <Object?>[
+        ownerId,
+        if (hasCursor) cursorScore,
+        if (hasCursor) cursorScore,
+        if (hasCursor) cursorId,
+        normalizedLimit,
+      ],
+    );
+  }
+
+  Future<int?> readMaxFriendTicks(int ownerId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT MAX(ticks) AS maxTicks FROM Friends WHERE ownerId = ?',
+      <Object?>[ownerId],
+    );
+    return (rows.single['maxTicks'] as num?)?.toInt();
+  }
+
+  Future<String?> readSettingValue(String id) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT value FROM Settings WHERE id = ? LIMIT 1',
+      <Object?>[id],
+    );
+    return rows.isEmpty ? null : rows.single['value'] as String?;
+  }
+
+  Future<void> writeSettingValue({
+    required String id,
+    required String group,
+    required String value,
+  }) async {
+    await initialize();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _connection.runInsert(
+      'INSERT INTO Settings (id, [group], type, value, createTime, updateTime) '
+      "VALUES (?, ?, 'string', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
+      'value = excluded.value, updateTime = excluded.updateTime',
+      <Object?>[id, group, value, now, now],
     );
   }
 
   /// Persists remote session-unit summaries without deleting local records
   /// that are outside the current server page.
-  Future<void> upsertFriendRows(
-    List<Map<String, Object?>> rows,
-  ) async {
+  Future<void> upsertFriendRows(List<Map<String, Object?>> rows) async {
     if (rows.isEmpty) return;
     await initialize();
     for (final row in rows) {
@@ -224,8 +271,9 @@ class UnifiedDatabase {
 
   Future<void> dropDiagnosticsScratchTable() async {
     await initialize();
-    await _connection
-        .runCustom('DROP TABLE IF EXISTS $diagnosticsScratchTable');
+    await _connection.runCustom(
+      'DROP TABLE IF EXISTS $diagnosticsScratchTable',
+    );
   }
 
   Future<void> close() => _connection.close();
@@ -264,11 +312,11 @@ class DatabaseOverview {
   final List<DatabaseTableInfo> tables;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'name': name,
-        'schemaVersion': schemaVersion,
-        'storage': storage,
-        'tables': tables.map((table) => table.toJson()).toList(),
-      };
+    'name': name,
+    'schemaVersion': schemaVersion,
+    'storage': storage,
+    'tables': tables.map((table) => table.toJson()).toList(),
+  };
 }
 
 class DatabaseTableInfo {
@@ -283,10 +331,10 @@ class DatabaseTableInfo {
   final String createSql;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'name': name,
-        'rowCount': rowCount,
-        'createSql': createSql,
-      };
+    'name': name,
+    'rowCount': rowCount,
+    'createSql': createSql,
+  };
 }
 
 class DatabaseDiagnosticRecord {
@@ -316,12 +364,12 @@ class DatabaseDiagnosticRecord {
   final int updatedAt;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'id': id,
-        'title': title,
-        'payload': payload,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
-      };
+    'id': id,
+    'title': title,
+    'payload': payload,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+  };
 }
 
 const _version1Schema = <String>[
@@ -389,5 +437,7 @@ class _UnifiedDatabaseUser extends QueryExecutorUser {
 
   @override
   Future<void> beforeOpen(
-      QueryExecutor executor, OpeningDetails details) async {}
+    QueryExecutor executor,
+    OpeningDetails details,
+  ) async {}
 }

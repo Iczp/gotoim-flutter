@@ -17,17 +17,65 @@ class SessionUnitApi {
       response,
       ChatOwner.fromJson,
     );
-    return page.items;
+    final overview = await _apiClient.get<Map<String, dynamic>>(
+      '/api/chat/session-unit-cache/overview',
+    );
+    final rawOverviews = overview['overviews'];
+    final badges = <int, ({int unread, int immersed})>{};
+    if (rawOverviews is List) {
+      for (final raw in rawOverviews.whereType<Map>()) {
+        final ownerId = raw['ownerId'];
+        final id = ownerId is num ? ownerId.toInt() : int.tryParse('$ownerId');
+        if (id == null) continue;
+        final stat = raw['stat'] is Map ? raw['stat'] as Map : const {};
+        badges[id] = (
+          unread: (raw['totalUnreadCount'] as num?)?.toInt() ?? 0,
+          immersed: (stat['immersed'] as num?)?.toInt() ?? 0,
+        );
+      }
+    }
+    return page.items
+        .map((owner) {
+          final badge = badges[owner.id];
+          return owner.withOverview(
+            unread: badge?.unread ?? 0,
+            immersed: badge?.immersed ?? 0,
+          );
+        })
+        .toList(growable: false);
   }
 
   Future<PagedResultDto<SessionSummary>> getFriends({
-    int? ownerId,
+    required int ownerId,
     int maxResultCount = 50,
+    int? maxScore,
+    String? cursorId,
   }) async {
     final response = await _apiClient.get<Map<String, dynamic>>(
       '/api/chat/session-unit-cache/friends',
       query: <String, Object?>{
-        if (ownerId != null) 'ownerId': ownerId,
+        'ownerId': ownerId,
+        'maxResultCount': maxResultCount,
+        if (maxScore != null) 'maxScore': maxScore,
+        if (cursorId != null) 'cursorId': cursorId,
+      },
+    );
+    return PagedResultDto<SessionSummary>.fromJson(
+      response,
+      SessionSummary.fromJson,
+    );
+  }
+
+  Future<PagedResultDto<SessionSummary>> getChanges({
+    required int ownerId,
+    required int minTicks,
+    int maxResultCount = 99,
+  }) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/chat/session-unit-cache/changes',
+      query: <String, Object?>{
+        'ownerId': ownerId,
+        'minTicks': minTicks,
         'maxResultCount': maxResultCount,
       },
     );

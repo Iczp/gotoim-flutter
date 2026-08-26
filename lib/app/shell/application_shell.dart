@@ -37,26 +37,32 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         );
 
         return Scaffold(
-          appBar: _HomeAppBar(
-            title: _section.label,
-            platformLabel: '${environment.flavor.name} · ${platform.kind.name}',
-          ),
-          body: isCompact
-              ? content
-              : Row(
-                  children: [
-                    _HomeNavigationRail(
-                      selected: _section,
-                      extended: layout == WindowLayout.desktop,
-                      onSelected: _select,
-                    ),
-                    const VerticalDivider(width: 1),
-                    Expanded(child: content),
-                  ],
-                ),
-          bottomNavigationBar: isCompact
-              ? _HomeNavigationBar(selected: _section, onSelected: _select)
-              : null,
+          appBar:
+              _section == HomeSection.messages
+                  ? null
+                  : _HomeAppBar(
+                    title: _section.label,
+                    platformLabel:
+                        '${environment.flavor.name} · ${platform.kind.name}',
+                  ),
+          body:
+              isCompact
+                  ? content
+                  : Row(
+                    children: [
+                      _HomeNavigationRail(
+                        selected: _section,
+                        extended: layout == WindowLayout.desktop,
+                        onSelected: _select,
+                      ),
+                      const VerticalDivider(width: 1),
+                      Expanded(child: content),
+                    ],
+                  ),
+          bottomNavigationBar:
+              isCompact
+                  ? _HomeNavigationBar(selected: _section, onSelected: _select)
+                  : null,
         );
       },
     );
@@ -114,15 +120,16 @@ class _HomeNavigationBar extends StatelessWidget {
     return NavigationBar(
       selectedIndex: HomeSection.values.indexOf(selected),
       onDestinationSelected: (index) => onSelected(HomeSection.values[index]),
-      destinations: HomeSection.values
-          .map(
-            (section) => NavigationDestination(
-              icon: Icon(section.icon),
-              selectedIcon: Icon(section.selectedIcon),
-              label: section.label,
-            ),
-          )
-          .toList(),
+      destinations:
+          HomeSection.values
+              .map(
+                (section) => NavigationDestination(
+                  icon: Icon(section.icon),
+                  selectedIcon: Icon(section.selectedIcon),
+                  label: section.label,
+                ),
+              )
+              .toList(),
     );
   }
 }
@@ -146,15 +153,16 @@ class _HomeNavigationRail extends StatelessWidget {
       selectedIndex: HomeSection.values.indexOf(selected),
       onDestinationSelected: (index) => onSelected(HomeSection.values[index]),
       labelType: extended ? null : NavigationRailLabelType.all,
-      destinations: HomeSection.values
-          .map(
-            (section) => NavigationRailDestination(
-              icon: Icon(section.icon),
-              selectedIcon: Icon(section.selectedIcon),
-              label: Text(section.label),
-            ),
-          )
-          .toList(),
+      destinations:
+          HomeSection.values
+              .map(
+                (section) => NavigationRailDestination(
+                  icon: Icon(section.icon),
+                  selectedIcon: Icon(section.selectedIcon),
+                  label: Text(section.label),
+                ),
+              )
+              .toList(),
     );
   }
 }
