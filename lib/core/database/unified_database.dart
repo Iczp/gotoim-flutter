@@ -16,14 +16,14 @@ class UnifiedDatabase {
   UnifiedDatabase(this._connection);
 
   factory UnifiedDatabase.openDefault() => UnifiedDatabase(
-    driftDatabase(
-      name: databaseName,
-      web: DriftWebOptions(
-        sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-        driftWorker: Uri.parse('drift_worker.js'),
-      ),
-    ),
-  );
+        driftDatabase(
+          name: databaseName,
+          web: DriftWebOptions(
+            sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+            driftWorker: Uri.parse('drift_worker.js'),
+          ),
+        ),
+      );
 
   static const databaseName = 'gotoim';
   static const schemaVersion = 1;
@@ -46,7 +46,8 @@ class UnifiedDatabase {
   String? _initializationError;
 
   String? get initializationError => _initializationError;
-  bool get isInitialized => _initializationError == null && _initialization != null;
+  bool get isInitialized =>
+      _initializationError == null && _initialization != null;
 
   String get storageDescription => kIsWeb
       ? 'SQLite WASM（浏览器 OPFS / IndexedDB 持久化）'
@@ -138,7 +139,8 @@ class UnifiedDatabase {
     );
   }
 
-  Future<List<DatabaseDiagnosticRecord>> readDiagnosticRecords({int limit = 50}) async {
+  Future<List<DatabaseDiagnosticRecord>> readDiagnosticRecords(
+      {int limit = 50}) async {
     await initialize();
     final normalizedLimit = limit.clamp(1, 200);
     final rows = await _connection.runSelect(
@@ -155,6 +157,51 @@ class UnifiedDatabase {
       'DELETE FROM $diagnosticsTable WHERE id = ?',
       <Object?>[id],
     );
+  }
+
+  /// Reads the locally persisted conversation summaries in display order.
+  /// Feature code reaches this table through SessionDao rather than calling
+  /// this database primitive directly.
+  Future<List<Map<String, Object?>>> readFriendRows({int limit = 50}) async {
+    await initialize();
+    final normalizedLimit = limit.clamp(1, 200);
+    return _connection.runSelect(
+      'SELECT id, ownerId, score, raw FROM Friends '
+      'ORDER BY ticks DESC, score DESC, id DESC LIMIT ?',
+      <Object?>[normalizedLimit],
+    );
+  }
+
+  /// Persists remote session-unit summaries without deleting local records
+  /// that are outside the current server page.
+  Future<void> upsertFriendRows(
+    List<Map<String, Object?>> rows,
+  ) async {
+    if (rows.isEmpty) return;
+    await initialize();
+    for (final row in rows) {
+      await _connection.runInsert(
+        'INSERT INTO Friends '
+        '(id, ownerId, score, sorting, ticks, createTime, updateTime, '
+        'expireTime, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) '
+        'ON CONFLICT(id) DO UPDATE SET '
+        'ownerId = excluded.ownerId, score = excluded.score, '
+        'sorting = excluded.sorting, ticks = excluded.ticks, '
+        'createTime = excluded.createTime, updateTime = excluded.updateTime, '
+        'expireTime = excluded.expireTime, raw = excluded.raw',
+        <Object?>[
+          row['id'],
+          row['ownerId'],
+          row['score'],
+          row['sorting'],
+          row['ticks'],
+          row['createTime'],
+          row['updateTime'],
+          row['expireTime'],
+          row['raw'],
+        ],
+      );
+    }
   }
 
   /// Empties a known schema table. Arbitrary SQL/table names are intentionally
@@ -177,7 +224,8 @@ class UnifiedDatabase {
 
   Future<void> dropDiagnosticsScratchTable() async {
     await initialize();
-    await _connection.runCustom('DROP TABLE IF EXISTS $diagnosticsScratchTable');
+    await _connection
+        .runCustom('DROP TABLE IF EXISTS $diagnosticsScratchTable');
   }
 
   Future<void> close() => _connection.close();
@@ -216,11 +264,11 @@ class DatabaseOverview {
   final List<DatabaseTableInfo> tables;
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'name': name,
-    'schemaVersion': schemaVersion,
-    'storage': storage,
-    'tables': tables.map((table) => table.toJson()).toList(),
-  };
+        'name': name,
+        'schemaVersion': schemaVersion,
+        'storage': storage,
+        'tables': tables.map((table) => table.toJson()).toList(),
+      };
 }
 
 class DatabaseTableInfo {
@@ -235,10 +283,10 @@ class DatabaseTableInfo {
   final String createSql;
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'name': name,
-    'rowCount': rowCount,
-    'createSql': createSql,
-  };
+        'name': name,
+        'rowCount': rowCount,
+        'createSql': createSql,
+      };
 }
 
 class DatabaseDiagnosticRecord {
@@ -268,12 +316,12 @@ class DatabaseDiagnosticRecord {
   final int updatedAt;
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'id': id,
-    'title': title,
-    'payload': payload,
-    'createdAt': createdAt,
-    'updatedAt': updatedAt,
-  };
+        'id': id,
+        'title': title,
+        'payload': payload,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+      };
 }
 
 const _version1Schema = <String>[
@@ -340,6 +388,6 @@ class _UnifiedDatabaseUser extends QueryExecutorUser {
   int get schemaVersion => UnifiedDatabase.schemaVersion;
 
   @override
-  Future<void> beforeOpen(QueryExecutor executor, OpeningDetails details) async {}
+  Future<void> beforeOpen(
+      QueryExecutor executor, OpeningDetails details) async {}
 }
-
