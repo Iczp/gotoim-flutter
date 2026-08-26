@@ -339,6 +339,22 @@ Deleted
 
 发送失败的消息不得自动删除。
 
+
+
+消息这一页，其实是加载好友，加载逻辑是：
+
+分页加载本地好友，到页未了再加载线上的，  loadFriends
+
+
+
+刷新只加载线上变更的：  loadChanges
+
+参考：
+
+F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\im\services\friendService.ts
+
+F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\im\messages\MessageTab.vue
+
 ---
 
 ## 8. 消息发送与同步

@@ -17,8 +17,8 @@ final sessionRepositoryProvider = Provider<SessionRepository>((ref) {
 
 final sessionListControllerProvider =
     ChangeNotifierProvider<SessionListController>((ref) {
-  return SessionListController(ref.watch(sessionRepositoryProvider));
-});
+      return SessionListController(ref.watch(sessionRepositoryProvider));
+    });
 
 class SessionListController extends ChangeNotifier {
   SessionListController(this._repository);
@@ -28,6 +28,7 @@ class SessionListController extends ChangeNotifier {
   bool _isLoading = false;
   bool _isSyncing = false;
   Object? _error;
+  int? _ownerId;
 
   List<SessionSummary> get sessions => _sessions;
   bool get isLoading => _isLoading;
@@ -43,6 +44,7 @@ class SessionListController extends ChangeNotifier {
     try {
       _sessions = await _repository.loadCached();
       notifyListeners();
+      _ownerId ??= await _repository.resolveCurrentOwnerId();
       await sync();
     } finally {
       _isLoading = false;
@@ -56,7 +58,8 @@ class SessionListController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      _sessions = await _repository.sync();
+      _ownerId ??= await _repository.resolveCurrentOwnerId();
+      _sessions = await _repository.sync(ownerId: _ownerId);
     } catch (error) {
       _error = error;
       debugPrint('Session list sync failed: $error');

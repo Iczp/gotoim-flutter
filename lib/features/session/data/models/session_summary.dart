@@ -31,7 +31,8 @@ class SessionSummary {
       score: asInt(json['score']) ?? asInt(json['ticks']) ?? 0,
       title: title.isEmpty ? '未命名会话' : title,
       preview: messagePreview(content),
-      updatedAt: asDate(json['lastMessageTime']) ??
+      updatedAt:
+          asDate(json['lastMessageTime']) ??
           asDate(lastMessage['creationTime']) ??
           asDate(json['lastModificationTime']),
       unreadCount: asInt(json['publicBadge']) ?? 0,
@@ -60,14 +61,14 @@ class SessionSummary {
   final Map<String, dynamic> raw;
 
   Map<String, Object?> toDatabaseValues() => <String, Object?>{
-        'id': id,
-        'ownerId': ownerId,
-        'score': score,
-        'sorting': raw['sorting'],
-        'ticks': raw['ticks'],
-        'createTime': millis(raw['creationTime']),
-        'updateTime': updatedAt?.millisecondsSinceEpoch,
-        'expireTime': millis(raw['expireTime']),
-        'raw': encodeJson(raw),
-      };
+    'id': id,
+    'ownerId': ownerId,
+    'score': score,
+    'sorting': raw['sorting'],
+    'ticks': raw['ticks'],
+    'createTime': millis(raw['creationTime']),
+    'updateTime': updatedAt?.millisecondsSinceEpoch,
+    'expireTime': millis(raw['expireTime']),
+    'raw': encodeJson(raw),
+  };
 }

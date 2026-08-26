@@ -71,13 +71,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           else
             SliverList.separated(
               itemCount: sessions.length,
-              itemBuilder: (context, index) => _SessionListTile(
-                session: sessions[index],
-              ),
-              separatorBuilder: (context, index) => const Divider(
-                height: 1,
-                indent: 80,
-              ),
+              itemBuilder:
+                  (context, index) =>
+                      _SessionListTile(session: sessions[index]),
+              separatorBuilder:
+                  (context, index) => const Divider(height: 1, indent: 80),
             ),
         ],
       ),
@@ -127,14 +125,18 @@ class _SessionListTile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: session.unreadCount > 0
-          ? Badge(
-              label: Text(
-                  session.unreadCount > 99 ? '99+' : '${session.unreadCount}'))
-          : null,
-      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('聊天页面正在迁移中')),
-      ),
+      trailing:
+          session.unreadCount > 0
+              ? Badge(
+                label: Text(
+                  session.unreadCount > 99 ? '99+' : '${session.unreadCount}',
+                ),
+              )
+              : null,
+      onTap:
+          () => ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('聊天页面正在迁移中'))),
     );
   }
 }
@@ -188,8 +190,10 @@ class _SyncErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.sync_problem_outlined,
-              color: colorScheme.onErrorContainer),
+          Icon(
+            Icons.sync_problem_outlined,
+            color: colorScheme.onErrorContainer,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
