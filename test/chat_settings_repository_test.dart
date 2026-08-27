@@ -7,6 +7,7 @@ import 'package:gotoim_flutter/features/chat/data/datasources/message_dao.dart';
 import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
 import 'package:gotoim_flutter/features/chat_settings/data/datasources/chat_member_api.dart';
 import 'package:gotoim_flutter/features/chat_settings/data/datasources/chat_member_dao.dart';
+import 'package:gotoim_flutter/features/chat_settings/data/models/chat_member.dart';
 import 'package:gotoim_flutter/features/chat_settings/data/repositories/chat_settings_repository.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_dao.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
@@ -106,12 +107,61 @@ void main() {
     expect(friend?.raw['lastMessage'], isNull);
     expect(friend?.unreadCount, 0);
   });
+
+  test('member page continues from local cursor into remote page', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = ChatMemberDao(database);
+    ChatMember member(String id, int score) =>
+        ChatMember.fromJson(<String, dynamic>{
+          'id': id,
+          'score': score,
+          'owner': <String, dynamic>{'displayName': id},
+        });
+    await dao.upsertAll(7, 'session', <ChatMember>[
+      member('local-2', 20),
+      member('local-1', 10),
+    ]);
+    final client = _FakeApiClient(<String, dynamic>{
+      'items': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'id': 'remote-1',
+          'score': 5,
+          'owner': <String, dynamic>{'displayName': 'remote-1'},
+        },
+      ],
+      'totalCount': 3,
+      'extra': <String, dynamic>{'hasMore': false},
+    });
+    final repository = ChatSettingsRepository(
+      api: ChatMemberApi(client),
+      dao: dao,
+    );
+
+    final page = await repository.loadMembers(
+      ownerId: 7,
+      sessionUnitId: 'session',
+      limit: 3,
+    );
+
+    expect(page.items.map((item) => item.id), <String>[
+      'local-2',
+      'local-1',
+      'remote-1',
+    ]);
+    expect(page.hasMore, isFalse);
+    expect(client.queries.single['maxScore'], 10);
+    expect(client.queries.single['cursorId'], 'local-1');
+  });
 }
 
 class _FakeApiClient implements ApiClient {
   _FakeApiClient(this.response);
   final Map<String, dynamic> response;
   int getCount = 0;
+  final List<Map<String, Object?>> queries = <Map<String, Object?>>[];
 
   @override
   Future<T> get<T>(
@@ -120,6 +170,7 @@ class _FakeApiClient implements ApiClient {
     bool retryOnUnauthorized = true,
   }) async {
     getCount++;
+    queries.add(query ?? const <String, Object?>{});
     return response as T;
   }
 

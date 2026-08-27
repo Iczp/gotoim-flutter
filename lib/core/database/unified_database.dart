@@ -203,7 +203,7 @@ class UnifiedDatabase {
       'SELECT * FROM Members WHERE ownerId = ? AND sessionUnitId = ? AND isList = 1 '
       '${normalizedKeyword.isEmpty ? '' : 'AND (memberName LIKE ? OR raw LIKE ?) '}'
       '${hasCursor ? 'AND (score < ? OR (score = ? AND id < ?)) ' : ''}'
-      'ORDER BY isCreator DESC, score DESC, id DESC LIMIT ?',
+      'ORDER BY score DESC, id DESC LIMIT ?',
       <Object?>[
         ownerId,
         sessionUnitId,

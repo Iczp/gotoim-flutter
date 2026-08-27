@@ -21,6 +21,8 @@ class MemberListPage extends ConsumerStatefulWidget {
 class _MemberListPageState extends ConsumerState<MemberListPage> {
   late final MemberListController controller;
   final search = TextEditingController();
+  final scrollController = ScrollController();
+  bool checkingUnderflow = false;
 
   @override
   void initState() {
@@ -36,39 +38,43 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
   void dispose() {
     controller.dispose();
     search.dispose();
+    scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
-    builder:
-        (context, _) => Scaffold(
-          appBar: AppBar(title: const Text('成员列表')),
-          body: Column(
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-                child: SearchBar(
-                  controller: search,
-                  hintText: '搜索成员',
-                  leading: const Icon(Icons.search),
-                  trailing:
-                      search.text.isEmpty
-                          ? const <Widget>[]
-                          : <Widget>[
-                            IconButton(
-                              onPressed: () {
-                                search.clear();
-                                controller.search('');
-                              },
-                              icon: const Icon(Icons.close),
-                            ),
-                          ],
-                  onSubmitted: controller.search,
-                ),
+    builder: (context, _) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
+      return Scaffold(
+        appBar: AppBar(title: const Text('成员列表')),
+        body: Column(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              child: SearchBar(
+                controller: search,
+                hintText: '搜索成员',
+                leading: const Icon(Icons.search),
+                trailing:
+                    search.text.isEmpty
+                        ? const <Widget>[]
+                        : <Widget>[
+                          IconButton(
+                            onPressed: () {
+                              search.clear();
+                              controller.search('');
+                            },
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                onSubmitted: controller.search,
               ),
-              Expanded(
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: controller.refresh,
                 child: NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
                     if (notification.metrics.extentAfter < 180) {
@@ -77,6 +83,8 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
                     return false;
                   },
                   child: ListView.builder(
+                    controller: scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     itemCount: controller.members.length + 1,
@@ -96,6 +104,12 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
                           child: Text('加载失败，点击重试：${controller.error}'),
                         );
                       }
+                      if (controller.hasMore) {
+                        return TextButton(
+                          onPressed: controller.loadMore,
+                          child: const Text('加载更多成员'),
+                        );
+                      }
                       return Padding(
                         padding: const EdgeInsets.all(20),
                         child: Center(
@@ -106,8 +120,22 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      );
+    },
   );
+
+  Future<void> _fillViewport() async {
+    if (checkingUnderflow || controller.loading || !controller.hasMore) return;
+    if (!scrollController.hasClients) return;
+    if (scrollController.position.maxScrollExtent > 80) return;
+    checkingUnderflow = true;
+    try {
+      await controller.loadMore();
+    } finally {
+      checkingUnderflow = false;
+    }
+  }
 }

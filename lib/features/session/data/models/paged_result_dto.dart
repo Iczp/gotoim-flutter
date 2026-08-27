@@ -1,5 +1,9 @@
 class PagedResultDto<T> {
-  const PagedResultDto({required this.items, required this.totalCount});
+  const PagedResultDto({
+    required this.items,
+    required this.totalCount,
+    this.hasMore,
+  });
 
   factory PagedResultDto.fromJson(
     Map<String, dynamic> json,
@@ -14,15 +18,19 @@ class PagedResultDto<T> {
                 .toList(growable: false)
             : List<T>.empty(growable: false);
     final rawCount = json['totalCount'];
+    final extra = json['extra'];
+    final rawHasMore = extra is Map ? extra['hasMore'] : null;
     return PagedResultDto<T>(
       items: items,
       totalCount:
           rawCount is num
               ? rawCount.toInt()
               : int.tryParse('$rawCount') ?? items.length,
+      hasMore: rawHasMore is bool ? rawHasMore : null,
     );
   }
 
   final List<T> items;
   final int totalCount;
+  final bool? hasMore;
 }

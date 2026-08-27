@@ -35,7 +35,7 @@ class ChatSettingsRepository {
       );
       debugPrint(
         '[loadMembers][local] session=$sessionUnitId requested=$limit '
-        'added=${local.length}',
+        'cursorScore=$cursorScore cursorId=$cursorId added=${local.length}',
       );
       if (local.length >= limit) return MemberPage(local, true, null);
       if (await _dao.isLoadedAll(sessionUnitId)) {
@@ -52,7 +52,9 @@ class ChatSettingsRepository {
       keyword: keyword,
     );
     await _dao.upsertAll(ownerId, sessionUnitId, remote.items);
-    final hasMore = remote.items.length >= limit - local.length;
+    final requestedRemoteCount = limit - local.length;
+    final hasMore =
+        remote.hasMore ?? remote.items.length >= requestedRemoteCount;
     await _dao.updateState(
       sessionUnitId,
       totalCount: remote.totalCount,

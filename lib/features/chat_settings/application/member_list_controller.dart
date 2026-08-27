@@ -21,6 +21,14 @@ class MemberListController extends ChangeNotifier {
 
   Future<void> initialize() => loadMore();
 
+  Future<void> refresh() async {
+    if (loading) return;
+    members.clear();
+    hasMore = true;
+    totalCount = 0;
+    await loadMore(forceRemote: true);
+  }
+
   Future<void> search(String value) async {
     keyword = value.trim();
     members.clear();
