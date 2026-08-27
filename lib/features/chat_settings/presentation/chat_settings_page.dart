@@ -157,11 +157,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     if (confirmed != true || !mounted) return;
     try {
       await controller.clearMessages();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('聊天记录已清空')));
-      }
+      if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(

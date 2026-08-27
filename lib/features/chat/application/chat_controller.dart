@@ -249,4 +249,17 @@ class ChatController extends ChangeNotifier {
     }
     _messages.sort((a, b) => b.score.compareTo(a.score));
   }
+
+  void handleMessagesCleared() {
+    _messages.clear();
+    _timeVisibilityResetMarker++;
+    hasMore = true;
+    error = null;
+    isLoading = false;
+    isLoadingLatest = false;
+    notifyListeners();
+  }
+
+  int _timeVisibilityResetMarker = 0;
+  int get timeVisibilityResetMarker => _timeVisibilityResetMarker;
 }

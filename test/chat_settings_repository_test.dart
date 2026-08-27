@@ -1,8 +1,10 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/database/unified_database.dart';
 import 'package:gotoim_flutter/core/network/api_client.dart';
+import 'package:gotoim_flutter/features/chat/data/datasources/message_dao.dart';
+import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
 import 'package:gotoim_flutter/features/chat_settings/data/datasources/chat_member_api.dart';
 import 'package:gotoim_flutter/features/chat_settings/data/datasources/chat_member_dao.dart';
 import 'package:gotoim_flutter/features/chat_settings/data/repositories/chat_settings_repository.dart';
@@ -60,6 +62,50 @@ void main() {
       expect(client.getCount, 1);
     },
   );
+
+  test('clear messages resets local messages and friend summary', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final sessionDao = SessionDao(database);
+    await sessionDao.upsertAll(<SessionSummary>[
+      SessionSummary.fromJson(<String, dynamic>{
+        'id': 'session',
+        'ownerId': 7,
+        'score': 10,
+        'publicBadge': 3,
+        'lastMessage': <String, dynamic>{
+          'id': 9,
+          'content': <String, dynamic>{'text': '旧消息'},
+        },
+        'destination': <String, dynamic>{'name': '群聊'},
+      }),
+    ]);
+    final messageDao = MessageDao(database);
+    await messageDao.upsertAll(<ChatMessage>[
+      ChatMessage.fromJson(
+        <String, dynamic>{'id': 9, 'messageType': 0},
+        ownerId: 7,
+        sessionUnitId: 'session',
+      ),
+    ]);
+    final repository = ChatSettingsRepository(
+      api: ChatMemberApi(_FakeApiClient(<String, dynamic>{})),
+      dao: ChatMemberDao(database),
+    );
+
+    await repository.clearMessages(7, 'session');
+
+    expect(
+      await messageDao.readPage(ownerId: 7, sessionUnitId: 'session'),
+      isEmpty,
+    );
+    expect(await messageDao.isLoadedAll('session'), isFalse);
+    final friend = await sessionDao.readById('session');
+    expect(friend?.raw['lastMessage'], isNull);
+    expect(friend?.unreadCount, 0);
+  });
 }
 
 class _FakeApiClient implements ApiClient {
@@ -84,7 +130,7 @@ class _FakeApiClient implements ApiClient {
     Object? data,
     Map<String, String>? headers,
     bool retryOnUnauthorized = true,
-  }) => throw UnimplementedError();
+  }) async => <String, dynamic>{} as T;
 
   @override
   Future<T> postMultipart<T>(

@@ -43,5 +43,5 @@ class ChatMemberDao {
       _database.readFriendMembersLoadedAll(sessionUnitId);
 
   Future<int> clearMessages(int ownerId, String sessionUnitId) =>
-      _database.deleteMessageRows(ownerId, sessionUnitId);
+      _database.resetFriendMessages(ownerId, sessionUnitId);
 }

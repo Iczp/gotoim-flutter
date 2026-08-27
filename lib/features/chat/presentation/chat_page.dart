@@ -27,6 +27,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   late final ChatController controller;
   final input = TextEditingController();
   final Map<String, bool> _timeVisibility = <String, bool>{};
+  int _timeVisibilityResetMarker = 0;
 
   @override
   void initState() {
@@ -58,12 +59,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             actions: <Widget>[
               IconButton(
                 tooltip: '聊天设置',
-                onPressed: () {
+                onPressed: () async {
                   FocusManager.instance.primaryFocus?.unfocus();
-                  context.push(
+                  final cleared = await context.push<bool>(
                     '/chat/${Uri.encodeComponent(widget.sessionUnitId)}/settings'
                     '?ownerId=${widget.ownerId}',
                   );
+                  if (cleared == true) {
+                    controller.handleMessagesCleared();
+                  }
                 },
                 icon: const Icon(Icons.more_horiz),
               ),
@@ -176,6 +180,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   );
 
   bool _showTime(ChatMessage current, ChatMessage? older) {
+    if (_timeVisibilityResetMarker != controller.timeVisibilityResetMarker) {
+      _timeVisibilityResetMarker = controller.timeVisibilityResetMarker;
+      _timeVisibility.clear();
+    }
     return _timeVisibility.putIfAbsent(current.localId, () {
       if (current.createdAt == null || older?.createdAt == null) {
         return older == null;
