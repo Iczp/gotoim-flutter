@@ -88,6 +88,41 @@ class MessageRepository {
     }
   }
 
+  Future<List<ChatMessage>> loadLatest({
+    required int ownerId,
+    required String sessionUnitId,
+    required int minMessageId,
+    int limit = 99,
+    int maxPages = 10,
+  }) async {
+    var cursor = minMessageId;
+    final collected = <String, ChatMessage>{};
+    for (var pageIndex = 0; pageIndex < maxPages; pageIndex++) {
+      final page = await _api.latest(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        limit: limit,
+        minMessageId: cursor,
+      );
+      if (page.items.isEmpty) break;
+      for (final item in page.items) {
+        collected[item.localId] = item;
+      }
+      final next = page.items
+          .map((item) => item.serverId ?? 0)
+          .fold<int>(cursor, (max, id) => id > max ? id : max);
+      if (page.items.length < limit || next <= cursor) break;
+      cursor = next;
+    }
+    final items = collected.values.toList(growable: false);
+    await _dao.upsertAll(items);
+    debugPrint(
+      '[loadMessages][latest] session=$sessionUnitId minMessageId=$minMessageId '
+      'received=${items.length} persisted=${items.length}',
+    );
+    return items;
+  }
+
   Future<ChatMessage> sendText({
     required int ownerId,
     required String sessionUnitId,

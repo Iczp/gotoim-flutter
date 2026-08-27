@@ -35,6 +35,7 @@ class ChatController extends ChangeNotifier {
   final List<ChatMessage> _messages = <ChatMessage>[];
   bool isLoading = false;
   bool isSending = false;
+  bool isLoadingLatest = false;
   bool hasMore = true;
   Object? error;
   SessionSummary? friend;
@@ -55,6 +56,12 @@ class ChatController extends ChangeNotifier {
     }
     unawaited(_refreshFriendDetail());
     await _loadInitialLocal();
+    if (_messages.isEmpty && hasMore) {
+      await loadMore();
+    }
+    if (_messages.isNotEmpty) {
+      unawaited(loadLatest());
+    }
   }
 
   Future<void> _loadInitialLocal() async {
@@ -115,6 +122,37 @@ class ChatController extends ChangeNotifier {
       error = exception;
     } finally {
       isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadLatest() async {
+    if (isLoadingLatest || _messages.isEmpty) return;
+    final minMessageId = _messages
+        .map((item) => item.serverId ?? 0)
+        .fold<int>(0, (max, id) => id > max ? id : max);
+    if (minMessageId <= 0) return;
+    isLoadingLatest = true;
+    try {
+      final latest = await _repository.loadLatest(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        minMessageId: minMessageId,
+      );
+      final byId = <String, ChatMessage>{
+        for (final item in _messages) item.localId: item,
+        for (final item in latest) item.localId: item,
+      };
+      _messages
+        ..clear()
+        ..addAll(byId.values)
+        ..sort((a, b) => b.score.compareTo(a.score));
+    } catch (exception) {
+      debugPrint(
+        '[loadMessages][latest-failed] session=$sessionUnitId error=$exception',
+      );
+    } finally {
+      isLoadingLatest = false;
       notifyListeners();
     }
   }

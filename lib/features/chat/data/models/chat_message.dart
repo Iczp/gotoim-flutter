@@ -68,6 +68,35 @@ class ChatMessage {
   final Map<String, dynamic> raw;
 
   bool get isMine => senderSessionUnitId == sessionUnitId;
+  Map<String, dynamic> get senderSessionUnit => asMap(raw['senderSessionUnit']);
+  String get senderName {
+    final sender = senderSessionUnit;
+    final owner = asMap(sender['owner']);
+    final name = firstNonEmpty(<Object?>[
+      owner['fullPathName'],
+      raw['senderName'],
+      raw['senderDisplayName'],
+      sender['displayName'],
+      sender['memberName'],
+      owner['displayName'],
+      owner['name'],
+      isMine ? '我' : '未知用户',
+    ]);
+    return name.replaceAll('/', ':');
+  }
+
+  String? get senderAvatarUrl {
+    final sender = senderSessionUnit;
+    final owner = asMap(sender['owner']);
+    final value = firstNonEmpty(<Object?>[
+      sender['thumbnail'],
+      sender['portrait'],
+      owner['thumbnail'],
+      owner['portrait'],
+    ]);
+    return value.isEmpty ? null : value;
+  }
+
   String get text {
     final content = asMap(raw['content']);
     return firstNonEmpty(<Object?>[

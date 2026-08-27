@@ -389,6 +389,12 @@ F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\im\messages\MessageTab.vu
 
 1. 先加载本地 10条，向在上翻页才加载 本地分页数据（30条）  本地没有了，  判断是否已经加载加了全部消息，如没有加载全部才访问线上  /api/chat/message/history  ，线上也没有了，更新到本地标记，friend 表。
 
+1. 消息发送人的头像，昵称没有显示
+2. 调用接口出现401，  说明 Api拦截器失效，
+   调用业务Api前，先验证token是否在有效期内（不请求网络），过期前5分种 就要refresh_token, 
+   注意： 刷新Token是全局，要考虑并发，
+3. 如果401 ，验证是否有在刷新token,  如果有，等待刷新Token的结果， 如果没有，尝试 刷新Token，当然刷新token一直都是全局，要考虑并发
+
 ---
 
 ## 8. 消息发送与同步

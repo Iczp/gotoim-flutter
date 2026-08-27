@@ -23,6 +23,27 @@ void main() {
     sessionUnitId: 'session',
   );
 
+  test('message exposes sender nickname and avatar from senderSessionUnit', () {
+    final value = ChatMessage.fromJson(
+      <String, dynamic>{
+        'id': 1,
+        'messageType': 0,
+        'senderSessionUnit': <String, dynamic>{
+          'displayName': '成员昵称',
+          'owner': <String, dynamic>{
+            'fullPathName': '部门/张三',
+            'thumbnail': '/avatars/1.png',
+          },
+        },
+      },
+      ownerId: 7,
+      sessionUnitId: 'session',
+    );
+
+    expect(value.senderName, '部门:张三');
+    expect(value.senderAvatarUrl, '/avatars/1.png');
+  });
+
   test('history returns a complete local page without HTTP', () async {
     final database = UnifiedDatabase(
       DatabaseConnection(NativeDatabase.memory()),
@@ -142,6 +163,48 @@ void main() {
     expect(client.paths, <String>['/api/chat/message/history']);
     expect(await dao.isLoadedAll('session'), isTrue);
   });
+
+  test(
+    'loadLatest persists and returns messages newer than minMessageId',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      final client = _FakeApiClient(<String, Map<String, dynamic>>{
+        '/api/chat/message/latest': <String, dynamic>{
+          'items': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'id': 11,
+              'clientMessageId': 'c11',
+              'messageType': 0,
+              'content': <String, dynamic>{'text': 'new'},
+            },
+          ],
+          'totalCount': 1,
+        },
+      });
+      final repository = MessageRepository(api: MessageApi(client), dao: dao);
+
+      final latest = await repository.loadLatest(
+        ownerId: 7,
+        sessionUnitId: 'session',
+        minMessageId: 10,
+      );
+
+      expect(latest.single.serverId, 11);
+      expect(client.paths, <String>['/api/chat/message/latest']);
+      expect(client.queries.single['minMessageId'], 10);
+      expect(
+        (await dao.readPage(
+          ownerId: 7,
+          sessionUnitId: 'session',
+        )).single.serverId,
+        11,
+      );
+    },
+  );
 }
 
 class _FakeApiClient implements ApiClient {

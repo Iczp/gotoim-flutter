@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
 import '../../session/application/session_list_controller.dart';
+import '../../session/presentation/chat_object_avatar.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
@@ -23,6 +24,7 @@ class ChatPage extends ConsumerStatefulWidget {
 class _ChatPageState extends ConsumerState<ChatPage> {
   late final ChatController controller;
   final input = TextEditingController();
+  final Map<String, bool> _timeVisibility = <String, bool>{};
 
   @override
   void initState() {
@@ -69,55 +71,68 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     }
                     return false;
                   },
-                  child: ListView.builder(
-                    reverse: true,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 16,
-                    ),
-                    itemCount: controller.messages.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == controller.messages.length) {
-                        if (controller.isLoading) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: CircularProgressIndicator(),
+                  child:
+                      controller.messages.isEmpty
+                          ? _EmptyMessagesState(controller: controller)
+                          : ListView.builder(
+                            reverse: true,
+                            findChildIndexCallback: (key) {
+                              if (key is! ValueKey<String>) return null;
+                              final index = controller.messages.indexWhere(
+                                (message) => message.localId == key.value,
+                              );
+                              return index < 0 ? null : index;
+                            },
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 16,
                             ),
-                          );
-                        }
-                        if (controller.error != null) {
-                          return TextButton(
-                            style: _compactTextButtonStyle,
-                            onPressed: controller.loadMore,
-                            child: Text('加载失败，点击重试：${controller.error}'),
-                          );
-                        }
-                        return Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child:
-                                controller.hasMore
-                                    ? TextButton(
-                                      style: _compactTextButtonStyle,
-                                      onPressed: controller.loadMore,
-                                      child: const Text('加载更多消息'),
-                                    )
-                                    : const Text('美好生活从这里开始'),
+                            itemCount: controller.messages.length + 1,
+                            itemBuilder: (context, index) {
+                              if (index == controller.messages.length) {
+                                if (controller.isLoading) {
+                                  return const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(16),
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
+                                if (controller.error != null) {
+                                  return TextButton(
+                                    style: _compactTextButtonStyle,
+                                    onPressed: controller.loadMore,
+                                    child: Text(
+                                      '加载失败，点击重试：${controller.error}',
+                                    ),
+                                  );
+                                }
+                                return Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child:
+                                        controller.hasMore
+                                            ? TextButton(
+                                              style: _compactTextButtonStyle,
+                                              onPressed: controller.loadMore,
+                                              child: const Text('加载更多消息'),
+                                            )
+                                            : const Text('美好生活从这里开始'),
+                                  ),
+                                );
+                              }
+                              final message = controller.messages[index];
+                              final older =
+                                  index + 1 < controller.messages.length
+                                      ? controller.messages[index + 1]
+                                      : null;
+                              return _MessageRow(
+                                key: ValueKey<String>(message.localId),
+                                message: message,
+                                showTime: _showTime(message, older),
+                              );
+                            },
                           ),
-                        );
-                      }
-                      final message = controller.messages[index];
-                      final older =
-                          index + 1 < controller.messages.length
-                              ? controller.messages[index + 1]
-                              : null;
-                      return _MessageRow(
-                        message: message,
-                        showTime: _showTime(message, older),
-                      );
-                    },
-                  ),
                 ),
               ),
               SafeArea(
@@ -130,16 +145,40 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   );
 
   bool _showTime(ChatMessage current, ChatMessage? older) {
-    if (current.createdAt == null || older?.createdAt == null) {
-      return older == null;
+    return _timeVisibility.putIfAbsent(current.localId, () {
+      if (current.createdAt == null || older?.createdAt == null) {
+        return older == null;
+      }
+      return current.createdAt!.difference(older!.createdAt!).abs() >
+          const Duration(minutes: 5);
+    });
+  }
+}
+
+class _EmptyMessagesState extends StatelessWidget {
+  const _EmptyMessagesState({required this.controller});
+  final ChatController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    if (controller.isLoading) {
+      return const Center(child: CircularProgressIndicator());
     }
-    return current.createdAt!.difference(older!.createdAt!).abs() >
-        const Duration(minutes: 5);
+    if (controller.error != null) {
+      return Center(
+        child: TextButton(
+          style: _compactTextButtonStyle,
+          onPressed: controller.loadMore,
+          child: Text('消息加载失败，点击重试：${controller.error}'),
+        ),
+      );
+    }
+    return const Center(child: Text('暂无消息'));
   }
 }
 
 class _MessageRow extends StatelessWidget {
-  const _MessageRow({required this.message, required this.showTime});
+  const _MessageRow({required this.message, required this.showTime, super.key});
   final ChatMessage message;
   final bool showTime;
 
@@ -174,49 +213,74 @@ class _MessageRow extends StatelessWidget {
               style: Theme.of(context).textTheme.labelSmall,
             ),
           ),
-        Align(
-          alignment:
-              message.isMine ? Alignment.centerRight : Alignment.centerLeft,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final bubbleWidth = constraints.maxWidth * 0.72;
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment:
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final bubbleWidth = constraints.maxWidth * 0.68;
+            final avatar = ChatObjectAvatar(
+              name: message.senderName,
+              imageUrl: message.senderAvatarUrl,
+              radius: 18,
+            );
+            final content = Expanded(
+              child: Column(
+                crossAxisAlignment:
                     message.isMine
-                        ? MainAxisAlignment.end
-                        : MainAxisAlignment.start,
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
                 children: <Widget>[
-                  if (message.isMine && message.state == 'failed')
-                    const Padding(
-                      padding: EdgeInsets.only(right: 6),
-                      child: Icon(Icons.error, color: Colors.red, size: 18),
-                    ),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: bubbleWidth),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color:
-                            message.isMine
-                                ? Theme.of(context).colorScheme.primaryContainer
-                                : Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 13,
-                          vertical: 9,
-                        ),
-                        child: Text(text),
-                      ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      message.senderName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall,
                     ),
                   ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (message.isMine && message.state == 'failed')
+                        const Padding(
+                          padding: EdgeInsets.only(right: 6),
+                          child: Icon(Icons.error, color: Colors.red, size: 18),
+                        ),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: bubbleWidth),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color:
+                                message.isMine
+                                    ? Theme.of(
+                                      context,
+                                    ).colorScheme.primaryContainer
+                                    : Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 13,
+                              vertical: 9,
+                            ),
+                            child: Text(text),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
-              );
-            },
-          ),
+              ),
+            );
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children:
+                  message.isMine
+                      ? <Widget>[content, const SizedBox(width: 8), avatar]
+                      : <Widget>[avatar, const SizedBox(width: 8), content],
+            );
+          },
         ),
         const SizedBox(height: 8),
       ],

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,8 +17,12 @@ class LoginPage extends ConsumerStatefulWidget {
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _usernameController = TextEditingController(
+    text: kDebugMode ? 'admin' : '',
+  );
+  final _passwordController = TextEditingController(
+    text: kDebugMode ? '1a2w3E*' : '',
+  );
   bool _obscurePassword = true;
   bool _isQrLogin = false;
 

@@ -30,6 +30,30 @@ class MessageApi {
     );
   }
 
+  Future<PagedResultDto<ChatMessage>> latest({
+    required int ownerId,
+    required String sessionUnitId,
+    required int limit,
+    required int minMessageId,
+  }) async {
+    final json = await _client.get<Map<String, dynamic>>(
+      '/api/chat/message/latest',
+      query: <String, Object?>{
+        'sessionUnitId': sessionUnitId,
+        'maxResultCount': limit,
+        'minMessageId': minMessageId,
+      },
+    );
+    return PagedResultDto<ChatMessage>.fromJson(
+      json,
+      (item) => ChatMessage.fromJson(
+        item,
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+      ),
+    );
+  }
+
   Future<Map<String, dynamic>> sendText({
     required String sessionUnitId,
     required String clientMessageId,

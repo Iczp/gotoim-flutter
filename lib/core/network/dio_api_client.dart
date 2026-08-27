@@ -4,6 +4,7 @@ import 'api_client.dart';
 import 'api_exception.dart';
 import 'token_refresher.dart';
 import 'token_storage.dart';
+import 'jwt_token_expiry.dart';
 import '../device/client_device_context.dart';
 
 /// The single authenticated HTTP transport for repositories.
@@ -23,6 +24,7 @@ class DioApiClient implements ApiClient {
   final TokenRefresher _tokenRefresher;
   final ClientDeviceContext _deviceContext;
   final Map<Object, CancelToken> _cancelTokens = <Object, CancelToken>{};
+  Future<void>? _refreshInFlight;
 
   @override
   Future<void> cancelByTag(Object tag) async {
@@ -70,8 +72,18 @@ class DioApiClient implements ApiClient {
     bool hasRetriedAfterRefresh = false,
     bool retryOnUnauthorized = true,
   }) async {
+    final usesStoredAccessToken = headers?.containsKey('Authorization') != true;
+    var accessToken = await _tokenStorage.readAccessToken();
+    if (retryOnUnauthorized &&
+        usesStoredAccessToken &&
+        !hasRetriedAfterRefresh &&
+        accessToken != null &&
+        accessToken.isNotEmpty &&
+        shouldRefreshJwt(accessToken)) {
+      await _refreshOrClear();
+      accessToken = await _tokenStorage.readAccessToken();
+    }
     try {
-      final accessToken = await _tokenStorage.readAccessToken();
       final response = await _dio.request<dynamic>(
         path,
         data: data,
@@ -91,10 +103,14 @@ class DioApiClient implements ApiClient {
       return _unwrap<T>(response.data);
     } on DioException catch (error) {
       if (retryOnUnauthorized &&
+          usesStoredAccessToken &&
           error.response?.statusCode == 401 &&
           !hasRetriedAfterRefresh) {
         try {
-          await _tokenRefresher.refreshAccessToken();
+          final currentToken = await _tokenStorage.readAccessToken();
+          if (currentToken == accessToken) {
+            await _refreshOnce();
+          }
         } catch (_) {
           await _tokenRefresher.clearSession();
           rethrow;
@@ -110,6 +126,25 @@ class DioApiClient implements ApiClient {
         );
       }
       throw _toApiException(error);
+    }
+  }
+
+  Future<void> _refreshOnce() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+    final refresh = _tokenRefresher.refreshAccessToken();
+    _refreshInFlight = refresh;
+    return refresh.whenComplete(() {
+      if (identical(_refreshInFlight, refresh)) _refreshInFlight = null;
+    });
+  }
+
+  Future<void> _refreshOrClear() async {
+    try {
+      await _refreshOnce();
+    } catch (_) {
+      await _tokenRefresher.clearSession();
+      rethrow;
     }
   }
 
