@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/services/file/file_picker_service.dart';
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
+import '../../chat_settings/data/models/chat_member.dart';
+import '../../chat_settings/presentation/member_profile_sheet.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/presentation/chat_object_avatar.dart';
 
@@ -161,6 +163,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                     key: ValueKey<String>(message.localId),
                                     message: message,
                                     showTime: _showTime(message, older),
+                                    onUserTap:
+                                        () => _showSenderProfile(message),
                                     onRetry:
                                         message.messageType == 5 &&
                                                 message.state == 'failed'
@@ -200,6 +204,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           const Duration(minutes: 5);
     });
   }
+
+  Future<void> _showSenderProfile(ChatMessage message) {
+    final sender = <String, dynamic>{...message.senderSessionUnit};
+    sender.putIfAbsent(
+      'id',
+      () => message.senderSessionUnitId ?? message.sessionUnitId,
+    );
+    if (sender['owner'] == null) {
+      sender['owner'] = <String, dynamic>{
+        'displayName': message.senderName,
+        if (message.senderAvatarUrl != null)
+          'thumbnail': message.senderAvatarUrl,
+      };
+    }
+    return showMemberProfileSheet(context, ChatMember.fromJson(sender));
+  }
 }
 
 class _EmptyMessagesState extends StatelessWidget {
@@ -228,11 +248,13 @@ class _MessageRow extends StatelessWidget {
   const _MessageRow({
     required this.message,
     required this.showTime,
+    required this.onUserTap,
     this.onRetry,
     super.key,
   });
   final ChatMessage message;
   final bool showTime;
+  final VoidCallback onUserTap;
   final VoidCallback? onRetry;
 
   @override
@@ -269,10 +291,14 @@ class _MessageRow extends StatelessWidget {
         LayoutBuilder(
           builder: (context, constraints) {
             final bubbleWidth = constraints.maxWidth * 0.68;
-            final avatar = ChatObjectAvatar(
-              name: message.senderName,
-              imageUrl: message.senderAvatarUrl,
-              radius: 18,
+            final avatar = GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onUserTap,
+              child: ChatObjectAvatar(
+                name: message.senderName,
+                imageUrl: message.senderAvatarUrl,
+                radius: 18,
+              ),
             );
             final content = Expanded(
               child: Column(
@@ -281,13 +307,23 @@ class _MessageRow extends StatelessWidget {
                         ? CrossAxisAlignment.end
                         : CrossAxisAlignment.start,
                 children: <Widget>[
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      message.senderName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall,
+                  Align(
+                    alignment:
+                        message.isMine
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: onUserTap,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          message.senderName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
                     ),
                   ),
                   Row(
@@ -613,29 +649,45 @@ class _FunctionPanel extends StatelessWidget {
                     return InkWell(
                       borderRadius: BorderRadius.circular(12),
                       onTap: () => onSelected(item),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: <Widget>[
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color:
-                                  Theme.of(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final iconSize = (constraints.maxHeight - 22).clamp(
+                            34.0,
+                            44.0,
+                          );
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Container(
+                                width: iconSize,
+                                height: iconSize,
+                                decoration: BoxDecoration(
+                                  color:
+                                      Theme.of(
+                                        context,
+                                      ).colorScheme.surfaceContainerHigh,
+                                  borderRadius: BorderRadius.circular(11),
+                                ),
+                                child: Icon(
+                                  item.icon,
+                                  size: (iconSize * 0.54).clamp(19.0, 24.0),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Flexible(
+                                child: Text(
+                                  item.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textScaler: MediaQuery.textScalerOf(
                                     context,
-                                  ).colorScheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(item.icon, size: 25),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            item.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ],
+                                  ).clamp(maxScaleFactor: 1.3),
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     );
                   },

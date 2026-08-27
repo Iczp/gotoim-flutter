@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../session/presentation/chat_object_avatar.dart';
 import '../data/models/chat_member.dart';
+import 'member_profile_sheet.dart';
 
 class MemberTile extends StatelessWidget {
   const MemberTile({required this.member, this.compact = false, super.key});
@@ -79,38 +80,5 @@ class MemberTile extends StatelessWidget {
   static Future<void> showMemberDetails(
     BuildContext context,
     ChatMember member,
-  ) => showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder:
-        (context) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
-            child: Row(
-              children: <Widget>[
-                ChatObjectAvatar(
-                  name: member.name,
-                  imageUrl: member.avatarUrl.isEmpty ? null : member.avatarUrl,
-                  radius: 32,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        member.name,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(member.isCreator ? '群主' : '会话成员'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-  );
+  ) => showMemberProfileSheet(context, member);
 }
