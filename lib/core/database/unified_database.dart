@@ -283,6 +283,71 @@ class UnifiedDatabase {
     }
   }
 
+  Future<List<Map<String, Object?>>> readMessageRows({
+    required int ownerId,
+    required String sessionUnitId,
+    int? beforeScore,
+    int limit = 30,
+  }) async {
+    await initialize();
+    return _connection.runSelect(
+      'SELECT * FROM Messages WHERE ownerId = ? AND sessionUnitId = ? '
+      '${beforeScore == null ? '' : 'AND score < ? '}'
+      'ORDER BY score DESC LIMIT ?',
+      <Object?>[
+        ownerId,
+        sessionUnitId,
+        if (beforeScore != null) beforeScore,
+        limit.clamp(1, 100),
+      ],
+    );
+  }
+
+  Future<int> countMessageRows(int ownerId, String sessionUnitId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT COUNT(*) AS count FROM Messages WHERE ownerId = ? AND sessionUnitId = ?',
+      <Object?>[ownerId, sessionUnitId],
+    );
+    return (rows.single['count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<int> readMaxMessageScore(int ownerId, String sessionUnitId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT MAX(score) AS score FROM Messages WHERE ownerId = ? AND sessionUnitId = ?',
+      <Object?>[ownerId, sessionUnitId],
+    );
+    return (rows.single['score'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> upsertMessageRows(List<Map<String, Object?>> rows) async {
+    if (rows.isEmpty) return;
+    await initialize();
+    for (final row in rows) {
+      await _connection.runInsert(
+        'INSERT INTO Messages (id, serverId, score, clientMessageId, ownerId, '
+        'sessionUnitId, senderSessionUnitId, messageType, state, createTime, raw) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET '
+        'serverId = excluded.serverId, score = excluded.score, state = excluded.state, '
+        'raw = excluded.raw, updateTime = excluded.createTime',
+        <Object?>[
+          row['id'],
+          row['serverId'],
+          row['score'],
+          row['clientMessageId'],
+          row['ownerId'],
+          row['sessionUnitId'],
+          row['senderSessionUnitId'],
+          row['messageType'],
+          row['state'],
+          row['createTime'],
+          row['raw'],
+        ],
+      );
+    }
+  }
+
   /// Empties a known schema table. Arbitrary SQL/table names are intentionally
   /// not accepted by this application-level API.
   Future<int> clearTable(String table) async {

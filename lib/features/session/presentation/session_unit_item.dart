@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme_tokens.dart';
 import '../data/models/session_summary.dart';
@@ -46,9 +47,11 @@ class SessionUnitItem extends StatelessWidget {
           item.isPinned ? tokens.sessionPinnedBackground : Colors.transparent,
       child: InkWell(
         onTap:
-            () => ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('聊天页面正在迁移中'))),
+            () => context.push(
+              '/chat/${Uri.encodeComponent(item.id)}'
+              '?ownerId=${item.ownerId ?? 0}'
+              '&title=${Uri.encodeQueryComponent(item.title)}',
+            ),
         child: Container(
           height: 68,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

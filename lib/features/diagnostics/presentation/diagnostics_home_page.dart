@@ -88,6 +88,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/session-list'),
           ),
           _Item(
+            icon: Icons.chat_bubble_outline,
+            title: '聊天窗口',
+            subtitle: '本地消息、历史分页与文本发送',
+            onTap: () => context.push('/diagnostics/chat'),
+          ),
+          _Item(
             icon: Icons.perm_media_outlined,
             title: '媒体与文件测试',
             subtitle: '相册、拍照、视频、缩略图、压缩、录音、图片识码与另存为',

@@ -18,6 +18,7 @@ import '../../features/diagnostics/presentation/media_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/js_bridge_harness_page.dart';
 import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/session_list_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/chat_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/app_task_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/deep_link_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/native_diagnostics_page.dart';
@@ -28,6 +29,7 @@ import '../../features/local_file_server/pages/terminal_details_page.dart';
 import '../../features/local_file_server/pages/shared_file_manager_page.dart';
 import '../../features/workbench/presentation/workbench_page.dart';
 import '../../features/session/presentation/login_devices_page.dart';
+import '../../features/chat/presentation/chat_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
@@ -126,6 +128,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SessionListDiagnosticsPage(),
       ),
       GoRoute(
+        path: '/diagnostics/chat',
+        builder: (context, state) => const ChatDiagnosticsPage(),
+      ),
+      GoRoute(
         path: '/diagnostics/js-bridge-harness',
         builder: (context, state) => const JsBridgeHarnessPage(),
       ),
@@ -160,6 +166,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/devices',
         builder: (context, state) => const LoginDevicesPage(),
+      ),
+      GoRoute(
+        path: '/chat/:sessionUnitId',
+        builder:
+            (context, state) => ChatPage(
+              ownerId:
+                  int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
+              sessionUnitId: state.pathParameters['sessionUnitId']!,
+              title: state.uri.queryParameters['title'] ?? '聊天',
+            ),
       ),
     ],
   );
