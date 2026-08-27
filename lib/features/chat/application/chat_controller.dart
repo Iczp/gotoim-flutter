@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/services/file/file_picker_service.dart';
+import '../../../core/services/media/media_service.dart';
 import '../data/datasources/message_api.dart';
 import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
@@ -28,16 +29,19 @@ class ChatController extends ChangeNotifier {
     this._repository,
     this._sessionRepository, {
     required FilePickerService filePickerService,
+    required MediaService mediaService,
     required this.ownerId,
     required this.sessionUnitId,
     required String initialTitle,
   }) : _filePickerService = filePickerService,
+       _mediaService = mediaService,
        _title = initialTitle;
   static const pageSize = 30;
   static const initialPageSize = 10;
   final MessageRepository _repository;
   final SessionRepository _sessionRepository;
   final FilePickerService _filePickerService;
+  final MediaService _mediaService;
   final int ownerId;
   final String sessionUnitId;
   final List<ChatMessage> _messages = <ChatMessage>[];
@@ -213,6 +217,33 @@ class ChatController extends ChangeNotifier {
     }
   }
 
+  Future<void> startVoiceRecording() => _mediaService.startAudioRecording(
+    const AudioRecordingRequest(fileNamePrefix: 'gotoim_voice'),
+  );
+
+  Future<double> voiceRecordingLevel() => _mediaService.audioRecordingLevel();
+
+  Future<void> cancelVoiceRecording() => _mediaService.cancelAudioRecording();
+
+  Future<void> finishVoiceRecording(Duration duration) async {
+    final file = await _mediaService.stopAudioRecording();
+    if (file == null) return;
+    final local = await _repository.createLocalVoice(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      file: file,
+      duration: duration,
+    );
+    _pendingFiles[local.localId] = file;
+    _messages.insert(0, local);
+    _messages.sort((a, b) => b.score.compareTo(a.score));
+    notifyListeners();
+    final sent = await _repository.sendLocalVoice(local: local, file: file);
+    _replaceMessage(sent);
+    if (sent.state == 'sent') _pendingFiles.remove(local.localId);
+    notifyListeners();
+  }
+
   Future<void> _sendFile(SelectedFile file) async {
     final local = await _repository.createLocalFile(
       ownerId: ownerId,
@@ -236,7 +267,10 @@ class ChatController extends ChangeNotifier {
     final sending = message.copyWith(state: 'sending');
     _replaceMessage(sending);
     notifyListeners();
-    final sent = await _repository.sendLocalFile(local: sending, file: file);
+    final sent =
+        message.messageType == 3
+            ? await _repository.sendLocalVoice(local: sending, file: file)
+            : await _repository.sendLocalFile(local: sending, file: file);
     _replaceMessage(sent);
     if (sent.state == 'sent') _pendingFiles.remove(message.localId);
     notifyListeners();

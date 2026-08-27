@@ -137,6 +137,9 @@ abstract class MediaService {
   Future<SelectedFile?> stopAudioRecording();
 
   Future<void> cancelAudioRecording();
+
+  /// Normalized live microphone level in the 0...1 range.
+  Future<double> audioRecordingLevel();
 }
 
 AssetPickerTextDelegate _resolveAssetPickerTextDelegate(BuildContext context) {
@@ -195,7 +198,7 @@ class DefaultMediaService implements MediaService {
             }
           }
           if (xFiles.isNotEmpty) {
-            return Future.wait(xFiles.map(SelectedFile.fromXFile));
+            return await Future.wait(xFiles.map(SelectedFile.fromXFile));
           }
           return const <SelectedFile>[];
         } else {
@@ -255,7 +258,7 @@ class DefaultMediaService implements MediaService {
         if (result != null && result.isNotEmpty) {
           final file = await result.first.originFile ?? await result.first.file;
           if (file != null) {
-            return SelectedFile.fromXFile(
+            return await SelectedFile.fromXFile(
               XFile(
                 file.path,
                 name: result.first.title,
@@ -383,6 +386,12 @@ class DefaultMediaService implements MediaService {
   @override
   Future<void> cancelAudioRecording() async {
     await _audioRecorder.cancel();
+  }
+
+  @override
+  Future<double> audioRecordingLevel() async {
+    final amplitude = await _audioRecorder.getAmplitude();
+    return ((amplitude.current + 60) / 60).clamp(0.0, 1.0);
   }
 
   Future<SelectedFile?> _pickOneImage(

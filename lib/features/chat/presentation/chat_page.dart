@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/file/file_picker_service.dart';
+import '../../../core/services/media/media_service.dart';
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
 import '../../chat_settings/data/models/chat_member.dart';
@@ -39,6 +42,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ref.read(messageRepositoryProvider),
       ref.read(sessionRepositoryProvider),
       filePickerService: ref.read(filePickerServiceProvider),
+      mediaService: ref.read(mediaServiceProvider),
       ownerId: widget.ownerId,
       sessionUnitId: widget.sessionUnitId,
       initialTitle: widget.title,
@@ -166,7 +170,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                     onUserTap:
                                         () => _showSenderProfile(message),
                                     onRetry:
-                                        message.messageType == 5 &&
+                                        (message.messageType == 5 ||
+                                                    message.messageType == 3) &&
                                                 message.state == 'failed'
                                             ? () =>
                                                 controller.retryFile(message)
@@ -370,6 +375,8 @@ class _MessageRow extends StatelessWidget {
                             child:
                                 message.messageType == 5
                                     ? _FileMessageCard(message: message)
+                                    : message.messageType == 3
+                                    ? _VoiceMessageBubble(message: message)
                                     : Text(text),
                           ),
                         ),
@@ -457,6 +464,36 @@ class _FileMessageCard extends StatelessWidget {
   }
 }
 
+class _VoiceMessageBubble extends StatelessWidget {
+  const _VoiceMessageBubble({required this.message});
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final seconds = (message.audioDuration.inMilliseconds / 1000).ceil();
+    return SizedBox(
+      width: (96.0 + seconds.clamp(0, 30) * 3).clamp(96.0, 186.0),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            message.isMine
+                ? Icons.graphic_eq_rounded
+                : Icons.multitrack_audio_rounded,
+            size: 22,
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(seconds <= 0 ? '语音' : '$seconds″')),
+          if (message.state == 'sending')
+            const SizedBox.square(
+              dimension: 14,
+              child: CircularProgressIndicator(strokeWidth: 1.8),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Composer extends StatefulWidget {
   const _Composer({required this.controller, required this.input, super.key});
   final ChatController controller;
@@ -470,6 +507,15 @@ class _ComposerState extends State<_Composer> {
   final FocusNode _focusNode = FocusNode();
   final PageController _pageController = PageController();
   bool _showFunctions = false;
+  bool _voiceMode = false;
+  bool _startingRecording = false;
+  bool _recording = false;
+  bool _cancelRecording = false;
+  bool _pointerReleased = false;
+  Timer? _levelTimer;
+  final Stopwatch _recordingWatch = Stopwatch();
+  Duration _recordingDuration = Duration.zero;
+  final List<double> _levels = List<double>.filled(24, 0.08);
   int _page = 0;
 
   static const _functions = <_ChatFunction>[
@@ -487,6 +533,10 @@ class _ComposerState extends State<_Composer> {
 
   @override
   void dispose() {
+    _levelTimer?.cancel();
+    if (_recording || _startingRecording) {
+      unawaited(widget.controller.cancelVoiceRecording());
+    }
     _focusNode.dispose();
     _pageController.dispose();
     super.dispose();
@@ -505,6 +555,94 @@ class _ComposerState extends State<_Composer> {
   void closeInputArea() {
     _focusNode.unfocus();
     if (_showFunctions) setState(() => _showFunctions = false);
+  }
+
+  void _toggleVoiceMode() {
+    _focusNode.unfocus();
+    setState(() {
+      _showFunctions = false;
+      _voiceMode = !_voiceMode;
+    });
+  }
+
+  Future<void> _startRecording(LongPressStartDetails _) async {
+    if (_startingRecording || _recording) return;
+    _pointerReleased = false;
+    _startingRecording = true;
+    _recordingWatch.reset();
+    setState(() {
+      _cancelRecording = false;
+      _recordingDuration = Duration.zero;
+    });
+    try {
+      await widget.controller.startVoiceRecording();
+      _startingRecording = false;
+      if (_pointerReleased) {
+        await widget.controller.cancelVoiceRecording();
+        return;
+      }
+      if (!mounted) return;
+      _recordingWatch.start();
+      setState(() => _recording = true);
+      _levelTimer = Timer.periodic(
+        const Duration(milliseconds: 80),
+        (_) => _sampleRecordingLevel(),
+      );
+    } catch (error) {
+      _startingRecording = false;
+      _recordingWatch.stop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('无法开始录音：$error')));
+    }
+  }
+
+  Future<void> _sampleRecordingLevel() async {
+    if (!_recording) return;
+    try {
+      final level = await widget.controller.voiceRecordingLevel();
+      if (!mounted || !_recording) return;
+      setState(() {
+        _levels
+          ..removeAt(0)
+          ..add(level);
+        _recordingDuration = _recordingWatch.elapsed;
+      });
+    } catch (_) {
+      // A transient amplitude read must not terminate an active recording.
+    }
+  }
+
+  void _moveRecording(LongPressMoveUpdateDetails details) {
+    final cancel = details.localPosition.dy < -44;
+    if (cancel != _cancelRecording) {
+      setState(() => _cancelRecording = cancel);
+    }
+  }
+
+  Future<void> _endRecording(LongPressEndDetails _) async {
+    _pointerReleased = true;
+    if (_startingRecording || !_recording) return;
+    _levelTimer?.cancel();
+    _recordingWatch.stop();
+    final duration = _recordingWatch.elapsed;
+    final cancel =
+        _cancelRecording || duration < const Duration(milliseconds: 800);
+    setState(() {
+      _recording = false;
+      _recordingDuration = duration;
+    });
+    if (cancel) {
+      await widget.controller.cancelVoiceRecording();
+      if (mounted && !_cancelRecording) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('说话时间太短')));
+      }
+      return;
+    }
+    await widget.controller.finishVoiceRecording(duration);
   }
 
   Future<void> _selectFunction(_ChatFunction item) async {
@@ -530,54 +668,96 @@ class _ComposerState extends State<_Composer> {
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
             child: Row(
               children: <Widget>[
-                IconButton(onPressed: () {}, icon: const Icon(Icons.mic_none)),
+                IconButton(
+                  tooltip: _voiceMode ? '切换键盘' : '语音输入',
+                  onPressed: _toggleVoiceMode,
+                  icon: Icon(
+                    _voiceMode ? Icons.keyboard_alt_outlined : Icons.mic_none,
+                  ),
+                ),
                 Expanded(
-                  child: TextField(
-                    controller: widget.input,
-                    focusNode: _focusNode,
-                    onTap: () {
-                      if (_showFunctions) {
-                        setState(() => _showFunctions = false);
-                      }
-                    },
-                    minLines: 1,
-                    maxLines: 5,
-                    textInputAction: TextInputAction.newline,
-                    decoration: const InputDecoration(
-                      hintText: '输入消息',
-                      isDense: true,
-                      border: OutlineInputBorder(),
+                  child:
+                      _voiceMode
+                          ? GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onLongPressStart: _startRecording,
+                            onLongPressMoveUpdate: _moveRecording,
+                            onLongPressEnd: _endRecording,
+                            child: Container(
+                              height: 42,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color:
+                                    _recording
+                                        ? Theme.of(
+                                          context,
+                                        ).colorScheme.primaryContainer
+                                        : Theme.of(
+                                          context,
+                                        ).colorScheme.surfaceContainerHigh,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                _recording
+                                    ? (_cancelRecording ? '松开取消' : '松开发送')
+                                    : '按住说话',
+                              ),
+                            ),
+                          )
+                          : TextField(
+                            controller: widget.input,
+                            focusNode: _focusNode,
+                            onTap: () {
+                              if (_showFunctions) {
+                                setState(() => _showFunctions = false);
+                              }
+                            },
+                            minLines: 1,
+                            maxLines: 5,
+                            textInputAction: TextInputAction.newline,
+                            decoration: const InputDecoration(
+                              hintText: '输入消息',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                ),
+                if (!_voiceMode)
+                  IconButton(
+                    tooltip: _showFunctions ? '打开键盘' : '更多功能',
+                    onPressed: _toggleFunctions,
+                    icon: AnimatedRotation(
+                      turns: _showFunctions ? 0.125 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: const Icon(Icons.add_circle_outline),
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: _showFunctions ? '打开键盘' : '更多功能',
-                  onPressed: _toggleFunctions,
-                  icon: AnimatedRotation(
-                    turns: _showFunctions ? 0.125 : 0,
-                    duration: const Duration(milliseconds: 180),
-                    child: const Icon(Icons.add_circle_outline),
+                if (!_voiceMode)
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(56, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed:
+                        widget.controller.isSending
+                            ? null
+                            : () {
+                              final value = widget.input.text;
+                              widget.input.clear();
+                              widget.controller.send(value);
+                            },
+                    child: const Text('发送'),
                   ),
-                ),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(56, 40),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  onPressed:
-                      widget.controller.isSending
-                          ? null
-                          : () {
-                            final value = widget.input.text;
-                            widget.input.clear();
-                            widget.controller.send(value);
-                          },
-                  child: const Text('发送'),
-                ),
               ],
             ),
           ),
+          if (_recording)
+            _RecordingPanel(
+              levels: _levels,
+              duration: _recordingDuration,
+              cancelling: _cancelRecording,
+            ),
           AnimatedSize(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
@@ -718,6 +898,89 @@ class _FunctionPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+class _RecordingPanel extends StatelessWidget {
+  const _RecordingPanel({
+    required this.levels,
+    required this.duration,
+    required this.cancelling,
+  });
+  final List<double> levels;
+  final Duration duration;
+  final bool cancelling;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final seconds = duration.inSeconds;
+    return Container(
+      height: 112,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 12, 22, 10),
+      color:
+          cancelling
+              ? colorScheme.errorContainer
+              : colorScheme.surfaceContainerLowest,
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            child: CustomPaint(
+              painter: _VoiceWavePainter(
+                levels: levels,
+                color: cancelling ? colorScheme.error : colorScheme.primary,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            cancelling
+                ? '松开手指，取消发送'
+                : '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
+                    '${(seconds % 60).toString().padLeft(2, '0')}  上滑取消',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color:
+                  cancelling
+                      ? colorScheme.onErrorContainer
+                      : colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VoiceWavePainter extends CustomPainter {
+  const _VoiceWavePainter({required this.levels, required this.color});
+  final List<double> levels;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (levels.isEmpty || size.isEmpty) return;
+    final paint =
+        Paint()
+          ..color = color
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round;
+    final step = size.width / levels.length;
+    final center = size.height / 2;
+    for (var index = 0; index < levels.length; index++) {
+      final normalized = levels[index].clamp(0.06, 1.0);
+      final height = normalized * size.height * 0.9;
+      final x = step * (index + 0.5);
+      canvas.drawLine(
+        Offset(x, center - height / 2),
+        Offset(x, center + height / 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_VoiceWavePainter oldDelegate) => true;
 }
 
 class _ChatFunction {

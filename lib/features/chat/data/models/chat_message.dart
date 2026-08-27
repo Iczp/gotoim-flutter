@@ -110,6 +110,13 @@ class ChatMessage {
   String get fileName =>
       firstNonEmpty(<Object?>[content['fileName'], content['name']]);
   int get fileSize => asInt(content['size']) ?? 0;
+  Duration get audioDuration => Duration(
+    milliseconds:
+        asInt(content['time']) ??
+        asInt(content['duration']) ??
+        asInt(content['durationMs']) ??
+        0,
+  );
   String get fileSuffix => firstNonEmpty(<Object?>[
     content['suffix'],
     fileName.contains('.') ? '.${fileName.split('.').last}' : '',

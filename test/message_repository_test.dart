@@ -265,6 +265,45 @@ void main() {
     },
   );
 
+  test('voice is persisted before upload with duration and sound type', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final temp = await File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}gotoim-voice-message-test.m4a',
+    ).writeAsBytes(<int>[0, 1, 2, 3]);
+    addTearDown(() => temp.delete());
+    final selected = await SelectedFile.fromXFile(XFile(temp.path));
+    final dao = MessageDao(database);
+    final client =
+        _FakeApiClient()
+          ..multipartResponse = <String, dynamic>{
+            'id': 89,
+            'messageType': 3,
+            'content': <String, dynamic>{'url': '/voice/89.m4a'},
+          };
+    final repository = MessageRepository(api: MessageApi(client), dao: dao);
+
+    final local = await repository.createLocalVoice(
+      ownerId: 7,
+      sessionUnitId: 'session',
+      file: selected,
+      duration: const Duration(milliseconds: 2300),
+    );
+    expect(local.messageType, 3);
+    expect(local.state, 'sending');
+    expect(local.audioDuration, const Duration(milliseconds: 2300));
+
+    final sent = await repository.sendLocalVoice(local: local, file: selected);
+    final persisted =
+        (await dao.readPage(ownerId: 7, sessionUnitId: 'session')).single;
+    expect(sent.messageType, 3);
+    expect(persisted.serverId, 89);
+    expect(persisted.state, 'sent');
+    expect(persisted.audioDuration, const Duration(milliseconds: 2300));
+  });
+
   test('sent message updates friend summary and publishes change', () async {
     final database = UnifiedDatabase(
       DatabaseConnection(NativeDatabase.memory()),

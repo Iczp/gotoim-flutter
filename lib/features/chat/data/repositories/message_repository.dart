@@ -226,6 +226,95 @@ class MessageRepository {
     return message;
   }
 
+  Future<ChatMessage> createLocalVoice({
+    required int ownerId,
+    required String sessionUnitId,
+    required SelectedFile file,
+    required Duration duration,
+  }) async {
+    final clientId = '${DateTime.now().microsecondsSinceEpoch}';
+    final maxScore = await _dao.maxScore(ownerId, sessionUnitId);
+    final now = DateTime.now();
+    final message = ChatMessage(
+      localId: clientId,
+      serverId: null,
+      clientMessageId: clientId,
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      senderSessionUnitId: sessionUnitId,
+      messageType: 3,
+      state: 'sending',
+      score: maxScore + 1,
+      createdAt: now,
+      raw: <String, dynamic>{
+        'messageType': 3,
+        'creationTime': now.toIso8601String(),
+        'content': <String, dynamic>{
+          'fileName': file.name,
+          'contentType': file.mimeType ?? 'audio/mp4',
+          'size': file.size,
+          'time': duration.inMilliseconds,
+          'suffix': file.extension == null ? '' : '.${file.extension}',
+          if (file.originalPath != null) 'path': file.originalPath,
+        },
+      },
+    );
+    await _dao.upsertAll(<ChatMessage>[message]);
+    debugPrint(
+      '[sendVoice][local] session=$sessionUnitId localId=$clientId '
+      'durationMs=${duration.inMilliseconds} state=sending',
+    );
+    return message;
+  }
+
+  Future<ChatMessage> sendLocalVoice({
+    required ChatMessage local,
+    required SelectedFile file,
+  }) async {
+    var result = local;
+    try {
+      final response = await _api.sendUploadFile(
+        sessionUnitId: local.sessionUnitId,
+        fileName: file.name,
+        fileLength: file.size,
+        openRead: file.readAsByteStream,
+      );
+      final serverId =
+          response['id'] is num
+              ? (response['id'] as num).toInt()
+              : int.tryParse('${response['id']}');
+      result = local.copyWith(
+        serverId: serverId,
+        score: serverId == null ? local.score : serverId * 1000000,
+        state: 'sent',
+        raw: <String, dynamic>{
+          ...response,
+          'messageType': 3,
+          'content': <String, dynamic>{
+            ...local.content,
+            ...?response['content'] as Map<String, dynamic>?,
+          },
+        },
+      );
+      debugPrint(
+        '[sendVoice][remote] session=${local.sessionUnitId} '
+        'localId=${local.localId} serverId=$serverId state=sent',
+      );
+    } catch (error) {
+      result = local.copyWith(
+        state: 'failed',
+        raw: <String, dynamic>{...local.raw, 'error': '$error'},
+      );
+      debugPrint(
+        '[sendVoice][failed] session=${local.sessionUnitId} '
+        'localId=${local.localId} error=$error',
+      );
+    }
+    await _dao.upsertAll(<ChatMessage>[result]);
+    if (result.state == 'sent') await _updateSessionSummary(result);
+    return result;
+  }
+
   Future<ChatMessage> sendLocalFile({
     required ChatMessage local,
     required SelectedFile file,
