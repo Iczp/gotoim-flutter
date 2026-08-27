@@ -69,6 +69,13 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> sessionInvalidated() async {
+    await _signalRGateway.disconnect();
+    _status = AuthStatus.unauthenticated;
+    _errorMessage = '登录已过期，请重新登录。';
+    notifyListeners();
+  }
+
   Future<void> _restore() async {
     try {
       final hasSession = await _repository.restoreSession().timeout(

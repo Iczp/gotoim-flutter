@@ -29,6 +29,8 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     tokenStorage: ref.watch(tokenStorageProvider),
     tokenRefresher: authRepository as OpenIdConnectAuthRepository,
     deviceContext: ref.watch(clientDeviceContextProvider),
+    onSessionInvalidated:
+        () => ref.read(authControllerProvider.notifier).sessionInvalidated(),
   );
 });
 

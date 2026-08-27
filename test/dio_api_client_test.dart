@@ -57,6 +57,31 @@ void main() {
     final expiry = DateTime.utc(2030, 1, 1);
     expect(readJwtExpiry(_jwt(expiry)), expiry);
   });
+
+  test('missing refresh token clears session and notifies auth once', () async {
+    final storage = _MemoryTokenStorage(
+      _jwt(DateTime.now().add(const Duration(minutes: 1))),
+      null,
+    );
+    final refresher = _MissingRefreshRefresher(storage);
+    var invalidations = 0;
+    final client = DioApiClient(
+      dio: _tokenDio(<String?>[]),
+      tokenStorage: storage,
+      tokenRefresher: refresher,
+      deviceContext: _device,
+      onSessionInvalidated: () => invalidations++,
+    );
+
+    await expectLater(
+      client.get<Map<String, dynamic>>('/business'),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(storage.accessToken, isNull);
+    expect(storage.refreshToken, isNull);
+    expect(invalidations, 1);
+  });
 }
 
 String _jwt(DateTime expiry) {
@@ -115,6 +140,19 @@ class _FakeRefresher implements TokenRefresher {
     calls++;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     await storage.save(accessToken: 'fresh-token', refreshToken: 'refresh');
+  }
+}
+
+class _MissingRefreshRefresher implements TokenRefresher {
+  _MissingRefreshRefresher(this.storage);
+  final _MemoryTokenStorage storage;
+
+  @override
+  Future<void> clearSession() => storage.clear();
+
+  @override
+  Future<void> refreshAccessToken() async {
+    throw StateError('No refresh token is available.');
   }
 }
 

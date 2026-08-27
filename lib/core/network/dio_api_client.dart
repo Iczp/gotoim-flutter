@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 
 import 'api_client.dart';
@@ -14,17 +16,21 @@ class DioApiClient implements ApiClient {
     required TokenStorage tokenStorage,
     required TokenRefresher tokenRefresher,
     required ClientDeviceContext deviceContext,
+    FutureOr<void> Function()? onSessionInvalidated,
   }) : _dio = dio,
        _tokenStorage = tokenStorage,
        _tokenRefresher = tokenRefresher,
-       _deviceContext = deviceContext;
+       _deviceContext = deviceContext,
+       _onSessionInvalidated = onSessionInvalidated;
 
   final Dio _dio;
   final TokenStorage _tokenStorage;
   final TokenRefresher _tokenRefresher;
   final ClientDeviceContext _deviceContext;
+  final FutureOr<void> Function()? _onSessionInvalidated;
   final Map<Object, CancelToken> _cancelTokens = <Object, CancelToken>{};
   Future<void>? _refreshInFlight;
+  Future<void>? _sessionInvalidationInFlight;
 
   @override
   Future<void> cancelByTag(Object tag) async {
@@ -135,7 +141,7 @@ class DioApiClient implements ApiClient {
             await _refreshOnce();
           }
         } catch (_) {
-          await _tokenRefresher.clearSession();
+          await _invalidateSession();
           rethrow;
         }
         return _request<T>(
@@ -167,9 +173,24 @@ class DioApiClient implements ApiClient {
     try {
       await _refreshOnce();
     } catch (_) {
-      await _tokenRefresher.clearSession();
+      await _invalidateSession();
       rethrow;
     }
+  }
+
+  Future<void> _invalidateSession() {
+    final inFlight = _sessionInvalidationInFlight;
+    if (inFlight != null) return inFlight;
+    final invalidation = () async {
+      await _tokenRefresher.clearSession();
+      await _onSessionInvalidated?.call();
+    }();
+    _sessionInvalidationInFlight = invalidation;
+    return invalidation.whenComplete(() {
+      if (identical(_sessionInvalidationInFlight, invalidation)) {
+        _sessionInvalidationInFlight = null;
+      }
+    });
   }
 
   T _unwrap<T>(dynamic data) {

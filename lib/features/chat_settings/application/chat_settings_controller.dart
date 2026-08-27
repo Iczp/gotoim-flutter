@@ -82,7 +82,7 @@ class ChatSettingsController extends ChangeNotifier {
       loading = false;
       notifyListeners();
     }
-    unawaited(_refreshFriend());
+    unawaited(_refreshFriendSafely());
   }
 
   Future<void> refresh() async {
@@ -115,6 +115,17 @@ class ChatSettingsController extends ChangeNotifier {
       sessionUnitId: sessionUnitId,
     );
     notifyListeners();
+  }
+
+  Future<void> _refreshFriendSafely() async {
+    try {
+      await _refreshFriend();
+    } catch (exception) {
+      debugPrint(
+        '[chatSettings][remote-friend-failed] session=$sessionUnitId '
+        'keepLocal=${friend != null} error=$exception',
+      );
+    }
   }
 
   Future<void> setTopping(bool value) =>
