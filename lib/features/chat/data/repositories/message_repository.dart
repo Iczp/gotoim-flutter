@@ -1,16 +1,26 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/services/file/file_picker_service.dart';
+import '../../../session/data/datasources/session_dao.dart';
+import '../../../session/data/session_change_bus.dart';
 import '../datasources/message_api.dart';
 import '../datasources/message_dao.dart';
 import '../models/chat_message.dart';
 
 class MessageRepository {
-  MessageRepository({required MessageApi api, required MessageDao dao})
-    : _api = api,
-      _dao = dao;
+  MessageRepository({
+    required MessageApi api,
+    required MessageDao dao,
+    SessionDao? sessionDao,
+    SessionChangeBus? sessionChangeBus,
+  }) : _api = api,
+       _dao = dao,
+       _sessionDao = sessionDao,
+       _sessionChangeBus = sessionChangeBus;
   final MessageApi _api;
   final MessageDao _dao;
+  final SessionDao? _sessionDao;
+  final SessionChangeBus? _sessionChangeBus;
 
   Future<MessagePage> loadInitialLocal({
     required int ownerId,
@@ -117,6 +127,11 @@ class MessageRepository {
     }
     final items = collected.values.toList(growable: false);
     await _dao.upsertAll(items);
+    if (items.isNotEmpty) {
+      final newest = [...items]
+        ..sort((a, b) => (b.serverId ?? 0).compareTo(a.serverId ?? 0));
+      await _updateSessionSummary(newest.first);
+    }
     debugPrint(
       '[loadMessages][latest] session=$sessionUnitId minMessageId=$minMessageId '
       'received=${items.length} persisted=${items.length}',
@@ -168,6 +183,7 @@ class MessageRepository {
       local = local.copyWith(state: 'failed');
     }
     await _dao.upsertAll(<ChatMessage>[local]);
+    if (local.state == 'sent') await _updateSessionSummary(local);
     return local;
   }
 
@@ -247,7 +263,20 @@ class MessageRepository {
       );
     }
     await _dao.upsertAll(<ChatMessage>[result]);
+    if (result.state == 'sent') await _updateSessionSummary(result);
     return result;
+  }
+
+  Future<void> _updateSessionSummary(ChatMessage message) async {
+    await _sessionDao?.updateLastMessage(
+      ownerId: message.ownerId,
+      sessionUnitId: message.sessionUnitId,
+      message: message.raw,
+    );
+    _sessionChangeBus?.publish(
+      ownerId: message.ownerId,
+      sessionUnitId: message.sessionUnitId,
+    );
   }
 }
 

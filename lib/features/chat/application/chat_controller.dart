@@ -10,12 +10,16 @@ import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
 import '../data/repositories/message_repository.dart';
 import '../../session/data/models/session_summary.dart';
+import '../../session/data/datasources/session_dao.dart';
 import '../../session/data/repositories/session_repository.dart';
+import '../../session/data/session_change_bus.dart';
 
 final messageRepositoryProvider = Provider<MessageRepository>(
   (ref) => MessageRepository(
     api: MessageApi(ref.watch(apiClientProvider)),
     dao: MessageDao(ref.watch(unifiedDatabaseProvider)),
+    sessionDao: SessionDao(ref.watch(unifiedDatabaseProvider)),
+    sessionChangeBus: ref.watch(sessionChangeBusProvider),
   ),
 );
 

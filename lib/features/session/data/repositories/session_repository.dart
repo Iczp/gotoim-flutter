@@ -6,14 +6,20 @@ import '../models/session_summary.dart';
 import '../models/logged_in_device.dart';
 import '../models/chat_owner.dart';
 import '../models/paged_result_dto.dart';
+import '../session_change_bus.dart';
 
 class SessionRepository {
-  SessionRepository({required SessionUnitApi api, required SessionDao dao})
-    : _api = api,
-      _dao = dao;
+  SessionRepository({
+    required SessionUnitApi api,
+    required SessionDao dao,
+    SessionChangeBus? changeBus,
+  }) : _api = api,
+       _dao = dao,
+       _changeBus = changeBus;
 
   final SessionUnitApi _api;
   final SessionDao _dao;
+  final SessionChangeBus? _changeBus;
 
   Future<List<ChatOwner>> loadLocalOwners() => _dao.readOwners();
 
@@ -144,6 +150,7 @@ class SessionRepository {
       sessionUnitId: sessionUnitId,
     );
     await _dao.upsertAll(<SessionSummary>[friend]);
+    _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
     debugPrint('[loadFriendDetail][remote] session=$sessionUnitId persisted=1');
     return friend;
   }
@@ -160,6 +167,9 @@ class SessionRepository {
         changed[item.id] = item;
       }
       await _dao.upsertAll(page.items);
+      for (final item in page.items) {
+        _changeBus?.publish(ownerId: ownerId, sessionUnitId: item.id);
+      }
       final nextTicks = page.items
           .map((item) => item.ticks)
           .fold<int>(minTicks, (max, ticks) => ticks > max ? ticks : max);

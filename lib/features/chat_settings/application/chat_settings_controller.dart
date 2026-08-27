@@ -7,6 +7,7 @@ import '../../../app/application_providers.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/data/models/session_summary_helpers.dart';
 import '../../session/data/repositories/session_repository.dart';
+import '../../session/data/session_change_bus.dart';
 import '../data/datasources/chat_member_api.dart';
 import '../data/datasources/chat_member_dao.dart';
 import '../data/models/chat_member.dart';
@@ -16,6 +17,7 @@ final chatSettingsRepositoryProvider = Provider<ChatSettingsRepository>(
   (ref) => ChatSettingsRepository(
     api: ChatMemberApi(ref.watch(apiClientProvider)),
     dao: ChatMemberDao(ref.watch(unifiedDatabaseProvider)),
+    sessionChangeBus: ref.watch(sessionChangeBusProvider),
   ),
 );
 

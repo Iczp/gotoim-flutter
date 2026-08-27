@@ -12,6 +12,7 @@ import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
 import 'package:gotoim_flutter/features/chat/data/repositories/message_repository.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_dao.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
+import 'package:gotoim_flutter/features/session/data/session_change_bus.dart';
 import 'package:image_picker/image_picker.dart';
 
 void main() {
@@ -263,6 +264,52 @@ void main() {
       expect(afterUpload.state, 'sent');
     },
   );
+
+  test('sent message updates friend summary and publishes change', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final sessionDao = SessionDao(database);
+    await sessionDao.upsertAll(<SessionSummary>[
+      SessionSummary.fromJson(<String, dynamic>{
+        'id': 'session',
+        'ownerId': 7,
+        'score': 1,
+        'ticks': 1,
+        'destination': <String, dynamic>{'name': '会话'},
+      }),
+    ]);
+    final bus = SessionChangeBus();
+    addTearDown(bus.dispose);
+    final event = bus.events.first;
+    final client =
+        _FakeApiClient()
+          ..postResponse = <String, dynamic>{
+            'id': 99,
+            'clientMessageId': 'client-99',
+            'messageType': 0,
+            'creationTime': '2026-08-27T09:00:00Z',
+            'content': <String, dynamic>{'text': '新消息'},
+          };
+    final repository = MessageRepository(
+      api: MessageApi(client),
+      dao: MessageDao(database),
+      sessionDao: sessionDao,
+      sessionChangeBus: bus,
+    );
+
+    await repository.sendText(
+      ownerId: 7,
+      sessionUnitId: 'session',
+      text: '新消息',
+    );
+
+    final friend = await sessionDao.readById('session');
+    expect(friend?.preview, '新消息');
+    expect(friend?.unreadCount, 0);
+    expect((await event).sessionUnitId, 'session');
+  });
 }
 
 class _FakeApiClient implements ApiClient {
@@ -272,6 +319,7 @@ class _FakeApiClient implements ApiClient {
   final List<Map<String, Object?>> queries = <Map<String, Object?>>[];
   final List<String> multipartPaths = <String>[];
   Map<String, dynamic>? multipartResponse;
+  Map<String, dynamic>? postResponse;
 
   @override
   Future<T> get<T>(
@@ -291,7 +339,7 @@ class _FakeApiClient implements ApiClient {
     Object? data,
     Map<String, String>? headers,
     bool retryOnUnauthorized = true,
-  }) => throw UnimplementedError();
+  }) async => postResponse as T;
 
   @override
   Future<T> postMultipart<T>(

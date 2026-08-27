@@ -14,11 +14,13 @@ import '../data/models/chat_owner.dart';
 import '../data/models/session_summary.dart';
 import '../data/models/logged_in_device.dart';
 import '../data/repositories/session_repository.dart';
+import '../data/session_change_bus.dart';
 
 final sessionRepositoryProvider = Provider<SessionRepository>(
   (ref) => SessionRepository(
     api: SessionUnitApi(ref.watch(apiClientProvider)),
     dao: SessionDao(ref.watch(unifiedDatabaseProvider)),
+    changeBus: ref.watch(sessionChangeBusProvider),
   ),
 );
 
@@ -28,6 +30,7 @@ final sessionListControllerProvider =
         ref.watch(sessionRepositoryProvider),
         ref.watch(signalRGatewayProvider),
         ref.watch(clientDeviceContextProvider),
+        ref.watch(sessionChangeBusProvider),
       ),
     );
 
@@ -36,19 +39,30 @@ class SessionListController extends ChangeNotifier {
     this._repository,
     this._signalRGateway,
     this._deviceContext,
+    this._changeBus,
   ) : _connectionState = _signalRGateway.connectionState {
     _signalSubscription = _signalRGateway.events.listen((event) {
       if (event is SignalRConnectionEvent) {
         _connectionState = event.state;
         notifyListeners();
+      } else if (event is SignalRCommandEvent &&
+          _shouldSyncForCommand(event.command)) {
+        _scheduleRemoteChanges();
       }
+    });
+    _changeSubscription = _changeBus.events.listen((event) {
+      if (event.ownerId == _currentOwner?.id) _scheduleLocalReload();
     });
   }
   static const pageSize = 50;
   final SessionRepository _repository;
   final SignalRGateway _signalRGateway;
   final ClientDeviceContext _deviceContext;
+  final SessionChangeBus _changeBus;
   late final StreamSubscription<SignalRAppEvent> _signalSubscription;
+  late final StreamSubscription<SessionChangeEvent> _changeSubscription;
+  Timer? _localReloadTimer;
+  Timer? _remoteChangeTimer;
   final List<SessionSummary> _sessions = [];
   List<ChatOwner> _owners = const [];
   ChatOwner? _currentOwner;
@@ -186,7 +200,46 @@ class SessionListController extends ChangeNotifier {
   @override
   void dispose() {
     _signalSubscription.cancel();
+    _changeSubscription.cancel();
+    _localReloadTimer?.cancel();
+    _remoteChangeTimer?.cancel();
     super.dispose();
+  }
+
+  bool _shouldSyncForCommand(SignalRCommand command) =>
+      command == SignalRCommand.messageCreated ||
+      command == SignalRCommand.messageForwarded ||
+      command == SignalRCommand.messageUpdated ||
+      command == SignalRCommand.messageBadgeUpdated ||
+      command == SignalRCommand.messageRollbacked ||
+      command == SignalRCommand.sessionUnitChanged;
+
+  void _scheduleLocalReload() {
+    _localReloadTimer?.cancel();
+    _localReloadTimer = Timer(const Duration(milliseconds: 80), () async {
+      final owner = _currentOwner;
+      if (owner == null) return;
+      final local = await _repository.loadLocalFriends(
+        ownerId: owner.id,
+        limit: _sessions.length < pageSize ? pageSize : _sessions.length,
+      );
+      _sessions
+        ..clear()
+        ..addAll(local);
+      notifyListeners();
+    });
+  }
+
+  void _scheduleRemoteChanges() {
+    _remoteChangeTimer?.cancel();
+    _remoteChangeTimer = Timer(const Duration(milliseconds: 250), () async {
+      if (_currentOwner == null || _isRefreshing) return;
+      try {
+        await refreshChanges();
+      } catch (_) {
+        // refreshChanges already exposes the error to diagnostics/UI.
+      }
+    });
   }
 
   Future<void> selectOwner(ChatOwner owner) async {

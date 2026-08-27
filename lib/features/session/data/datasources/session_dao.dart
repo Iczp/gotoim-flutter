@@ -82,6 +82,16 @@ class SessionDao {
         sessions.map((session) => session.toDatabaseValues()).toList(),
       );
 
+  Future<void> updateLastMessage({
+    required int ownerId,
+    required String sessionUnitId,
+    required Map<String, dynamic> message,
+  }) => _database.updateFriendLastMessage(
+    ownerId: ownerId,
+    sessionUnitId: sessionUnitId,
+    message: message,
+  );
+
   String _loadedAllKey(int ownerId) => 'friends-is-loaded-all-$ownerId';
 }
 

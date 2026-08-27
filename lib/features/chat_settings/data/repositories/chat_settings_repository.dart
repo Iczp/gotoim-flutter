@@ -3,16 +3,20 @@ import 'package:flutter/foundation.dart';
 import '../datasources/chat_member_api.dart';
 import '../datasources/chat_member_dao.dart';
 import '../models/chat_member.dart';
+import '../../../session/data/session_change_bus.dart';
 
 class ChatSettingsRepository {
   ChatSettingsRepository({
     required ChatMemberApi api,
     required ChatMemberDao dao,
+    SessionChangeBus? sessionChangeBus,
   }) : _api = api,
-       _dao = dao;
+       _dao = dao,
+       _sessionChangeBus = sessionChangeBus;
 
   final ChatMemberApi _api;
   final ChatMemberDao _dao;
+  final SessionChangeBus? _sessionChangeBus;
 
   Future<MemberPage> loadMembers({
     required int ownerId,
@@ -83,6 +87,7 @@ class ChatSettingsRepository {
   Future<void> clearMessages(int ownerId, String id) async {
     await _api.clearMessages(id);
     await _dao.clearMessages(ownerId, id);
+    _sessionChangeBus?.publish(ownerId: ownerId, sessionUnitId: id);
   }
 }
 
