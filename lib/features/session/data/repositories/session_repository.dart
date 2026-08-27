@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../datasources/session_dao.dart';
 import '../datasources/session_unit_api.dart';
 import '../models/session_summary.dart';
@@ -40,30 +42,61 @@ class SessionRepository {
       cursor: cursor,
       limit: limit,
     );
+    debugPrint(
+      '[loadFriends][local] ownerId=$ownerId cursor=${cursor?.id} '
+      'requested=$limit added=${localItems.length}',
+    );
     if (localItems.length >= limit) {
+      debugPrint(
+        '[loadFriends][result] source=local ownerId=$ownerId '
+        'added=${localItems.length} hasMore=true',
+      );
       return LoadFriendsResult(items: localItems, hasMore: true);
     }
     if (await _dao.isLoadedAll(ownerId)) {
+      final totalCount = await _dao.count(ownerId);
+      debugPrint(
+        '[loadFriends][result] source=local ownerId=$ownerId '
+        'added=${localItems.length} hasMore=false totalCount=$totalCount',
+      );
       return LoadFriendsResult(
         items: localItems,
         hasMore: false,
-        totalCount: await _dao.count(ownerId),
+        totalCount: totalCount,
       );
     }
     final last = localItems.isNotEmpty ? localItems.last : null;
+    final maxMessageId = last?.lastMessageId ?? cursor?.maxMessageId;
+    debugPrint(
+      '[loadFriends][remote] ownerId=$ownerId '
+      'maxMessageId=$maxMessageId maxScore=${last?.score ?? cursor?.score} '
+      'cursorId=${last?.id ?? cursor?.id} '
+      'requested=${limit - localItems.length}',
+    );
     final remote = await _api.getFriends(
       ownerId: ownerId,
       maxResultCount: limit - localItems.length,
+      maxMessageId: maxMessageId,
       maxScore: last?.score ?? cursor?.score,
       cursorId: last?.id ?? cursor?.id,
     );
     await _dao.upsertAll(remote.items);
     final hasMore = remote.items.length == limit - localItems.length;
+    debugPrint(
+      '[loadFriends][remote] ownerId=$ownerId received=${remote.items.length} '
+      'persisted=${remote.items.length} hasMore=$hasMore '
+      'totalCount=${remote.totalCount}',
+    );
     if (!hasMore) await _dao.markLoadedAll(ownerId, true);
     final unique = <String, SessionSummary>{
       for (final item in localItems) item.id: item,
       for (final item in remote.items) item.id: item,
     };
+    debugPrint(
+      '[loadFriends][result] source=local+remote ownerId=$ownerId '
+      'localAdded=${localItems.length} remoteAdded=${remote.items.length} '
+      'pageAdded=${unique.length} hasMore=$hasMore',
+    );
     return LoadFriendsResult(
       items: unique.values.toList(),
       hasMore: hasMore,

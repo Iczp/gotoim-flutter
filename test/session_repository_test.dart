@@ -104,12 +104,63 @@ void main() {
     expect(result.totalCount, 125);
     expect(result.items.single.id, 'remote');
   });
+
+  test('loadFriends sends the last local maxMessageId to HTTP', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = SessionDao(database);
+    await dao.upsertAll([
+      SessionSummary.fromJson({
+        'id': 'local',
+        'ownerId': 7,
+        'score': 20,
+        'ticks': 20,
+        'destination': {'name': 'local'},
+        'lastMessage': {'id': 9001},
+      }),
+    ]);
+    final client = _FakeApiClient(
+      responses: {
+        '/api/chat/session-unit-cache/friends': {
+          'items': [
+            {
+              'id': 'remote',
+              'ownerId': 7,
+              'score': 10,
+              'ticks': 10,
+              'destination': {'name': 'remote'},
+            },
+          ],
+          'totalCount': 2,
+        },
+      },
+    );
+    final repository = SessionRepository(api: SessionUnitApi(client), dao: dao);
+
+    final localPage = await repository.loadFriends(ownerId: 7, limit: 1);
+    expect(localPage.items.single.id, 'local');
+    expect(client.getPaths, isEmpty);
+
+    final result = await repository.loadFriends(
+      ownerId: 7,
+      limit: 1,
+      cursor: const SessionCursor(id: 'local', score: 20, maxMessageId: 9001),
+    );
+
+    expect(result.items.single.id, 'remote');
+    expect(client.getQueries.single['maxMessageId'], 9001);
+    expect(client.getQueries.single['maxScore'], 20);
+    expect(client.getQueries.single['cursorId'], 'local');
+  });
 }
 
 class _FakeApiClient implements ApiClient {
   _FakeApiClient({this.responses = const {}});
   final Map<String, Map<String, dynamic>> responses;
   final List<String> getPaths = [];
+  final List<Map<String, Object?>> getQueries = [];
 
   @override
   Future<T> get<T>(
@@ -118,6 +169,7 @@ class _FakeApiClient implements ApiClient {
     bool retryOnUnauthorized = true,
   }) async {
     getPaths.add(path);
+    getQueries.add(query ?? const {});
     final response = responses[path];
     if (response == null) throw StateError('Unexpected GET $path');
     return response as T;

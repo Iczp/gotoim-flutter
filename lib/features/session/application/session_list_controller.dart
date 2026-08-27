@@ -196,7 +196,13 @@ class SessionListController extends ChangeNotifier {
     final result = await _repository.loadFriends(
       ownerId: owner.id,
       cursor:
-          last == null ? null : SessionCursor(id: last.id, score: last.score),
+          last == null
+              ? null
+              : SessionCursor(
+                id: last.id,
+                score: last.score,
+                maxMessageId: last.lastMessageId,
+              ),
       limit: pageSize,
     );
     if (reset) _sessions.clear();

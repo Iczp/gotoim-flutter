@@ -65,6 +65,8 @@ class SessionSummary {
   final bool isPinned;
   final Map<String, dynamic> raw;
 
+  int? get lastMessageId => asInt(asMap(raw['lastMessage'])['id']);
+
   String get messageTypeLabel => messageContentType(asMap(raw['lastMessage']));
 
   Map<String, Object?> toDatabaseValues() => <String, Object?>{

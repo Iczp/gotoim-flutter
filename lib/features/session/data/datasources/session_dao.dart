@@ -65,7 +65,12 @@ class SessionDao {
 }
 
 class SessionCursor {
-  const SessionCursor({required this.id, required this.score});
+  const SessionCursor({
+    required this.id,
+    required this.score,
+    this.maxMessageId,
+  });
   final String id;
   final int score;
+  final int? maxMessageId;
 }
