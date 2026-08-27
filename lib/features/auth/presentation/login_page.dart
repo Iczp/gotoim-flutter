@@ -21,7 +21,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     text: kDebugMode ? 'admin' : '',
   );
   final _passwordController = TextEditingController(
-    text: kDebugMode ? '1a2w3E*' : '',
+    text: kDebugMode ? '1q2w3E*' : '',
   );
   bool _obscurePassword = true;
   bool _isQrLogin = false;
