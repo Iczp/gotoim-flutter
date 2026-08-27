@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
+import '../../session/application/session_list_controller.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
@@ -28,9 +29,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     super.initState();
     controller = ChatController(
       ref.read(messageRepositoryProvider),
+      ref.read(sessionRepositoryProvider),
       ownerId: widget.ownerId,
       sessionUnitId: widget.sessionUnitId,
-    )..loadMore();
+      initialTitle: widget.title,
+    )..initialize();
   }
 
   @override
@@ -46,7 +49,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     builder:
         (context, _) => Scaffold(
           appBar: AppBar(
-            title: Text(widget.title, overflow: TextOverflow.ellipsis),
+            title: Text(controller.title, overflow: TextOverflow.ellipsis),
             actions: <Widget>[
               IconButton(onPressed: () {}, icon: const Icon(Icons.more_horiz)),
             ],
@@ -56,7 +59,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               Expanded(
                 child: NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
-                    if (notification.metrics.extentAfter < 180) {
+                    final isUserPaging =
+                        (notification is ScrollUpdateNotification &&
+                            notification.dragDetails != null) ||
+                        notification is OverscrollNotification;
+                    if (isUserPaging &&
+                        notification.metrics.extentAfter < 180) {
                       controller.loadMore();
                     }
                     return false;
@@ -80,6 +88,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         }
                         if (controller.error != null) {
                           return TextButton(
+                            style: _compactTextButtonStyle,
                             onPressed: controller.loadMore,
                             child: Text('加载失败，点击重试：${controller.error}'),
                           );
@@ -87,9 +96,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         return Center(
                           child: Padding(
                             padding: const EdgeInsets.all(16),
-                            child: Text(
-                              controller.hasMore ? '加载更多消息' : '美好生活从这里开始',
-                            ),
+                            child:
+                                controller.hasMore
+                                    ? TextButton(
+                                      style: _compactTextButtonStyle,
+                                      onPressed: controller.loadMore,
+                                      child: const Text('加载更多消息'),
+                                    )
+                                    : const Text('美好生活从这里开始'),
                           ),
                         );
                       }
@@ -163,35 +177,45 @@ class _MessageRow extends StatelessWidget {
         Align(
           alignment:
               message.isMine ? Alignment.centerRight : Alignment.centerLeft,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (message.isMine && message.state == 'failed')
-                const Padding(
-                  padding: EdgeInsets.only(right: 6),
-                  child: Icon(Icons.error, color: Colors.red, size: 18),
-                ),
-              Flexible(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color:
-                        message.isMine
-                            ? Theme.of(context).colorScheme.primaryContainer
-                            : Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 13,
-                      vertical: 9,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final bubbleWidth = constraints.maxWidth * 0.72;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment:
+                    message.isMine
+                        ? MainAxisAlignment.end
+                        : MainAxisAlignment.start,
+                children: <Widget>[
+                  if (message.isMine && message.state == 'failed')
+                    const Padding(
+                      padding: EdgeInsets.only(right: 6),
+                      child: Icon(Icons.error, color: Colors.red, size: 18),
                     ),
-                    child: Text(text),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: bubbleWidth),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color:
+                            message.isMine
+                                ? Theme.of(context).colorScheme.primaryContainer
+                                : Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 13,
+                          vertical: 9,
+                        ),
+                        child: Text(text),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
         const SizedBox(height: 8),
@@ -236,6 +260,11 @@ class _Composer extends StatelessWidget {
             icon: const Icon(Icons.add_circle_outline),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(56, 40),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
             onPressed:
                 controller.isSending
                     ? null
@@ -251,3 +280,8 @@ class _Composer extends StatelessWidget {
     ),
   );
 }
+
+final ButtonStyle _compactTextButtonStyle = TextButton.styleFrom(
+  minimumSize: const Size(0, 40),
+  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+);

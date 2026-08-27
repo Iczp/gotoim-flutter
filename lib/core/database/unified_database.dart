@@ -188,6 +188,33 @@ class UnifiedDatabase {
     );
   }
 
+  Future<Map<String, Object?>?> readFriendRow(String id) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT id, ownerId, score, ticks, raw FROM Friends WHERE id = ? LIMIT 1',
+      <Object?>[id],
+    );
+    return rows.isEmpty ? null : rows.single;
+  }
+
+  Future<bool> readFriendMessagesLoadedAll(String id) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT isMessageLoadedAll FROM Friends WHERE id = ? LIMIT 1',
+      <Object?>[id],
+    );
+    return rows.isNotEmpty &&
+        ((rows.single['isMessageLoadedAll'] as num?)?.toInt() ?? 0) > 0;
+  }
+
+  Future<void> writeFriendMessagesLoadedAll(String id, bool value) async {
+    await initialize();
+    await _connection.runUpdate(
+      'UPDATE Friends SET isMessageLoadedAll = ?, updateTime = ? WHERE id = ?',
+      <Object?>[value ? 1 : 0, DateTime.now().millisecondsSinceEpoch, id],
+    );
+  }
+
   Future<int?> readMaxFriendTicks(int ownerId) async {
     await initialize();
     final rows = await _connection.runSelect(

@@ -11,6 +11,24 @@ class MessageRepository {
   final MessageApi _api;
   final MessageDao _dao;
 
+  Future<MessagePage> loadInitialLocal({
+    required int ownerId,
+    required String sessionUnitId,
+    int limit = 10,
+  }) async {
+    final local = await _dao.readPage(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      limit: limit,
+    );
+    final loadedAll = await _dao.isLoadedAll(sessionUnitId);
+    debugPrint(
+      '[loadMessages][initial-local] session=$sessionUnitId '
+      'requested=$limit added=${local.length} loadedAll=$loadedAll',
+    );
+    return MessagePage(local, !(loadedAll && local.length < limit));
+  }
+
   Future<MessagePage> loadHistory({
     required int ownerId,
     required String sessionUnitId,
@@ -24,9 +42,16 @@ class MessageRepository {
       limit: limit,
     );
     debugPrint(
-      '[loadMessages][local] session=$sessionUnitId added=${local.length}',
+      '[loadMessages][local-page] session=$sessionUnitId '
+      'requested=$limit added=${local.length}',
     );
     if (local.length >= limit) return MessagePage(local, true);
+    final loadedAll = await _dao.isLoadedAll(sessionUnitId);
+    debugPrint(
+      '[loadMessages][loaded-all-check] session=$sessionUnitId '
+      'loadedAll=$loadedAll localAdded=${local.length}',
+    );
+    if (loadedAll) return MessagePage(local, false);
     final cursorScore = local.isNotEmpty ? local.last.score : beforeScore;
     final maxMessageId = cursorScore == null ? null : cursorScore ~/ 1000000;
     try {
@@ -37,6 +62,15 @@ class MessageRepository {
         maxMessageId: maxMessageId == 0 ? null : maxMessageId,
       );
       await _dao.upsertAll(remote.items);
+      final requestedRemoteCount = limit - local.length;
+      final hasMore = remote.items.length >= requestedRemoteCount;
+      if (!hasMore) {
+        await _dao.markLoadedAll(sessionUnitId, true);
+        debugPrint(
+          '[loadMessages][mark-loaded-all] session=$sessionUnitId '
+          'received=${remote.items.length} requested=$requestedRemoteCount',
+        );
+      }
       debugPrint(
         '[loadMessages][remote] session=$sessionUnitId maxMessageId=$maxMessageId '
         'received=${remote.items.length} persisted=${remote.items.length}',
@@ -47,7 +81,7 @@ class MessageRepository {
               for (final item in remote.items) item.localId: item,
             }.values.toList()
             ..sort((a, b) => b.score.compareTo(a.score));
-      return MessagePage(all, remote.items.length == limit - local.length);
+      return MessagePage(all, hasMore);
     } catch (error) {
       if (local.isNotEmpty) return MessagePage(local, true);
       rethrow;

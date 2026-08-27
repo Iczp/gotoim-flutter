@@ -74,6 +74,20 @@ class SessionUnitApi {
     );
   }
 
+  Future<SessionSummary> getFriendDetail({
+    required int ownerId,
+    required String sessionUnitId,
+  }) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/chat/session-unit-cache/friend/$sessionUnitId',
+    );
+    return SessionSummary.fromJson(<String, dynamic>{
+      ...response,
+      'id': response['id'] ?? sessionUnitId,
+      'ownerId': response['ownerId'] ?? ownerId,
+    });
+  }
+
   Future<PagedResultDto<SessionSummary>> getChanges({
     required int ownerId,
     required int minTicks,

@@ -132,6 +132,22 @@ class SessionRepository {
     int limit = 50,
   }) => _dao.readPage(ownerId: ownerId, cursor: cursor, limit: limit);
 
+  Future<SessionSummary?> loadLocalFriendDetail(String sessionUnitId) =>
+      _dao.readById(sessionUnitId);
+
+  Future<SessionSummary> loadRemoteFriendDetail({
+    required int ownerId,
+    required String sessionUnitId,
+  }) async {
+    final friend = await _api.getFriendDetail(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+    );
+    await _dao.upsertAll(<SessionSummary>[friend]);
+    debugPrint('[loadFriendDetail][remote] session=$sessionUnitId persisted=1');
+    return friend;
+  }
+
   Future<List<SessionSummary>> loadChanges({required int ownerId}) async {
     final initialTicks = await _dao.readMaxTicks(ownerId);
     if (initialTicks == null || initialTicks <= 0) return const [];

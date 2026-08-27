@@ -380,6 +380,15 @@ F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\im\messages\MessageTab.vu
 
    
 
+   进入聊天
+
+   1. 读取本地的friend,  更新到UI，如聊天标题，
+   2. 加载网络FriendDetail, 不阻塞，更新UI，更新本地数据库
+
+消息加载：
+
+1. 先加载本地 10条，向在上翻页才加载 本地分页数据（30条）  本地没有了，  判断是否已经加载加了全部消息，如没有加载全部才访问线上  /api/chat/message/history  ，线上也没有了，更新到本地标记，friend 表。
+
 ---
 
 ## 8. 消息发送与同步

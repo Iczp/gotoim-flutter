@@ -32,6 +32,16 @@ class SessionDao {
     return sessions;
   }
 
+  Future<SessionSummary?> readById(String id) async {
+    final row = await _database.readFriendRow(id);
+    if (row == null) return null;
+    try {
+      return SessionSummary.fromDatabaseRow(row);
+    } on FormatException {
+      return null;
+    }
+  }
+
   Future<int?> readMaxTicks(int ownerId) =>
       _database.readMaxFriendTicks(ownerId);
 

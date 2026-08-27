@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +8,8 @@ import '../data/datasources/message_api.dart';
 import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
 import '../data/repositories/message_repository.dart';
+import '../../session/data/models/session_summary.dart';
+import '../../session/data/repositories/session_repository.dart';
 
 final messageRepositoryProvider = Provider<MessageRepository>(
   (ref) => MessageRepository(
@@ -16,12 +20,16 @@ final messageRepositoryProvider = Provider<MessageRepository>(
 
 class ChatController extends ChangeNotifier {
   ChatController(
-    this._repository, {
+    this._repository,
+    this._sessionRepository, {
     required this.ownerId,
     required this.sessionUnitId,
-  });
+    required String initialTitle,
+  }) : _title = initialTitle;
   static const pageSize = 30;
+  static const initialPageSize = 10;
   final MessageRepository _repository;
+  final SessionRepository _sessionRepository;
   final int ownerId;
   final String sessionUnitId;
   final List<ChatMessage> _messages = <ChatMessage>[];
@@ -29,8 +37,63 @@ class ChatController extends ChangeNotifier {
   bool isSending = false;
   bool hasMore = true;
   Object? error;
+  SessionSummary? friend;
+  String _title;
 
   List<ChatMessage> get messages => List.unmodifiable(_messages);
+  String get title => friend?.title ?? _title;
+
+  Future<void> initialize() async {
+    final local = await _sessionRepository.loadLocalFriendDetail(sessionUnitId);
+    if (local != null) {
+      friend = local;
+      _title = local.title;
+      debugPrint(
+        '[chatInitialize][local-friend] session=$sessionUnitId title=$_title',
+      );
+      notifyListeners();
+    }
+    unawaited(_refreshFriendDetail());
+    await _loadInitialLocal();
+  }
+
+  Future<void> _loadInitialLocal() async {
+    isLoading = true;
+    notifyListeners();
+    try {
+      final page = await _repository.loadInitialLocal(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        limit: initialPageSize,
+      );
+      _messages
+        ..clear()
+        ..addAll(page.items);
+      hasMore = page.hasMore;
+    } catch (exception) {
+      error = exception;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _refreshFriendDetail() async {
+    try {
+      final remote = await _sessionRepository.loadRemoteFriendDetail(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+      );
+      friend = remote;
+      _title = remote.title;
+      notifyListeners();
+    } catch (exception) {
+      debugPrint(
+        '[chatInitialize][remote-friend-failed] session=$sessionUnitId '
+        'keepLocal=${friend != null} error=$exception',
+      );
+    }
+  }
 
   Future<void> loadMore() async {
     if (isLoading || !hasMore) return;

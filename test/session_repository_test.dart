@@ -207,6 +207,39 @@ void main() {
     expect(cached.single.name, '本地身份');
     expect(cached.single.imageUrl, '/avatar.png');
   });
+
+  test('remote friend detail updates the local friend row', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = SessionDao(database);
+    final repository = SessionRepository(
+      api: SessionUnitApi(
+        _FakeApiClient(
+          responses: {
+            '/api/chat/session-unit-cache/friend/session-1': {
+              'id': 'session-1',
+              'ownerId': 7,
+              'score': 12,
+              'ticks': 12,
+              'destination': {'displayName': '网络新标题'},
+            },
+          },
+        ),
+      ),
+      dao: dao,
+    );
+
+    final remote = await repository.loadRemoteFriendDetail(
+      ownerId: 7,
+      sessionUnitId: 'session-1',
+    );
+    final local = await repository.loadLocalFriendDetail('session-1');
+
+    expect(remote.title, '网络新标题');
+    expect(local?.title, '网络新标题');
+  });
 }
 
 class _FakeApiClient implements ApiClient {
