@@ -24,6 +24,12 @@ abstract class ApiClient {
   });
 
   Future<void> cancelByTag(Object tag);
+
+  Future<List<int>> getBytes(
+    String path, {
+    Object? cancelTag,
+    void Function(int received, int total)? onProgress,
+  }) => throw UnsupportedError('Binary download is not supported.');
 }
 
 class MultipartUploadFile {

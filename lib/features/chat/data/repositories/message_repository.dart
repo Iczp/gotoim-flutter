@@ -22,6 +22,8 @@ class MessageRepository {
   final SessionDao? _sessionDao;
   final SessionChangeBus? _sessionChangeBus;
 
+  Future<void> markOpened(String localId) => _dao.markOpened(localId);
+
   Future<MessagePage> loadInitialLocal({
     required int ownerId,
     required String sessionUnitId,

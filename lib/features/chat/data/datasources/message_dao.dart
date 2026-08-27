@@ -5,6 +5,9 @@ class MessageDao {
   MessageDao(this._database);
   final UnifiedDatabase _database;
 
+  Future<void> markOpened(String localId) =>
+      _database.markMessageOpened(localId);
+
   Future<List<ChatMessage>> readPage({
     required int ownerId,
     required String sessionUnitId,

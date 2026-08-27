@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/application_providers.dart';
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
-import '../../../core/services/media/video_processing_models.dart';
+import '../../chat/application/chat_controller.dart';
 
 class MediaDiagnosticsPage extends ConsumerStatefulWidget {
   const MediaDiagnosticsPage({super.key});
@@ -40,12 +40,15 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
 
   List<String> _parseExtensions() {
     if (_selectedFileType == 'any') return const [];
-    if (_selectedFileType == 'images')
+    if (_selectedFileType == 'images') {
       return const ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'];
-    if (_selectedFileType == 'videos')
+    }
+    if (_selectedFileType == 'videos') {
       return const ['mp4', 'mov', 'avi', 'mkv'];
-    if (_selectedFileType == 'docs')
+    }
+    if (_selectedFileType == 'docs') {
       return const ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'];
+    }
     return _customExtController.text
         .split(',')
         .map((e) => e.trim().replaceAll('.', ''))
@@ -151,6 +154,8 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
       return const Scaffold(body: Center(child: Text('开发诊断仅在 Debug 模式可用。')));
     }
     final capabilities = ref.read(clientCapabilityServiceProvider);
+    final mediaService = ref.read(mediaServiceProvider);
+    final audioPlayback = ref.read(audioPlaybackServiceProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('媒体与文件选择器测试')),
       body: ListView(
@@ -233,6 +238,15 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
             title: '音频录制功能',
             children: [
               _button(
+                '验证麦克风权限',
+                () => _run(
+                  () async => <String, Object?>{
+                    'granted': await mediaService.hasAudioRecordingPermission(),
+                    'platforms': 'Android/iOS/iPad/macOS/Windows/Linux/Web',
+                  },
+                ),
+              ),
+              _button(
                 '开始录音',
                 _recording
                     ? null
@@ -289,6 +303,24 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
                       _recording = false;
                       _paused = false;
                       return const <String, bool>{'cancelled': true};
+                    }),
+              ),
+              _button(
+                '播放/暂停当前音频',
+                _selected == null
+                    ? null
+                    : () => _run(() async {
+                      await audioPlayback.toggle(
+                        messageId: 'diagnostics-audio',
+                        localPath: _selected!.originalPath,
+                        url: _selected!.originalUri.toString(),
+                        mimeType: _selected!.mimeType,
+                      );
+                      return <String, Object?>{
+                        'playing': audioPlayback.isPlaying,
+                        'source': _selected!.toJson(),
+                        'earpiece': audioPlayback.isEarpiece,
+                      };
                     }),
               ),
             ],
@@ -538,7 +570,7 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _selectedFiles.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final file = _selectedFiles[index];
                 final isCurrent = _selected?.id == file.id;

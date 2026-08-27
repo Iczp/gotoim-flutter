@@ -29,7 +29,8 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> {
+class _ChatPageState extends ConsumerState<ChatPage>
+    with WidgetsBindingObserver {
   late final ChatController controller;
   late final AudioPlaybackService _audioPlayback;
   final input = TextEditingController();
@@ -40,6 +41,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _audioPlayback = ref.read(audioPlaybackServiceProvider);
     controller = ChatController(
       ref.read(messageRepositoryProvider),
@@ -55,10 +57,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_audioPlayback.stop());
     controller.dispose();
     input.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      unawaited(_audioPlayback.stop());
+      _composerKey.currentState?.cancelActiveRecording();
+    }
   }
 
   @override
@@ -174,6 +187,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                     showTime: _showTime(message, older),
                                     onUserTap:
                                         () => _showSenderProfile(message),
+                                    onVoiceOpened:
+                                        () =>
+                                            controller.markVoiceOpened(message),
                                     onRetry:
                                         (message.messageType == 5 ||
                                                     message.messageType == 3) &&
@@ -259,12 +275,14 @@ class _MessageRow extends StatelessWidget {
     required this.message,
     required this.showTime,
     required this.onUserTap,
+    required this.onVoiceOpened,
     this.onRetry,
     super.key,
   });
   final ChatMessage message;
   final bool showTime;
   final VoidCallback onUserTap;
+  final Future<void> Function() onVoiceOpened;
   final VoidCallback? onRetry;
 
   @override
@@ -381,7 +399,10 @@ class _MessageRow extends StatelessWidget {
                                 message.messageType == 5
                                     ? _FileMessageCard(message: message)
                                     : message.messageType == 3
-                                    ? _VoiceMessageBubble(message: message)
+                                    ? _VoiceMessageBubble(
+                                      message: message,
+                                      onOpened: onVoiceOpened,
+                                    )
                                     : Text(text),
                           ),
                         ),
@@ -470,14 +491,22 @@ class _FileMessageCard extends StatelessWidget {
 }
 
 class _VoiceMessageBubble extends ConsumerWidget {
-  const _VoiceMessageBubble({required this.message});
+  const _VoiceMessageBubble({required this.message, required this.onOpened});
   final ChatMessage message;
+  final Future<void> Function() onOpened;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final seconds = (message.audioDuration.inMilliseconds / 1000).ceil();
     final playback = ref.watch(audioPlaybackServiceProvider);
     final playing = playback.isMessagePlaying(message.localId);
+    final downloading = playback.downloadingMessageId == message.localId;
+    final progress =
+        playback.activeMessageId == message.localId &&
+                playback.duration.inMilliseconds > 0
+            ? playback.position.inMilliseconds /
+                playback.duration.inMilliseconds
+            : 0.0;
     return InkWell(
       onTap:
           message.state == 'sending'
@@ -490,6 +519,9 @@ class _VoiceMessageBubble extends ConsumerWidget {
                     url: message.audioUrl,
                     mimeType: message.content['contentType']?.toString(),
                   );
+                  if (playback.isMessagePlaying(message.localId)) {
+                    await onOpened();
+                  }
                 } catch (error) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(
@@ -501,37 +533,65 @@ class _VoiceMessageBubble extends ConsumerWidget {
       borderRadius: BorderRadius.circular(8),
       child: SizedBox(
         width: (96.0 + seconds.clamp(0, 30) * 3).clamp(96.0, 186.0),
-        child: Row(
-          children:
-              message.isMine
-                  ? <Widget>[
-                    if (message.state == 'sending')
-                      const SizedBox.square(
-                        dimension: 14,
-                        child: CircularProgressIndicator(strokeWidth: 1.8),
-                      ),
-                    Expanded(
-                      child: Text(
-                        seconds <= 0 ? '语音' : '$seconds″',
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Transform.flip(
-                      flipX: true,
-                      child: _VoicePlaybackIcon(playing: playing),
-                    ),
-                  ]
-                  : <Widget>[
-                    _VoicePlaybackIcon(playing: playing),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(seconds <= 0 ? '语音' : '$seconds″')),
-                    if (message.state == 'sending')
-                      const SizedBox.square(
-                        dimension: 14,
-                        child: CircularProgressIndicator(strokeWidth: 1.8),
-                      ),
-                  ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Row(
+              children:
+                  message.isMine
+                      ? <Widget>[
+                        if (message.state == 'sending')
+                          const SizedBox.square(
+                            dimension: 14,
+                            child: CircularProgressIndicator(strokeWidth: 1.8),
+                          ),
+                        Expanded(
+                          child: Text(
+                            seconds <= 0 ? '语音' : '$seconds″',
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Transform.flip(
+                          flipX: true,
+                          child: _VoicePlaybackIcon(playing: playing),
+                        ),
+                      ]
+                      : <Widget>[
+                        _VoicePlaybackIcon(playing: playing),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(seconds <= 0 ? '语音' : '$seconds″'),
+                        ),
+                        if (message.state == 'sending')
+                          const SizedBox.square(
+                            dimension: 14,
+                            child: CircularProgressIndicator(strokeWidth: 1.8),
+                          ),
+                      ],
+            ),
+            if (downloading || progress > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: LinearProgressIndicator(
+                  minHeight: 2,
+                  value: downloading ? playback.downloadProgress : progress,
+                ),
+              ),
+            if (!message.isOpened && !message.isMine)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  margin: const EdgeInsets.only(top: 3),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -648,7 +708,9 @@ class _ComposerState extends State<_Composer> {
   bool _recording = false;
   bool _cancelRecording = false;
   bool _pointerReleased = false;
+  bool _finishingRecording = false;
   StreamSubscription<double>? _levelSubscription;
+  Timer? _durationTimer;
   OverlayEntry? _recordingOverlay;
   final Stopwatch _recordingWatch = Stopwatch();
   Duration _recordingDuration = Duration.zero;
@@ -672,6 +734,7 @@ class _ComposerState extends State<_Composer> {
   @override
   void dispose() {
     unawaited(_levelSubscription?.cancel());
+    _durationTimer?.cancel();
     _hideRecordingOverlay();
     if (_recording || _startingRecording) {
       unawaited(widget.controller.cancelVoiceRecording());
@@ -696,6 +759,12 @@ class _ComposerState extends State<_Composer> {
     if (_showFunctions) setState(() => _showFunctions = false);
   }
 
+  void cancelActiveRecording() {
+    if (!_recording && !_startingRecording) return;
+    _pointerReleased = true;
+    unawaited(_completeRecording(forceCancel: true));
+  }
+
   void _toggleVoiceMode() {
     _focusNode.unfocus();
     setState(() {
@@ -713,6 +782,7 @@ class _ComposerState extends State<_Composer> {
       _cancelRecording = false;
       _recordingDuration = Duration.zero;
       _amplitudeSampleCount = 0;
+      _finishingRecording = false;
       _levels.fillRange(0, _levels.length, 0.04);
     });
     try {
@@ -745,6 +815,14 @@ class _ComposerState extends State<_Composer> {
               debugPrint('[voiceAmplitude][failed] error=$error');
             },
           );
+      _durationTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+        if (!mounted || !_recording) return;
+        setState(() => _recordingDuration = _recordingWatch.elapsed);
+        _recordingOverlay?.markNeedsBuild();
+        if (_recordingDuration >= const Duration(seconds: 60)) {
+          unawaited(_completeRecording());
+        }
+      });
     } catch (error) {
       _startingRecording = false;
       _recordingWatch.stop();
@@ -766,7 +844,6 @@ class _ComposerState extends State<_Composer> {
       _levels
         ..removeAt(0)
         ..add(smoothed.clamp(0.04, 1.0));
-      _recordingDuration = _recordingWatch.elapsed;
     });
     _recordingOverlay?.markNeedsBuild();
   }
@@ -781,13 +858,22 @@ class _ComposerState extends State<_Composer> {
 
   Future<void> _endRecording(LongPressEndDetails _) async {
     _pointerReleased = true;
-    if (_startingRecording || !_recording) return;
+    await _completeRecording();
+  }
+
+  Future<void> _completeRecording({bool forceCancel = false}) async {
+    if (_startingRecording || !_recording || _finishingRecording) return;
+    _finishingRecording = true;
     await _levelSubscription?.cancel();
     _levelSubscription = null;
+    _durationTimer?.cancel();
+    _durationTimer = null;
     _recordingWatch.stop();
     final duration = _recordingWatch.elapsed;
     final cancel =
-        _cancelRecording || duration < const Duration(milliseconds: 800);
+        forceCancel ||
+        _cancelRecording ||
+        duration < const Duration(milliseconds: 800);
     setState(() {
       _recording = false;
       _recordingDuration = duration;
@@ -1132,6 +1218,8 @@ class _RecordingPanel extends StatelessWidget {
           Text(
             cancelling
                 ? '松开手指，取消发送'
+                : seconds >= 55
+                ? '还可以说 ${60 - seconds} 秒'
                 : '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
                     '${(seconds % 60).toString().padLeft(2, '0')}  上滑取消',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(

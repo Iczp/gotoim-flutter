@@ -2,11 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../app/application_providers.dart';
+import '../../../core/config/app_environment.dart';
+import '../../../core/native/native.dart';
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
 import '../../../core/services/media/audio_playback_service.dart';
+import '../../../core/services/media/voice_cache_service.dart';
 import '../data/datasources/message_api.dart';
 import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
@@ -24,6 +28,19 @@ final messageRepositoryProvider = Provider<MessageRepository>(
     sessionChangeBus: ref.watch(sessionChangeBusProvider),
   ),
 );
+
+final voiceCacheServiceProvider = Provider<VoiceCacheService>(
+  (ref) => createVoiceCacheService(ref.watch(apiClientProvider)),
+);
+
+final audioPlaybackServiceProvider =
+    ChangeNotifierProvider<AudioPlaybackService>((ref) {
+      return AudioPlaybackService(
+        environment: ref.watch(appEnvironmentProvider),
+        voiceCacheService: ref.watch(voiceCacheServiceProvider),
+        nativeSensor: ref.watch(nativeSensorProvider),
+      );
+    });
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -287,6 +304,16 @@ class ChatController extends ChangeNotifier {
     _replaceMessage(sent);
     if (sent.state == 'sent') _pendingFiles.remove(message.localId);
     notifyListeners();
+  }
+
+  Future<void> markVoiceOpened(ChatMessage message) async {
+    if (message.isOpened || message.isMine) return;
+    final updated = message.copyWith(
+      raw: <String, dynamic>{...message.raw, 'isOpened': true},
+    );
+    _replaceMessage(updated);
+    notifyListeners();
+    await _repository.markOpened(message.localId);
   }
 
   void _replaceMessage(ChatMessage value) {

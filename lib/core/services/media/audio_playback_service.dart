@@ -3,15 +3,19 @@ import 'dart:math' as math;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../config/app_environment.dart';
+import '../../native/sensor.dart';
+import 'voice_cache_service.dart';
 
 class AudioPlaybackService extends ChangeNotifier {
   AudioPlaybackService({
     required AppEnvironment environment,
+    required VoiceCacheService voiceCacheService,
+    required NativeSensor nativeSensor,
     AudioPlayer? player,
   }) : _environment = environment,
+       _voiceCacheService = voiceCacheService,
        _player = player ?? AudioPlayer() {
     _stateSubscription = _player.onPlayerStateChanged.listen((state) {
       _playing = state == PlayerState.playing;
@@ -22,20 +26,46 @@ class AudioPlaybackService extends ChangeNotifier {
       _activeMessageId = null;
       notifyListeners();
     });
+    _proximitySubscription = nativeSensor.onProximityChange.listen((event) {
+      if (_playing) unawaited(_setEarpiece(event.isNear));
+    });
+    _positionSubscription = _player.onPositionChanged.listen((value) {
+      _position = value;
+      notifyListeners();
+    });
+    _durationSubscription = _player.onDurationChanged.listen((value) {
+      _duration = value;
+      notifyListeners();
+    });
   }
 
   final AppEnvironment _environment;
+  final VoiceCacheService _voiceCacheService;
   final AudioPlayer _player;
   final AudioPlayer _effectPlayer = AudioPlayer();
   late final StreamSubscription<PlayerState> _stateSubscription;
   late final StreamSubscription<void> _completionSubscription;
+  late final StreamSubscription<ProximityEvent> _proximitySubscription;
+  late final StreamSubscription<Duration> _positionSubscription;
+  late final StreamSubscription<Duration> _durationSubscription;
   String? _activeMessageId;
   bool _playing = false;
   Object? _error;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  String? _downloadingMessageId;
+  double _downloadProgress = 0;
+  bool _earpiece = false;
+  int _operation = 0;
 
   String? get activeMessageId => _activeMessageId;
   bool get isPlaying => _playing;
   Object? get error => _error;
+  Duration get position => _position;
+  Duration get duration => _duration;
+  String? get downloadingMessageId => _downloadingMessageId;
+  double get downloadProgress => _downloadProgress;
+  bool get isEarpiece => _earpiece;
 
   bool isMessagePlaying(String messageId) =>
       _activeMessageId == messageId && _playing;
@@ -46,6 +76,7 @@ class AudioPlaybackService extends ChangeNotifier {
     String? url,
     String? mimeType,
   }) async {
+    final operation = ++_operation;
     _error = null;
     try {
       if (_activeMessageId == messageId) {
@@ -56,12 +87,20 @@ class AudioPlaybackService extends ChangeNotifier {
         }
         return;
       }
+      final downloading = _downloadingMessageId;
+      if (downloading != null && downloading != messageId) {
+        await _voiceCacheService.cancel(downloading);
+      }
       await _player.stop();
-      final source = _source(
+      _position = Duration.zero;
+      _duration = Duration.zero;
+      final source = await _source(
+        messageId: messageId,
         localPath: localPath,
         url: url,
         mimeType: mimeType,
       );
+      if (operation != _operation) return;
       _activeMessageId = messageId;
       notifyListeners();
       await _player.play(source);
@@ -75,9 +114,16 @@ class AudioPlaybackService extends ChangeNotifier {
   }
 
   Future<void> stop() async {
+    _operation++;
+    final downloading = _downloadingMessageId;
+    if (downloading != null) await _voiceCacheService.cancel(downloading);
     await _player.stop();
     _playing = false;
     _activeMessageId = null;
+    _position = Duration.zero;
+    _duration = Duration.zero;
+    _downloadingMessageId = null;
+    await _setEarpiece(false);
     notifyListeners();
   }
 
@@ -133,7 +179,12 @@ class AudioPlaybackService extends ChangeNotifier {
     return bytes.buffer.asUint8List();
   }
 
-  Source _source({String? localPath, String? url, String? mimeType}) {
+  Future<Source> _source({
+    required String messageId,
+    String? localPath,
+    String? url,
+    String? mimeType,
+  }) async {
     if (localPath != null && localPath.isNotEmpty) {
       return DeviceFileSource(localPath, mimeType: mimeType);
     }
@@ -144,22 +195,46 @@ class AudioPlaybackService extends ChangeNotifier {
         parsed?.hasScheme == true
             ? value
             : Uri.parse(_environment.apiBaseUrl).resolve(value).toString();
+    _downloadingMessageId = messageId;
+    _downloadProgress = 0;
+    notifyListeners();
+    final cached = await _voiceCacheService.resolve(
+      cacheKey: messageId,
+      url: resolved,
+      onProgress: (received, total) {
+        _downloadProgress = total <= 0 ? 0 : received / total;
+        notifyListeners();
+      },
+    );
+    _downloadingMessageId = null;
+    notifyListeners();
+    if (cached != null) return DeviceFileSource(cached, mimeType: mimeType);
     return UrlSource(resolved, mimeType: mimeType);
+  }
+
+  Future<void> _setEarpiece(bool value) async {
+    if (_earpiece == value) return;
+    _earpiece = value;
+    await _player.setAudioContext(
+      AudioContextConfig(
+        route:
+            value
+                ? AudioContextConfigRoute.earpiece
+                : AudioContextConfigRoute.speaker,
+      ).build(),
+    );
+    notifyListeners();
   }
 
   @override
   void dispose() {
     unawaited(_stateSubscription.cancel());
     unawaited(_completionSubscription.cancel());
+    unawaited(_proximitySubscription.cancel());
+    unawaited(_positionSubscription.cancel());
+    unawaited(_durationSubscription.cancel());
     unawaited(_player.dispose());
     unawaited(_effectPlayer.dispose());
     super.dispose();
   }
 }
-
-final audioPlaybackServiceProvider =
-    ChangeNotifierProvider<AudioPlaybackService>((ref) {
-      return AudioPlaybackService(
-        environment: ref.watch(appEnvironmentProvider),
-      );
-    });

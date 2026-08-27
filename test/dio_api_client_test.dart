@@ -58,6 +58,40 @@ void main() {
     expect(readJwtExpiry(_jwt(expiry)), expiry);
   });
 
+  test(
+    'binary download uses authenticated API client and reports bytes',
+    () async {
+      final storage = _MemoryTokenStorage('access-token', 'refresh');
+      final tokens = <String?>[];
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            tokens.add(options.headers['Authorization']?.toString());
+            handler.resolve(
+              Response<dynamic>(
+                requestOptions: options,
+                statusCode: 200,
+                data: <int>[1, 2, 3, 4],
+              ),
+            );
+          },
+        ),
+      );
+      final client = DioApiClient(
+        dio: dio,
+        tokenStorage: storage,
+        tokenRefresher: _FakeRefresher(storage),
+        deviceContext: _device,
+      );
+
+      final bytes = await client.getBytes('/voice/message.m4a');
+
+      expect(bytes, <int>[1, 2, 3, 4]);
+      expect(tokens, <String?>['Bearer access-token']);
+    },
+  );
+
   test('missing refresh token clears session and notifies auth once', () async {
     final storage = _MemoryTokenStorage(
       _jwt(DateTime.now().add(const Duration(minutes: 1))),

@@ -52,6 +52,19 @@ class DioApiClient implements ApiClient {
   }
 
   @override
+  Future<List<int>> getBytes(
+    String path, {
+    Object? cancelTag,
+    void Function(int received, int total)? onProgress,
+  }) => _request<List<int>>(
+    path: path,
+    method: 'GET',
+    responseType: ResponseType.bytes,
+    cancelTag: cancelTag,
+    onReceiveProgress: onProgress,
+  );
+
+  @override
   Future<T> post<T>(
     String path, {
     Map<String, Object?>? query,
@@ -100,6 +113,9 @@ class DioApiClient implements ApiClient {
     Map<String, String>? headers,
     bool hasRetriedAfterRefresh = false,
     bool retryOnUnauthorized = true,
+    ResponseType? responseType,
+    Object? cancelTag,
+    void Function(int received, int total)? onReceiveProgress,
   }) async {
     final usesStoredAccessToken = headers?.containsKey('Authorization') != true;
     var accessToken = await _tokenStorage.readAccessToken();
@@ -119,6 +135,7 @@ class DioApiClient implements ApiClient {
         queryParameters: query,
         options: Options(
           method: method,
+          responseType: responseType,
           headers: <String, String>{
             ..._deviceContext.requestHeaders,
             ...?headers,
@@ -128,9 +145,16 @@ class DioApiClient implements ApiClient {
               'Authorization': 'Bearer $accessToken',
           },
         ),
+        cancelToken:
+            cancelTag == null
+                ? null
+                : (_cancelTokens[cancelTag] = CancelToken()),
+        onReceiveProgress: onReceiveProgress,
       );
+      if (cancelTag != null) _cancelTokens.remove(cancelTag);
       return _unwrap<T>(response.data);
     } on DioException catch (error) {
+      if (cancelTag != null) _cancelTokens.remove(cancelTag);
       if (retryOnUnauthorized &&
           usesStoredAccessToken &&
           error.response?.statusCode == 401 &&
@@ -153,6 +177,9 @@ class DioApiClient implements ApiClient {
           headers: headers,
           hasRetriedAfterRefresh: true,
           retryOnUnauthorized: retryOnUnauthorized,
+          responseType: responseType,
+          cancelTag: cancelTag,
+          onReceiveProgress: onReceiveProgress,
         );
       }
       throw _toApiException(error);

@@ -281,4 +281,11 @@ class _FakeApiClient implements ApiClient {
 
   @override
   Future<void> cancelByTag(Object tag) async {}
+
+  @override
+  Future<List<int>> getBytes(
+    String path, {
+    Object? cancelTag,
+    void Function(int received, int total)? onProgress,
+  }) async => const <int>[];
 }

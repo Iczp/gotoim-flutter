@@ -510,6 +510,22 @@ class UnifiedDatabase {
     return (rows.single['score'] as num?)?.toInt() ?? 0;
   }
 
+  Future<void> markMessageOpened(String localId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT raw FROM Messages WHERE id = ? LIMIT 1',
+      <Object?>[localId],
+    );
+    if (rows.isEmpty || rows.single['raw'] is! String) return;
+    final decoded = jsonDecode(rows.single['raw'] as String);
+    if (decoded is! Map) return;
+    final raw = Map<String, dynamic>.from(decoded)..['isOpened'] = true;
+    await _connection.runUpdate(
+      'UPDATE Messages SET raw = ? WHERE id = ?',
+      <Object?>[jsonEncode(raw), localId],
+    );
+  }
+
   Future<void> upsertMessageRows(List<Map<String, Object?>> rows) async {
     if (rows.isEmpty) return;
     await initialize();

@@ -68,6 +68,7 @@ class ChatMessage {
   final Map<String, dynamic> raw;
 
   bool get isMine => senderSessionUnitId == sessionUnitId;
+  bool get isOpened => raw['isOpened'] == true || isMine;
   Map<String, dynamic> get senderSessionUnit => asMap(raw['senderSessionUnit']);
   String get senderName {
     final sender = senderSessionUnit;

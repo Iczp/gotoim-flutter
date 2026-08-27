@@ -349,6 +349,35 @@ void main() {
     expect(friend?.unreadCount, 0);
     expect((await event).sessionUnitId, 'session');
   });
+
+  test('opening a voice message persists the local listened state', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = MessageDao(database);
+    final voice = ChatMessage.fromJson(
+      <String, dynamic>{
+        'id': 901,
+        'messageType': 3,
+        'isOpened': false,
+        'content': <String, dynamic>{'url': '/voice/901.m4a', 'time': 1000},
+      },
+      ownerId: 7,
+      sessionUnitId: 'session',
+    );
+    await dao.upsertAll(<ChatMessage>[voice]);
+    final repository = MessageRepository(
+      api: MessageApi(_FakeApiClient()),
+      dao: dao,
+    );
+
+    await repository.markOpened(voice.localId);
+
+    final stored =
+        (await dao.readPage(ownerId: 7, sessionUnitId: 'session')).single;
+    expect(stored.isOpened, isTrue);
+  });
 }
 
 class _FakeApiClient implements ApiClient {
@@ -394,4 +423,11 @@ class _FakeApiClient implements ApiClient {
 
   @override
   Future<void> cancelByTag(Object tag) async {}
+
+  @override
+  Future<List<int>> getBytes(
+    String path, {
+    Object? cancelTag,
+    void Function(int received, int total)? onProgress,
+  }) async => const <int>[];
 }
