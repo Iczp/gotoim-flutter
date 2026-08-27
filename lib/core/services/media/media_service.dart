@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -130,6 +131,8 @@ abstract class MediaService {
 
   Future<void> startAudioRecording(AudioRecordingRequest request);
 
+  Future<bool> hasAudioRecordingPermission();
+
   Future<void> pauseAudioRecording();
 
   Future<void> resumeAudioRecording();
@@ -140,6 +143,8 @@ abstract class MediaService {
 
   /// Normalized live microphone level in the 0...1 range.
   Future<double> audioRecordingLevel();
+
+  Stream<double> audioRecordingLevels(Duration interval);
 }
 
 AssetPickerTextDelegate _resolveAssetPickerTextDelegate(BuildContext context) {
@@ -372,6 +377,9 @@ class DefaultMediaService implements MediaService {
   }
 
   @override
+  Future<bool> hasAudioRecordingPermission() => _audioRecorder.hasPermission();
+
+  @override
   Future<void> pauseAudioRecording() => _audioRecorder.pause();
 
   @override
@@ -391,7 +399,18 @@ class DefaultMediaService implements MediaService {
   @override
   Future<double> audioRecordingLevel() async {
     final amplitude = await _audioRecorder.getAmplitude();
-    return ((amplitude.current + 60) / 60).clamp(0.0, 1.0);
+    return _normalizeAmplitude(amplitude.current);
+  }
+
+  @override
+  Stream<double> audioRecordingLevels(Duration interval) => _audioRecorder
+      .onAmplitudeChanged(interval)
+      .map((amplitude) => _normalizeAmplitude(amplitude.current));
+
+  static double _normalizeAmplitude(double dbfs) {
+    if (!dbfs.isFinite || dbfs == 0) return 0.06;
+    final linear = ((dbfs + 78) / 63).clamp(0.0, 1.0);
+    return math.sqrt(linear).clamp(0.04, 1.0);
   }
 
   Future<SelectedFile?> _pickOneImage(

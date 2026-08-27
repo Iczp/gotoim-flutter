@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/application_providers.dart';
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
+import '../../../core/services/media/audio_playback_service.dart';
 import '../data/datasources/message_api.dart';
 import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
@@ -30,11 +31,13 @@ class ChatController extends ChangeNotifier {
     this._sessionRepository, {
     required FilePickerService filePickerService,
     required MediaService mediaService,
+    required AudioPlaybackService audioPlaybackService,
     required this.ownerId,
     required this.sessionUnitId,
     required String initialTitle,
   }) : _filePickerService = filePickerService,
        _mediaService = mediaService,
+       _audioPlaybackService = audioPlaybackService,
        _title = initialTitle;
   static const pageSize = 30;
   static const initialPageSize = 10;
@@ -42,6 +45,7 @@ class ChatController extends ChangeNotifier {
   final SessionRepository _sessionRepository;
   final FilePickerService _filePickerService;
   final MediaService _mediaService;
+  final AudioPlaybackService _audioPlaybackService;
   final int ownerId;
   final String sessionUnitId;
   final List<ChatMessage> _messages = <ChatMessage>[];
@@ -192,6 +196,7 @@ class ChatController extends ChangeNotifier {
     );
     _messages.insert(0, pending);
     notifyListeners();
+    unawaited(_audioPlaybackService.playSendEffect());
     final sent = await _repository.sendText(
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,
@@ -221,7 +226,13 @@ class ChatController extends ChangeNotifier {
     const AudioRecordingRequest(fileNamePrefix: 'gotoim_voice'),
   );
 
+  Future<bool> hasVoiceRecordingPermission() =>
+      _mediaService.hasAudioRecordingPermission();
+
   Future<double> voiceRecordingLevel() => _mediaService.audioRecordingLevel();
+
+  Stream<double> voiceRecordingLevels(Duration interval) =>
+      _mediaService.audioRecordingLevels(interval);
 
   Future<void> cancelVoiceRecording() => _mediaService.cancelAudioRecording();
 
@@ -238,6 +249,7 @@ class ChatController extends ChangeNotifier {
     _messages.insert(0, local);
     _messages.sort((a, b) => b.score.compareTo(a.score));
     notifyListeners();
+    unawaited(_audioPlaybackService.playSendEffect());
     final sent = await _repository.sendLocalVoice(local: local, file: file);
     _replaceMessage(sent);
     if (sent.state == 'sent') _pendingFiles.remove(local.localId);
@@ -254,6 +266,7 @@ class ChatController extends ChangeNotifier {
     _messages.insert(0, local);
     _messages.sort((a, b) => b.score.compareTo(a.score));
     notifyListeners();
+    unawaited(_audioPlaybackService.playSendEffect());
 
     final sent = await _repository.sendLocalFile(local: local, file: file);
     _replaceMessage(sent);

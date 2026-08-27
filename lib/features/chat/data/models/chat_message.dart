@@ -117,6 +117,11 @@ class ChatMessage {
         asInt(content['durationMs']) ??
         0,
   );
+  String? get audioUrl {
+    final value = firstNonEmpty(<Object?>[content['url'], content['audioUrl']]);
+    return value.isEmpty ? null : value;
+  }
+
   String get fileSuffix => firstNonEmpty(<Object?>[
     content['suffix'],
     fileName.contains('.') ? '.${fileName.split('.').last}' : '',

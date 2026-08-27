@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
+import '../../../core/services/media/audio_playback_service.dart';
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
 import '../../chat_settings/data/models/chat_member.dart';
@@ -30,6 +31,7 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> {
   late final ChatController controller;
+  late final AudioPlaybackService _audioPlayback;
   final input = TextEditingController();
   final GlobalKey<_ComposerState> _composerKey = GlobalKey<_ComposerState>();
   final Map<String, bool> _timeVisibility = <String, bool>{};
@@ -38,11 +40,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   void initState() {
     super.initState();
+    _audioPlayback = ref.read(audioPlaybackServiceProvider);
     controller = ChatController(
       ref.read(messageRepositoryProvider),
       ref.read(sessionRepositoryProvider),
       filePickerService: ref.read(filePickerServiceProvider),
       mediaService: ref.read(mediaServiceProvider),
+      audioPlaybackService: _audioPlayback,
       ownerId: widget.ownerId,
       sessionUnitId: widget.sessionUnitId,
       initialTitle: widget.title,
@@ -51,6 +55,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
+    unawaited(_audioPlayback.stop());
     controller.dispose();
     input.dispose();
     super.dispose();
@@ -464,34 +469,165 @@ class _FileMessageCard extends StatelessWidget {
   }
 }
 
-class _VoiceMessageBubble extends StatelessWidget {
+class _VoiceMessageBubble extends ConsumerWidget {
   const _VoiceMessageBubble({required this.message});
   final ChatMessage message;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final seconds = (message.audioDuration.inMilliseconds / 1000).ceil();
-    return SizedBox(
-      width: (96.0 + seconds.clamp(0, 30) * 3).clamp(96.0, 186.0),
-      child: Row(
-        children: <Widget>[
-          Icon(
-            message.isMine
-                ? Icons.graphic_eq_rounded
-                : Icons.multitrack_audio_rounded,
-            size: 22,
-          ),
-          const SizedBox(width: 8),
-          Expanded(child: Text(seconds <= 0 ? '语音' : '$seconds″')),
-          if (message.state == 'sending')
-            const SizedBox.square(
-              dimension: 14,
-              child: CircularProgressIndicator(strokeWidth: 1.8),
-            ),
-        ],
+    final playback = ref.watch(audioPlaybackServiceProvider);
+    final playing = playback.isMessagePlaying(message.localId);
+    return InkWell(
+      onTap:
+          message.state == 'sending'
+              ? null
+              : () async {
+                try {
+                  await playback.toggle(
+                    messageId: message.localId,
+                    localPath: message.localFilePath,
+                    url: message.audioUrl,
+                    mimeType: message.content['contentType']?.toString(),
+                  );
+                } catch (error) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('语音播放失败：$error')));
+                  }
+                }
+              },
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: (96.0 + seconds.clamp(0, 30) * 3).clamp(96.0, 186.0),
+        child: Row(
+          children:
+              message.isMine
+                  ? <Widget>[
+                    if (message.state == 'sending')
+                      const SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(strokeWidth: 1.8),
+                      ),
+                    Expanded(
+                      child: Text(
+                        seconds <= 0 ? '语音' : '$seconds″',
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Transform.flip(
+                      flipX: true,
+                      child: _VoicePlaybackIcon(playing: playing),
+                    ),
+                  ]
+                  : <Widget>[
+                    _VoicePlaybackIcon(playing: playing),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(seconds <= 0 ? '语音' : '$seconds″')),
+                    if (message.state == 'sending')
+                      const SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(strokeWidth: 1.8),
+                      ),
+                  ],
+        ),
       ),
     );
   }
+}
+
+class _VoicePlaybackIcon extends StatefulWidget {
+  const _VoicePlaybackIcon({required this.playing});
+  final bool playing;
+
+  @override
+  State<_VoicePlaybackIcon> createState() => _VoicePlaybackIconState();
+}
+
+class _VoicePlaybackIconState extends State<_VoicePlaybackIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.playing) _controller.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VoicePlaybackIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.playing == oldWidget.playing) return;
+    if (widget.playing) {
+      _controller.repeat();
+    } else {
+      _controller
+        ..stop()
+        ..value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder:
+        (context, _) => CustomPaint(
+          size: const Size(24, 24),
+          painter: _PlaybackWavePainter(
+            color:
+                IconTheme.of(context).color ??
+                Theme.of(context).colorScheme.onSurface,
+            waveCount: widget.playing ? (_controller.value * 3).floor() + 1 : 3,
+          ),
+        ),
+  );
+}
+
+class _PlaybackWavePainter extends CustomPainter {
+  const _PlaybackWavePainter({required this.color, required this.waveCount});
+  final Color color;
+  final int waveCount;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint =
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(
+      Offset(5, size.height / 2),
+      1.8,
+      paint..style = PaintingStyle.fill,
+    );
+    paint.style = PaintingStyle.stroke;
+    for (var index = 0; index < waveCount.clamp(1, 3); index++) {
+      final radius = 5.0 + index * 4;
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset(5, size.height / 2), radius: radius),
+        -0.72,
+        1.44,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PlaybackWavePainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.waveCount != waveCount;
 }
 
 class _Composer extends StatefulWidget {
@@ -512,10 +648,12 @@ class _ComposerState extends State<_Composer> {
   bool _recording = false;
   bool _cancelRecording = false;
   bool _pointerReleased = false;
-  Timer? _levelTimer;
+  StreamSubscription<double>? _levelSubscription;
+  OverlayEntry? _recordingOverlay;
   final Stopwatch _recordingWatch = Stopwatch();
   Duration _recordingDuration = Duration.zero;
   final List<double> _levels = List<double>.filled(24, 0.08);
+  int _amplitudeSampleCount = 0;
   int _page = 0;
 
   static const _functions = <_ChatFunction>[
@@ -533,7 +671,8 @@ class _ComposerState extends State<_Composer> {
 
   @override
   void dispose() {
-    _levelTimer?.cancel();
+    unawaited(_levelSubscription?.cancel());
+    _hideRecordingOverlay();
     if (_recording || _startingRecording) {
       unawaited(widget.controller.cancelVoiceRecording());
     }
@@ -573,8 +712,21 @@ class _ComposerState extends State<_Composer> {
     setState(() {
       _cancelRecording = false;
       _recordingDuration = Duration.zero;
+      _amplitudeSampleCount = 0;
+      _levels.fillRange(0, _levels.length, 0.04);
     });
     try {
+      final permitted = await widget.controller.hasVoiceRecordingPermission();
+      debugPrint('[voicePermission] microphone=$permitted');
+      if (!permitted) {
+        _startingRecording = false;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('未获得麦克风权限，请在系统设置中允许录音。')),
+          );
+        }
+        return;
+      }
       await widget.controller.startVoiceRecording();
       _startingRecording = false;
       if (_pointerReleased) {
@@ -584,10 +736,15 @@ class _ComposerState extends State<_Composer> {
       if (!mounted) return;
       _recordingWatch.start();
       setState(() => _recording = true);
-      _levelTimer = Timer.periodic(
-        const Duration(milliseconds: 80),
-        (_) => _sampleRecordingLevel(),
-      );
+      _showRecordingOverlay();
+      _levelSubscription = widget.controller
+          .voiceRecordingLevels(const Duration(milliseconds: 70))
+          .listen(
+            _sampleRecordingLevel,
+            onError: (Object error) {
+              debugPrint('[voiceAmplitude][failed] error=$error');
+            },
+          );
     } catch (error) {
       _startingRecording = false;
       _recordingWatch.stop();
@@ -598,33 +755,35 @@ class _ComposerState extends State<_Composer> {
     }
   }
 
-  Future<void> _sampleRecordingLevel() async {
-    if (!_recording) return;
-    try {
-      final level = await widget.controller.voiceRecordingLevel();
-      if (!mounted || !_recording) return;
-      setState(() {
-        _levels
-          ..removeAt(0)
-          ..add(level);
-        _recordingDuration = _recordingWatch.elapsed;
-      });
-    } catch (_) {
-      // A transient amplitude read must not terminate an active recording.
+  void _sampleRecordingLevel(double level) {
+    if (!_recording || !mounted) return;
+    _amplitudeSampleCount++;
+    if (_amplitudeSampleCount == 1) {
+      debugPrint('[voiceAmplitude] stream=true level=$level');
     }
+    final smoothed = _levels.last * 0.28 + level * 0.72;
+    setState(() {
+      _levels
+        ..removeAt(0)
+        ..add(smoothed.clamp(0.04, 1.0));
+      _recordingDuration = _recordingWatch.elapsed;
+    });
+    _recordingOverlay?.markNeedsBuild();
   }
 
   void _moveRecording(LongPressMoveUpdateDetails details) {
     final cancel = details.localPosition.dy < -44;
     if (cancel != _cancelRecording) {
       setState(() => _cancelRecording = cancel);
+      _recordingOverlay?.markNeedsBuild();
     }
   }
 
   Future<void> _endRecording(LongPressEndDetails _) async {
     _pointerReleased = true;
     if (_startingRecording || !_recording) return;
-    _levelTimer?.cancel();
+    await _levelSubscription?.cancel();
+    _levelSubscription = null;
     _recordingWatch.stop();
     final duration = _recordingWatch.elapsed;
     final cancel =
@@ -633,6 +792,7 @@ class _ComposerState extends State<_Composer> {
       _recording = false;
       _recordingDuration = duration;
     });
+    _hideRecordingOverlay();
     if (cancel) {
       await widget.controller.cancelVoiceRecording();
       if (mounted && !_cancelRecording) {
@@ -643,6 +803,34 @@ class _ComposerState extends State<_Composer> {
       return;
     }
     await widget.controller.finishVoiceRecording(duration);
+  }
+
+  void _showRecordingOverlay() {
+    _hideRecordingOverlay();
+    _recordingOverlay = OverlayEntry(
+      builder:
+          (context) => Positioned(
+            top: MediaQuery.paddingOf(context).top + kToolbarHeight + 18,
+            left: 42,
+            right: 42,
+            child: IgnorePointer(
+              child: Material(
+                color: Colors.transparent,
+                child: _RecordingPanel(
+                  levels: _levels,
+                  duration: _recordingDuration,
+                  cancelling: _cancelRecording,
+                ),
+              ),
+            ),
+          ),
+    );
+    Overlay.of(context).insert(_recordingOverlay!);
+  }
+
+  void _hideRecordingOverlay() {
+    _recordingOverlay?.remove();
+    _recordingOverlay = null;
   }
 
   Future<void> _selectFunction(_ChatFunction item) async {
@@ -752,12 +940,6 @@ class _ComposerState extends State<_Composer> {
               ],
             ),
           ),
-          if (_recording)
-            _RecordingPanel(
-              levels: _levels,
-              duration: _recordingDuration,
-              cancelling: _cancelRecording,
-            ),
           AnimatedSize(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
@@ -915,20 +1097,33 @@ class _RecordingPanel extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final seconds = duration.inSeconds;
     return Container(
-      height: 112,
+      height: 126,
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(22, 12, 22, 10),
-      color:
-          cancelling
-              ? colorScheme.errorContainer
-              : colorScheme.surfaceContainerLowest,
+      padding: const EdgeInsets.fromLTRB(22, 16, 22, 12),
+      decoration: BoxDecoration(
+        color:
+            cancelling
+                ? colorScheme.errorContainer.withValues(alpha: 0.96)
+                : colorScheme.inverseSurface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
       child: Column(
         children: <Widget>[
           Expanded(
             child: CustomPaint(
               painter: _VoiceWavePainter(
                 levels: levels,
-                color: cancelling ? colorScheme.error : colorScheme.primary,
+                color:
+                    cancelling
+                        ? colorScheme.error
+                        : colorScheme.onInverseSurface,
               ),
               child: const SizedBox.expand(),
             ),
@@ -943,7 +1138,7 @@ class _RecordingPanel extends StatelessWidget {
               color:
                   cancelling
                       ? colorScheme.onErrorContainer
-                      : colorScheme.onSurfaceVariant,
+                      : colorScheme.onInverseSurface,
             ),
           ),
         ],
