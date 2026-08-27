@@ -18,22 +18,27 @@ class SessionUnitApi {
       response,
       ChatOwner.fromJson,
     );
-    final overview = await _apiClient.get<Map<String, dynamic>>(
-      '/api/chat/session-unit-cache/overview',
-    );
-    final rawOverviews = overview['overviews'];
     final badges = <int, ({int unread, int immersed})>{};
-    if (rawOverviews is List) {
-      for (final raw in rawOverviews.whereType<Map>()) {
-        final ownerId = raw['ownerId'];
-        final id = ownerId is num ? ownerId.toInt() : int.tryParse('$ownerId');
-        if (id == null) continue;
-        final stat = raw['stat'] is Map ? raw['stat'] as Map : const {};
-        badges[id] = (
-          unread: (raw['totalUnreadCount'] as num?)?.toInt() ?? 0,
-          immersed: (stat['immersed'] as num?)?.toInt() ?? 0,
-        );
+    try {
+      final overview = await _apiClient.get<Map<String, dynamic>>(
+        '/api/chat/session-unit-cache/overview',
+      );
+      final rawOverviews = overview['overviews'];
+      if (rawOverviews is List) {
+        for (final raw in rawOverviews.whereType<Map>()) {
+          final ownerId = raw['ownerId'];
+          final id =
+              ownerId is num ? ownerId.toInt() : int.tryParse('$ownerId');
+          if (id == null) continue;
+          final stat = raw['stat'] is Map ? raw['stat'] as Map : const {};
+          badges[id] = (
+            unread: (raw['totalUnreadCount'] as num?)?.toInt() ?? 0,
+            immersed: (stat['immersed'] as num?)?.toInt() ?? 0,
+          );
+        }
       }
+    } on Object {
+      // Overview badges are supplementary; owner switching must remain usable.
     }
     return page.items
         .map((owner) {

@@ -77,7 +77,13 @@ class SessionListController extends ChangeNotifier {
     _deviceContext.model,
   ].where((value) => value.isNotEmpty).join(' · ');
   bool get isLoadingDevices => _isLoadingDevices;
-  SignalRConnectionState get connectionState => _connectionState;
+  SessionRealtimeStatus get connectionState => switch (_connectionState) {
+    SignalRConnectionState.disconnected => SessionRealtimeStatus.disconnected,
+    SignalRConnectionState.connecting => SessionRealtimeStatus.connecting,
+    SignalRConnectionState.connected => SessionRealtimeStatus.connected,
+    SignalRConnectionState.reconnecting => SessionRealtimeStatus.reconnecting,
+    SignalRConnectionState.disconnecting => SessionRealtimeStatus.disconnecting,
+  };
 
   Future<void> reconnectSignalR() => _signalRGateway.connect();
 
@@ -197,6 +203,16 @@ class SessionListController extends ChangeNotifier {
     final known = _sessions.map((item) => item.id).toSet();
     _sessions.addAll(result.items.where((item) => known.add(item.id)));
     _hasMore = result.hasMore;
-    _totalCount = result.totalCount;
+    if (result.totalCount != null) {
+      _totalCount = result.totalCount;
+    }
   }
+}
+
+enum SessionRealtimeStatus {
+  disconnected,
+  connecting,
+  connected,
+  reconnecting,
+  disconnecting,
 }

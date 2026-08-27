@@ -67,7 +67,7 @@ class SessionRepository {
     return LoadFriendsResult(
       items: unique.values.toList(),
       hasMore: hasMore,
-      totalCount: hasMore ? null : await _dao.count(ownerId),
+      totalCount: remote.totalCount,
     );
   }
 

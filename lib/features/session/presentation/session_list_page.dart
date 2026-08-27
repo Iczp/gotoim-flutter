@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/realtime/signalr_gateway.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/glass_container.dart';
@@ -239,7 +238,7 @@ class _OwnerDrawer extends ConsumerWidget {
                 ],
               ),
             ),
-            if (controller.connectionState != SignalRConnectionState.connected)
+            if (controller.connectionState != SessionRealtimeStatus.connected)
               _SignalRStatusBar(
                 state: controller.connectionState,
                 onReconnect: controller.reconnectSignalR,
@@ -363,7 +362,7 @@ class _OwnerDrawer extends ConsumerWidget {
 
 class _SignalRStatusBar extends StatelessWidget {
   const _SignalRStatusBar({required this.state, required this.onReconnect});
-  final SignalRConnectionState state;
+  final SessionRealtimeStatus state;
   final Future<void> Function() onReconnect;
 
   @override
@@ -371,14 +370,14 @@ class _SignalRStatusBar extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final busy =
-        state == SignalRConnectionState.connecting ||
-        state == SignalRConnectionState.reconnecting;
+        state == SessionRealtimeStatus.connecting ||
+        state == SessionRealtimeStatus.reconnecting;
     final text = switch (state) {
-      SignalRConnectionState.connecting => 'SignalR 正在连接…',
-      SignalRConnectionState.reconnecting => 'SignalR 正在重新连接…',
-      SignalRConnectionState.disconnecting => 'SignalR 正在断开…',
-      SignalRConnectionState.disconnected => 'SignalR 已断开',
-      SignalRConnectionState.connected => '',
+      SessionRealtimeStatus.connecting => 'SignalR 正在连接…',
+      SessionRealtimeStatus.reconnecting => 'SignalR 正在重新连接…',
+      SessionRealtimeStatus.disconnecting => 'SignalR 正在断开…',
+      SessionRealtimeStatus.disconnected => 'SignalR 已断开',
+      SessionRealtimeStatus.connected => '',
     };
     return Material(
       color: colorScheme.errorContainer,

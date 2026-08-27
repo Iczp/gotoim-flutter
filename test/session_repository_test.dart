@@ -72,6 +72,38 @@ void main() {
       );
     },
   );
+
+  test('loadFriends exposes the server total count', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final client = _FakeApiClient(
+      responses: {
+        '/api/chat/session-unit-cache/friends': {
+          'items': [
+            {
+              'id': 'remote',
+              'ownerId': 7,
+              'score': 10,
+              'ticks': 10,
+              'destination': {'name': 'remote'},
+            },
+          ],
+          'totalCount': 125,
+        },
+      },
+    );
+    final repository = SessionRepository(
+      api: SessionUnitApi(client),
+      dao: SessionDao(database),
+    );
+
+    final result = await repository.loadFriends(ownerId: 7, limit: 2);
+
+    expect(result.totalCount, 125);
+    expect(result.items.single.id, 'remote');
+  });
 }
 
 class _FakeApiClient implements ApiClient {
