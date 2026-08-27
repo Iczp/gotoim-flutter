@@ -188,6 +188,98 @@ class UnifiedDatabase {
     );
   }
 
+  Future<List<Map<String, Object?>>> readMemberRows({
+    required int ownerId,
+    required String sessionUnitId,
+    int? cursorScore,
+    String? cursorId,
+    int limit = 50,
+    String keyword = '',
+  }) async {
+    await initialize();
+    final hasCursor = cursorScore != null && cursorId != null;
+    final normalizedKeyword = keyword.trim();
+    return _connection.runSelect(
+      'SELECT * FROM Members WHERE ownerId = ? AND sessionUnitId = ? AND isList = 1 '
+      '${normalizedKeyword.isEmpty ? '' : 'AND (memberName LIKE ? OR raw LIKE ?) '}'
+      '${hasCursor ? 'AND (score < ? OR (score = ? AND id < ?)) ' : ''}'
+      'ORDER BY isCreator DESC, score DESC, id DESC LIMIT ?',
+      <Object?>[
+        ownerId,
+        sessionUnitId,
+        if (normalizedKeyword.isNotEmpty) '%$normalizedKeyword%',
+        if (normalizedKeyword.isNotEmpty) '%$normalizedKeyword%',
+        if (hasCursor) cursorScore,
+        if (hasCursor) cursorScore,
+        if (hasCursor) cursorId,
+        limit.clamp(1, 200),
+      ],
+    );
+  }
+
+  Future<void> upsertMemberRows(List<Map<String, Object?>> rows) async {
+    await initialize();
+    for (final row in rows) {
+      await _connection.runInsert(
+        '''INSERT INTO Members
+        (id, ownerId, sessionUnitId, memberName, isFriendship, isCreator,
+         isList, score, sorting, ticks, joinTime, createTime, updateTime, raw)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET ownerId=excluded.ownerId,
+        sessionUnitId=excluded.sessionUnitId, memberName=excluded.memberName,
+        isFriendship=excluded.isFriendship, isCreator=excluded.isCreator,
+        isList=excluded.isList, score=excluded.score, sorting=excluded.sorting,
+        ticks=excluded.ticks, joinTime=excluded.joinTime,
+        updateTime=excluded.updateTime, raw=excluded.raw''',
+        <Object?>[
+          row['id'],
+          row['ownerId'],
+          row['sessionUnitId'],
+          row['memberName'],
+          row['isFriendship'],
+          row['isCreator'],
+          row['isList'],
+          row['score'],
+          row['sorting'],
+          row['ticks'],
+          row['joinTime'],
+          row['createTime'],
+          row['updateTime'],
+          row['raw'],
+        ],
+      );
+    }
+  }
+
+  Future<void> updateFriendMemberState({
+    required String sessionUnitId,
+    int? memberCount,
+    bool? loadedAll,
+  }) async {
+    await initialize();
+    await _connection.runUpdate(
+      'UPDATE Friends SET '
+      'memberCount = COALESCE(?, memberCount), '
+      'isMemberInit = 1, '
+      'isMemberLoadedAll = COALESCE(?, isMemberLoadedAll), '
+      'memberLoadedTime = ? WHERE id = ?',
+      <Object?>[
+        memberCount,
+        loadedAll == null ? null : (loadedAll ? 1 : 0),
+        DateTime.now().millisecondsSinceEpoch,
+        sessionUnitId,
+      ],
+    );
+  }
+
+  Future<int> deleteMessageRows(int ownerId, String sessionUnitId) async {
+    await initialize();
+    return _connection.runDelete(
+      'DELETE FROM Messages WHERE ownerId = ? AND sessionUnitId = ?',
+      <Object?>[ownerId, sessionUnitId],
+    );
+  }
+
   Future<Map<String, Object?>?> readFriendRow(String id) async {
     await initialize();
     final rows = await _connection.runSelect(
@@ -205,6 +297,16 @@ class UnifiedDatabase {
     );
     return rows.isNotEmpty &&
         ((rows.single['isMessageLoadedAll'] as num?)?.toInt() ?? 0) > 0;
+  }
+
+  Future<bool> readFriendMembersLoadedAll(String id) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT isMemberLoadedAll FROM Friends WHERE id = ? LIMIT 1',
+      <Object?>[id],
+    );
+    return rows.isNotEmpty &&
+        ((rows.single['isMemberLoadedAll'] as num?)?.toInt() ?? 0) > 0;
   }
 
   Future<void> writeFriendMessagesLoadedAll(String id, bool value) async {

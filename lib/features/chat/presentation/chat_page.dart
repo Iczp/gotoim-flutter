@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/services/file/file_picker_service.dart';
 import '../application/chat_controller.dart';
@@ -55,7 +56,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           appBar: AppBar(
             title: Text(controller.title, overflow: TextOverflow.ellipsis),
             actions: <Widget>[
-              IconButton(onPressed: () {}, icon: const Icon(Icons.more_horiz)),
+              IconButton(
+                tooltip: '聊天设置',
+                onPressed: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  context.push(
+                    '/chat/${Uri.encodeComponent(widget.sessionUnitId)}/settings'
+                    '?ownerId=${widget.ownerId}',
+                  );
+                },
+                icon: const Icon(Icons.more_horiz),
+              ),
             ],
           ),
           body: Column(

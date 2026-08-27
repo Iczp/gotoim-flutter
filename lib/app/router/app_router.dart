@@ -30,6 +30,8 @@ import '../../features/local_file_server/pages/shared_file_manager_page.dart';
 import '../../features/workbench/presentation/workbench_page.dart';
 import '../../features/session/presentation/login_devices_page.dart';
 import '../../features/chat/presentation/chat_page.dart';
+import '../../features/chat_settings/presentation/chat_settings_page.dart';
+import '../../features/chat_settings/presentation/member_list_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
@@ -166,6 +168,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/devices',
         builder: (context, state) => const LoginDevicesPage(),
+      ),
+      GoRoute(
+        path: '/chat/:sessionUnitId/settings',
+        builder:
+            (context, state) => ChatSettingsPage(
+              ownerId:
+                  int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
+              sessionUnitId: state.pathParameters['sessionUnitId']!,
+            ),
+      ),
+      GoRoute(
+        path: '/chat/:sessionUnitId/members',
+        builder:
+            (context, state) => MemberListPage(
+              ownerId:
+                  int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
+              sessionUnitId: state.pathParameters['sessionUnitId']!,
+            ),
       ),
       GoRoute(
         path: '/chat/:sessionUnitId',
