@@ -8,14 +8,33 @@ void main() {
   SessionSummary session({
     required String id,
     required int ticks,
+    int? score,
     bool pinned = false,
   }) => SessionSummary.fromJson({
     'id': id,
     'ownerId': 1,
-    'score': ticks,
+    'score': score ?? ticks,
     'ticks': ticks,
     'sorting': pinned ? 1 : 0,
     'destination': {'name': id},
+  });
+
+  test('sessions are ordered by score inside their pinned group', () {
+    final items = buildSessionListItems(
+      [
+        session(id: 'newer-time', ticks: 200, score: 10),
+        session(id: 'higher-score', ticks: 100, score: 20),
+      ],
+      hasMore: false,
+      now: now,
+    );
+
+    final sessions =
+        items
+            .where((item) => item.kind == SessionListItemKind.session)
+            .map((item) => item.session!.id)
+            .toList();
+    expect(sessions, <String>['higher-score', 'newer-time']);
   });
 
   test('pinned sessions form a separate group before time groups', () {

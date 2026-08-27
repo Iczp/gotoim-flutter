@@ -67,6 +67,11 @@ class SessionSummary {
 
   int? get lastMessageId => asInt(asMap(raw['lastMessage'])['id']);
 
+  bool get isImmersed {
+    final value = asMap(raw['setting'])['isImmersed'];
+    return value == true || asInt(value) == 1;
+  }
+
   String get messageTypeLabel => messageContentType(asMap(raw['lastMessage']));
 
   Map<String, Object?> toDatabaseValues() => <String, Object?>{

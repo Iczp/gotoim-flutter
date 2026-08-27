@@ -116,4 +116,24 @@ class SessionUnitApi {
       LoggedInDevice.fromJson,
     );
   }
+
+  Future<void> setTopping(String sessionUnitId, bool value) async {
+    await _apiClient.post<Map<String, dynamic>>(
+      '/api/chat/session-unit-setting/set-topping/$sessionUnitId',
+      query: <String, Object?>{'isTopping': value},
+    );
+  }
+
+  Future<void> setImmersed(String sessionUnitId, bool value) async {
+    await _apiClient.post<Map<String, dynamic>>(
+      '/api/chat/session-unit-setting/set-immersed/$sessionUnitId',
+      query: <String, Object?>{'isImmersed': value},
+    );
+  }
+
+  Future<void> clearMessages(String sessionUnitId) async {
+    await _apiClient.post<Map<String, dynamic>>(
+      '/api/chat/session-unit-setting/clear-message/$sessionUnitId',
+    );
+  }
 }

@@ -10,11 +10,15 @@ class SessionUnitItem extends StatelessWidget {
   const SessionUnitItem({
     required this.item,
     required this.showDivider,
+    this.onLongPress,
+    this.onTap,
     super.key,
   });
 
   final SessionSummary item;
   final bool showDivider;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +50,9 @@ class SessionUnitItem extends StatelessWidget {
       color:
           item.isPinned ? tokens.sessionPinnedBackground : Colors.transparent,
       child: InkWell(
+        onLongPress: onLongPress,
         onTap:
+            onTap ??
             () => context.push(
               '/chat/${Uri.encodeComponent(item.id)}'
               '?ownerId=${item.ownerId ?? 0}'

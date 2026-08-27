@@ -26,6 +26,7 @@ class ChatPage extends ConsumerStatefulWidget {
 class _ChatPageState extends ConsumerState<ChatPage> {
   late final ChatController controller;
   final input = TextEditingController();
+  final GlobalKey<_ComposerState> _composerKey = GlobalKey<_ComposerState>();
   final Map<String, bool> _timeVisibility = <String, bool>{};
   int _timeVisibilityResetMarker = 0;
 
@@ -78,7 +79,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
-                  onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                  onTap: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    _composerKey.currentState?.closeInputArea();
+                  },
                   child: NotificationListener<ScrollNotification>(
                     onNotification: (notification) {
                       final isUserPaging =
@@ -172,7 +176,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
               SafeArea(
                 top: false,
-                child: _Composer(controller: controller, input: input),
+                child: _Composer(
+                  key: _composerKey,
+                  controller: controller,
+                  input: input,
+                ),
               ),
             ],
           ),
@@ -413,57 +421,258 @@ class _FileMessageCard extends StatelessWidget {
   }
 }
 
-class _Composer extends StatelessWidget {
-  const _Composer({required this.controller, required this.input});
+class _Composer extends StatefulWidget {
+  const _Composer({required this.controller, required this.input, super.key});
   final ChatController controller;
   final TextEditingController input;
 
   @override
+  State<_Composer> createState() => _ComposerState();
+}
+
+class _ComposerState extends State<_Composer> {
+  final FocusNode _focusNode = FocusNode();
+  final PageController _pageController = PageController();
+  bool _showFunctions = false;
+  int _page = 0;
+
+  static const _functions = <_ChatFunction>[
+    _ChatFunction('相册', Icons.photo_outlined),
+    _ChatFunction('拍摄', Icons.camera_alt_outlined),
+    _ChatFunction('视频', Icons.videocam_outlined),
+    _ChatFunction('文件', Icons.insert_drive_file_outlined, enabled: true),
+    _ChatFunction('位置', Icons.location_on_outlined),
+    _ChatFunction('名片', Icons.contact_page_outlined),
+    _ChatFunction('语音通话', Icons.call_outlined),
+    _ChatFunction('视频通话', Icons.video_call_outlined),
+    _ChatFunction('红包', Icons.wallet_giftcard_outlined),
+    _ChatFunction('收藏', Icons.bookmark_border_rounded),
+  ];
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _toggleFunctions() {
+    if (_showFunctions) {
+      setState(() => _showFunctions = false);
+      _focusNode.requestFocus();
+    } else {
+      _focusNode.unfocus();
+      setState(() => _showFunctions = true);
+    }
+  }
+
+  void closeInputArea() {
+    _focusNode.unfocus();
+    if (_showFunctions) setState(() => _showFunctions = false);
+  }
+
+  Future<void> _selectFunction(_ChatFunction item) async {
+    if (item.label == '文件') {
+      await widget.controller.chooseAndSendFile();
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('${item.label}功能暂未接入')));
+  }
+
+  @override
   Widget build(BuildContext context) => Material(
     elevation: 8,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      child: Row(
+    child: SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          IconButton(onPressed: () {}, icon: const Icon(Icons.mic_none)),
-          Expanded(
-            child: TextField(
-              controller: input,
-              minLines: 1,
-              maxLines: 5,
-              textInputAction: TextInputAction.newline,
-              decoration: const InputDecoration(
-                hintText: '输入消息',
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: '发送文件',
-            onPressed: controller.chooseAndSendFile,
-            icon: const Icon(Icons.add_circle_outline),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(56, 40),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            onPressed:
-                controller.isSending
-                    ? null
-                    : () {
-                      final value = input.text;
-                      input.clear();
-                      controller.send(value);
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            child: Row(
+              children: <Widget>[
+                IconButton(onPressed: () {}, icon: const Icon(Icons.mic_none)),
+                Expanded(
+                  child: TextField(
+                    controller: widget.input,
+                    focusNode: _focusNode,
+                    onTap: () {
+                      if (_showFunctions) {
+                        setState(() => _showFunctions = false);
+                      }
                     },
-            child: const Text('发送'),
+                    minLines: 1,
+                    maxLines: 5,
+                    textInputAction: TextInputAction.newline,
+                    decoration: const InputDecoration(
+                      hintText: '输入消息',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: _showFunctions ? '打开键盘' : '更多功能',
+                  onPressed: _toggleFunctions,
+                  icon: AnimatedRotation(
+                    turns: _showFunctions ? 0.125 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(Icons.add_circle_outline),
+                  ),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(56, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed:
+                      widget.controller.isSending
+                          ? null
+                          : () {
+                            final value = widget.input.text;
+                            widget.input.clear();
+                            widget.controller.send(value);
+                          },
+                  child: const Text('发送'),
+                ),
+              ],
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            child:
+                _showFunctions
+                    ? _FunctionPanel(
+                      items: _functions,
+                      pageController: _pageController,
+                      page: _page,
+                      onPageChanged: (value) => setState(() => _page = value),
+                      onSelected: _selectFunction,
+                    )
+                    : const SizedBox(width: double.infinity),
           ),
         ],
       ),
     ),
   );
+}
+
+class _FunctionPanel extends StatelessWidget {
+  const _FunctionPanel({
+    required this.items,
+    required this.pageController,
+    required this.page,
+    required this.onPageChanged,
+    required this.onSelected,
+  });
+
+  final List<_ChatFunction> items;
+  final PageController pageController;
+  final int page;
+  final ValueChanged<int> onPageChanged;
+  final ValueChanged<_ChatFunction> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final pageCount = (items.length / 8).ceil();
+    return Container(
+      height: 238,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        border: Border(
+          top: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
+        ),
+      ),
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            child: PageView.builder(
+              controller: pageController,
+              itemCount: pageCount,
+              onPageChanged: onPageChanged,
+              itemBuilder: (context, pageIndex) {
+                final start = pageIndex * 8;
+                final pageItems = items.skip(start).take(8).toList();
+                return GridView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 1.18,
+                  ),
+                  itemCount: pageItems.length,
+                  itemBuilder: (context, index) {
+                    final item = pageItems[index];
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => onSelected(item),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color:
+                                  Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(item.icon, size: 25),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            item.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List<Widget>.generate(
+              pageCount,
+              (index) => AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: index == page ? 14 : 6,
+                height: 6,
+                margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
+                decoration: BoxDecoration(
+                  color:
+                      index == page
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatFunction {
+  const _ChatFunction(this.label, this.icon, {this.enabled = false});
+  final String label;
+  final IconData icon;
+  final bool enabled;
 }
 
 final ButtonStyle _compactTextButtonStyle = TextButton.styleFrom(

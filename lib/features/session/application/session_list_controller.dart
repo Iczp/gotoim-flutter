@@ -74,6 +74,7 @@ class SessionListController extends ChangeNotifier {
   List<LoggedInDevice> _devices = const [];
   bool _isLoadingDevices = false;
   late SignalRConnectionState _connectionState;
+  int _focusUnreadRequest = 0;
 
   List<SessionSummary> get sessions => List.unmodifiable(_sessions);
   List<ChatOwner> get owners => _owners;
@@ -98,6 +99,13 @@ class SessionListController extends ChangeNotifier {
     SignalRConnectionState.reconnecting => SessionRealtimeStatus.reconnecting,
     SignalRConnectionState.disconnecting => SessionRealtimeStatus.disconnecting,
   };
+  int get focusUnreadRequest => _focusUnreadRequest;
+
+  void requestFocusUnread() {
+    if (!_sessions.any((session) => session.unreadCount > 0)) return;
+    _focusUnreadRequest++;
+    notifyListeners();
+  }
 
   Future<void> reconnectSignalR() => _signalRGateway.connect();
 
@@ -291,6 +299,48 @@ class SessionListController extends ChangeNotifier {
       _isRefreshing = false;
       notifyListeners();
     }
+  }
+
+  Future<void> reloadVisibleLocal() async {
+    final owner = _currentOwner;
+    if (owner == null) return;
+    final local = await _repository.loadLocalFriends(
+      ownerId: owner.id,
+      limit: _sessions.length < pageSize ? pageSize : _sessions.length,
+    );
+    _sessions
+      ..clear()
+      ..addAll(local);
+    notifyListeners();
+  }
+
+  Future<void> setTopping(SessionSummary session, bool value) async {
+    final ownerId = session.ownerId ?? _currentOwner?.id;
+    if (ownerId == null) return;
+    await _repository.setTopping(
+      ownerId: ownerId,
+      sessionUnitId: session.id,
+      value: value,
+    );
+  }
+
+  Future<void> setImmersed(SessionSummary session, bool value) async {
+    final ownerId = session.ownerId ?? _currentOwner?.id;
+    if (ownerId == null) return;
+    await _repository.setImmersed(
+      ownerId: ownerId,
+      sessionUnitId: session.id,
+      value: value,
+    );
+  }
+
+  Future<void> clearMessages(SessionSummary session) async {
+    final ownerId = session.ownerId ?? _currentOwner?.id;
+    if (ownerId == null) return;
+    await _repository.clearMessages(
+      ownerId: ownerId,
+      sessionUnitId: session.id,
+    );
   }
 
   Future<void> _loadNextPageInternal({bool reset = false}) async {

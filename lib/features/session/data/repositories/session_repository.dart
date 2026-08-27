@@ -178,6 +178,39 @@ class SessionRepository {
     }
     return changed.values.toList(growable: false);
   }
+
+  Future<void> setTopping({
+    required int ownerId,
+    required String sessionUnitId,
+    required bool value,
+  }) async {
+    await _api.setTopping(sessionUnitId, value);
+    await loadRemoteFriendDetail(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+    );
+  }
+
+  Future<void> setImmersed({
+    required int ownerId,
+    required String sessionUnitId,
+    required bool value,
+  }) async {
+    await _api.setImmersed(sessionUnitId, value);
+    await loadRemoteFriendDetail(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+    );
+  }
+
+  Future<void> clearMessages({
+    required int ownerId,
+    required String sessionUnitId,
+  }) async {
+    await _api.clearMessages(sessionUnitId);
+    await _dao.resetMessages(ownerId, sessionUnitId);
+    _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
+  }
 }
 
 class LoadFriendsResult {

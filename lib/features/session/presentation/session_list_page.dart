@@ -7,6 +7,7 @@ import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/chat_owner.dart';
+import '../data/models/session_summary.dart';
 import 'chat_object_avatar.dart';
 import 'session_dividers.dart';
 import 'session_list_item.dart';
@@ -20,6 +21,10 @@ class SessionListPage extends ConsumerStatefulWidget {
 }
 
 class _SessionListPageState extends ConsumerState<SessionListPage> {
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _sessionKeys = <String, GlobalKey>{};
+  int _handledFocusUnreadRequest = 0;
+
   @override
   void initState() {
     super.initState();
@@ -29,12 +34,24 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final controller = ref.watch(sessionListControllerProvider);
     final listItems = buildSessionListItems(
       controller.sessions,
       hasMore: controller.hasMore,
     );
+    if (_handledFocusUnreadRequest != controller.focusUnreadRequest) {
+      _handledFocusUnreadRequest = controller.focusUnreadRequest;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scrollToFirstUnread(controller, listItems),
+      );
+    }
     return Scaffold(
       drawer: _OwnerDrawer(controller: controller),
       body: SafeArea(
@@ -63,6 +80,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                     return false;
                   },
                   child: CustomScrollView(
+                    controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
                       if (controller.error != null)
@@ -89,7 +107,23 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                             final item = listItems[index];
                             return switch (item.kind) {
                               SessionListItemKind.session => SessionUnitItem(
+                                key: _sessionKeys.putIfAbsent(
+                                  item.session!.id,
+                                  GlobalKey.new,
+                                ),
                                 item: item.session!,
+                                onTap:
+                                    () => _openChat(
+                                      context,
+                                      controller,
+                                      item.session!,
+                                    ),
+                                onLongPress:
+                                    () => _showSessionMenu(
+                                      context,
+                                      controller,
+                                      item.session!,
+                                    ),
                                 showDivider:
                                     index + 1 < listItems.length &&
                                     listItems[index + 1].kind ==
@@ -122,7 +156,214 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       ),
     );
   }
+
+  Future<void> _openChat(
+    BuildContext context,
+    SessionListController controller,
+    SessionSummary session,
+  ) async {
+    await context.push(
+      '/chat/${Uri.encodeComponent(session.id)}'
+      '?ownerId=${session.ownerId ?? controller.currentOwner?.id ?? 0}'
+      '&title=${Uri.encodeQueryComponent(session.title)}',
+    );
+    if (!mounted) return;
+    await controller.reloadVisibleLocal();
+  }
+
+  Future<void> _scrollToFirstUnread(
+    SessionListController _,
+    List<SessionListItem> listItems,
+  ) async {
+    if (!mounted || !_scrollController.hasClients) return;
+    final targetIndex = listItems.indexWhere(
+      (item) =>
+          item.kind == SessionListItemKind.session &&
+          item.session!.unreadCount > 0,
+    );
+    if (targetIndex < 0) return;
+    final target = listItems[targetIndex].session!;
+    final targetContext = _sessionKeys[target.id]?.currentContext;
+    if (targetContext != null) {
+      await Scrollable.ensureVisible(
+        targetContext,
+        alignment: 0.12,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+
+    var estimatedOffset = 0.0;
+    for (var index = 0; index < targetIndex; index++) {
+      estimatedOffset +=
+          listItems[index].kind == SessionListItemKind.session ? 68 : 32;
+    }
+    final position = _scrollController.position;
+    await _scrollController.animateTo(
+      estimatedOffset.clamp(position.minScrollExtent, position.maxScrollExtent),
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+    if (!mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final builtContext = _sessionKeys[target.id]?.currentContext;
+    if (builtContext != null && builtContext.mounted) {
+      await Scrollable.ensureVisible(
+        builtContext,
+        alignment: 0.12,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  Future<void> _showSessionMenu(
+    BuildContext context,
+    SessionListController controller,
+    SessionSummary session,
+  ) async {
+    final action = await showModalBottomSheet<_SessionMenuAction>(
+      context: context,
+      showDragHandle: true,
+      builder:
+          (sheetContext) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                ListTile(
+                  leading: ChatObjectAvatar(
+                    name: session.title,
+                    imageUrl: null,
+                    radius: 22,
+                  ),
+                  title: Text(
+                    session.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: const Text('会话操作'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: Icon(
+                    session.isPinned
+                        ? Icons.push_pin_outlined
+                        : Icons.push_pin_rounded,
+                  ),
+                  title: Text(session.isPinned ? '取消置顶' : '置顶会话'),
+                  onTap:
+                      () => Navigator.pop(
+                        sheetContext,
+                        _SessionMenuAction.topping,
+                      ),
+                ),
+                ListTile(
+                  leading: Icon(
+                    session.isImmersed
+                        ? Icons.notifications_active_outlined
+                        : Icons.notifications_off_outlined,
+                  ),
+                  title: Text(session.isImmersed ? '开启消息通知' : '关闭消息通知'),
+                  onTap:
+                      () => Navigator.pop(
+                        sheetContext,
+                        _SessionMenuAction.notification,
+                      ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.settings_outlined),
+                  title: const Text('聊天设置'),
+                  onTap:
+                      () => Navigator.pop(
+                        sheetContext,
+                        _SessionMenuAction.settings,
+                      ),
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.delete_sweep_outlined,
+                    color: Theme.of(sheetContext).colorScheme.error,
+                  ),
+                  title: Text(
+                    '清空聊天记录',
+                    style: TextStyle(
+                      color: Theme.of(sheetContext).colorScheme.error,
+                    ),
+                  ),
+                  onTap:
+                      () =>
+                          Navigator.pop(sheetContext, _SessionMenuAction.clear),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+    );
+    if (action == null || !context.mounted) return;
+    if (action == _SessionMenuAction.settings) {
+      await context.push(
+        '/chat/${Uri.encodeComponent(session.id)}/settings'
+        '?ownerId=${session.ownerId ?? controller.currentOwner?.id ?? 0}',
+      );
+      return;
+    }
+    if (action == _SessionMenuAction.clear) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder:
+            (dialogContext) => AlertDialog(
+              title: const Text('清空聊天记录'),
+              content: Text('确定清空“${session.title}”的全部聊天记录吗？'),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('清空'),
+                ),
+              ],
+            ),
+      );
+      if (confirmed != true || !context.mounted) return;
+    }
+    try {
+      switch (action) {
+        case _SessionMenuAction.topping:
+          await controller.setTopping(session, !session.isPinned);
+        case _SessionMenuAction.notification:
+          await controller.setImmersed(session, !session.isImmersed);
+        case _SessionMenuAction.clear:
+          await controller.clearMessages(session);
+        case _SessionMenuAction.settings:
+          break;
+      }
+      if (context.mounted) {
+        final message = switch (action) {
+          _SessionMenuAction.topping => session.isPinned ? '已取消置顶' : '已置顶',
+          _SessionMenuAction.notification =>
+            session.isImmersed ? '已开启消息通知' : '已关闭消息通知',
+          _SessionMenuAction.clear => '聊天记录已清空',
+          _SessionMenuAction.settings => '',
+        };
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
+      }
+    }
+  }
 }
+
+enum _SessionMenuAction { topping, notification, settings, clear }
 
 class _CurrentOwnerHeader extends StatelessWidget {
   const _CurrentOwnerHeader({

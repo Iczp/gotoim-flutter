@@ -271,6 +271,7 @@ class MessageRepository {
     await _sessionDao?.updateLastMessage(
       ownerId: message.ownerId,
       sessionUnitId: message.sessionUnitId,
+      score: message.score,
       message: message.raw,
     );
     _sessionChangeBus?.publish(

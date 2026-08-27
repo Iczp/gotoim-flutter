@@ -312,6 +312,7 @@ class UnifiedDatabase {
   Future<void> updateFriendLastMessage({
     required int ownerId,
     required String sessionUnitId,
+    required int score,
     required Map<String, dynamic> message,
   }) async {
     await initialize();
@@ -329,12 +330,13 @@ class UnifiedDatabase {
     raw['lastMessage'] = message;
     raw['lastMessageTime'] = messageTime.toIso8601String();
     raw['ticks'] = ticks;
+    raw['score'] = score;
     raw['publicBadge'] = 0;
     raw['privateBadge'] = 0;
     await _connection.runUpdate(
-      'UPDATE Friends SET ticks = ?, updateTime = ?, raw = ? '
+      'UPDATE Friends SET score = ?, ticks = ?, updateTime = ?, raw = ? '
       'WHERE id = ? AND ownerId = ?',
-      <Object?>[ticks, ticks, jsonEncode(raw), sessionUnitId, ownerId],
+      <Object?>[score, ticks, ticks, jsonEncode(raw), sessionUnitId, ownerId],
     );
   }
 

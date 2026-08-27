@@ -9,6 +9,7 @@ import '../../auth/application/auth_controller.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/presentation/chat_object_avatar.dart';
 import '../../session/presentation/session_list_page.dart';
+import '../../explore/presentation/explore_page.dart';
 
 /// Top-level section page router for the IM home shell.
 class HomeSectionPage extends StatelessWidget {
@@ -39,17 +40,21 @@ class HomeSectionPage extends StatelessWidget {
     if (section == HomeSection.workbench) {
       return _WorkbenchEntry(isCompact: isCompact);
     }
+    if (section == HomeSection.explore) {
+      return ExplorePage(isCompact: isCompact);
+    }
     return _ProfileSettingsPage(isCompact: isCompact);
   }
 }
 
-enum HomeSection { messages, contacts, workbench, profile }
+enum HomeSection { messages, contacts, workbench, explore, profile }
 
 extension HomeSectionInfo on HomeSection {
   String get label {
     if (this == HomeSection.messages) return '消息';
     if (this == HomeSection.contacts) return '通讯录';
     if (this == HomeSection.workbench) return '工作台';
+    if (this == HomeSection.explore) return '探索';
     return '我的';
   }
 
@@ -57,6 +62,7 @@ extension HomeSectionInfo on HomeSection {
     if (this == HomeSection.messages) return Icons.forum_outlined;
     if (this == HomeSection.contacts) return Icons.contacts_outlined;
     if (this == HomeSection.workbench) return Icons.grid_view_rounded;
+    if (this == HomeSection.explore) return Icons.explore_outlined;
     return Icons.person_outline_rounded;
   }
 
@@ -64,6 +70,7 @@ extension HomeSectionInfo on HomeSection {
     if (this == HomeSection.messages) return Icons.forum_rounded;
     if (this == HomeSection.contacts) return Icons.contacts_rounded;
     if (this == HomeSection.workbench) return Icons.grid_view;
+    if (this == HomeSection.explore) return Icons.explore_rounded;
     return Icons.person_rounded;
   }
 }

@@ -9,6 +9,7 @@ import '../../core/theme/theme_mode_controller.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/home/presentation/home_sections.dart';
+import '../../features/session/application/session_list_controller.dart';
 import '../layout/app_breakpoints.dart';
 
 /// Responsive host for the IM's top-level sections.
@@ -21,8 +22,23 @@ class ApplicationShell extends ConsumerStatefulWidget {
 
 class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   HomeSection _section = HomeSection.messages;
+  DateTime? _lastMessagesTabTap;
 
-  void _select(HomeSection section) => setState(() => _section = section);
+  void _select(HomeSection section) {
+    final now = DateTime.now();
+    if (section == HomeSection.messages && _section == HomeSection.messages) {
+      final previous = _lastMessagesTabTap;
+      _lastMessagesTabTap = now;
+      if (previous != null &&
+          now.difference(previous) <= const Duration(milliseconds: 450)) {
+        _lastMessagesTabTap = null;
+        ref.read(sessionListControllerProvider).requestFocusUnread();
+      }
+      return;
+    }
+    _lastMessagesTabTap = section == HomeSection.messages ? now : null;
+    setState(() => _section = section);
+  }
 
   @override
   Widget build(BuildContext context) {

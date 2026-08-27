@@ -50,10 +50,10 @@ List<SessionListItem> buildSessionListItems(
   final items = [...source]..sort((a, b) {
     final pinned = (b.isPinned ? 1 : 0).compareTo(a.isPinned ? 1 : 0);
     if (pinned != 0) return pinned;
-    final ticks = b.ticks.compareTo(a.ticks);
-    if (ticks != 0) return ticks;
     final score = b.score.compareTo(a.score);
-    return score != 0 ? score : b.id.compareTo(a.id);
+    if (score != 0) return score;
+    final ticks = b.ticks.compareTo(a.ticks);
+    return ticks != 0 ? ticks : b.id.compareTo(a.id);
   });
   final result = <SessionListItem>[];
   final pinnedCount = items.where((item) => item.isPinned).length;
