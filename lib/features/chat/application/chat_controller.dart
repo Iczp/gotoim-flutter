@@ -213,7 +213,6 @@ class ChatController extends ChangeNotifier {
     );
     _messages.insert(0, pending);
     notifyListeners();
-    unawaited(_audioPlaybackService.playSendEffect());
     final sent = await _repository.sendText(
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,
@@ -224,6 +223,7 @@ class ChatController extends ChangeNotifier {
     _messages.sort((a, b) => b.score.compareTo(a.score));
     isSending = false;
     notifyListeners();
+    _playSentEffect(sent);
   }
 
   Future<void> chooseAndSendFile() async {
@@ -266,11 +266,11 @@ class ChatController extends ChangeNotifier {
     _messages.insert(0, local);
     _messages.sort((a, b) => b.score.compareTo(a.score));
     notifyListeners();
-    unawaited(_audioPlaybackService.playSendEffect());
     final sent = await _repository.sendLocalVoice(local: local, file: file);
     _replaceMessage(sent);
     if (sent.state == 'sent') _pendingFiles.remove(local.localId);
     notifyListeners();
+    _playSentEffect(sent);
   }
 
   Future<void> _sendFile(SelectedFile file) async {
@@ -283,12 +283,12 @@ class ChatController extends ChangeNotifier {
     _messages.insert(0, local);
     _messages.sort((a, b) => b.score.compareTo(a.score));
     notifyListeners();
-    unawaited(_audioPlaybackService.playSendEffect());
 
     final sent = await _repository.sendLocalFile(local: local, file: file);
     _replaceMessage(sent);
     if (sent.state == 'sent') _pendingFiles.remove(local.localId);
     notifyListeners();
+    _playSentEffect(sent);
   }
 
   Future<void> retryFile(ChatMessage message) async {
@@ -304,6 +304,13 @@ class ChatController extends ChangeNotifier {
     _replaceMessage(sent);
     if (sent.state == 'sent') _pendingFiles.remove(message.localId);
     notifyListeners();
+    _playSentEffect(sent);
+  }
+
+  void _playSentEffect(ChatMessage message) {
+    if (message.state == 'sent') {
+      unawaited(_audioPlaybackService.playSendEffect());
+    }
   }
 
   Future<void> markVoiceOpened(ChatMessage message) async {

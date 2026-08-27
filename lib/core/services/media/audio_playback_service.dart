@@ -132,7 +132,7 @@ class AudioPlaybackService extends ChangeNotifier {
       await _effectPlayer.stop();
       await _effectPlayer.play(
         BytesSource(_buildSendEffect(), mimeType: 'audio/wav'),
-        volume: 0.45,
+        volume: 0.42,
       );
     } catch (error) {
       debugPrint('[sendSound][failed] error=$error');
@@ -141,7 +141,7 @@ class AudioPlaybackService extends ChangeNotifier {
 
   static Uint8List _buildSendEffect() {
     const sampleRate = 22050;
-    const durationMs = 145;
+    const durationMs = 185;
     final sampleCount = sampleRate * durationMs ~/ 1000;
     final dataLength = sampleCount * 2;
     final bytes = ByteData(44 + dataLength);
@@ -165,15 +165,27 @@ class AudioPlaybackService extends ChangeNotifier {
     ascii(36, 'data');
     bytes.setUint32(40, dataLength, Endian.little);
     var phase = 0.0;
+    var noiseSeed = 0x51f15e;
+    var previousNoise = 0.0;
     for (var index = 0; index < sampleCount; index++) {
       final progress = index / sampleCount;
-      final frequency = 900 + 1900 * progress * progress;
+      final frequency = 720 + 2200 * math.pow(progress, 1.7);
       phase += 2 * math.pi * frequency / sampleRate;
       final envelope =
-          progress < 0.08
-              ? progress / 0.08
-              : math.pow(1 - progress, 1.8).toDouble();
-      final sample = (math.sin(phase) * envelope * 15000).round();
+          progress < 0.06
+              ? progress / 0.06
+              : math.pow(1 - progress, 2.15).toDouble();
+      noiseSeed = (noiseSeed * 1103515245 + 12345) & 0x7fffffff;
+      final noise = noiseSeed / 0x7fffffff * 2 - 1;
+      final airy = noise - previousNoise * 0.82;
+      previousNoise = noise;
+      final tonal =
+          math.sin(phase) * 0.72 + math.sin(phase * 1.98 + 0.35) * 0.18;
+      final tail = math.sin(phase * 0.51) * math.pow(1 - progress, 3) * 0.1;
+      final sample =
+          ((tonal + airy * 0.22 + tail) * envelope * 14500)
+              .clamp(-32767, 32767)
+              .round();
       bytes.setInt16(44 + index * 2, sample, Endian.little);
     }
     return bytes.buffer.asUint8List();
