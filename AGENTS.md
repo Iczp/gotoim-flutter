@@ -370,7 +370,13 @@ F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\im\messages\MessageTab.vu
 
 6. 
 
-7.  tab 加   搜索Tab页，工作台放中心，  切换Tab，要有胶囊移动效果
+7.  tab 加   探索，Tab页，工作台放中心，  切换Tab，要有胶囊移动效果
+
+
+   目前还没有达到效果：
+
+   1. 好友是首先加载本地的，有默认currentOwnerId, 显示的是加载网络失败，列表暂无好友。流程是加载网络时，要upsert本地，所以要有加载成功过，本地是有好友数据的。
+   2. 抽屉打开，没有网络时候，聊天身份就没有，说明这个也是没有缓存下来，
 
    
 

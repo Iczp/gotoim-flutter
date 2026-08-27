@@ -1,3 +1,5 @@
+import 'session_summary_helpers.dart';
+
 class ChatOwner {
   const ChatOwner({
     required this.id,
@@ -29,6 +31,31 @@ class ChatOwner {
   final String typeDescription;
   final int unreadCount;
   final int immersedCount;
+
+  factory ChatOwner.fromDatabaseRow(Map<String, Object?> row) {
+    final raw = row['raw'];
+    if (raw is String && raw.isNotEmpty) {
+      return ChatOwner.fromJson(decodeJsonObject(raw));
+    }
+    return ChatOwner(
+      id: (row['id'] as num).toInt(),
+      name: row['name']?.toString() ?? '',
+      imageUrl: null,
+      typeDescription: row['objectType']?.toString() ?? '',
+    );
+  }
+
+  Map<String, Object?> toDatabaseValues() => <String, Object?>{
+    'id': id,
+    'name': name,
+    'objectType': typeDescription,
+    'raw': encodeJson(<String, Object?>{
+      'id': id,
+      'displayName': name,
+      'thumbnail': imageUrl,
+      'objectTypeDescription': typeDescription,
+    }),
+  };
 
   ChatOwner withOverview({required int unread, required int immersed}) =>
       ChatOwner(

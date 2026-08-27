@@ -206,6 +206,29 @@ class UnifiedDatabase {
     return (rows.single['count'] as num?)?.toInt() ?? 0;
   }
 
+  Future<List<Map<String, Object?>>> readOwnerRows() async {
+    await initialize();
+    return _connection.runSelect(
+      'SELECT id, name, objectType, raw FROM Owners ORDER BY id',
+      const [],
+    );
+  }
+
+  Future<void> upsertOwnerRows(List<Map<String, Object?>> rows) async {
+    if (rows.isEmpty) return;
+    await initialize();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final row in rows) {
+      await _connection.runInsert(
+        'INSERT INTO Owners (id, name, objectType, updateTime, raw) '
+        'VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET '
+        'name = excluded.name, objectType = excluded.objectType, '
+        'updateTime = excluded.updateTime, raw = excluded.raw',
+        <Object?>[row['id'], row['name'], row['objectType'], now, row['raw']],
+      );
+    }
+  }
+
   Future<String?> readSettingValue(String id) async {
     await initialize();
     final rows = await _connection.runSelect(

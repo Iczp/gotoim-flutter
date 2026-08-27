@@ -92,23 +92,73 @@ class SessionListController extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
+    final savedOwnerId = await _repository.readCurrentOwnerId();
     try {
-      _owners = await _repository.loadOwners();
-      if (_owners.isEmpty) throw StateError('当前账号没有可用的聊天对象');
-      final savedOwnerId = await _repository.readCurrentOwnerId();
-      _currentOwner = _owners.cast<ChatOwner?>().firstWhere(
-        (owner) => owner?.id == savedOwnerId,
-        orElse: () => _owners.first,
-      );
-      await _repository.saveCurrentOwnerId(_currentOwner!.id);
+      _owners = await _repository.loadLocalOwners();
+      if (_owners.isEmpty && savedOwnerId != null) {
+        _owners = <ChatOwner>[
+          ChatOwner(
+            id: savedOwnerId,
+            name: '聊天身份 $savedOwnerId',
+            imageUrl: null,
+            typeDescription: '',
+          ),
+        ];
+      }
+      if (_owners.isNotEmpty) {
+        _currentOwner = _ownerById(savedOwnerId) ?? _owners.first;
+        final cached = await _repository.loadLocalFriends(
+          ownerId: _currentOwner!.id,
+          limit: pageSize,
+        );
+        _sessions
+          ..clear()
+          ..addAll(cached);
+        _hasMore = true;
+        debugPrint(
+          '[sessionInitialize][local] ownerId=${_currentOwner!.id} '
+          'owners=${_owners.length} friends=${cached.length}',
+        );
+        notifyListeners();
+      }
+
+      final remoteOwners = await _repository.loadOwners();
+      if (remoteOwners.isEmpty && _currentOwner == null) {
+        throw StateError('当前账号没有可用的聊天对象');
+      }
+      if (remoteOwners.isNotEmpty) {
+        final previousOwnerId = _currentOwner?.id;
+        _owners = remoteOwners;
+        _currentOwner =
+            _ownerById(previousOwnerId) ??
+            _ownerById(savedOwnerId) ??
+            remoteOwners.first;
+        await _repository.saveCurrentOwnerId(_currentOwner!.id);
+        await _loadNextPageInternal(reset: true);
+      }
       unawaited(loadDevices(silent: true));
-      await _loadNextPageInternal(reset: true);
     } catch (error) {
-      _error = error;
+      if (_currentOwner == null || _sessions.isEmpty) {
+        _error = error;
+      } else {
+        debugPrint(
+          '[sessionInitialize][remote-failed] keepLocalOwner='
+          '${_currentOwner!.id} keepLocalFriends=${_sessions.length} '
+          'error=$error',
+        );
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  ChatOwner? _ownerById(int? id) {
+    if (id == null) return null;
+    for (final owner in _owners) {
+      if (owner.id == id) return owner;
+    }
+    return null;
   }
 
   Future<void> loadDevices({bool silent = false}) async {

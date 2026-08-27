@@ -5,6 +5,7 @@ import '../datasources/session_unit_api.dart';
 import '../models/session_summary.dart';
 import '../models/logged_in_device.dart';
 import '../models/chat_owner.dart';
+import '../models/paged_result_dto.dart';
 
 class SessionRepository {
   SessionRepository({required SessionUnitApi api, required SessionDao dao})
@@ -14,7 +15,16 @@ class SessionRepository {
   final SessionUnitApi _api;
   final SessionDao _dao;
 
-  Future<List<ChatOwner>> loadOwners() => _api.getOwners();
+  Future<List<ChatOwner>> loadLocalOwners() => _dao.readOwners();
+
+  Future<List<ChatOwner>> loadOwners() async {
+    final owners = await _api.getOwners();
+    await _dao.upsertOwners(owners);
+    debugPrint(
+      '[loadOwners][remote] received=${owners.length} persisted=${owners.length}',
+    );
+    return owners;
+  }
 
   Future<int?> readCurrentOwnerId() => _dao.readCurrentOwnerId();
 
@@ -73,13 +83,25 @@ class SessionRepository {
       'cursorId=${last?.id ?? cursor?.id} '
       'requested=${limit - localItems.length}',
     );
-    final remote = await _api.getFriends(
-      ownerId: ownerId,
-      maxResultCount: limit - localItems.length,
-      maxMessageId: maxMessageId,
-      maxScore: last?.score ?? cursor?.score,
-      cursorId: last?.id ?? cursor?.id,
-    );
+    late final PagedResultDto<SessionSummary> remote;
+    try {
+      remote = await _api.getFriends(
+        ownerId: ownerId,
+        maxResultCount: limit - localItems.length,
+        maxMessageId: maxMessageId,
+        maxScore: last?.score ?? cursor?.score,
+        cursorId: last?.id ?? cursor?.id,
+      );
+    } catch (error) {
+      debugPrint(
+        '[loadFriends][remote-failed] ownerId=$ownerId '
+        'keepLocal=${localItems.length} error=$error',
+      );
+      if (localItems.isNotEmpty) {
+        return LoadFriendsResult(items: localItems, hasMore: true);
+      }
+      rethrow;
+    }
     await _dao.upsertAll(remote.items);
     final hasMore = remote.items.length == limit - localItems.length;
     debugPrint(

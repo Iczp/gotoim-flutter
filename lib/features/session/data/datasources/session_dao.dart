@@ -1,4 +1,5 @@
 import '../../../../core/database/unified_database.dart';
+import '../models/chat_owner.dart';
 import '../models/session_summary.dart';
 
 /// Local session-list access backed by the shared Friends table.
@@ -35,6 +36,16 @@ class SessionDao {
       _database.readMaxFriendTicks(ownerId);
 
   Future<int> count(int ownerId) => _database.countFriendRows(ownerId);
+
+  Future<List<ChatOwner>> readOwners() async =>
+      (await _database.readOwnerRows())
+          .map(ChatOwner.fromDatabaseRow)
+          .toList(growable: false);
+
+  Future<void> upsertOwners(List<ChatOwner> owners) =>
+      _database.upsertOwnerRows(
+        owners.map((owner) => owner.toDatabaseValues()).toList(growable: false),
+      );
 
   Future<bool> isLoadedAll(int ownerId) async =>
       await _database.readSettingValue(_loadedAllKey(ownerId)) == 'true';

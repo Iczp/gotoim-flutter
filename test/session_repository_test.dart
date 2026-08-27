@@ -154,6 +154,59 @@ void main() {
     expect(client.getQueries.single['maxScore'], 20);
     expect(client.getQueries.single['cursorId'], 'local');
   });
+
+  test('loadFriends keeps local rows when the remote page fails', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = SessionDao(database);
+    await dao.upsertAll([item('cached', 20)]);
+    final repository = SessionRepository(
+      api: SessionUnitApi(_FakeApiClient()),
+      dao: dao,
+    );
+
+    final result = await repository.loadFriends(ownerId: 7, limit: 2);
+
+    expect(result.items.single.id, 'cached');
+    expect(result.hasMore, isTrue);
+  });
+
+  test('remote owners are upserted and available offline', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = SessionDao(database);
+    final repository = SessionRepository(
+      api: SessionUnitApi(
+        _FakeApiClient(
+          responses: {
+            '/api/chat/chat-object/by-current-user': {
+              'items': [
+                {
+                  'id': 7,
+                  'displayName': '本地身份',
+                  'thumbnail': '/avatar.png',
+                  'objectTypeDescription': '个人',
+                },
+              ],
+              'totalCount': 1,
+            },
+          },
+        ),
+      ),
+      dao: dao,
+    );
+
+    await repository.loadOwners();
+    final cached = await repository.loadLocalOwners();
+
+    expect(cached.single.id, 7);
+    expect(cached.single.name, '本地身份');
+    expect(cached.single.imageUrl, '/avatar.png');
+  });
 }
 
 class _FakeApiClient implements ApiClient {
