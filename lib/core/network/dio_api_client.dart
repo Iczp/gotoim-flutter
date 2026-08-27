@@ -63,11 +63,34 @@ class DioApiClient implements ApiClient {
     );
   }
 
+  @override
+  Future<T> postMultipart<T>(
+    String path, {
+    Map<String, Object?>? query,
+    required MultipartUploadFile file,
+    String fieldName = 'file',
+    bool retryOnUnauthorized = true,
+  }) => _request<T>(
+    path: path,
+    method: 'POST',
+    query: query,
+    dataFactory:
+        () => FormData.fromMap(<String, Object>{
+          fieldName: MultipartFile.fromStream(
+            file.openRead,
+            file.length,
+            filename: file.name,
+          ),
+        }),
+    retryOnUnauthorized: retryOnUnauthorized,
+  );
+
   Future<T> _request<T>({
     required String path,
     required String method,
     Map<String, Object?>? query,
     Object? data,
+    Object? Function()? dataFactory,
     Map<String, String>? headers,
     bool hasRetriedAfterRefresh = false,
     bool retryOnUnauthorized = true,
@@ -86,7 +109,7 @@ class DioApiClient implements ApiClient {
     try {
       final response = await _dio.request<dynamic>(
         path,
-        data: data,
+        data: dataFactory?.call() ?? data,
         queryParameters: query,
         options: Options(
           method: method,
@@ -120,6 +143,7 @@ class DioApiClient implements ApiClient {
           method: method,
           query: query,
           data: data,
+          dataFactory: dataFactory,
           headers: headers,
           hasRetriedAfterRefresh: true,
           retryOnUnauthorized: retryOnUnauthorized,

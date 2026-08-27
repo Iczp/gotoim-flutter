@@ -65,4 +65,18 @@ class MessageApi {
       'content': <String, Object?>{'text': text},
     },
   );
+
+  Future<Map<String, dynamic>> sendUploadFile({
+    required String sessionUnitId,
+    required String fileName,
+    required int fileLength,
+    required Stream<List<int>> Function() openRead,
+  }) => _client.postMultipart<Map<String, dynamic>>(
+    '/api/chat/message-sender/send-upload-file/$sessionUnitId',
+    file: MultipartUploadFile(
+      name: fileName,
+      length: fileLength,
+      openRead: openRead,
+    ),
+  );
 }

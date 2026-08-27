@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/file/file_picker_service.dart';
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
 import '../../session/application/session_list_controller.dart';
@@ -32,6 +33,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     controller = ChatController(
       ref.read(messageRepositoryProvider),
       ref.read(sessionRepositoryProvider),
+      filePickerService: ref.read(filePickerServiceProvider),
       ownerId: widget.ownerId,
       sessionUnitId: widget.sessionUnitId,
       initialTitle: widget.title,
@@ -59,80 +61,98 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           body: Column(
             children: <Widget>[
               Expanded(
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    final isUserPaging =
-                        (notification is ScrollUpdateNotification &&
-                            notification.dragDetails != null) ||
-                        notification is OverscrollNotification;
-                    if (isUserPaging &&
-                        notification.metrics.extentAfter < 180) {
-                      controller.loadMore();
-                    }
-                    return false;
-                  },
-                  child:
-                      controller.messages.isEmpty
-                          ? _EmptyMessagesState(controller: controller)
-                          : ListView.builder(
-                            reverse: true,
-                            findChildIndexCallback: (key) {
-                              if (key is! ValueKey<String>) return null;
-                              final index = controller.messages.indexWhere(
-                                (message) => message.localId == key.value,
-                              );
-                              return index < 0 ? null : index;
-                            },
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 16,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      final isUserPaging =
+                          (notification is ScrollUpdateNotification &&
+                              notification.dragDetails != null) ||
+                          notification is OverscrollNotification;
+                      if (isUserPaging &&
+                          notification.metrics.extentAfter < 180) {
+                        controller.loadMore();
+                      }
+                      return false;
+                    },
+                    child:
+                        controller.messages.isEmpty
+                            ? _EmptyMessagesState(controller: controller)
+                            : Align(
+                              alignment: Alignment.topCenter,
+                              child: ListView.builder(
+                                keyboardDismissBehavior:
+                                    ScrollViewKeyboardDismissBehavior.onDrag,
+                                reverse: true,
+                                shrinkWrap: true,
+                                findChildIndexCallback: (key) {
+                                  if (key is! ValueKey<String>) return null;
+                                  final index = controller.messages.indexWhere(
+                                    (message) => message.localId == key.value,
+                                  );
+                                  return index < 0 ? null : index;
+                                },
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 16,
+                                ),
+                                itemCount: controller.messages.length + 1,
+                                itemBuilder: (context, index) {
+                                  if (index == controller.messages.length) {
+                                    if (controller.isLoading) {
+                                      return const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.all(16),
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      );
+                                    }
+                                    if (controller.error != null) {
+                                      return TextButton(
+                                        style: _compactTextButtonStyle,
+                                        onPressed: controller.loadMore,
+                                        child: Text(
+                                          '加载失败，点击重试：${controller.error}',
+                                        ),
+                                      );
+                                    }
+                                    return Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child:
+                                            controller.hasMore
+                                                ? TextButton(
+                                                  style:
+                                                      _compactTextButtonStyle,
+                                                  onPressed:
+                                                      controller.loadMore,
+                                                  child: const Text('加载更多消息'),
+                                                )
+                                                : const Text('美好生活从这里开始'),
+                                      ),
+                                    );
+                                  }
+                                  final message = controller.messages[index];
+                                  final older =
+                                      index + 1 < controller.messages.length
+                                          ? controller.messages[index + 1]
+                                          : null;
+                                  return _MessageRow(
+                                    key: ValueKey<String>(message.localId),
+                                    message: message,
+                                    showTime: _showTime(message, older),
+                                    onRetry:
+                                        message.messageType == 5 &&
+                                                message.state == 'failed'
+                                            ? () =>
+                                                controller.retryFile(message)
+                                            : null,
+                                  );
+                                },
+                              ),
                             ),
-                            itemCount: controller.messages.length + 1,
-                            itemBuilder: (context, index) {
-                              if (index == controller.messages.length) {
-                                if (controller.isLoading) {
-                                  return const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(16),
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  );
-                                }
-                                if (controller.error != null) {
-                                  return TextButton(
-                                    style: _compactTextButtonStyle,
-                                    onPressed: controller.loadMore,
-                                    child: Text(
-                                      '加载失败，点击重试：${controller.error}',
-                                    ),
-                                  );
-                                }
-                                return Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child:
-                                        controller.hasMore
-                                            ? TextButton(
-                                              style: _compactTextButtonStyle,
-                                              onPressed: controller.loadMore,
-                                              child: const Text('加载更多消息'),
-                                            )
-                                            : const Text('美好生活从这里开始'),
-                                  ),
-                                );
-                              }
-                              final message = controller.messages[index];
-                              final older =
-                                  index + 1 < controller.messages.length
-                                      ? controller.messages[index + 1]
-                                      : null;
-                              return _MessageRow(
-                                key: ValueKey<String>(message.localId),
-                                message: message,
-                                showTime: _showTime(message, older),
-                              );
-                            },
-                          ),
+                  ),
                 ),
               ),
               SafeArea(
@@ -178,9 +198,15 @@ class _EmptyMessagesState extends StatelessWidget {
 }
 
 class _MessageRow extends StatelessWidget {
-  const _MessageRow({required this.message, required this.showTime, super.key});
+  const _MessageRow({
+    required this.message,
+    required this.showTime,
+    this.onRetry,
+    super.key,
+  });
   final ChatMessage message;
   final bool showTime;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +226,7 @@ class _MessageRow extends StatelessWidget {
       2 => '[图片]',
       3 => '[语音]',
       4 => '[视频]',
-      5 => '[文件]',
+      5 => message.fileName.isEmpty ? '[文件]' : message.fileName,
       _ => message.text.isEmpty ? '[暂不支持的消息]' : message.text,
     };
     return Column(
@@ -240,10 +266,24 @@ class _MessageRow extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      if (message.isMine && message.state == 'failed')
+                      if (message.isMine && message.state == 'sending')
                         const Padding(
-                          padding: EdgeInsets.only(right: 6),
-                          child: Icon(Icons.error, color: Colors.red, size: 18),
+                          padding: EdgeInsets.only(right: 7),
+                          child: SizedBox.square(
+                            dimension: 17,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      if (message.isMine && message.state == 'failed')
+                        IconButton(
+                          tooltip: '发送失败，点击重试',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: onRetry,
+                          icon: const Icon(
+                            Icons.error,
+                            color: Colors.red,
+                            size: 19,
+                          ),
                         ),
                       ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: bubbleWidth),
@@ -264,7 +304,10 @@ class _MessageRow extends StatelessWidget {
                               horizontal: 13,
                               vertical: 9,
                             ),
-                            child: Text(text),
+                            child:
+                                message.messageType == 5
+                                    ? _FileMessageCard(message: message)
+                                    : Text(text),
                           ),
                         ),
                       ),
@@ -291,6 +334,64 @@ class _MessageRow extends StatelessWidget {
       value == null
           ? ''
           : '${value.month}-${value.day} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+}
+
+class _FileMessageCard extends StatelessWidget {
+  const _FileMessageCard({required this.message});
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 230,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            const Icon(Icons.insert_drive_file_outlined, size: 34),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message.fileName.isEmpty ? '文件' : message.fileName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const Divider(height: 16),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                _formatFileSize(message.fileSize),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
+            Text(
+              message.state == 'sending'
+                  ? '发送中'
+                  : message.state == 'failed'
+                  ? '发送失败'
+                  : message.fileSuffix,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: message.state == 'failed' ? Colors.red : null,
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
+  }
 }
 
 class _Composer extends StatelessWidget {
@@ -320,7 +421,8 @@ class _Composer extends StatelessWidget {
             ),
           ),
           IconButton(
-            onPressed: () {},
+            tooltip: '发送文件',
+            onPressed: controller.chooseAndSendFile,
             icon: const Icon(Icons.add_circle_outline),
           ),
           FilledButton(

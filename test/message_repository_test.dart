@@ -1,14 +1,18 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/database/unified_database.dart';
 import 'package:gotoim_flutter/core/network/api_client.dart';
+import 'package:gotoim_flutter/core/services/file/file_picker_service.dart';
 import 'package:gotoim_flutter/features/chat/data/datasources/message_api.dart';
 import 'package:gotoim_flutter/features/chat/data/datasources/message_dao.dart';
 import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
 import 'package:gotoim_flutter/features/chat/data/repositories/message_repository.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_dao.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() {
   ChatMessage message(int id) => ChatMessage.fromJson(
@@ -205,6 +209,60 @@ void main() {
       );
     },
   );
+
+  test(
+    'file is persisted as sending before upload and updated in place',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final temp = await File(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}gotoim-file-message-test.txt',
+      ).writeAsString('file payload');
+      addTearDown(() => temp.delete());
+      final selected = await SelectedFile.fromXFile(XFile(temp.path));
+      final dao = MessageDao(database);
+      final client =
+          _FakeApiClient()
+            ..multipartResponse = <String, dynamic>{
+              'id': 88,
+              'clientMessageId': 'server-client-id',
+              'messageType': 5,
+              'content': <String, dynamic>{
+                'fileName': temp.uri.pathSegments.last,
+                'size': await temp.length(),
+                'suffix': '.txt',
+              },
+            };
+      final repository = MessageRepository(api: MessageApi(client), dao: dao);
+
+      final local = await repository.createLocalFile(
+        ownerId: 7,
+        sessionUnitId: 'session',
+        file: selected,
+      );
+      final beforeUpload =
+          (await dao.readPage(ownerId: 7, sessionUnitId: 'session')).single;
+
+      expect(beforeUpload.localId, local.localId);
+      expect(beforeUpload.state, 'sending');
+      expect(beforeUpload.messageType, 5);
+      expect(client.multipartPaths, isEmpty);
+
+      final sent = await repository.sendLocalFile(local: local, file: selected);
+      final afterUpload =
+          (await dao.readPage(ownerId: 7, sessionUnitId: 'session')).single;
+
+      expect(client.multipartPaths, <String>[
+        '/api/chat/message-sender/send-upload-file/session',
+      ]);
+      expect(sent.localId, local.localId);
+      expect(afterUpload.localId, local.localId);
+      expect(afterUpload.serverId, 88);
+      expect(afterUpload.state, 'sent');
+    },
+  );
 }
 
 class _FakeApiClient implements ApiClient {
@@ -212,6 +270,8 @@ class _FakeApiClient implements ApiClient {
   final Map<String, Map<String, dynamic>> responses;
   final List<String> paths = <String>[];
   final List<Map<String, Object?>> queries = <Map<String, Object?>>[];
+  final List<String> multipartPaths = <String>[];
+  Map<String, dynamic>? multipartResponse;
 
   @override
   Future<T> get<T>(
@@ -232,6 +292,18 @@ class _FakeApiClient implements ApiClient {
     Map<String, String>? headers,
     bool retryOnUnauthorized = true,
   }) => throw UnimplementedError();
+
+  @override
+  Future<T> postMultipart<T>(
+    String path, {
+    Map<String, Object?>? query,
+    required MultipartUploadFile file,
+    String fieldName = 'file',
+    bool retryOnUnauthorized = true,
+  }) async {
+    multipartPaths.add(path);
+    return multipartResponse as T;
+  }
 
   @override
   Future<void> cancelByTag(Object tag) async {}

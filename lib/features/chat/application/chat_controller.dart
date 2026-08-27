@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
+import '../../../core/services/file/file_picker_service.dart';
 import '../data/datasources/message_api.dart';
 import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
@@ -22,17 +23,21 @@ class ChatController extends ChangeNotifier {
   ChatController(
     this._repository,
     this._sessionRepository, {
+    required FilePickerService filePickerService,
     required this.ownerId,
     required this.sessionUnitId,
     required String initialTitle,
-  }) : _title = initialTitle;
+  }) : _filePickerService = filePickerService,
+       _title = initialTitle;
   static const pageSize = 30;
   static const initialPageSize = 10;
   final MessageRepository _repository;
   final SessionRepository _sessionRepository;
+  final FilePickerService _filePickerService;
   final int ownerId;
   final String sessionUnitId;
   final List<ChatMessage> _messages = <ChatMessage>[];
+  final Map<String, SelectedFile> _pendingFiles = <String, SelectedFile>{};
   bool isLoading = false;
   bool isSending = false;
   bool isLoadingLatest = false;
@@ -189,5 +194,59 @@ class ChatController extends ChangeNotifier {
     _messages.sort((a, b) => b.score.compareTo(a.score));
     isSending = false;
     notifyListeners();
+  }
+
+  Future<void> chooseAndSendFile() async {
+    try {
+      final files = await _filePickerService.chooseFile(
+        const FilePickerRequest(dialogTitle: '选择要发送的文件'),
+      );
+      if (files.isEmpty) return;
+      await _sendFile(files.first);
+    } catch (exception) {
+      error = exception;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _sendFile(SelectedFile file) async {
+    final local = await _repository.createLocalFile(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      file: file,
+    );
+    _pendingFiles[local.localId] = file;
+    _messages.insert(0, local);
+    _messages.sort((a, b) => b.score.compareTo(a.score));
+    notifyListeners();
+
+    final sent = await _repository.sendLocalFile(local: local, file: file);
+    _replaceMessage(sent);
+    if (sent.state == 'sent') _pendingFiles.remove(local.localId);
+    notifyListeners();
+  }
+
+  Future<void> retryFile(ChatMessage message) async {
+    final file = _pendingFiles[message.localId];
+    if (file == null || message.state == 'sending') return;
+    final sending = message.copyWith(state: 'sending');
+    _replaceMessage(sending);
+    notifyListeners();
+    final sent = await _repository.sendLocalFile(local: sending, file: file);
+    _replaceMessage(sent);
+    if (sent.state == 'sent') _pendingFiles.remove(message.localId);
+    notifyListeners();
+  }
+
+  void _replaceMessage(ChatMessage value) {
+    final index = _messages.indexWhere(
+      (message) => message.localId == value.localId,
+    );
+    if (index < 0) {
+      _messages.insert(0, value);
+    } else {
+      _messages[index] = value;
+    }
+    _messages.sort((a, b) => b.score.compareTo(a.score));
   }
 }

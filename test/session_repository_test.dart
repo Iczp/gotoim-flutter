@@ -271,5 +271,14 @@ class _FakeApiClient implements ApiClient {
   }) => throw UnimplementedError();
 
   @override
+  Future<T> postMultipart<T>(
+    String path, {
+    Map<String, Object?>? query,
+    required MultipartUploadFile file,
+    String fieldName = 'file',
+    bool retryOnUnauthorized = true,
+  }) => throw UnimplementedError();
+
+  @override
   Future<void> cancelByTag(Object tag) async {}
 }

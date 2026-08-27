@@ -15,5 +15,25 @@ abstract class ApiClient {
     bool retryOnUnauthorized = true,
   });
 
+  Future<T> postMultipart<T>(
+    String path, {
+    Map<String, Object?>? query,
+    required MultipartUploadFile file,
+    String fieldName = 'file',
+    bool retryOnUnauthorized = true,
+  });
+
   Future<void> cancelByTag(Object tag);
+}
+
+class MultipartUploadFile {
+  const MultipartUploadFile({
+    required this.name,
+    required this.length,
+    required this.openRead,
+  });
+
+  final String name;
+  final int length;
+  final Stream<List<int>> Function() openRead;
 }

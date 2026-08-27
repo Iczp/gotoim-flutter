@@ -106,6 +106,19 @@ class ChatMessage {
     ]);
   }
 
+  Map<String, dynamic> get content => asMap(raw['content']);
+  String get fileName =>
+      firstNonEmpty(<Object?>[content['fileName'], content['name']]);
+  int get fileSize => asInt(content['size']) ?? 0;
+  String get fileSuffix => firstNonEmpty(<Object?>[
+    content['suffix'],
+    fileName.contains('.') ? '.${fileName.split('.').last}' : '',
+  ]);
+  String? get localFilePath {
+    final value = content['path']?.toString();
+    return value == null || value.isEmpty ? null : value;
+  }
+
   ChatMessage copyWith({
     int? serverId,
     String? state,
