@@ -17,16 +17,18 @@ class HomeSectionPage extends StatelessWidget {
   const HomeSectionPage({
     required this.section,
     required this.isCompact,
+    required this.onOpenOwnerDrawer,
     super.key,
   });
 
   final HomeSection section;
   final bool isCompact;
+  final VoidCallback onOpenOwnerDrawer;
 
   @override
   Widget build(BuildContext context) {
     if (section == HomeSection.messages) {
-      return const SessionListPage();
+      return SessionListPage(onOpenOwnerDrawer: onOpenOwnerDrawer);
     }
     if (section == HomeSection.contacts) {
       return const ContactsPage();
@@ -45,7 +47,10 @@ class HomeSectionPage extends StatelessWidget {
     }
     return _HomeSectionWithTitle(
       title: section.label,
-      child: _ProfileSettingsPage(isCompact: isCompact),
+      child: _ProfileSettingsPage(
+        isCompact: isCompact,
+        onOpenOwnerDrawer: onOpenOwnerDrawer,
+      ),
     );
   }
 }
@@ -209,9 +214,13 @@ class _WorkbenchEntry extends StatelessWidget {
 }
 
 class _ProfileSettingsPage extends ConsumerWidget {
-  const _ProfileSettingsPage({required this.isCompact});
+  const _ProfileSettingsPage({
+    required this.isCompact,
+    required this.onOpenOwnerDrawer,
+  });
 
   final bool isCompact;
+  final VoidCallback onOpenOwnerDrawer;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -233,10 +242,14 @@ class _ProfileSettingsPage extends ConsumerWidget {
           padding: const EdgeInsets.all(20),
           child: Row(
             children: [
-              ChatObjectAvatar(
-                name: currentOwner?.name ?? 'Goto User',
-                imageUrl: currentOwner?.imageUrl,
-                radius: 30,
+              InkResponse(
+                onTap: onOpenOwnerDrawer,
+                radius: 34,
+                child: ChatObjectAvatar(
+                  name: currentOwner?.name ?? 'Goto User',
+                  imageUrl: currentOwner?.imageUrl,
+                  radius: 30,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(

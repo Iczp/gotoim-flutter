@@ -14,7 +14,9 @@ import 'session_list_item.dart';
 import 'session_unit_item.dart';
 
 class SessionListPage extends ConsumerStatefulWidget {
-  const SessionListPage({super.key});
+  const SessionListPage({required this.onOpenOwnerDrawer, super.key});
+
+  final VoidCallback onOpenOwnerDrawer;
 
   @override
   ConsumerState<SessionListPage> createState() => _SessionListPageState();
@@ -52,107 +54,116 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         (_) => _scrollToFirstUnread(controller, listItems),
       );
     }
-    return Scaffold(
-      drawer: _OwnerDrawer(controller: controller),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Builder(
-              builder:
-                  (context) => _CurrentOwnerHeader(
-                    owner: controller.currentOwner,
-                    hasMultiple: controller.owners.length > 1,
-                    isConnecting: controller.isRefreshing,
-                    onPressed: () => Scaffold.of(context).openDrawer(),
-                  ),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: controller.refreshChanges,
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.extentAfter < 240 &&
-                        controller.hasMore &&
-                        !controller.isLoading) {
-                      controller.loadNextPage();
-                    }
-                    return false;
-                  },
-                  child: CustomScrollView(
-                    controller: _scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      if (controller.error != null)
-                        SliverToBoxAdapter(
-                          child: _ErrorBanner(
-                            error: controller.error!,
-                            onRetry: controller.loadNextPage,
-                          ),
-                        ),
-                      if (controller.sessions.isEmpty && controller.isLoading)
-                        const SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else if (controller.sessions.isEmpty)
-                        SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: _EmptyState(onRetry: controller.loadNextPage),
-                        )
-                      else
-                        SliverList.builder(
-                          itemCount: listItems.length,
-                          itemBuilder: (context, index) {
-                            final item = listItems[index];
-                            return switch (item.kind) {
-                              SessionListItemKind.session => SessionUnitItem(
-                                key: _sessionKeys.putIfAbsent(
-                                  item.session!.id,
-                                  GlobalKey.new,
-                                ),
-                                item: item.session!,
-                                onTap:
-                                    () => _openChat(
-                                      context,
-                                      controller,
-                                      item.session!,
-                                    ),
-                                onLongPress:
-                                    () => _showSessionMenu(
-                                      context,
-                                      controller,
-                                      item.session!,
-                                    ),
-                                showDivider:
-                                    index + 1 < listItems.length &&
-                                    listItems[index + 1].kind ==
-                                        SessionListItemKind.session,
-                              ),
-                              SessionListItemKind.pinnedDivider =>
-                                PinnedDividerItem(
-                                  count: item.count,
-                                  hasMore: item.hasMore,
-                                ),
-                              SessionListItemKind.timeDivider =>
-                                TimeDividerItem(
-                                  text: item.title!,
-                                  count: item.count,
-                                  hasMore: item.hasMore,
-                                ),
-                            };
-                          },
-                        ),
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          _CurrentOwnerHeader(
+            owner: controller.currentOwner,
+            hasMultiple: controller.owners.length > 1,
+            isConnecting: controller.isRefreshing,
+            onPressed: widget.onOpenOwnerDrawer,
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: controller.refreshChanges,
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification.metrics.extentAfter < 240 &&
+                      controller.hasMore &&
+                      !controller.isLoading) {
+                    controller.loadNextPage();
+                  }
+                  return false;
+                },
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    if (controller.connectionState !=
+                        SessionRealtimeStatus.connected)
                       SliverToBoxAdapter(
-                        child: _LoadMoreFooter(controller: controller),
+                        child: _SignalRStatusBar(
+                          state: controller.connectionState,
+                          onReconnect: controller.reconnectSignalR,
+                        ),
                       ),
-                    ],
-                  ),
+                    SliverToBoxAdapter(
+                      child: _CurrentDeviceBar(
+                        label: controller.currentDeviceLabel,
+                        deviceCount: controller.devices.length,
+                        isLoading: controller.isLoadingDevices,
+                        onPressed: () => context.push('/devices'),
+                      ),
+                    ),
+                    if (controller.error != null)
+                      SliverToBoxAdapter(
+                        child: _ErrorBanner(
+                          error: controller.error!,
+                          onRetry: controller.loadNextPage,
+                        ),
+                      ),
+                    if (controller.sessions.isEmpty && controller.isLoading)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (controller.sessions.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyState(onRetry: controller.loadNextPage),
+                      )
+                    else
+                      SliverList.builder(
+                        itemCount: listItems.length,
+                        itemBuilder: (context, index) {
+                          final item = listItems[index];
+                          return switch (item.kind) {
+                            SessionListItemKind.session => SessionUnitItem(
+                              key: _sessionKeys.putIfAbsent(
+                                item.session!.id,
+                                GlobalKey.new,
+                              ),
+                              item: item.session!,
+                              onTap:
+                                  () => _openChat(
+                                    context,
+                                    controller,
+                                    item.session!,
+                                  ),
+                              onLongPress:
+                                  () => _showSessionMenu(
+                                    context,
+                                    controller,
+                                    item.session!,
+                                  ),
+                              showDivider:
+                                  index + 1 < listItems.length &&
+                                  listItems[index + 1].kind ==
+                                      SessionListItemKind.session,
+                            ),
+                            SessionListItemKind.pinnedDivider =>
+                              PinnedDividerItem(
+                                count: item.count,
+                                hasMore: item.hasMore,
+                              ),
+                            SessionListItemKind.timeDivider => TimeDividerItem(
+                              text: item.title!,
+                              count: item.count,
+                              hasMore: item.hasMore,
+                            ),
+                          };
+                        },
+                      ),
+                    SliverToBoxAdapter(
+                      child: _LoadMoreFooter(controller: controller),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -431,8 +442,9 @@ class _CurrentOwnerHeader extends StatelessWidget {
   }
 }
 
-class _OwnerDrawer extends ConsumerWidget {
-  const _OwnerDrawer({required this.controller});
+/// The home shell owns this drawer so every top-level tab can open it.
+class ChatOwnerDrawer extends ConsumerWidget {
+  const ChatOwnerDrawer({required this.controller, super.key});
   final SessionListController controller;
 
   @override

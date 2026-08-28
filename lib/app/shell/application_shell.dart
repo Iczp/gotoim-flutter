@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../features/home/presentation/home_sections.dart';
 import '../../features/session/application/session_list_controller.dart';
+import '../../features/session/presentation/session_list_page.dart';
 import '../layout/app_breakpoints.dart';
 
 /// Responsive host for the IM's top-level sections.
@@ -16,6 +17,7 @@ class ApplicationShell extends ConsumerStatefulWidget {
 }
 
 class _ApplicationShellState extends ConsumerState<ApplicationShell> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   HomeSection _section = HomeSection.messages;
   DateTime? _lastMessagesTabTap;
 
@@ -34,6 +36,8 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
     _lastMessagesTabTap = section == HomeSection.messages ? now : null;
     setState(() => _section = section);
   }
+
+  void _openOwnerDrawer() => _scaffoldKey.currentState?.openDrawer();
 
   @override
   Widget build(BuildContext context) {
@@ -54,9 +58,14 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
           final content = HomeSectionPage(
             section: _section,
             isCompact: isCompact,
+            onOpenOwnerDrawer: _openOwnerDrawer,
           );
 
           return Scaffold(
+            key: _scaffoldKey,
+            drawer: ChatOwnerDrawer(
+              controller: ref.watch(sessionListControllerProvider),
+            ),
             body:
                 isCompact
                     ? content
