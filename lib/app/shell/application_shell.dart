@@ -39,9 +39,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final headerColor = theme.colorScheme.surfaceContainerHighest.withValues(
-      alpha: .86,
-    );
+    final headerColor = theme.colorScheme.surfaceContainerHighest;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(

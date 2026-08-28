@@ -420,9 +420,10 @@ class _PinnedContactGroup {
   final ContactGroup group;
 }
 
-Color _contactHeaderBackground(BuildContext context) => Theme.of(
-  context,
-).colorScheme.surfaceContainerHighest.withValues(alpha: .86);
+/// Opaque so Android's system status bar and the in-app title surface have
+/// exactly the same color in both light and dark themes.
+Color _contactHeaderBackground(BuildContext context) =>
+    Theme.of(context).colorScheme.surfaceContainerHighest;
 
 class _ContactsTitleBar extends StatelessWidget {
   const _ContactsTitleBar();
@@ -781,15 +782,33 @@ class _AlphabetIndexBar extends StatefulWidget {
 
 class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
   static const _itemExtent = 19.0;
+  static const _jumpItemExtent = 26.0;
   static const _verticalPadding = 4.0;
   String? _draggingKey;
+  String? _jumpTarget;
   String? _pendingKey;
   bool _selectionScheduled = false;
 
   void _selectAt(Offset localPosition) {
     if (widget.keys.isEmpty) return;
-    final rawIndex =
-        ((localPosition.dy - _verticalPadding) / _itemExtent).floor();
+    final contentY = localPosition.dy - _verticalPadding;
+    if (contentY < _jumpItemExtent) {
+      if (_jumpTarget == 'top') return;
+      _jumpTarget = 'top';
+      _stopDragging(clearJumpTarget: false);
+      widget.onScrollToTop();
+      return;
+    }
+    final alphabetEnd = _jumpItemExtent + widget.keys.length * _itemExtent;
+    if (contentY >= alphabetEnd) {
+      if (_jumpTarget == 'bottom') return;
+      _jumpTarget = 'bottom';
+      _stopDragging(clearJumpTarget: false);
+      widget.onScrollToBottom();
+      return;
+    }
+    _jumpTarget = null;
+    final rawIndex = ((contentY - _jumpItemExtent) / _itemExtent).floor();
     final index = rawIndex.clamp(0, widget.keys.length - 1).toInt();
     final key = widget.keys[index];
     if (key == _draggingKey) return;
@@ -812,10 +831,12 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
     });
   }
 
-  void _stopDragging() {
-    if (_draggingKey == null) return;
-    setState(() => _draggingKey = null);
-    widget.onDragging(null);
+  void _stopDragging({bool clearJumpTarget = true}) {
+    if (clearJumpTarget) _jumpTarget = null;
+    if (_draggingKey != null) {
+      setState(() => _draggingKey = null);
+      widget.onDragging(null);
+    }
   }
 
   @override
@@ -827,12 +848,6 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          _AlphabetJumpButton(
-            icon: Icons.vertical_align_top_rounded,
-            tooltip: '回到通讯录顶部',
-            onPressed: widget.onScrollToTop,
-          ),
-          const SizedBox(height: 3),
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onPanDown: (details) => _selectAt(details.localPosition),
@@ -863,43 +878,41 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: widget.keys
-                      .map(
-                        (key) => SizedBox(
-                          width: 28,
-                          height: _itemExtent,
-                          child: Center(
-                            child: Text(
-                              key,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight:
-                                    key == shownKey
-                                        ? FontWeight.w800
-                                        : FontWeight.w500,
-                                color:
-                                    key == shownKey
-                                        ? colors.primary.withValues(
-                                          alpha: isTouching ? 1 : .56,
-                                        )
-                                        : colors.onSurfaceVariant.withValues(
-                                          alpha: isTouching ? .9 : .36,
-                                        ),
-                              ),
+                  children: <Widget>[
+                    _AlphabetJumpIcon(icon: Icons.vertical_align_top_rounded),
+                    ...widget.keys.map(
+                      (key) => SizedBox(
+                        width: 28,
+                        height: _itemExtent,
+                        child: Center(
+                          child: Text(
+                            key,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight:
+                                  key == shownKey
+                                      ? FontWeight.w800
+                                      : FontWeight.w500,
+                              color:
+                                  key == shownKey
+                                      ? colors.primary.withValues(
+                                        alpha: isTouching ? 1 : .56,
+                                      )
+                                      : colors.onSurfaceVariant.withValues(
+                                        alpha: isTouching ? .9 : .36,
+                                      ),
                             ),
                           ),
                         ),
-                      )
-                      .toList(growable: false),
+                      ),
+                    ),
+                    _AlphabetJumpIcon(
+                      icon: Icons.vertical_align_bottom_rounded,
+                    ),
+                  ],
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 3),
-          _AlphabetJumpButton(
-            icon: Icons.vertical_align_bottom_rounded,
-            tooltip: '跳到通讯录底部',
-            onPressed: widget.onScrollToBottom,
           ),
         ],
       ),
@@ -907,32 +920,22 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
   }
 }
 
-class _AlphabetJumpButton extends StatelessWidget {
-  const _AlphabetJumpButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
+class _AlphabetJumpIcon extends StatelessWidget {
+  const _AlphabetJumpIcon({required this.icon});
 
   final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: tooltip,
-      child: InkResponse(
-        radius: 16,
-        onTap: onPressed,
-        child: SizedBox.square(
-          dimension: 26,
-          child: Icon(
-            icon,
-            size: 16,
-            color: colors.onSurfaceVariant.withValues(alpha: .42),
-          ),
+    return SizedBox(
+      width: 28,
+      height: _AlphabetIndexBarState._jumpItemExtent,
+      child: Center(
+        child: Icon(
+          icon,
+          size: 16,
+          color: colors.onSurfaceVariant.withValues(alpha: .42),
         ),
       ),
     );
