@@ -32,6 +32,18 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
   String _hexColor(Color color) =>
       '#${color.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()}';
 
+  String _inversionHint(double value) {
+    if (value < .34) return '轻微内收';
+    if (value < .67) return 'S 型微凹';
+    return '强反角收紧';
+  }
+
+  String _sharpnessHint(double value) {
+    if (value < .34) return '圆润尾端';
+    if (value < .67) return '清晰尖端';
+    return '极尖挑刺';
+  }
+
   Future<void> _copyJson() async {
     await Clipboard.setData(
       ClipboardData(
@@ -156,7 +168,8 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
                       (value) => _update(_config.copyWith(tailHeight: value)),
                 ),
                 _SliderSetting(
-                  label: '根部微凹 inversion',
+                  label:
+                      '反角凹陷度 inversion（${_inversionHint(_config.inversion)}）',
                   value: _config.inversion,
                   min: 0,
                   max: 1,
@@ -165,7 +178,7 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
                       (value) => _update(_config.copyWith(inversion: value)),
                 ),
                 _SliderSetting(
-                  label: '尖端收敛 sharpness',
+                  label: '尖端锐度 sharpness（${_sharpnessHint(_config.sharpness)}）',
                   value: _config.sharpness,
                   min: 0,
                   max: 1,
@@ -205,7 +218,9 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
                     color: colors.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: SelectableText(
+                  // Copy is provided explicitly below. A plain Text avoids the
+                  // selection overlay intercepting vertical drags in this panel.
+                  child: Text(
                     json,
                     style: Theme.of(
                       context,

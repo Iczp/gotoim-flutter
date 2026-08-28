@@ -135,23 +135,31 @@ class _ParametricBubblePainter extends CustomPainter {
     final end = Offset(start.dx, top + height);
     final direction = config.side == ParametricBubbleSide.left ? -1.0 : 1.0;
     final apex = Offset(start.dx + direction * length, top + height / 2);
-    final rootInset = length * config.inversion.clamp(0, 1).toDouble() * .28;
-    final apexReach =
-        length * (1 - config.sharpness.clamp(0, 1).toDouble()) * .55;
+    // Inversion pulls the root back into the body.  The deliberately wide
+    // range makes the inverted S bend evident even on compact message bubbles.
+    final inversion = config.inversion.clamp(0, 1).toDouble();
+    final sharpness = config.sharpness.clamp(0, 1).toDouble();
+    final rootInset = length * (.06 + inversion * .52);
+
+    // Higher sharpness places the cubic control points almost on the apex,
+    // producing a thin, crisp pick. Lower values keep a softer rounded tip.
+    final apexReach = length * (.015 + (1 - sharpness) * .58);
+    final apexApproach = height * (.34 - sharpness * .25);
+    final rootCurve = .10 + inversion * .22;
     final path = Path()..moveTo(start.dx, start.dy);
     path.cubicTo(
       start.dx - direction * rootInset,
-      top + height * .12,
+      top + height * rootCurve,
       apex.dx - direction * apexReach,
-      apex.dy - height * .20,
+      apex.dy - apexApproach,
       apex.dx,
       apex.dy,
     );
     path.cubicTo(
       apex.dx - direction * apexReach,
-      apex.dy + height * .20,
+      apex.dy + apexApproach,
       end.dx - direction * rootInset,
-      top + height * .88,
+      top + height * (1 - rootCurve),
       end.dx,
       end.dy,
     );
