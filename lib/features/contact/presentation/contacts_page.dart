@@ -24,9 +24,11 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<String?> _draggingIndex = ValueNotifier<String?>(null);
   final ValueNotifier<String> _activeSurnameInitial = ValueNotifier<String>('');
+  final ValueNotifier<String> _activeGroupIndex = ValueNotifier<String>('');
+  final ValueNotifier<_PinnedContactGroup?> _pinnedHeader =
+      ValueNotifier<_PinnedContactGroup?>(null);
   List<double> _groupOffsets = const <double>[];
   List<ContactGroup> _offsetGroups = const <ContactGroup>[];
-  String _activeIndex = '';
 
   @override
   void initState() {
@@ -44,6 +46,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       ..dispose();
     _draggingIndex.dispose();
     _activeSurnameInitial.dispose();
+    _activeGroupIndex.dispose();
+    _pinnedHeader.dispose();
     super.dispose();
   }
 
@@ -60,9 +64,9 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     final groups = contacts.groups;
     _syncGroupOffsets(groups);
     if (groups.isNotEmpty &&
-        (_activeIndex.isEmpty ||
-            !groups.any((group) => group.index == _activeIndex))) {
-      _activeIndex = groups.first.index;
+        (_activeGroupIndex.value.isEmpty ||
+            !groups.any((group) => group.index == _activeGroupIndex.value))) {
+      _activeGroupIndex.value = groups.first.index;
       _activeSurnameInitial.value = groups.first.contacts.first.surnameInitial;
     }
 
@@ -94,24 +98,6 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                                       : contacts.refresh,
                             ),
                           ),
-                        if (groups.isNotEmpty)
-                          SliverPersistentHeader(
-                            pinned: true,
-                            delegate: _ContactGroupHeaderDelegate(
-                              group: groups.firstWhere(
-                                (group) => group.index == _activeIndex,
-                              ),
-                              activeInitial: _activeSurnameInitial,
-                              onSurnameSelected:
-                                  (initial) => _scrollToSurname(
-                                    groups,
-                                    groups.firstWhere(
-                                      (group) => group.index == _activeIndex,
-                                    ),
-                                    initial,
-                                  ),
-                            ),
-                          ),
                         if (groups.isEmpty && contacts.isLoading)
                           const SliverFillRemaining(
                             hasScrollBody: false,
@@ -139,20 +125,46 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                       ],
                     ),
                   ),
+                  ValueListenableBuilder<_PinnedContactGroup?>(
+                    valueListenable: _pinnedHeader,
+                    builder: (context, header, _) {
+                      if (header == null) return const SizedBox.shrink();
+                      return Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: _ContactGroupHeader(
+                          group: header.group,
+                          activeInitial: _activeSurnameInitial.value,
+                          activeInitialListenable: _activeSurnameInitial,
+                          onSurnameSelected:
+                              (initial) => _scrollToSurname(
+                                groups,
+                                header.group,
+                                initial,
+                              ),
+                        ),
+                      );
+                    },
+                  ),
                   if (groups.isNotEmpty)
                     Positioned(
                       top: 8,
                       right: 2,
                       bottom: 8,
-                      child: _AlphabetIndexBar(
-                        keys: groups.map((group) => group.index).toList(),
-                        activeKey: _activeIndex,
-                        onSelected: (key) => _scrollToGroup(groups, key),
-                        onDragging: (key) {
-                          if (_draggingIndex.value != key) {
-                            _draggingIndex.value = key;
-                          }
-                        },
+                      child: ValueListenableBuilder<String>(
+                        valueListenable: _activeGroupIndex,
+                        builder:
+                            (context, activeKey, _) => _AlphabetIndexBar(
+                              keys: groups.map((group) => group.index).toList(),
+                              activeKey: activeKey,
+                              onSelected: (key) => _scrollToGroup(groups, key),
+                              onDragging: (key) {
+                                if (_draggingIndex.value != key) {
+                                  _draggingIndex.value = key;
+                                }
+                              },
+                            ),
                       ),
                     ),
                   ValueListenableBuilder<String?>(
@@ -198,6 +210,14 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   ) => groups
       .expand<Widget>(
         (group) => <Widget>[
+          SliverPersistentHeader(
+            delegate: _ContactGroupHeaderDelegate(
+              group: group,
+              activeInitial: _activeSurnameInitial,
+              onSurnameSelected:
+                  (initial) => _scrollToSurname(groups, group, initial),
+            ),
+          ),
           SliverFixedExtentList(
             itemExtent: _rowExtent,
             delegate: SliverChildBuilderDelegate((context, index) {
@@ -231,10 +251,10 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
         );
     if (unchanged) return;
 
-    var offset = _quickActionsExtent + _groupHeaderExtent;
+    var offset = _quickActionsExtent;
     _groupOffsets = List<double>.generate(groups.length, (index) {
       final groupOffset = offset;
-      offset += groups[index].count * _rowExtent;
+      offset += _groupHeaderExtent + groups[index].count * _rowExtent;
       return groupOffset;
     }, growable: false);
     _offsetGroups = List<ContactGroup>.of(groups, growable: false);
@@ -242,7 +262,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
 
   double _groupOffset(int targetIndex) {
     if (targetIndex < 0 || targetIndex >= _groupOffsets.length) {
-      return _quickActionsExtent + _groupHeaderExtent;
+      return _quickActionsExtent;
     }
     return _groupOffsets[targetIndex];
   }
@@ -269,7 +289,11 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     if (groupIndex < 0 || contactIndex < 0 || !_scrollController.hasClients) {
       return;
     }
-    final offset = _groupOffset(groupIndex) + contactIndex * _rowExtent;
+    final offset =
+        _groupOffset(groupIndex) +
+        _groupHeaderExtent +
+        contactIndex * _rowExtent -
+        _groupHeaderExtent;
     _scrollController.animateTo(
       offset.clamp(0, _scrollController.position.maxScrollExtent),
       duration: const Duration(milliseconds: 180),
@@ -281,6 +305,12 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     final groups = ref.read(contactsControllerProvider).groups;
     if (groups.isEmpty || !_scrollController.hasClients) return;
     final offset = _scrollController.offset;
+    if (offset < _quickActionsExtent) {
+      if (_pinnedHeader.value != null) {
+        _pinnedHeader.value = null;
+      }
+      return;
+    }
     var low = 0;
     var high = groups.length - 1;
     var activeIndex = 0;
@@ -295,7 +325,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       }
     }
     final group = groups[activeIndex];
-    final firstContactOffset = _groupOffset(activeIndex);
+    final firstContactOffset = _groupOffset(activeIndex) + _groupHeaderExtent;
     final visibleContactIndex =
         ((offset + _groupHeaderExtent - firstContactOffset) / _rowExtent)
             .floor()
@@ -306,10 +336,20 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     if (activeSurname != _activeSurnameInitial.value) {
       _activeSurnameInitial.value = activeSurname;
     }
-    if (activeIndexKey != _activeIndex && mounted) {
-      setState(() => _activeIndex = activeIndexKey);
+    if (activeIndexKey != _activeGroupIndex.value) {
+      _activeGroupIndex.value = activeIndexKey;
+    }
+    final pinnedHeader = _pinnedHeader.value;
+    if (pinnedHeader == null || pinnedHeader.group != group) {
+      _pinnedHeader.value = _PinnedContactGroup(group: group);
     }
   }
+}
+
+class _PinnedContactGroup {
+  const _PinnedContactGroup({required this.group});
+
+  final ContactGroup group;
 }
 
 class _QuickActions extends StatelessWidget {
@@ -372,14 +412,11 @@ class _ContactGroupHeaderDelegate extends SliverPersistentHeaderDelegate {
     BuildContext context,
     double shrinkOffset,
     bool overlapsContent,
-  ) => ValueListenableBuilder<String>(
-    valueListenable: activeInitial,
-    builder:
-        (context, surnameInitial, _) => _ContactGroupHeader(
-          group: group,
-          activeInitial: surnameInitial,
-          onSurnameSelected: onSurnameSelected,
-        ),
+  ) => _ContactGroupHeader(
+    group: group,
+    activeInitial: activeInitial.value,
+    onSurnameSelected: onSurnameSelected,
+    showBlur: false,
   );
 
   @override
@@ -392,17 +429,23 @@ class _ContactGroupHeader extends StatelessWidget {
     required this.group,
     required this.activeInitial,
     required this.onSurnameSelected,
+    this.activeInitialListenable,
+    this.showBlur = true,
   });
 
   final ContactGroup group;
   final String activeInitial;
+  final ValueListenable<String>? activeInitialListenable;
   final ValueChanged<String> onSurnameSelected;
+  final bool showBlur;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final header = Material(
-      color: colors.surfaceContainerHighest.withValues(alpha: .72),
+      color: colors.surfaceContainerHighest.withValues(
+        alpha: showBlur ? .72 : .92,
+      ),
       child: Row(
         children: <Widget>[
           Padding(
@@ -419,41 +462,78 @@ class _ContactGroupHeader extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(width: 8),
-          Expanded(
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.only(right: 42),
-              itemCount: group.surnameInitials.length,
-              separatorBuilder: (_, _) => const Text('、'),
-              itemBuilder: (context, index) {
-                final initial = group.surnameInitials[index];
-                final isActive = initial == activeInitial;
-                return TextButton(
-                  onPressed: () => onSurnameSelected(initial),
-                  style: TextButton.styleFrom(
-                    foregroundColor:
-                        isActive ? colors.primary : colors.onSurfaceVariant,
-                    minimumSize: const Size(28, 32),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                  ),
-                  child: Text(initial),
-                );
-              },
-            ),
+          _ContactSurnameInitialBar(
+            group: group,
+            activeInitial: activeInitial,
+            activeInitialListenable: activeInitialListenable,
+            onSelected: onSurnameSelected,
           ),
         ],
       ),
     );
     return SizedBox(
       height: _ContactsPageState._groupHeaderExtent,
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: header,
-        ),
-      ),
+      child:
+          showBlur
+              ? ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: header,
+                ),
+              )
+              : header,
     );
   }
+}
+
+class _ContactSurnameInitialBar extends StatelessWidget {
+  const _ContactSurnameInitialBar({
+    required this.group,
+    required this.activeInitial,
+    required this.activeInitialListenable,
+    required this.onSelected,
+  });
+
+  final ContactGroup group;
+  final String activeInitial;
+  final ValueListenable<String>? activeInitialListenable;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) => Expanded(child: _buildList(context));
+
+  Widget _buildList(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(right: 42),
+      itemCount: group.surnameInitials.length,
+      separatorBuilder: (_, _) => const Text('、'),
+      itemBuilder: (context, index) {
+        final initial = group.surnameInitials[index];
+        if (activeInitialListenable == null) {
+          return _buildButton(initial, initial == activeInitial, colors);
+        }
+        return ValueListenableBuilder<String>(
+          valueListenable: activeInitialListenable!,
+          builder:
+              (context, currentInitial, _) =>
+                  _buildButton(initial, initial == currentInitial, colors),
+        );
+      },
+    );
+  }
+
+  Widget _buildButton(String initial, bool isActive, ColorScheme colors) =>
+      TextButton(
+        onPressed: () => onSelected(initial),
+        style: TextButton.styleFrom(
+          foregroundColor: isActive ? colors.primary : colors.onSurfaceVariant,
+          minimumSize: const Size(28, 32),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+        child: Text(initial),
+      );
 }
 
 class _ContactRow extends StatelessWidget {
