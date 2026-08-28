@@ -94,6 +94,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/chat'),
           ),
           _Item(
+            icon: Icons.bubble_chart_outlined,
+            title: '聊天气泡参数',
+            subtitle: '实时调节反角 S 曲线尾巴并生成 JSON 参数',
+            onTap: () => context.push('/diagnostics/chat-bubble'),
+          ),
+          _Item(
             icon: Icons.perm_media_outlined,
             title: '媒体与文件测试',
             subtitle: '相册、拍照、视频、缩略图、压缩、录音、图片识码与另存为',

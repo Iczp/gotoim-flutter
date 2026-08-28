@@ -19,6 +19,7 @@ import '../../features/diagnostics/presentation/js_bridge_harness_page.dart';
 import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/session_list_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/chat_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/chat_bubble_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/app_task_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/deep_link_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/native_diagnostics_page.dart';
@@ -140,6 +141,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/chat',
         builder: (context, state) => const ChatDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/chat-bubble',
+        builder: (context, state) => const ChatBubbleDiagnosticsPage(),
       ),
       GoRoute(
         path: '/diagnostics/js-bridge-harness',
