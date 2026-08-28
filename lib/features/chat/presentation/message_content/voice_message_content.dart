@@ -27,6 +27,9 @@ class VoiceMessageContent extends ConsumerWidget {
             ? playback.position.inMilliseconds /
                 playback.duration.inMilliseconds
             : 0.0;
+    // Match the original UniApp `MsgSound`: it shows the rounded total
+    // duration in seconds, for example `10″`, rather than a clock format.
+    final durationLabel = seconds <= 0 ? '语音' : '$seconds″';
     final playedProgress = progress.clamp(0.0, 1.0);
     final colorScheme = Theme.of(context).colorScheme;
     final baseColor =
@@ -79,7 +82,10 @@ class VoiceMessageContent extends ConsumerWidget {
                     alignment: Alignment.centerLeft,
                     child: FractionallySizedBox(
                       widthFactor: playedProgress,
-                      child: ColoredBox(color: playedColor),
+                      child: ColoredBox(
+                        color: playedColor,
+                        child: const SizedBox.expand(),
+                      ),
                     ),
                   ),
                 ),
@@ -101,7 +107,7 @@ class VoiceMessageContent extends ConsumerWidget {
                               ),
                             Expanded(
                               child: Text(
-                                seconds <= 0 ? '语音' : '$seconds″',
+                                durationLabel,
                                 textAlign: TextAlign.right,
                               ),
                             ),
@@ -119,9 +125,7 @@ class VoiceMessageContent extends ConsumerWidget {
                                 ? const _VoiceDownloadIndicator()
                                 : _VoicePlaybackIcon(playing: playing),
                             const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(seconds <= 0 ? '语音' : '$seconds″'),
-                            ),
+                            Expanded(child: Text(durationLabel)),
                             if (message.state == 'sending')
                               const SizedBox.square(
                                 dimension: 14,

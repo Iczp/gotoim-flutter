@@ -860,7 +860,7 @@ class _MessageRow extends StatelessWidget {
                                       progress: uploadProgress,
                                     )
                                   else if (message.messageType == 0)
-                                    TextMessageContent(text: text)
+                                    TextMessageContent(message: message)
                                   else
                                     Text(text),
                                 ],

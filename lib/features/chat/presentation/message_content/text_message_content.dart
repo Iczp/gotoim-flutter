@@ -1,13 +1,17 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import '../../data/models/chat_message.dart';
+
 /// Renders text messages, including the Markdown dialect supported by chat.
 class TextMessageContent extends StatelessWidget {
-  const TextMessageContent({required this.text, super.key});
+  const TextMessageContent({required this.message, super.key});
 
-  final String text;
+  /// Common content input. Every message-content component receives the full
+  /// message so it can use metadata without changing its public contract.
+  final ChatMessage message;
 
   @override
   Widget build(BuildContext context) =>
-      MarkdownBody(data: text, selectable: true, shrinkWrap: true);
+      MarkdownBody(data: message.text, selectable: true, shrinkWrap: true);
 }
