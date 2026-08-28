@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,8 +21,10 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   static const _groupHeaderExtent = 40.0;
   static const _quickActionsExtent = _rowExtent * 4;
   final ScrollController _scrollController = ScrollController();
+  final ValueNotifier<String?> _draggingIndex = ValueNotifier<String?>(null);
+  List<double> _groupOffsets = const <double>[];
+  List<ContactGroup> _offsetGroups = const <ContactGroup>[];
   String _activeIndex = '';
-  String? _draggingIndex;
 
   @override
   void initState() {
@@ -36,6 +40,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     _scrollController
       ..removeListener(_updateActiveIndex)
       ..dispose();
+    _draggingIndex.dispose();
     super.dispose();
   }
 
@@ -50,6 +55,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       );
     }
     final groups = contacts.groups;
+    _syncGroupOffsets(groups);
     if (_activeIndex.isEmpty && groups.isNotEmpty) {
       _activeIndex = groups.first.index;
     }
@@ -59,7 +65,6 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
         bottom: false,
         child: Column(
           children: <Widget>[
-            _ContactsTopBar(totalCount: contacts.totalCount),
             Expanded(
               child: Stack(
                 children: <Widget>[
@@ -120,34 +125,39 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                         activeKey: _activeIndex,
                         onSelected: (key) => _scrollToGroup(groups, key),
                         onDragging: (key) {
-                          if (_draggingIndex != key && mounted) {
-                            setState(() => _draggingIndex = key);
+                          if (_draggingIndex.value != key) {
+                            _draggingIndex.value = key;
                           }
                         },
                       ),
                     ),
-                  if (_draggingIndex case final key?)
-                    IgnorePointer(
-                      child: Center(
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: .58),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            key,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 36,
-                              fontWeight: FontWeight.w700,
+                  ValueListenableBuilder<String?>(
+                    valueListenable: _draggingIndex,
+                    builder: (context, key, _) {
+                      if (key == null) return const SizedBox.shrink();
+                      return IgnorePointer(
+                        child: Center(
+                          child: Container(
+                            width: 80,
+                            height: 80,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: .58),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              key,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 36,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
@@ -162,29 +172,31 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     List<ContactGroup> groups,
     int? ownerId,
   ) => groups
-      .expand<Widget>(
-        (group) => <Widget>[
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _ContactGroupHeaderDelegate(
-              group: group,
-              activeInitial: _activeIndex,
-              onSurnameSelected:
-                  (initial) => _scrollToSurname(groups, group, initial),
+      .map<Widget>(
+        (group) => SliverMainAxisGroup(
+          slivers: <Widget>[
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _ContactGroupHeaderDelegate(
+                group: group,
+                activeInitial: _activeIndex,
+                onSurnameSelected:
+                    (initial) => _scrollToSurname(groups, group, initial),
+              ),
             ),
-          ),
-          SliverFixedExtentList(
-            itemExtent: _rowExtent,
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final contact = group.contacts[index];
-              return _ContactRow(
-                contact: contact,
-                showDivider: index + 1 < group.contacts.length,
-                onTap: () => _openChat(context, contact, ownerId),
-              );
-            }, childCount: group.contacts.length),
-          ),
-        ],
+            SliverFixedExtentList(
+              itemExtent: _rowExtent,
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final contact = group.contacts[index];
+                return _ContactRow(
+                  contact: contact,
+                  showDivider: index + 1 < group.contacts.length,
+                  onTap: () => _openChat(context, contact, ownerId),
+                );
+              }, childCount: group.contacts.length),
+            ),
+          ],
+        ),
       )
       .toList(growable: false);
 
@@ -196,12 +208,30 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     );
   }
 
-  double _groupOffset(List<ContactGroup> groups, int targetIndex) {
+  void _syncGroupOffsets(List<ContactGroup> groups) {
+    final unchanged =
+        groups.length == _offsetGroups.length &&
+        Iterable<int>.generate(groups.length).every(
+          (index) =>
+              identical(groups[index], _offsetGroups[index]) &&
+              groups[index].count == _offsetGroups[index].count,
+        );
+    if (unchanged) return;
+
     var offset = _quickActionsExtent;
-    for (var index = 0; index < targetIndex; index++) {
+    _groupOffsets = List<double>.generate(groups.length, (index) {
+      final groupOffset = offset;
       offset += _groupHeaderExtent + groups[index].count * _rowExtent;
+      return groupOffset;
+    }, growable: false);
+    _offsetGroups = List<ContactGroup>.of(groups, growable: false);
+  }
+
+  double _groupOffset(int targetIndex) {
+    if (targetIndex < 0 || targetIndex >= _groupOffsets.length) {
+      return _quickActionsExtent;
     }
-    return offset;
+    return _groupOffsets[targetIndex];
   }
 
   void _scrollToGroup(List<ContactGroup> groups, String key) {
@@ -209,10 +239,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     if (index < 0 || !_scrollController.hasClients) {
       return;
     }
-    _scrollController.animateTo(
-      _groupOffset(groups, index),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
+    _scrollController.jumpTo(
+      _groupOffset(index).clamp(0, _scrollController.position.maxScrollExtent),
     );
   }
 
@@ -229,7 +257,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       return;
     }
     final offset =
-        _groupOffset(groups, groupIndex) +
+        _groupOffset(groupIndex) +
         _groupHeaderExtent +
         contactIndex * _rowExtent -
         _groupHeaderExtent;
@@ -244,56 +272,24 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     final groups = ref.read(contactsControllerProvider).groups;
     if (groups.isEmpty || !_scrollController.hasClients) return;
     final offset = _scrollController.offset;
-    var active = groups.first.index;
-    for (var index = 0; index < groups.length; index++) {
-      if (offset + _groupHeaderExtent >= _groupOffset(groups, index)) {
-        active = groups[index].index;
+    var low = 0;
+    var high = groups.length - 1;
+    var activeIndex = 0;
+    final targetOffset = offset + _groupHeaderExtent;
+    while (low <= high) {
+      final middle = (low + high) ~/ 2;
+      if (targetOffset >= _groupOffset(middle)) {
+        activeIndex = middle;
+        low = middle + 1;
       } else {
-        break;
+        high = middle - 1;
       }
     }
+    final active = groups[activeIndex].index;
     if (active != _activeIndex && mounted) {
       setState(() => _activeIndex = active);
     }
   }
-}
-
-class _ContactsTopBar extends StatelessWidget {
-  const _ContactsTopBar({required this.totalCount});
-  final int totalCount;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 56,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: <Widget>[
-          Text('通讯录', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(width: 8),
-          if (totalCount > 0)
-            Text('($totalCount)', style: Theme.of(context).textTheme.bodySmall),
-          const Spacer(),
-          IconButton(
-            tooltip: '搜索联系人',
-            onPressed:
-                () => ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('联系人搜索将在下一步接入'))),
-            icon: const Icon(Icons.search),
-          ),
-          IconButton(
-            tooltip: '添加好友',
-            onPressed:
-                () => ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('添加好友功能即将接入'))),
-            icon: const Icon(Icons.add),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 class _QuickActions extends StatelessWidget {
@@ -356,56 +352,85 @@ class _ContactGroupHeaderDelegate extends SliverPersistentHeaderDelegate {
     BuildContext context,
     double shrinkOffset,
     bool overlapsContent,
-  ) {
-    final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: colors.surfaceContainerHighest,
-      child: Row(
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.only(left: 16, right: 4),
-            child: Text(
-              group.index,
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-          Text(
-            '(${group.count})',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.only(right: 42),
-              itemCount: group.surnameInitials.length,
-              separatorBuilder: (_, _) => const Text('、'),
-              itemBuilder: (context, index) {
-                final initial = group.surnameInitials[index];
-                final isActive = initial == activeInitial;
-                return TextButton(
-                  onPressed: () => onSurnameSelected(initial),
-                  style: TextButton.styleFrom(
-                    foregroundColor:
-                        isActive ? colors.primary : colors.onSurfaceVariant,
-                    minimumSize: const Size(28, 32),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                  ),
-                  child: Text(initial),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  ) => _ContactGroupHeader(
+    group: group,
+    activeInitial: activeInitial,
+    onSurnameSelected: onSurnameSelected,
+  );
 
   @override
   bool shouldRebuild(covariant _ContactGroupHeaderDelegate oldDelegate) =>
       group != oldDelegate.group || activeInitial != oldDelegate.activeInitial;
+}
+
+class _ContactGroupHeader extends StatelessWidget {
+  const _ContactGroupHeader({
+    required this.group,
+    required this.activeInitial,
+    required this.onSurnameSelected,
+  });
+
+  final ContactGroup group;
+  final String activeInitial;
+  final ValueChanged<String> onSurnameSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: _ContactsPageState._groupHeaderExtent,
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Material(
+            color: colors.surfaceContainerHighest.withValues(alpha: .72),
+            child: Row(
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 4),
+                  child: Text(
+                    group.index,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '(${group.count})',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(right: 42),
+                    itemCount: group.surnameInitials.length,
+                    separatorBuilder: (_, _) => const Text('、'),
+                    itemBuilder: (context, index) {
+                      final initial = group.surnameInitials[index];
+                      final isActive = initial == activeInitial;
+                      return TextButton(
+                        onPressed: () => onSurnameSelected(initial),
+                        style: TextButton.styleFrom(
+                          foregroundColor:
+                              isActive
+                                  ? colors.primary
+                                  : colors.onSurfaceVariant,
+                          minimumSize: const Size(28, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        ),
+                        child: Text(initial),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ContactRow extends StatelessWidget {
