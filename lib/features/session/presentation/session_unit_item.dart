@@ -109,7 +109,7 @@ class SessionUnitItem extends StatelessWidget {
                               _time(item.updatedAt!),
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: colorScheme.onSurfaceVariant.withValues(
-                                  alpha: 0.8,
+                                  alpha: 0.4,
                                 ),
                               ),
                             ),
@@ -174,7 +174,7 @@ class SessionUnitItem extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: colorScheme.onSurfaceVariant.withValues(
-                                  alpha: 0.9,
+                                  alpha: 0.4,
                                 ),
                               ),
                             ),
@@ -235,6 +235,7 @@ class SessionUnitItem extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(width: 16),
             ],
           ),
         ),

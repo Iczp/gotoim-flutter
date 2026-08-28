@@ -32,7 +32,7 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.only(top: 8, bottom: 8),
                   itemCount: controller.devices.length,
                   itemBuilder:
                       (context, index) => _DeviceCard(
@@ -64,7 +64,7 @@ class _DeviceCard extends StatelessWidget {
     ].where((value) => value.isNotEmpty).join(' · ');
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
