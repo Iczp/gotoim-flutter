@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -264,11 +265,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         () => _showMessageActions(message),
                                     onQuoteTap: () => _scrollToQuoted(message),
                                     showUnreadDivider:
+                                        message.serverId != null &&
                                         controller.friend?.readMessageId ==
                                             message.serverId &&
                                         index > 0,
                                     showPeerRead:
                                         message.isMine &&
+                                        message.serverId != null &&
                                         controller.friend?.peerReadMessageId ==
                                             message.serverId,
                                   );
@@ -1837,11 +1840,18 @@ class _ComposerState extends State<_Composer> {
     if (_amplitudeSampleCount == 1) {
       debugPrint('[voiceAmplitude] stream=true level=$level');
     }
-    final smoothed = _levels.last * 0.28 + level * 0.72;
+    // Recorder amplitudes tend to cluster near the low end. Apply a visual
+    // (not recording) gain curve so normal speech has a clearly visible wave.
+    final normalized = ((level - 0.05) / 0.95).clamp(0.0, 1.0);
+    final boosted = 0.10 + math.pow(normalized, 0.42).toDouble() * 0.90;
+    // Fast attack makes a spoken syllable immediately noticeable; the slower
+    // release keeps the waveform lively without abrupt drop-outs.
+    final response = boosted > _levels.last ? 0.88 : 0.46;
+    final smoothed = _levels.last * (1 - response) + boosted * response;
     setState(() {
       _levels
         ..removeAt(0)
-        ..add(smoothed.clamp(0.04, 1.0));
+        ..add(smoothed.clamp(0.06, 1.0));
     });
     _recordingOverlay?.markNeedsBuild();
   }
@@ -2296,13 +2306,13 @@ class _VoiceWavePainter extends CustomPainter {
     final paint =
         Paint()
           ..color = color
-          ..strokeWidth = 3
+          ..strokeWidth = 4
           ..strokeCap = StrokeCap.round;
     final step = size.width / levels.length;
     final center = size.height / 2;
     for (var index = 0; index < levels.length; index++) {
       final normalized = levels[index].clamp(0.06, 1.0);
-      final height = normalized * size.height * 0.9;
+      final height = normalized * size.height * 0.96;
       final x = step * (index + 0.5);
       canvas.drawLine(
         Offset(x, center - height / 2),
