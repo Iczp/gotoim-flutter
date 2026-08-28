@@ -32,12 +32,21 @@ class HomeSectionPage extends StatelessWidget {
       return const ContactsPage();
     }
     if (section == HomeSection.workbench) {
-      return _WorkbenchEntry(isCompact: isCompact);
+      return _HomeSectionWithTitle(
+        title: section.label,
+        child: _WorkbenchEntry(isCompact: isCompact),
+      );
     }
     if (section == HomeSection.explore) {
-      return ExplorePage(isCompact: isCompact);
+      return _HomeSectionWithTitle(
+        title: section.label,
+        child: ExplorePage(isCompact: isCompact),
+      );
     }
-    return _ProfileSettingsPage(isCompact: isCompact);
+    return _HomeSectionWithTitle(
+      title: section.label,
+      child: _ProfileSettingsPage(isCompact: isCompact),
+    );
   }
 }
 
@@ -66,6 +75,51 @@ extension HomeSectionInfo on HomeSection {
     if (this == HomeSection.workbench) return Icons.grid_view;
     if (this == HomeSection.explore) return Icons.explore_rounded;
     return Icons.person_rounded;
+  }
+}
+
+Color _homeSectionHeaderBackground(BuildContext context) => Theme.of(
+  context,
+).colorScheme.surfaceContainerHighest.withValues(alpha: .86);
+
+/// A title owned by an individual tab page, rather than by the home shell.
+class _HomeSectionWithTitle extends StatelessWidget {
+  const _HomeSectionWithTitle({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          Material(
+            color: _homeSectionHeaderBackground(context),
+            child: SizedBox(
+              height: kToolbarHeight,
+              width: double.infinity,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(child: child),
+        ],
+      ),
+    );
   }
 }
 

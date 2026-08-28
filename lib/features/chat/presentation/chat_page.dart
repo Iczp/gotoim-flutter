@@ -718,7 +718,17 @@ class _MessageRow extends StatelessWidget {
             ),
           LayoutBuilder(
             builder: (context, constraints) {
-              final bubbleWidth = constraints.maxWidth * 0.68;
+              // Keep the bubble constraint stable across selection-mode changes:
+              // 36px is reserved in the maximum width for a checkbox that is
+              // only inserted while selecting, and 48px is reserved for avatar
+              // plus its gap. This prevents text wrapping and row-height jumps.
+              const selectionSlotWidth = 36.0;
+              const avatarSlotWidth = 48.0;
+              final contentMaxWidth = (constraints.maxWidth -
+                      selectionSlotWidth -
+                      avatarSlotWidth)
+                  .clamp(0.0, double.infinity);
+              final bubbleWidth = contentMaxWidth * 0.68;
               final avatar = GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: onUserTap,
@@ -754,28 +764,9 @@ class _MessageRow extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    Stack(
+                      clipBehavior: Clip.none,
                       children: <Widget>[
-                        if (message.isMine && message.state == 'sending')
-                          const Padding(
-                            padding: EdgeInsets.only(right: 7),
-                            child: SizedBox.square(
-                              dimension: 17,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                        if (message.isMine && message.state == 'failed')
-                          IconButton(
-                            tooltip: '发送失败，点击重试',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: onRetry,
-                            icon: const Icon(
-                              Icons.error,
-                              color: Colors.red,
-                              size: 19,
-                            ),
-                          ),
                         ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: bubbleWidth),
                           child: DecoratedBox(
@@ -873,6 +864,30 @@ class _MessageRow extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (message.isMine && message.state == 'sending')
+                          const Positioned(
+                            left: -24,
+                            top: 10,
+                            child: SizedBox.square(
+                              dimension: 17,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        if (message.isMine && message.state == 'failed')
+                          Positioned(
+                            left: -29,
+                            top: 4,
+                            child: IconButton(
+                              tooltip: '发送失败，点击重试',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: onRetry,
+                              icon: const Icon(
+                                Icons.error,
+                                color: Colors.red,
+                                size: 19,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ],
@@ -881,23 +896,22 @@ class _MessageRow extends StatelessWidget {
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  SizedBox(
-                    width: 48,
-                    child: IgnorePointer(
-                      ignoring: !selectionMode,
-                      child: AnimatedOpacity(
-                        opacity: selectionMode ? 1 : 0,
-                        duration: const Duration(milliseconds: 120),
+                  if (selectionMode)
+                    SizedBox(
+                      width: selectionSlotWidth,
+                      child: Center(
                         child: Checkbox(
                           value: selected,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
                           onChanged: (_) => onTap?.call(),
                         ),
                       ),
                     ),
-                  ),
                   ...(message.isMine
-                      ? <Widget>[content, const SizedBox(width: 8), avatar]
-                      : <Widget>[avatar, const SizedBox(width: 8), content]),
+                      ? <Widget>[content, const SizedBox(width: 12), avatar]
+                      : <Widget>[avatar, const SizedBox(width: 12), content]),
                 ],
               );
             },

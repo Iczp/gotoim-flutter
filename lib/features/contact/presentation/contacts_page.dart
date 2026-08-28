@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -22,6 +23,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   // 联系人行高与分组标题高度集中配置，修改时会同步影响滚动定位。
   static const _rowExtent = 56.0;
   static const _groupHeaderExtent = 40.0;
+  static const _titleBarExtent = 56.0;
   // 右侧字母索引拖动时，暂时关闭吸顶标题毛玻璃；松手后自动恢复。
   static const _disablePinnedHeaderBlurWhileIndexDragging = true;
   static const _quickActionsExtent = _rowExtent * 4;
@@ -78,157 +80,174 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       _activeSurnameInitial.value = groups.first.contacts.first.surnameInitial;
     }
 
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: Stack(
-                children: <Widget>[
-                  RefreshIndicator(
-                    onRefresh: contacts.refresh,
-                    child: CustomScrollView(
-                      controller: _scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: <Widget>[
-                        const SliverToBoxAdapter(child: _QuickActions()),
-                        if (contacts.error != null)
-                          SliverToBoxAdapter(
-                            child: _ContactsError(
-                              error: contacts.error!,
-                              hasContacts: groups.isNotEmpty,
-                              onRetry:
-                                  groups.isEmpty
-                                      ? () => ref
-                                          .read(contactsControllerProvider)
-                                          .initialize(ownerId)
-                                      : contacts.refresh,
+    final headerColor = _contactHeaderBackground(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: headerColor,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      ),
+      child: Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: <Widget>[
+              const _ContactsTitleBar(),
+              Expanded(
+                child: Stack(
+                  children: <Widget>[
+                    RefreshIndicator(
+                      onRefresh: contacts.refresh,
+                      child: CustomScrollView(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: <Widget>[
+                          const SliverToBoxAdapter(child: _QuickActions()),
+                          if (contacts.error != null)
+                            SliverToBoxAdapter(
+                              child: _ContactsError(
+                                error: contacts.error!,
+                                hasContacts: groups.isNotEmpty,
+                                onRetry:
+                                    groups.isEmpty
+                                        ? () => ref
+                                            .read(contactsControllerProvider)
+                                            .initialize(ownerId)
+                                        : contacts.refresh,
+                              ),
                             ),
-                          ),
-                        if (isInitialLoading)
-                          const SliverToBoxAdapter(
-                            child: _ContactsLoadingSkeleton(),
-                          )
-                        else if (groups.isEmpty)
-                          const SliverFillRemaining(
-                            hasScrollBody: false,
-                            child: _NoContacts(),
-                          )
-                        else
-                          ..._buildGroupSlivers(context, groups, ownerId),
-                        if (groups.isNotEmpty)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 20),
-                              child: Center(
-                                child: Text(
-                                  '共有 ${contacts.totalCount} 位联系人',
-                                  style: Theme.of(context).textTheme.bodySmall,
+                          if (isInitialLoading)
+                            const SliverToBoxAdapter(
+                              child: _ContactsLoadingSkeleton(),
+                            )
+                          else if (groups.isEmpty)
+                            const SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: _NoContacts(),
+                            )
+                          else
+                            ..._buildGroupSlivers(context, groups, ownerId),
+                          if (groups.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 20,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '共有 ${contacts.totalCount} 位联系人',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  ValueListenableBuilder<_PinnedContactGroup?>(
-                    valueListenable: _pinnedHeader,
-                    builder: (context, header, _) {
-                      if (header == null) return const SizedBox.shrink();
-                      return Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: _isIndexDragging,
-                          builder:
-                              (context, isDragging, _) => _ContactGroupHeader(
-                                group: header.group,
-                                activeInitial: _activeSurnameInitial.value,
-                                activeInitialListenable: _activeSurnameInitial,
-                                onSurnameSelected:
-                                    (initial) => _scrollToSurname(
-                                      groups,
-                                      header.group,
-                                      initial,
-                                    ),
-                                showBlur:
-                                    !_disablePinnedHeaderBlurWhileIndexDragging ||
-                                    !isDragging,
-                              ),
-                        ),
-                      );
-                    },
-                  ),
-                  if (groups.isNotEmpty)
-                    Positioned(
-                      top: 8,
-                      right: 2,
-                      bottom: 8,
-                      child: ValueListenableBuilder<String>(
-                        valueListenable: _activeGroupIndex,
-                        builder:
-                            (context, activeKey, _) => _AlphabetIndexBar(
-                              keys: groups.map((group) => group.index).toList(),
-                              activeKey: activeKey,
-                              onSelected: (key) => _scrollToGroup(groups, key),
-                              onDragging: (key) {
-                                if (_draggingIndex.value != key) {
-                                  _draggingIndex.value = key;
-                                }
-                                final isDragging = key != null;
-                                if (_isIndexDragging.value != isDragging) {
-                                  _isIndexDragging.value = isDragging;
-                                }
-                              },
-                            ),
+                        ],
                       ),
                     ),
-                  ValueListenableBuilder<String?>(
-                    valueListenable: _draggingIndex,
-                    builder: (context, key, _) {
-                      if (key == null) return const SizedBox.shrink();
-                      return IgnorePointer(
-                        child: Center(
-                          child: Container(
-                            width: 80,
-                            height: 80,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: .58),
-                              shape: BoxShape.circle,
-                              boxShadow: <BoxShadow>[
-                                BoxShadow(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: .52),
-                                  blurRadius: 24,
-                                  spreadRadius: 5,
+                    ValueListenableBuilder<_PinnedContactGroup?>(
+                      valueListenable: _pinnedHeader,
+                      builder: (context, header, _) {
+                        if (header == null) return const SizedBox.shrink();
+                        return Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: ValueListenableBuilder<bool>(
+                            valueListenable: _isIndexDragging,
+                            builder:
+                                (context, isDragging, _) => _ContactGroupHeader(
+                                  group: header.group,
+                                  activeInitial: _activeSurnameInitial.value,
+                                  activeInitialListenable:
+                                      _activeSurnameInitial,
+                                  onSurnameSelected:
+                                      (initial) => _scrollToSurname(
+                                        groups,
+                                        header.group,
+                                        initial,
+                                      ),
+                                  showBlur:
+                                      !_disablePinnedHeaderBlurWhileIndexDragging ||
+                                      !isDragging,
                                 ),
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: .36),
-                                  blurRadius: 14,
+                          ),
+                        );
+                      },
+                    ),
+                    if (groups.isNotEmpty)
+                      Positioned(
+                        top: 8,
+                        right: 2,
+                        bottom: 8,
+                        child: ValueListenableBuilder<String>(
+                          valueListenable: _activeGroupIndex,
+                          builder:
+                              (context, activeKey, _) => _AlphabetIndexBar(
+                                keys:
+                                    groups.map((group) => group.index).toList(),
+                                activeKey: activeKey,
+                                onSelected:
+                                    (key) => _scrollToGroup(groups, key),
+                                onScrollToTop: _scrollToTop,
+                                onScrollToBottom: _scrollToBottom,
+                                onDragging: (key) {
+                                  if (_draggingIndex.value != key) {
+                                    _draggingIndex.value = key;
+                                  }
+                                  final isDragging = key != null;
+                                  if (_isIndexDragging.value != isDragging) {
+                                    _isIndexDragging.value = isDragging;
+                                  }
+                                },
+                              ),
+                        ),
+                      ),
+                    ValueListenableBuilder<String?>(
+                      valueListenable: _draggingIndex,
+                      builder: (context, key, _) {
+                        if (key == null) return const SizedBox.shrink();
+                        return IgnorePointer(
+                          child: Center(
+                            child: Container(
+                              width: 80,
+                              height: 80,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: .58),
+                                shape: BoxShape.circle,
+                                boxShadow: <BoxShadow>[
+                                  BoxShadow(
+                                    color: Theme.of(context).colorScheme.primary
+                                        .withValues(alpha: .52),
+                                    blurRadius: 24,
+                                    spreadRadius: 5,
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: .36),
+                                    blurRadius: 14,
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                key,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.w700,
                                 ),
-                              ],
-                            ),
-                            child: Text(
-                              key,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 36,
-                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -308,6 +327,24 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     );
   }
 
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _scrollToBottom() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   void _scrollToSurname(
     List<ContactGroup> groups,
     ContactGroup group,
@@ -381,6 +418,47 @@ class _PinnedContactGroup {
   const _PinnedContactGroup({required this.group});
 
   final ContactGroup group;
+}
+
+Color _contactHeaderBackground(BuildContext context) => Theme.of(
+  context,
+).colorScheme.surfaceContainerHighest.withValues(alpha: .86);
+
+class _ContactsTitleBar extends StatelessWidget {
+  const _ContactsTitleBar();
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: _contactHeaderBackground(context),
+    child: SizedBox(
+      height: _ContactsPageState._titleBarExtent,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: <Widget>[
+            Text('通讯录', style: Theme.of(context).textTheme.titleLarge),
+            const Spacer(),
+            IconButton(
+              tooltip: '搜索联系人',
+              onPressed:
+                  () => ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('联系人搜索将在下一步接入'))),
+              icon: const Icon(Icons.search),
+            ),
+            IconButton(
+              tooltip: '添加好友',
+              onPressed:
+                  () => ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('添加好友功能即将接入'))),
+              icon: const Icon(Icons.add),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _QuickActions extends StatelessWidget {
@@ -472,11 +550,8 @@ class _ContactGroupHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final header = Material(
-      color: colors.surfaceContainerHighest.withValues(
-        alpha: showBlur ? .72 : .92,
-      ),
+      color: _contactHeaderBackground(context),
       child: Row(
         children: <Widget>[
           Padding(
@@ -663,7 +738,9 @@ class _ContactRow extends StatelessWidget {
                       ? BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: Theme.of(context).dividerColor,
+                            color: Theme.of(
+                              context,
+                            ).dividerColor.withValues(alpha: .35),
                             width: .5,
                           ),
                         ),
@@ -687,11 +764,15 @@ class _AlphabetIndexBar extends StatefulWidget {
     required this.keys,
     required this.activeKey,
     required this.onSelected,
+    required this.onScrollToTop,
+    required this.onScrollToBottom,
     required this.onDragging,
   });
   final List<String> keys;
   final String activeKey;
   final ValueChanged<String> onSelected;
+  final VoidCallback onScrollToTop;
+  final VoidCallback onScrollToBottom;
   final ValueChanged<String?> onDragging;
 
   @override
@@ -743,65 +824,114 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
     final isTouching = _draggingKey != null;
     final colors = Theme.of(context).colorScheme;
     return Center(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanDown: (details) => _selectAt(details.localPosition),
-        onPanUpdate: (details) => _selectAt(details.localPosition),
-        onPanEnd: (_) => _stopDragging(),
-        onPanCancel: _stopDragging,
-        onTapUp: (_) => _stopDragging(),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-          decoration: BoxDecoration(
-            color: colors.surface.withValues(alpha: isTouching ? .88 : .22),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow:
-                isTouching
-                    ? <BoxShadow>[
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: .12),
-                        blurRadius: 8,
-                      ),
-                    ]
-                    : null,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          _AlphabetJumpButton(
+            icon: Icons.vertical_align_top_rounded,
+            tooltip: '回到通讯录顶部',
+            onPressed: widget.onScrollToTop,
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              vertical: _verticalPadding,
-              horizontal: 2,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: widget.keys
-                  .map(
-                    (key) => SizedBox(
-                      width: 28,
-                      height: _itemExtent,
-                      child: Center(
-                        child: Text(
-                          key,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight:
-                                key == shownKey
-                                    ? FontWeight.w800
-                                    : FontWeight.w500,
-                            color:
-                                key == shownKey
-                                    ? colors.primary.withValues(
-                                      alpha: isTouching ? 1 : .56,
-                                    )
-                                    : colors.onSurfaceVariant.withValues(
-                                      alpha: isTouching ? .9 : .36,
-                                    ),
+          const SizedBox(height: 3),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanDown: (details) => _selectAt(details.localPosition),
+            onPanUpdate: (details) => _selectAt(details.localPosition),
+            onPanEnd: (_) => _stopDragging(),
+            onPanCancel: _stopDragging,
+            onTapUp: (_) => _stopDragging(),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                color: colors.surface.withValues(alpha: isTouching ? .88 : .22),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow:
+                    isTouching
+                        ? <BoxShadow>[
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: .12),
+                            blurRadius: 8,
+                          ),
+                        ]
+                        : null,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: _verticalPadding,
+                  horizontal: 2,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: widget.keys
+                      .map(
+                        (key) => SizedBox(
+                          width: 28,
+                          height: _itemExtent,
+                          child: Center(
+                            child: Text(
+                              key,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight:
+                                    key == shownKey
+                                        ? FontWeight.w800
+                                        : FontWeight.w500,
+                                color:
+                                    key == shownKey
+                                        ? colors.primary.withValues(
+                                          alpha: isTouching ? 1 : .56,
+                                        )
+                                        : colors.onSurfaceVariant.withValues(
+                                          alpha: isTouching ? .9 : .36,
+                                        ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  )
-                  .toList(growable: false),
+                      )
+                      .toList(growable: false),
+                ),
+              ),
             ),
+          ),
+          const SizedBox(height: 3),
+          _AlphabetJumpButton(
+            icon: Icons.vertical_align_bottom_rounded,
+            tooltip: '跳到通讯录底部',
+            onPressed: widget.onScrollToBottom,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AlphabetJumpButton extends StatelessWidget {
+  const _AlphabetJumpButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        radius: 16,
+        onTap: onPressed,
+        child: SizedBox.square(
+          dimension: 26,
+          child: Icon(
+            icon,
+            size: 16,
+            color: colors.onSurfaceVariant.withValues(alpha: .42),
           ),
         ),
       ),

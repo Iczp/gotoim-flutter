@@ -47,21 +47,28 @@ class GlassContainer extends StatelessWidget {
     final effectiveBg = backgroundColor ?? tokens.glassSurfaceColor;
     final effectiveBorder = borderColor ?? tokens.glassBorderColor;
 
-    Widget current = Container(
-      width: width,
-      height: height,
-      alignment: alignment,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: effectiveBg,
-        gradient: gradient,
-        borderRadius: effectiveRadius,
-        border:
-            borderWidth > 0
-                ? Border.all(color: effectiveBorder, width: borderWidth)
-                : null,
+    // Ink paints the card decoration on this Material surface, so descendant
+    // ListTile ink splashes remain visible above the glass background.
+    Widget current = Material(
+      type: MaterialType.transparency,
+      child: Ink(
+        width: width,
+        height: height,
+        padding: padding,
+        decoration: BoxDecoration(
+          color: effectiveBg,
+          gradient: gradient,
+          borderRadius: effectiveRadius,
+          border:
+              borderWidth > 0
+                  ? Border.all(color: effectiveBorder, width: borderWidth)
+                  : null,
+        ),
+        child:
+            alignment == null
+                ? child
+                : Align(alignment: alignment!, child: child),
       ),
-      child: child,
     );
 
     if (effectiveBlur > 0) {

@@ -58,22 +58,11 @@ class SessionUnitItem extends StatelessWidget {
               '?ownerId=${item.ownerId ?? 0}'
               '&title=${Uri.encodeQueryComponent(item.title)}',
             ),
-        child: Container(
+        child: SizedBox(
           height: 68,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration:
-              showDivider
-                  ? BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: tokens.dividerBorder,
-                        width: 0.6,
-                      ),
-                    ),
-                  )
-                  : null,
           child: Row(
             children: [
+              const SizedBox(width: 16),
               ChatObjectAvatar(
                 name: item.title,
                 imageUrl:
@@ -83,147 +72,167 @@ class SessionUnitItem extends StatelessWidget {
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration:
+                      showDivider
+                          ? BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: tokens.dividerBorder.withValues(
+                                  alpha: .55,
+                                ),
+                                width: 0.6,
+                              ),
                             ),
-                          ),
-                        ),
-                        if (item.updatedAt != null)
-                          Text(
-                            _time(item.updatedAt!),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.8,
+                          )
+                          : null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
                               ),
                             ),
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                if (immersed && badge > 0)
-                                  TextSpan(
-                                    text: '[$badge条] ',
-                                    style: TextStyle(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w500,
+                          if (item.updatedAt != null)
+                            Text(
+                              _time(item.updatedAt!),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.8,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  if (immersed && badge > 0)
+                                    TextSpan(
+                                      text: '[$badge条] ',
+                                      style: TextStyle(
+                                        color: colorScheme.onSurfaceVariant,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                if (remind > 0)
+                                  if (remind > 0)
+                                    TextSpan(
+                                      text:
+                                          '[ ${remind > 99 ? '99+' : remind} 人@我 ] ',
+                                      style: TextStyle(
+                                        color: tokens.mentionBadgeColor,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  if (following > 0)
+                                    TextSpan(
+                                      text: '关注 $following ',
+                                      style: TextStyle(
+                                        color: tokens.followBadgeColor,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  if (showSender)
+                                    TextSpan(
+                                      text: '$senderName: ',
+                                      style: TextStyle(
+                                        color: colorScheme.onSurfaceVariant,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  if (messageType.isNotEmpty)
+                                    TextSpan(
+                                      text: '$messageType ',
+                                      style: TextStyle(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
                                   TextSpan(
                                     text:
-                                        '[ ${remind > 99 ? '99+' : remind} 人@我 ] ',
-                                    style: TextStyle(
-                                      color: tokens.mentionBadgeColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                        item.preview.isEmpty
+                                            ? '-'
+                                            : item.preview,
                                   ),
-                                if (following > 0)
-                                  TextSpan(
-                                    text: '关注 $following ',
-                                    style: TextStyle(
-                                      color: tokens.followBadgeColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                if (showSender)
-                                  TextSpan(
-                                    text: '$senderName: ',
-                                    style: TextStyle(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                if (messageType.isNotEmpty)
-                                  TextSpan(
-                                    text: '$messageType ',
-                                    style: TextStyle(
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                TextSpan(
-                                  text:
-                                      item.preview.isEmpty ? '-' : item.preview,
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.9,
                                 ),
-                              ],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.9,
                               ),
                             ),
                           ),
-                        ),
-                        if (immersed)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: Icon(
-                              Icons.notifications_off_outlined,
-                              size: 16,
-                              color: colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.6,
+                          if (immersed)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Icon(
+                                Icons.notifications_off_outlined,
+                                size: 16,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.6,
+                                ),
                               ),
                             ),
-                          ),
-                        if (item.isPinned)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: Icon(
-                              Icons.push_pin_rounded,
-                              size: 15,
-                              color: colorScheme.primary.withValues(alpha: 0.8),
+                          if (item.isPinned)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Icon(
+                                Icons.push_pin_rounded,
+                                size: 15,
+                                color: colorScheme.primary.withValues(
+                                  alpha: 0.8,
+                                ),
+                              ),
                             ),
-                          ),
-                        if (badge > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    immersed
-                                        ? colorScheme.outlineVariant
-                                        : tokens.unreadBadgeColor,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                badge > 99 ? '99+' : '$badge',
-                                style: TextStyle(
+                          if (badge > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
                                   color:
                                       immersed
-                                          ? colorScheme.onSurfaceVariant
-                                          : Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
+                                          ? colorScheme.outlineVariant
+                                          : tokens.unreadBadgeColor,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  badge > 99 ? '99+' : '$badge',
+                                  style: TextStyle(
+                                    color:
+                                        immersed
+                                            ? colorScheme.onSurfaceVariant
+                                            : Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
