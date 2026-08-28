@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/widgets/parametric_chat_bubble.dart';
 
-/// Live visual tuner for the parametric inverted-S chat bubble.
+/// Focused visual tuner for the two independently curved tail lines.
 class ChatBubbleDiagnosticsPage extends StatefulWidget {
   const ChatBubbleDiagnosticsPage({super.key});
 
@@ -16,33 +16,28 @@ class ChatBubbleDiagnosticsPage extends StatefulWidget {
 
 class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
   ParametricBubbleConfig _config = const ParametricBubbleConfig();
-  Color _backgroundColor = const Color(0xFFDCE5FF);
-  Color _textColor = const Color(0xFF172033);
 
-  void _update(ParametricBubbleConfig next) => setState(() => _config = next);
-
-  Map<String, Object> get _generatedParameters => <String, Object>{
-    ..._config.toJson(),
-    'style': <String, String>{
-      'backgroundColor': _hexColor(_backgroundColor),
-      'textColor': _hexColor(_textColor),
-    },
+  Map<String, double> get _generatedParameters => <String, double>{
+    'leadingCurveBend': _config.leadingCurveBend,
+    'trailingCurveBend': _config.trailingCurveBend,
   };
 
-  String _hexColor(Color color) =>
-      '#${color.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()}';
-
-  String _inversionHint(double value) {
-    if (value < .34) return '轻微内收';
-    if (value < .67) return 'S 型微凹';
-    return '强反角收紧';
+  Set<int> get _uniformBendSelection {
+    if (_config.leadingCurveBend == 1 && _config.trailingCurveBend == 1) {
+      return <int>{1};
+    }
+    if (_config.leadingCurveBend == -1 && _config.trailingCurveBend == -1) {
+      return <int>{-1};
+    }
+    return <int>{};
   }
 
-  String _sharpnessHint(double value) {
-    if (value < .34) return '圆润尾端';
-    if (value < .67) return '清晰尖端';
-    return '极尖挑刺';
-  }
+  void _setUniformBend(int direction) => setState(() {
+    _config = _config.copyWith(
+      leadingCurveBend: direction.toDouble(),
+      trailingCurveBend: direction.toDouble(),
+    );
+  });
 
   Future<void> _copyJson() async {
     await Clipboard.setData(
@@ -53,18 +48,17 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('气泡参数 JSON 已复制')));
+    ).showSnackBar(const SnackBar(content: Text('曲线参数 JSON 已复制')));
   }
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final json = const JsonEncoder.withIndent(
       '  ',
     ).convert(_generatedParameters);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('聊天气泡参数调节器'),
+        title: const Text('聊天气泡曲线调节器'),
         actions: <Widget>[
           IconButton(
             tooltip: '复制 JSON 参数',
@@ -75,165 +69,71 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxHeight < 420;
-          final previewHeight = compact ? 112.0 : 174.0;
+          if (constraints.maxHeight <= 0) return const SizedBox.shrink();
+          final previewHeight =
+              (constraints.maxHeight * .30).clamp(0.0, 174.0).toDouble();
+          final showPreview = previewHeight >= 72;
           return Column(
             children: <Widget>[
-              if (!compact)
+              if (showPreview)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: Text(
-                    '实时预览反角微凹 S 曲线尾巴。修改任一参数会立即重绘，不会影响正式聊天消息。',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: _PreviewCard(config: _config, height: previewHeight),
                 ),
-              SizedBox(height: compact ? 8 : 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _PreviewCard(
-                  config: _config,
-                  backgroundColor: _backgroundColor,
-                  textColor: _textColor,
-                  height: previewHeight,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Divider(height: 1),
+              if (showPreview) const Divider(height: 1),
               Expanded(
-                // This panel contains a small, fixed set of controls. A single
-                // scroll child avoids SliverList relayout while sliders rebuild.
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
                       Text(
-                        '方向与锚点',
+                        '快捷预设',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
-                      SegmentedButton<ParametricBubbleSide>(
-                        segments: const <ButtonSegment<ParametricBubbleSide>>[
+                      SegmentedButton<int>(
+                        segments: const <ButtonSegment<int>>[
                           ButtonSegment(
-                            value: ParametricBubbleSide.left,
-                            icon: Icon(Icons.format_align_left_rounded),
-                            label: Text('左侧接入'),
+                            value: 1,
+                            icon: Icon(Icons.south_rounded),
+                            label: Text('两段向下凹'),
                           ),
                           ButtonSegment(
-                            value: ParametricBubbleSide.right,
-                            icon: Icon(Icons.format_align_right_rounded),
-                            label: Text('右侧接入'),
-                          ),
-                        ],
-                        selected: <ParametricBubbleSide>{_config.side},
-                        onSelectionChanged:
-                            (selected) =>
-                                _update(_config.copyWith(side: selected.first)),
-                      ),
-                      const SizedBox(height: 10),
-                      SegmentedButton<ParametricBubbleAnchor>(
-                        segments: const <ButtonSegment<ParametricBubbleAnchor>>[
-                          ButtonSegment(
-                            value: ParametricBubbleAnchor.top,
-                            icon: Icon(Icons.vertical_align_top_rounded),
-                            label: Text('顶部锚点'),
-                          ),
-                          ButtonSegment(
-                            value: ParametricBubbleAnchor.bottom,
-                            icon: Icon(Icons.vertical_align_bottom_rounded),
-                            label: Text('底部锚点'),
+                            value: -1,
+                            icon: Icon(Icons.north_rounded),
+                            label: Text('两段向上凹'),
                           ),
                         ],
-                        selected: <ParametricBubbleAnchor>{_config.anchor},
+                        selected: _uniformBendSelection,
+                        emptySelectionAllowed: true,
                         onSelectionChanged:
-                            (selected) => _update(
-                              _config.copyWith(anchor: selected.first),
-                            ),
+                            (selected) => _setUniformBend(selected.first),
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        '几何参数',
+                        '单独微调',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      _SliderSetting(
-                        label: '垂直偏移 offset',
-                        value: _config.offset,
-                        min: 0,
-                        max: 100,
-                        unit: 'px',
+                      _CurveSlider(
+                        label: '第一段曲线凹向',
+                        value: _config.leadingCurveBend,
                         onChanged:
-                            (value) => _update(_config.copyWith(offset: value)),
+                            (value) => setState(() {
+                              _config = _config.copyWith(
+                                leadingCurveBend: value,
+                              );
+                            }),
                       ),
-                      _SliderSetting(
-                        label: '尾巴长度 tailLength',
-                        value: _config.tailLength,
-                        min: 4,
-                        max: 48,
-                        unit: 'px',
+                      _CurveSlider(
+                        label: '第二段曲线凹向',
+                        value: _config.trailingCurveBend,
                         onChanged:
-                            (value) =>
-                                _update(_config.copyWith(tailLength: value)),
-                      ),
-                      _SliderSetting(
-                        label: '尾巴高度 tailHeight',
-                        value: _config.tailHeight,
-                        min: 8,
-                        max: 48,
-                        unit: 'px',
-                        onChanged:
-                            (value) =>
-                                _update(_config.copyWith(tailHeight: value)),
-                      ),
-                      _SliderSetting(
-                        label:
-                            '反角凹陷度 inversion（${_inversionHint(_config.inversion)}）',
-                        value: _config.inversion,
-                        min: 0,
-                        max: 1,
-                        unit: '',
-                        onChanged:
-                            (value) =>
-                                _update(_config.copyWith(inversion: value)),
-                      ),
-                      _SliderSetting(
-                        label:
-                            '尖端锐度 sharpness（${_sharpnessHint(_config.sharpness)}）',
-                        value: _config.sharpness,
-                        min: 0,
-                        max: 1,
-                        unit: '',
-                        onChanged:
-                            (value) =>
-                                _update(_config.copyWith(sharpness: value)),
-                      ),
-                      _SliderSetting(
-                        label: '主体圆角 radius',
-                        value: _config.radius,
-                        min: 4,
-                        max: 40,
-                        unit: 'px',
-                        onChanged:
-                            (value) => _update(_config.copyWith(radius: value)),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        '样式颜色',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      _ColorSetting(
-                        label: '气泡背景 backgroundColor',
-                        color: _backgroundColor,
-                        onChanged:
-                            (color) => setState(() => _backgroundColor = color),
-                      ),
-                      _ColorSetting(
-                        label: '文字颜色 textColor',
-                        color: _textColor,
-                        onChanged:
-                            (color) => setState(() => _textColor = color),
+                            (value) => setState(() {
+                              _config = _config.copyWith(
+                                trailingCurveBend: value,
+                              );
+                            }),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -241,20 +141,7 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: colors.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        // Copy is provided explicitly below. A plain Text avoids the
-                        // selection overlay intercepting vertical drags in this panel.
-                        child: Text(
-                          json,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(fontFamily: 'monospace'),
-                        ),
-                      ),
+                      _JsonCard(json: json),
                       const SizedBox(height: 12),
                       Row(
                         children: <Widget>[
@@ -262,8 +149,6 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
                             onPressed:
                                 () => setState(() {
                                   _config = const ParametricBubbleConfig();
-                                  _backgroundColor = const Color(0xFFDCE5FF);
-                                  _textColor = const Color(0xFF172033);
                                 }),
                             icon: const Icon(Icons.restart_alt_rounded),
                             label: const Text('恢复默认'),
@@ -289,22 +174,14 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
 }
 
 class _PreviewCard extends StatelessWidget {
-  const _PreviewCard({
-    required this.config,
-    required this.backgroundColor,
-    required this.textColor,
-    required this.height,
-  });
+  const _PreviewCard({required this.config, required this.height});
 
   final ParametricBubbleConfig config;
-  final Color backgroundColor;
-  final Color textColor;
   final double height;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final isRight = config.side == ParametricBubbleSide.right;
     return Container(
       height: height,
       padding: EdgeInsets.all(height < 140 ? 12 : 20),
@@ -313,17 +190,15 @@ class _PreviewCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
       ),
       child: Align(
-        alignment: isRight ? Alignment.centerRight : Alignment.centerLeft,
+        alignment: Alignment.centerLeft,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 260),
           child: ParametricChatBubble(
             config: config,
-            color: backgroundColor,
+            color: colors.surfaceContainerHighest,
             child: Text(
-              '这是可实时调节的参数化聊天气泡。\n拖动滑块观察反角 S 曲线尾巴的变化。',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: textColor),
+              '独立调节两段曲线的凹向。',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
         ),
@@ -332,21 +207,15 @@ class _PreviewCard extends StatelessWidget {
   }
 }
 
-class _SliderSetting extends StatelessWidget {
-  const _SliderSetting({
+class _CurveSlider extends StatelessWidget {
+  const _CurveSlider({
     required this.label,
     required this.value,
-    required this.min,
-    required this.max,
-    required this.unit,
     required this.onChanged,
   });
 
   final String label;
   final double value;
-  final double min;
-  final double max;
-  final String unit;
   final ValueChanged<double> onChanged;
 
   @override
@@ -357,100 +226,35 @@ class _SliderSetting extends StatelessWidget {
       Row(
         children: <Widget>[
           Expanded(child: Text(label)),
-          Text('${value.toStringAsFixed(2)}$unit'),
+          Text(value.toStringAsFixed(2)),
         ],
       ),
-      Slider(value: value, min: min, max: max, onChanged: onChanged),
+      const Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[Text('向上凹 -1'), Text('直线 0'), Text('向下凹 1')],
+      ),
+      Slider(value: value, min: -1, max: 1, onChanged: onChanged),
     ],
   );
 }
 
-class _ColorSetting extends StatelessWidget {
-  const _ColorSetting({
-    required this.label,
-    required this.color,
-    required this.onChanged,
-  });
+class _JsonCard extends StatelessWidget {
+  const _JsonCard({required this.json});
 
-  final String label;
-  final Color color;
-  final ValueChanged<Color> onChanged;
+  final String json;
 
   @override
-  Widget build(BuildContext context) {
-    final hsv = HSVColor.fromColor(color);
-    final colorText =
-        '#${color.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const SizedBox(height: 12),
-        Row(
-          children: <Widget>[
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(label)),
-            Text(colorText),
-          ],
-        ),
-        _ColorChannelSlider(
-          label: '色相 H',
-          value: hsv.hue,
-          max: 360,
-          onChanged: (value) => onChanged(hsv.withHue(value).toColor()),
-        ),
-        _ColorChannelSlider(
-          label: '饱和度 S',
-          value: hsv.saturation * 100,
-          max: 100,
-          onChanged:
-              (value) => onChanged(hsv.withSaturation(value / 100).toColor()),
-        ),
-        _ColorChannelSlider(
-          label: '明度 V',
-          value: hsv.value * 100,
-          max: 100,
-          onChanged: (value) => onChanged(hsv.withValue(value / 100).toColor()),
-        ),
-      ],
-    );
-  }
-}
-
-class _ColorChannelSlider extends StatelessWidget {
-  const _ColorChannelSlider({
-    required this.label,
-    required this.value,
-    required this.max,
-    required this.onChanged,
-  });
-
-  final String label;
-  final double value;
-  final double max;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: <Widget>[
-      SizedBox(width: 44, child: Text(label)),
-      Expanded(
-        child: Slider(value: value, min: 0, max: max, onChanged: onChanged),
-      ),
-      SizedBox(
-        width: 36,
-        child: Text(value.round().toString(), textAlign: TextAlign.end),
-      ),
-    ],
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Text(
+      json,
+      style: Theme.of(
+        context,
+      ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+    ),
   );
 }

@@ -9,6 +9,8 @@ void main() {
     final config = base.copyWith(
       side: ParametricBubbleSide.right,
       anchor: ParametricBubbleAnchor.bottom,
+      leadingCurveBend: -3,
+      trailingCurveBend: 3,
       offset: 140,
       tailLength: 1,
       tailHeight: 90,
@@ -26,6 +28,8 @@ void main() {
     expect(config.toJson(), <String, Object>{
       'side': 'right',
       'anchor': 'bottom',
+      'leadingCurveBend': -1.0,
+      'trailingCurveBend': 1.0,
       'offset': 100.0,
       'tailLength': 4.0,
       'tailHeight': 48.0,
@@ -50,6 +54,14 @@ void main() {
       find.byType(SingleChildScrollView),
       const Offset(0, -400),
     );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.binding.setSurfaceSize(const Size(320, 100));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.binding.setSurfaceSize(const Size(320, 56));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });

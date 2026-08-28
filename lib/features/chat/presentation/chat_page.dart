@@ -14,7 +14,6 @@ import '../../../core/services/media/media_service.dart';
 import '../../../core/services/media/audio_playback_service.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../../../core/config/app_environment.dart';
-import '../../../core/widgets/parametric_chat_bubble.dart';
 import '../../auth/application/auth_controller.dart';
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
@@ -773,91 +772,98 @@ class _MessageRow extends StatelessWidget {
                       children: <Widget>[
                         ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: bubbleWidth),
-                          child: ParametricChatBubble(
-                            config: ParametricBubbleConfig(
-                              side:
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color:
                                   message.isMine
-                                      ? ParametricBubbleSide.right
-                                      : ParametricBubbleSide.left,
+                                      ? Theme.of(
+                                        context,
+                                      ).colorScheme.primaryContainer
+                                      : Theme.of(
+                                        context,
+                                      ).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            color:
-                                message.isMine
-                                    ? Theme.of(
-                                      context,
-                                    ).colorScheme.primaryContainer
-                                    : Theme.of(
-                                      context,
-                                    ).colorScheme.surfaceContainerHighest,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                if (message.quoteMessage.isNotEmpty)
-                                  InkWell(
-                                    onTap: onQuoteTap,
-                                    child: Container(
-                                      width: double.infinity,
-                                      margin: const EdgeInsets.only(bottom: 7),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .surface
-                                            .withValues(alpha: .55),
-                                        borderRadius: BorderRadius.circular(7),
-                                        border: Border(
-                                          left: BorderSide(
-                                            color:
-                                                Theme.of(
-                                                  context,
-                                                ).colorScheme.primary,
-                                            width: 3,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 13,
+                                vertical: 9,
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  if (message.quoteMessage.isNotEmpty)
+                                    InkWell(
+                                      onTap: onQuoteTap,
+                                      child: Container(
+                                        width: double.infinity,
+                                        margin: const EdgeInsets.only(
+                                          bottom: 7,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .surface
+                                              .withValues(alpha: .55),
+                                          borderRadius: BorderRadius.circular(
+                                            7,
+                                          ),
+                                          border: Border(
+                                            left: BorderSide(
+                                              color:
+                                                  Theme.of(
+                                                    context,
+                                                  ).colorScheme.primary,
+                                              width: 3,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      child: Text(
-                                        '[${message.quoteSenderName}]：${message.quotePreview}',
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style:
-                                            Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
+                                        child: Text(
+                                          '[${message.quoteSenderName}]：${message.quotePreview}',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style:
+                                              Theme.of(
+                                                context,
+                                              ).textTheme.bodySmall,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                if (message.messageType == 5)
-                                  _FileMessageCard(message: message)
-                                else if (message.messageType == 3)
-                                  _VoiceMessageBubble(
-                                    message: message,
-                                    onOpened: onVoiceOpened,
-                                  )
-                                else if (message.messageType == 2)
-                                  _ImageMessageCard(
-                                    message: message,
-                                    bytes: imageBytes,
-                                    apiBaseUrl: apiBaseUrl,
-                                    progress: uploadProgress,
-                                  )
-                                else if (message.messageType == 4)
-                                  _VideoMessageCard(
-                                    message: message,
-                                    apiBaseUrl: apiBaseUrl,
-                                    progress: uploadProgress,
-                                  )
-                                else if (message.messageType == 0)
-                                  MarkdownBody(
-                                    data: text,
-                                    selectable: true,
-                                    shrinkWrap: true,
-                                  )
-                                else
-                                  Text(text),
-                              ],
+                                  if (message.messageType == 5)
+                                    _FileMessageCard(message: message)
+                                  else if (message.messageType == 3)
+                                    _VoiceMessageBubble(
+                                      message: message,
+                                      onOpened: onVoiceOpened,
+                                    )
+                                  else if (message.messageType == 2)
+                                    _ImageMessageCard(
+                                      message: message,
+                                      bytes: imageBytes,
+                                      apiBaseUrl: apiBaseUrl,
+                                      progress: uploadProgress,
+                                    )
+                                  else if (message.messageType == 4)
+                                    _VideoMessageCard(
+                                      message: message,
+                                      apiBaseUrl: apiBaseUrl,
+                                      progress: uploadProgress,
+                                    )
+                                  else if (message.messageType == 0)
+                                    MarkdownBody(
+                                      data: text,
+                                      selectable: true,
+                                      shrinkWrap: true,
+                                    )
+                                  else
+                                    Text(text),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -2038,7 +2044,9 @@ class _ComposerState extends State<_Composer> {
                             onChanged: _onInputChanged,
                             enabled: !widget.controller.isMuted,
                             minLines: 1,
-                            maxLines: 5,
+                            // Let the composer grow with multi-line content instead
+                            // of switching to an internally scrollable text field.
+                            maxLines: null,
                             textInputAction: TextInputAction.newline,
                             decoration: InputDecoration(
                               hintText:
