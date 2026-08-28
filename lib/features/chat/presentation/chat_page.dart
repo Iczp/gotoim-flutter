@@ -4,9 +4,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:video_player/video_player.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/file/file_picker_service.dart';
@@ -24,6 +21,11 @@ import '../../session/application/session_list_controller.dart';
 import '../../session/presentation/chat_object_avatar.dart';
 import '../../call_center/application/call_center_controller.dart';
 import '../../call_center/data/models/transfer_target.dart';
+import 'message_content/file_message_content.dart';
+import 'message_content/image_message_content.dart';
+import 'message_content/text_message_content.dart';
+import 'message_content/video_message_content.dart';
+import 'message_content/voice_message_content.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
@@ -838,31 +840,27 @@ class _MessageRow extends StatelessWidget {
                                       ),
                                     ),
                                   if (message.messageType == 5)
-                                    _FileMessageCard(message: message)
+                                    FileMessageContent(message: message)
                                   else if (message.messageType == 3)
-                                    _VoiceMessageBubble(
+                                    VoiceMessageContent(
                                       message: message,
                                       onOpened: onVoiceOpened,
                                     )
                                   else if (message.messageType == 2)
-                                    _ImageMessageCard(
+                                    ImageMessageContent(
                                       message: message,
                                       bytes: imageBytes,
                                       apiBaseUrl: apiBaseUrl,
                                       progress: uploadProgress,
                                     )
                                   else if (message.messageType == 4)
-                                    _VideoMessageCard(
+                                    VideoMessageContent(
                                       message: message,
                                       apiBaseUrl: apiBaseUrl,
                                       progress: uploadProgress,
                                     )
                                   else if (message.messageType == 0)
-                                    MarkdownBody(
-                                      data: text,
-                                      selectable: true,
-                                      shrinkWrap: true,
-                                    )
+                                    TextMessageContent(text: text)
                                   else
                                     Text(text),
                                 ],
@@ -943,479 +941,6 @@ class _MessageRow extends StatelessWidget {
       value == null
           ? ''
           : '${value.month}-${value.day} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
-}
-
-class _FileMessageCard extends StatelessWidget {
-  const _FileMessageCard({required this.message});
-  final ChatMessage message;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 230,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            const Icon(Icons.insert_drive_file_outlined, size: 34),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message.fileName.isEmpty ? '文件' : message.fileName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        const Divider(height: 16),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(
-                _formatFileSize(message.fileSize),
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ),
-            Text(
-              message.state == 'sending'
-                  ? '发送中'
-                  : message.state == 'failed'
-                  ? '发送失败'
-                  : message.fileSuffix,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: message.state == 'failed' ? Colors.red : null,
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
-  }
-}
-
-class _VoiceMessageBubble extends ConsumerWidget {
-  const _VoiceMessageBubble({required this.message, required this.onOpened});
-  final ChatMessage message;
-  final Future<void> Function() onOpened;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final seconds = (message.audioDuration.inMilliseconds / 1000).ceil();
-    final playback = ref.watch(audioPlaybackServiceProvider);
-    final playing = playback.isMessagePlaying(message.localId);
-    final downloading = playback.downloadingMessageId == message.localId;
-    final progress =
-        playback.activeMessageId == message.localId &&
-                playback.duration.inMilliseconds > 0
-            ? playback.position.inMilliseconds /
-                playback.duration.inMilliseconds
-            : 0.0;
-    return InkWell(
-      onTap:
-          message.state == 'sending'
-              ? null
-              : () async {
-                try {
-                  await playback.toggle(
-                    messageId: message.localId,
-                    localPath: message.localFilePath,
-                    url: message.audioUrl,
-                    mimeType: message.content['contentType']?.toString(),
-                  );
-                  if (playback.isMessagePlaying(message.localId)) {
-                    await onOpened();
-                  }
-                } catch (error) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text('语音播放失败：$error')));
-                  }
-                }
-              },
-      borderRadius: BorderRadius.circular(8),
-      child: SizedBox(
-        width: (96.0 + seconds.clamp(0, 30) * 3).clamp(96.0, 186.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Row(
-              children:
-                  message.isMine
-                      ? <Widget>[
-                        if (message.state == 'sending')
-                          const SizedBox.square(
-                            dimension: 14,
-                            child: CircularProgressIndicator(strokeWidth: 1.8),
-                          ),
-                        Expanded(
-                          child: Text(
-                            seconds <= 0 ? '语音' : '$seconds″',
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Transform.flip(
-                          flipX: true,
-                          child: _VoicePlaybackIcon(playing: playing),
-                        ),
-                      ]
-                      : <Widget>[
-                        _VoicePlaybackIcon(playing: playing),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(seconds <= 0 ? '语音' : '$seconds″'),
-                        ),
-                        if (message.state == 'sending')
-                          const SizedBox.square(
-                            dimension: 14,
-                            child: CircularProgressIndicator(strokeWidth: 1.8),
-                          ),
-                      ],
-            ),
-            if (downloading || progress > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: LinearProgressIndicator(
-                  minHeight: 2,
-                  value: downloading ? playback.downloadProgress : progress,
-                ),
-              ),
-            if (!message.isOpened && !message.isMine)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  width: 7,
-                  height: 7,
-                  margin: const EdgeInsets.only(top: 3),
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _VoicePlaybackIcon extends StatefulWidget {
-  const _VoicePlaybackIcon({required this.playing});
-  final bool playing;
-
-  @override
-  State<_VoicePlaybackIcon> createState() => _VoicePlaybackIconState();
-}
-
-class _VoicePlaybackIconState extends State<_VoicePlaybackIcon>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.playing) _controller.repeat();
-  }
-
-  @override
-  void didUpdateWidget(covariant _VoicePlaybackIcon oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.playing == oldWidget.playing) return;
-    if (widget.playing) {
-      _controller.repeat();
-    } else {
-      _controller
-        ..stop()
-        ..value = 1;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder:
-        (context, _) => CustomPaint(
-          size: const Size(24, 24),
-          painter: _PlaybackWavePainter(
-            color:
-                IconTheme.of(context).color ??
-                Theme.of(context).colorScheme.onSurface,
-            waveCount: widget.playing ? (_controller.value * 3).floor() + 1 : 3,
-          ),
-        ),
-  );
-}
-
-class _PlaybackWavePainter extends CustomPainter {
-  const _PlaybackWavePainter({required this.color, required this.waveCount});
-  final Color color;
-  final int waveCount;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round;
-    canvas.drawCircle(
-      Offset(5, size.height / 2),
-      1.8,
-      paint..style = PaintingStyle.fill,
-    );
-    paint.style = PaintingStyle.stroke;
-    for (var index = 0; index < waveCount.clamp(1, 3); index++) {
-      final radius = 5.0 + index * 4;
-      canvas.drawArc(
-        Rect.fromCircle(center: Offset(5, size.height / 2), radius: radius),
-        -0.72,
-        1.44,
-        false,
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_PlaybackWavePainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.waveCount != waveCount;
-}
-
-class _ImageMessageCard extends StatelessWidget {
-  const _ImageMessageCard({
-    required this.message,
-    required this.bytes,
-    required this.apiBaseUrl,
-    required this.progress,
-  });
-  final ChatMessage message;
-  final Uint8List? bytes;
-  final String apiBaseUrl;
-  final double? progress;
-
-  String get _url {
-    final source = message.mediaUrl ?? '';
-    final uri = Uri.tryParse(source);
-    if (uri?.hasScheme == true || source.isEmpty) return source;
-    return Uri.parse(apiBaseUrl).resolve(source).toString();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final image =
-        bytes != null
-            ? Image.memory(bytes!, fit: BoxFit.cover)
-            : _url.isNotEmpty
-            ? CachedNetworkImage(
-              imageUrl: _url,
-              fit: BoxFit.cover,
-              placeholder:
-                  (_, _) => const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              errorWidget:
-                  (_, _, _) =>
-                      const Icon(Icons.broken_image_outlined, size: 42),
-            )
-            : const Center(child: Icon(Icons.image_outlined, size: 42));
-    return InkWell(
-      onTap:
-          () => showDialog<void>(
-            context: context,
-            barrierColor: Colors.black87,
-            builder:
-                (_) => Dialog.fullscreen(
-                  backgroundColor: Colors.black,
-                  child: Stack(
-                    children: <Widget>[
-                      Center(
-                        child: InteractiveViewer(
-                          minScale: .5,
-                          maxScale: 5,
-                          child: image,
-                        ),
-                      ),
-                      SafeArea(
-                        child: IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close, color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-          ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: SizedBox(
-          width: 190,
-          height: 190,
-          child: Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              image,
-              if (progress != null && progress! < 1)
-                ColoredBox(
-                  color: Colors.black38,
-                  child: Center(
-                    child: SizedBox.square(
-                      dimension: 46,
-                      child: CircularProgressIndicator(
-                        value: progress,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VideoMessageCard extends StatelessWidget {
-  const _VideoMessageCard({
-    required this.message,
-    required this.apiBaseUrl,
-    required this.progress,
-  });
-  final ChatMessage message;
-  final String apiBaseUrl;
-  final double? progress;
-
-  Uri? get _uri {
-    final source = message.mediaUrl ?? message.localFilePath ?? '';
-    if (source.isEmpty) return null;
-    final parsed = Uri.tryParse(source);
-    if (parsed?.hasScheme == true) return parsed;
-    if (message.localFilePath != null) return Uri.file(source);
-    return Uri.parse(apiBaseUrl).resolve(source);
-  }
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap:
-        _uri == null
-            ? null
-            : () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => _VideoViewer(uri: _uri!)),
-            ),
-    child: SizedBox(
-      width: 210,
-      height: 128,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.black87,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: <Widget>[
-            const Icon(Icons.play_circle_fill, color: Colors.white, size: 52),
-            Positioned(
-              left: 8,
-              right: 8,
-              bottom: 7,
-              child: Text(
-                message.fileName.isEmpty ? '视频' : message.fileName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-            if (progress != null && progress! < 1)
-              CircularProgressIndicator(value: progress, color: Colors.white),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _VideoViewer extends StatefulWidget {
-  const _VideoViewer({required this.uri});
-  final Uri uri;
-  @override
-  State<_VideoViewer> createState() => _VideoViewerState();
-}
-
-class _VideoViewerState extends State<_VideoViewer> {
-  late final VideoPlayerController _controller;
-  Object? _error;
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.networkUrl(widget.uri)
-      ..initialize()
-          .then((_) {
-            if (mounted) setState(() {});
-          })
-          .catchError((Object error) {
-            if (mounted) setState(() => _error = error);
-          });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.black,
-    appBar: AppBar(
-      backgroundColor: Colors.black,
-      foregroundColor: Colors.white,
-    ),
-    body: Center(
-      child:
-          _error != null
-              ? Text(
-                '视频加载失败：$_error',
-                style: const TextStyle(color: Colors.white),
-              )
-              : !_controller.value.isInitialized
-              ? const CircularProgressIndicator()
-              : GestureDetector(
-                onTap:
-                    () => setState(
-                      () =>
-                          _controller.value.isPlaying
-                              ? _controller.pause()
-                              : _controller.play(),
-                    ),
-                child: AspectRatio(
-                  aspectRatio: _controller.value.aspectRatio,
-                  child: VideoPlayer(_controller),
-                ),
-              ),
-    ),
-  );
 }
 
 class _SelectionBar extends StatelessWidget {
