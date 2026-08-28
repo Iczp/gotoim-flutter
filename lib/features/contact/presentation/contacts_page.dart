@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -25,6 +26,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   final ValueNotifier<String?> _draggingIndex = ValueNotifier<String?>(null);
   final ValueNotifier<String> _activeSurnameInitial = ValueNotifier<String>('');
   final ValueNotifier<String> _activeGroupIndex = ValueNotifier<String>('');
+  final ValueNotifier<bool> _isIndexDragging = ValueNotifier<bool>(false);
   final ValueNotifier<_PinnedContactGroup?> _pinnedHeader =
       ValueNotifier<_PinnedContactGroup?>(null);
   List<double> _groupOffsets = const <double>[];
@@ -47,6 +49,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     _draggingIndex.dispose();
     _activeSurnameInitial.dispose();
     _activeGroupIndex.dispose();
+    _isIndexDragging.dispose();
     _pinnedHeader.dispose();
     super.dispose();
   }
@@ -133,15 +136,20 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                         top: 0,
                         left: 0,
                         right: 0,
-                        child: _ContactGroupHeader(
-                          group: header.group,
-                          activeInitial: _activeSurnameInitial.value,
-                          activeInitialListenable: _activeSurnameInitial,
-                          onSurnameSelected:
-                              (initial) => _scrollToSurname(
-                                groups,
-                                header.group,
-                                initial,
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: _isIndexDragging,
+                          builder:
+                              (context, isDragging, _) => _ContactGroupHeader(
+                                group: header.group,
+                                activeInitial: _activeSurnameInitial.value,
+                                activeInitialListenable: _activeSurnameInitial,
+                                onSurnameSelected:
+                                    (initial) => _scrollToSurname(
+                                      groups,
+                                      header.group,
+                                      initial,
+                                    ),
+                                showBlur: !isDragging,
                               ),
                         ),
                       );
@@ -162,6 +170,10 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                               onDragging: (key) {
                                 if (_draggingIndex.value != key) {
                                   _draggingIndex.value = key;
+                                }
+                                final isDragging = key != null;
+                                if (_isIndexDragging.value != isDragging) {
+                                  _isIndexDragging.value = isDragging;
                                 }
                               },
                             ),
@@ -486,7 +498,7 @@ class _ContactGroupHeader extends StatelessWidget {
   }
 }
 
-class _ContactSurnameInitialBar extends StatelessWidget {
+class _ContactSurnameInitialBar extends StatefulWidget {
   const _ContactSurnameInitialBar({
     required this.group,
     required this.activeInitial,
@@ -500,33 +512,95 @@ class _ContactSurnameInitialBar extends StatelessWidget {
   final ValueChanged<String> onSelected;
 
   @override
-  Widget build(BuildContext context) => Expanded(child: _buildList(context));
+  State<_ContactSurnameInitialBar> createState() =>
+      _ContactSurnameInitialBarState();
+}
 
-  Widget _buildList(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.only(right: 42),
-      itemCount: group.surnameInitials.length,
-      separatorBuilder: (_, _) => const Text('、'),
-      itemBuilder: (context, index) {
-        final initial = group.surnameInitials[index];
-        if (activeInitialListenable == null) {
-          return _buildButton(initial, initial == activeInitial, colors);
-        }
-        return ValueListenableBuilder<String>(
-          valueListenable: activeInitialListenable!,
-          builder:
-              (context, currentInitial, _) =>
-                  _buildButton(initial, initial == currentInitial, colors),
+class _ContactSurnameInitialBarState extends State<_ContactSurnameInitialBar> {
+  final ScrollController _scrollController = ScrollController();
+  late Map<String, GlobalKey> _initialKeys = _createInitialKeys();
+  late String _currentInitial = widget.activeInitial;
+
+  Map<String, GlobalKey> _createInitialKeys() => <String, GlobalKey>{
+    for (final initial in widget.group.surnameInitials) initial: GlobalKey(),
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    widget.activeInitialListenable?.addListener(_onActiveInitialChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ContactSurnameInitialBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeInitialListenable != widget.activeInitialListenable) {
+      oldWidget.activeInitialListenable?.removeListener(
+        _onActiveInitialChanged,
+      );
+      widget.activeInitialListenable?.addListener(_onActiveInitialChanged);
+    }
+    if (oldWidget.group != widget.group) {
+      _initialKeys = _createInitialKeys();
+      _currentInitial = widget.activeInitial;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.activeInitialListenable?.removeListener(_onActiveInitialChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onActiveInitialChanged() {
+    final nextInitial = widget.activeInitialListenable!.value;
+    if (nextInitial == _currentInitial || !mounted) return;
+    setState(() => _currentInitial = nextInitial);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final targetContext = _initialKeys[nextInitial]?.currentContext;
+      if (mounted && targetContext != null) {
+        Scrollable.ensureVisible(
+          targetContext,
+          alignment: .5,
+          duration: Duration.zero,
         );
-      },
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Expanded(
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(right: 42),
+        child: Row(
+          children: widget.group.surnameInitials
+              .expand<Widget>((initial) sync* {
+                yield KeyedSubtree(
+                  key: _initialKeys[initial],
+                  child: _buildButton(
+                    initial,
+                    initial == _currentInitial,
+                    colors,
+                  ),
+                );
+                if (initial != widget.group.surnameInitials.last) {
+                  yield const Text('、');
+                }
+              })
+              .toList(growable: false),
+        ),
+      ),
     );
   }
 
   Widget _buildButton(String initial, bool isActive, ColorScheme colors) =>
       TextButton(
-        onPressed: () => onSelected(initial),
+        onPressed: () => widget.onSelected(initial),
         style: TextButton.styleFrom(
           foregroundColor: isActive ? colors.primary : colors.onSurfaceVariant,
           minimumSize: const Size(28, 32),
@@ -595,6 +669,8 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
   static const _itemExtent = 19.0;
   static const _verticalPadding = 4.0;
   String? _draggingKey;
+  String? _pendingKey;
+  bool _selectionScheduled = false;
 
   void _selectAt(Offset localPosition) {
     if (widget.keys.isEmpty) return;
@@ -604,8 +680,22 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
     final key = widget.keys[index];
     if (key == _draggingKey) return;
     setState(() => _draggingKey = key);
-    widget.onSelected(key);
     widget.onDragging(key);
+    _scheduleSelection(key);
+  }
+
+  void _scheduleSelection(String key) {
+    _pendingKey = key;
+    if (_selectionScheduled) return;
+    _selectionScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _selectionScheduled = false;
+      final selectedKey = _pendingKey;
+      _pendingKey = null;
+      if (mounted && selectedKey != null) {
+        widget.onSelected(selectedKey);
+      }
+    });
   }
 
   void _stopDragging() {
