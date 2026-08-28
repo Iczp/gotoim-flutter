@@ -421,10 +421,10 @@ class _PinnedContactGroup {
 }
 
 /// 通讯录状态栏、标题栏和分组标题的统一背景色。
-/// 默认跟随 [ColorScheme.surfaceContainerHighest]；如需只调整通讯录，改这里。
+/// 默认跟随工作台 AppBar 的 [ColorScheme.surface]；如需只调整通讯录，改这里。
 /// 保持不透明，避免 Android 状态栏与应用内标题栏出现合成后的色差。
 Color _contactHeaderBackground(BuildContext context) =>
-    Theme.of(context).colorScheme.surfaceContainerHighest;
+    Theme.of(context).colorScheme.surface;
 
 class _ContactsTitleBar extends StatelessWidget {
   const _ContactsTitleBar();

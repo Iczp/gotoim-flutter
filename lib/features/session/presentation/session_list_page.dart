@@ -418,14 +418,14 @@ class _CurrentOwnerHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              if (isConnecting) ...[
-                const SizedBox(width: 8),
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ],
+              // if (isConnecting) ...[
+              //   const SizedBox(width: 8),
+              //   const SizedBox(
+              //     width: 14,
+              //     height: 14,
+              //     child: CircularProgressIndicator(strokeWidth: 2),
+              //   ),
+              // ],
               if (hasMultiple)
                 Padding(
                   padding: const EdgeInsets.only(left: 4),

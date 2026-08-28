@@ -84,7 +84,7 @@ extension HomeSectionInfo on HomeSection {
 }
 
 Color _homeSectionHeaderBackground(BuildContext context) =>
-    Theme.of(context).colorScheme.surfaceContainerHighest;
+    Theme.of(context).colorScheme.surface;
 
 /// A title owned by an individual tab page, rather than by the home shell.
 class _HomeSectionWithTitle extends StatelessWidget {

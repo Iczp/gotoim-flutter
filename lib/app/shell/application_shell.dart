@@ -49,8 +49,8 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    // 与各 Tab 的页面内标题栏使用同一主题色，避免状态栏出现色差。
-    final headerColor = theme.colorScheme.surfaceContainerHighest;
+    // 与工作台 AppBar 及各 Tab 的页面内标题栏使用同一主题色，避免色差。
+    final headerColor = theme.colorScheme.surface;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
