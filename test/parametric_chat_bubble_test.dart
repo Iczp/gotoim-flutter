@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/widgets/parametric_chat_bubble.dart';
+import 'package:gotoim_flutter/features/diagnostics/presentation/chat_bubble_diagnostics_page.dart';
 
 void main() {
   test('parametric bubble config clamps values and emits JSON contract', () {
@@ -31,5 +33,24 @@ void main() {
       'sharpness': 1.0,
       'radius': 40.0,
     });
+  });
+
+  testWidgets('bubble tuner lays out and scrolls its parameter panel', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 300));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      const MaterialApp(home: ChatBubbleDiagnosticsPage()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, -400),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 }
