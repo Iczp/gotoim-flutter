@@ -25,6 +25,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   List<double> _groupOffsets = const <double>[];
   List<ContactGroup> _offsetGroups = const <ContactGroup>[];
   String _activeIndex = '';
+  String _activeSurnameInitial = '';
+  bool _showPinnedGroupHeader = false;
 
   @override
   void initState() {
@@ -56,8 +58,18 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     }
     final groups = contacts.groups;
     _syncGroupOffsets(groups);
-    if (_activeIndex.isEmpty && groups.isNotEmpty) {
+    if (groups.isNotEmpty &&
+        (_activeIndex.isEmpty ||
+            !groups.any((group) => group.index == _activeIndex))) {
       _activeIndex = groups.first.index;
+      _activeSurnameInitial = groups.first.contacts.first.surnameInitial;
+    }
+    ContactGroup? activeGroup;
+    for (final group in groups) {
+      if (group.index == _activeIndex) {
+        activeGroup = group;
+        break;
+      }
     }
 
     return Scaffold(
@@ -115,6 +127,19 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                       ],
                     ),
                   ),
+                  if (_showPinnedGroupHeader && activeGroup != null)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: _ContactGroupHeader(
+                        group: activeGroup,
+                        activeInitial: _activeSurnameInitial,
+                        onSurnameSelected:
+                            (initial) =>
+                                _scrollToSurname(groups, activeGroup!, initial),
+                      ),
+                    ),
                   if (groups.isNotEmpty)
                     Positioned(
                       top: 8,
@@ -172,31 +197,28 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     List<ContactGroup> groups,
     int? ownerId,
   ) => groups
-      .map<Widget>(
-        (group) => SliverMainAxisGroup(
-          slivers: <Widget>[
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _ContactGroupHeaderDelegate(
-                group: group,
-                activeInitial: _activeIndex,
-                onSurnameSelected:
-                    (initial) => _scrollToSurname(groups, group, initial),
-              ),
+      .expand<Widget>(
+        (group) => <Widget>[
+          SliverPersistentHeader(
+            delegate: _ContactGroupHeaderDelegate(
+              group: group,
+              activeInitial: _activeSurnameInitial,
+              onSurnameSelected:
+                  (initial) => _scrollToSurname(groups, group, initial),
             ),
-            SliverFixedExtentList(
-              itemExtent: _rowExtent,
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final contact = group.contacts[index];
-                return _ContactRow(
-                  contact: contact,
-                  showDivider: index + 1 < group.contacts.length,
-                  onTap: () => _openChat(context, contact, ownerId),
-                );
-              }, childCount: group.contacts.length),
-            ),
-          ],
-        ),
+          ),
+          SliverFixedExtentList(
+            itemExtent: _rowExtent,
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final contact = group.contacts[index];
+              return _ContactRow(
+                contact: contact,
+                showDivider: index + 1 < group.contacts.length,
+                onTap: () => _openChat(context, contact, ownerId),
+              );
+            }, childCount: group.contacts.length),
+          ),
+        ],
       )
       .toList(growable: false);
 
@@ -275,7 +297,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     var low = 0;
     var high = groups.length - 1;
     var activeIndex = 0;
-    final targetOffset = offset + _groupHeaderExtent;
+    final targetOffset = offset;
     while (low <= high) {
       final middle = (low + high) ~/ 2;
       if (targetOffset >= _groupOffset(middle)) {
@@ -285,9 +307,25 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
         high = middle - 1;
       }
     }
-    final active = groups[activeIndex].index;
-    if (active != _activeIndex && mounted) {
-      setState(() => _activeIndex = active);
+    final group = groups[activeIndex];
+    final firstContactOffset = _groupOffset(activeIndex) + _groupHeaderExtent;
+    final visibleContactIndex =
+        ((offset + _groupHeaderExtent - firstContactOffset) / _rowExtent)
+            .floor()
+            .clamp(0, group.contacts.length - 1);
+    final activeIndexKey = group.index;
+    final activeSurname =
+        group.contacts[visibleContactIndex.toInt()].surnameInitial;
+    final shouldShowPinnedHeader = offset >= _quickActionsExtent;
+    if ((activeIndexKey != _activeIndex ||
+            activeSurname != _activeSurnameInitial ||
+            shouldShowPinnedHeader != _showPinnedGroupHeader) &&
+        mounted) {
+      setState(() {
+        _activeIndex = activeIndexKey;
+        _activeSurnameInitial = activeSurname;
+        _showPinnedGroupHeader = shouldShowPinnedHeader;
+      });
     }
   }
 }
@@ -356,6 +394,7 @@ class _ContactGroupHeaderDelegate extends SliverPersistentHeaderDelegate {
     group: group,
     activeInitial: activeInitial,
     onSurnameSelected: onSurnameSelected,
+    showBlur: false,
   );
 
   @override
@@ -368,67 +407,73 @@ class _ContactGroupHeader extends StatelessWidget {
     required this.group,
     required this.activeInitial,
     required this.onSurnameSelected,
+    this.showBlur = true,
   });
 
   final ContactGroup group;
   final String activeInitial;
   final ValueChanged<String> onSurnameSelected;
+  final bool showBlur;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return SizedBox(
-      height: _ContactsPageState._groupHeaderExtent,
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Material(
-            color: colors.surfaceContainerHighest.withValues(alpha: .72),
-            child: Row(
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.only(left: 16, right: 4),
-                  child: Text(
-                    group.index,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                Text(
-                  '(${group.count})',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.only(right: 42),
-                    itemCount: group.surnameInitials.length,
-                    separatorBuilder: (_, _) => const Text('、'),
-                    itemBuilder: (context, index) {
-                      final initial = group.surnameInitials[index];
-                      final isActive = initial == activeInitial;
-                      return TextButton(
-                        onPressed: () => onSurnameSelected(initial),
-                        style: TextButton.styleFrom(
-                          foregroundColor:
-                              isActive
-                                  ? colors.primary
-                                  : colors.onSurfaceVariant,
-                          minimumSize: const Size(28, 32),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                        ),
-                        child: Text(initial),
-                      );
-                    },
-                  ),
-                ),
-              ],
+    final header = Material(
+      color: colors.surfaceContainerHighest.withValues(
+        alpha: showBlur ? .72 : .92,
+      ),
+      child: Row(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 4),
+            child: Text(
+              group.index,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-        ),
+          Text(
+            '(${group.count})',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(right: 42),
+              itemCount: group.surnameInitials.length,
+              separatorBuilder: (_, _) => const Text('、'),
+              itemBuilder: (context, index) {
+                final initial = group.surnameInitials[index];
+                final isActive = initial == activeInitial;
+                return TextButton(
+                  onPressed: () => onSurnameSelected(initial),
+                  style: TextButton.styleFrom(
+                    foregroundColor:
+                        isActive ? colors.primary : colors.onSurfaceVariant,
+                    minimumSize: const Size(28, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                  ),
+                  child: Text(initial),
+                );
+              },
+            ),
+          ),
+        ],
       ),
+    );
+    return SizedBox(
+      height: _ContactsPageState._groupHeaderExtent,
+      child:
+          showBlur
+              ? ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: header,
+                ),
+              )
+              : header,
     );
   }
 }
