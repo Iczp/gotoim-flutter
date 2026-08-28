@@ -1674,7 +1674,9 @@ class _ComposerState extends State<_Composer> {
   OverlayEntry? _recordingOverlay;
   final Stopwatch _recordingWatch = Stopwatch();
   Duration _recordingDuration = Duration.zero;
-  final List<double> _levels = List<double>.filled(24, 0.08);
+  // The waveform is a sliding window: samples are removed from the front and
+  // appended at the end, so this must be a growable list.
+  final List<double> _levels = List<double>.filled(24, 0.08, growable: true);
   int _amplitudeSampleCount = 0;
   int _page = 0;
   bool _mentionSheetOpen = false;
