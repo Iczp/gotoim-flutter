@@ -378,6 +378,95 @@ void main() {
         (await dao.readPage(ownerId: 7, sessionUnitId: 'session')).single;
     expect(stored.isOpened, isTrue);
   });
+
+  test(
+    'quoted text sends quoteMessageId and persists quote snapshot',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final client =
+          _FakeApiClient()
+            ..postResponse = <String, dynamic>{
+              'id': 1002,
+              'messageType': 0,
+              'quoteMessageId': 1001,
+              'content': <String, dynamic>{'text': '回复'},
+            };
+      final repository = MessageRepository(
+        api: MessageApi(client),
+        dao: MessageDao(database),
+      );
+      final quote = message(1001);
+
+      final sent = await repository.sendText(
+        ownerId: 7,
+        sessionUnitId: 'session',
+        text: '回复',
+        quote: quote,
+        remindList: const <String>['member-a', 'member-b'],
+      );
+
+      expect(client.postData?['quoteMessageId'], 1001);
+      expect(client.postData?['remindList'], <String>['member-a', 'member-b']);
+      expect(sent.quoteMessageId, 1001);
+      expect(sent.raw['remindList'], <String>['member-a', 'member-b']);
+    },
+  );
+
+  test('local delete removes selected messages from Drift', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = MessageDao(database);
+    await dao.upsertAll(<ChatMessage>[message(1), message(2)]);
+    final repository = MessageRepository(
+      api: MessageApi(_FakeApiClient()),
+      dao: dao,
+    );
+
+    await repository.deleteLocal(<String>[message(1).localId]);
+
+    final remaining = await dao.readPage(ownerId: 7, sessionUnitId: 'session');
+    expect(remaining.map((item) => item.serverId), <int?>[2]);
+  });
+
+  test('message operations use paths captured from Swagger', () async {
+    final client =
+        _FakeApiClient()
+          ..postResponse = <String, dynamic>{
+            'id': 'session',
+            'ownerId': 7,
+            'destination': <String, dynamic>{'name': '会话'},
+          };
+    final api = MessageApi(client);
+
+    await api.setRead(sessionUnitId: 'session', messageId: 101);
+    expect(client.postPaths.last, '/api/chat/session-unit-setting/set-read');
+    expect(client.postQueries.last['messageId'], 101);
+    await api.rollback(101);
+    expect(client.postPaths.last, '/api/chat/message-sender/rollback/101');
+    await api.deleteMessage(sessionUnitId: 'session', messageId: 101);
+    expect(
+      client.postPaths.last,
+      '/api/chat/session-unit-setting/delete-message',
+    );
+    await api.sendHistory(
+      sessionUnitId: 'target-session',
+      clientMessageId: 'history-client-id',
+      messageIds: <int>[101, 102],
+    );
+    expect(
+      client.postPaths.last,
+      '/api/chat/message-sender/send-history/target-session',
+    );
+    expect(
+      (client.postData!['content'] as Map<String, Object?>)['messageIdList'],
+      <int>[101, 102],
+    );
+  });
 }
 
 class _FakeApiClient implements ApiClient {
@@ -386,8 +475,11 @@ class _FakeApiClient implements ApiClient {
   final List<String> paths = <String>[];
   final List<Map<String, Object?>> queries = <Map<String, Object?>>[];
   final List<String> multipartPaths = <String>[];
+  final List<String> postPaths = <String>[];
+  final List<Map<String, Object?>> postQueries = <Map<String, Object?>>[];
   Map<String, dynamic>? multipartResponse;
   Map<String, dynamic>? postResponse;
+  Map<String, Object?>? postData;
 
   @override
   Future<T> get<T>(
@@ -407,7 +499,12 @@ class _FakeApiClient implements ApiClient {
     Object? data,
     Map<String, String>? headers,
     bool retryOnUnauthorized = true,
-  }) async => postResponse as T;
+  }) async {
+    postPaths.add(path);
+    postQueries.add(query ?? const <String, Object?>{});
+    if (data is Map<String, Object?>) postData = data;
+    return postResponse as T;
+  }
 
   @override
   Future<T> postMultipart<T>(
@@ -415,6 +512,7 @@ class _FakeApiClient implements ApiClient {
     Map<String, Object?>? query,
     required MultipartUploadFile file,
     String fieldName = 'file',
+    void Function(int sent, int total)? onProgress,
     bool retryOnUnauthorized = true,
   }) async {
     multipartPaths.add(path);

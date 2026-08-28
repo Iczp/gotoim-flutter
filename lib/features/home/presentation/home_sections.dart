@@ -10,6 +10,7 @@ import '../../session/application/session_list_controller.dart';
 import '../../session/presentation/chat_object_avatar.dart';
 import '../../session/presentation/session_list_page.dart';
 import '../../explore/presentation/explore_page.dart';
+import '../../contact/presentation/contacts_page.dart';
 
 /// Top-level section page router for the IM home shell.
 class HomeSectionPage extends StatelessWidget {
@@ -28,14 +29,7 @@ class HomeSectionPage extends StatelessWidget {
       return const SessionListPage();
     }
     if (section == HomeSection.contacts) {
-      return _EmptyFeatureState(
-        icon: Icons.contacts_outlined,
-        title: '通讯录',
-        description: '好友、群组及其索引将在联系人数据同步完成后接入。',
-        actionLabel: '查看 API 连接',
-        onAction: () => context.push('/diagnostics/api'),
-        isCompact: isCompact,
-      );
+      return const ContactsPage();
     }
     if (section == HomeSection.workbench) {
       return _WorkbenchEntry(isCompact: isCompact);

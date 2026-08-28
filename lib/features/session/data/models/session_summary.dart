@@ -66,11 +66,30 @@ class SessionSummary {
   final Map<String, dynamic> raw;
 
   int? get lastMessageId => asInt(asMap(raw['lastMessage'])['id']);
+  int? get readMessageId => asInt(raw['readMessageId']);
+  int? get peerReadMessageId => asInt(raw['peerReadMessageId']);
+  int? get ownerObjectType =>
+      asInt(raw['ownerObjectType']) ?? asInt(asMap(raw['owner'])['objectType']);
+
+  /// The original client shows the transfer control for shopkeeper/waiter
+  /// identities (7/8), not just when the chat destination is a shop account.
+  bool get isShopkeeperOrWaiter => ownerObjectType == 7 || ownerObjectType == 8;
+  int? get ownerParentId => asInt(asMap(raw['owner'])['parentId']);
+
+  /// Shop waiter accounts are children of a shopkeeper. The transfer list is
+  /// scoped to that shopkeeper so a waiter can only hand over within its shop.
+  int? get transferShopKeeperId =>
+      ownerObjectType == 8 ? ownerParentId ?? ownerId : ownerId;
 
   bool get isImmersed {
     final value = asMap(raw['setting'])['isImmersed'];
     return value == true || asInt(value) == 1;
   }
+
+  DateTime? get muteExpireTime =>
+      asDate(asMap(raw['setting'])['muteExpireTime']);
+  bool get isMuted =>
+      muteExpireTime != null && muteExpireTime!.isAfter(DateTime.now());
 
   String get messageTypeLabel => messageContentType(asMap(raw['lastMessage']));
 

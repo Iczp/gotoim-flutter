@@ -189,6 +189,7 @@ class _FakeApiClient implements ApiClient {
     Map<String, Object?>? query,
     required MultipartUploadFile file,
     String fieldName = 'file',
+    void Function(int sent, int total)? onProgress,
     bool retryOnUnauthorized = true,
   }) => throw UnimplementedError();
 

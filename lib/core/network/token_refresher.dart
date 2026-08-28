@@ -7,3 +7,14 @@ abstract class TokenRefresher {
 
   Future<void> clearSession();
 }
+
+/// The authorization server definitively rejected the stored refresh session.
+/// Connectivity, timeout and server errors must not use this exception.
+class TokenRefreshRejectedException implements Exception {
+  const TokenRefreshRejectedException(this.message, {this.code});
+  final String message;
+  final String? code;
+
+  @override
+  String toString() => 'TokenRefreshRejectedException($code): $message';
+}

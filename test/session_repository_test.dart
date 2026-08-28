@@ -17,6 +17,31 @@ void main() {
     'destination': {'name': id},
   });
 
+  test(
+    'shopkeeper and shop waiter identities expose the transfer capability',
+    () {
+      final shopkeeper = SessionSummary.fromJson(<String, dynamic>{
+        'id': 'shopkeeper',
+        'destination': <String, dynamic>{'name': '店铺'},
+        'ownerObjectType': 7,
+      });
+      final waiter = SessionSummary.fromJson(<String, dynamic>{
+        'id': 'waiter',
+        'destination': <String, dynamic>{'name': '客服'},
+        'owner': <String, dynamic>{'objectType': 8},
+      });
+      final personal = SessionSummary.fromJson(<String, dynamic>{
+        'id': 'person',
+        'destination': <String, dynamic>{'name': '普通会话'},
+        'ownerObjectType': 1,
+      });
+
+      expect(shopkeeper.isShopkeeperOrWaiter, isTrue);
+      expect(waiter.isShopkeeperOrWaiter, isTrue);
+      expect(personal.isShopkeeperOrWaiter, isFalse);
+    },
+  );
+
   test('loadFriends returns a complete local page without HTTP', () async {
     final database = UnifiedDatabase(
       DatabaseConnection(NativeDatabase.memory()),
@@ -276,6 +301,7 @@ class _FakeApiClient implements ApiClient {
     Map<String, Object?>? query,
     required MultipartUploadFile file,
     String fieldName = 'file',
+    void Function(int sent, int total)? onProgress,
     bool retryOnUnauthorized = true,
   }) => throw UnimplementedError();
 

@@ -109,12 +109,34 @@ void main() {
 
     await expectLater(
       client.get<Map<String, dynamic>>('/business'),
-      throwsA(isA<StateError>()),
+      throwsA(isA<TokenRefreshRejectedException>()),
     );
 
     expect(storage.accessToken, isNull);
     expect(storage.refreshToken, isNull);
     expect(invalidations, 1);
+  });
+
+  test('temporary refresh failure preserves tokens and login state', () async {
+    final access = _jwt(DateTime.now().add(const Duration(minutes: 1)));
+    final storage = _MemoryTokenStorage(access, 'refresh');
+    var invalidations = 0;
+    final client = DioApiClient(
+      dio: _tokenDio(<String?>[]),
+      tokenStorage: storage,
+      tokenRefresher: _TemporaryRefreshFailureRefresher(storage),
+      deviceContext: _device,
+      onSessionInvalidated: () => invalidations++,
+    );
+
+    await expectLater(
+      client.get<Map<String, dynamic>>('/business'),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(storage.accessToken, access);
+    expect(storage.refreshToken, 'refresh');
+    expect(invalidations, 0);
   });
 }
 
@@ -186,7 +208,23 @@ class _MissingRefreshRefresher implements TokenRefresher {
 
   @override
   Future<void> refreshAccessToken() async {
-    throw StateError('No refresh token is available.');
+    throw const TokenRefreshRejectedException(
+      'No refresh token is available.',
+      code: 'missing_refresh_token',
+    );
+  }
+}
+
+class _TemporaryRefreshFailureRefresher implements TokenRefresher {
+  _TemporaryRefreshFailureRefresher(this.storage);
+  final _MemoryTokenStorage storage;
+
+  @override
+  Future<void> clearSession() => storage.clear();
+
+  @override
+  Future<void> refreshAccessToken() async {
+    throw StateError('Network is temporarily unavailable');
   }
 }
 

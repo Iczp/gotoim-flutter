@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/config/app_environment.dart';
 import '../../../core/device/client_device_context.dart';
@@ -226,9 +227,14 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     try {
       await refreshSession();
       return true;
-    } catch (_) {
+    } on TokenRefreshRejectedException {
       await clearSession();
       return false;
+    } catch (error) {
+      // Keep the local session for offline/poor-network startup. Business
+      // requests will retry refresh when connectivity recovers.
+      debugPrint('[authRestore][refresh-deferred] error=$error');
+      return true;
     }
   }
 
@@ -248,7 +254,10 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   Future<AuthSession> _refresh() async {
     final refreshToken = await _tokenStorage.readRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) {
-      throw const ApiException('No refresh token is available.');
+      throw const TokenRefreshRejectedException(
+        'No refresh token is available.',
+        code: 'missing_refresh_token',
+      );
     }
     final session = await _requestToken(<String, String>{
       'grant_type': 'refresh_token',
@@ -293,7 +302,23 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
           body is Map && body['error_description'] != null
               ? body['error_description'].toString()
               : 'Login failed. Please check your network and credentials.';
-      throw ApiException(message, statusCode: error.response?.statusCode);
+      final code = body is Map ? body['error']?.toString() : null;
+      final statusCode = error.response?.statusCode;
+      final exception = ApiException(
+        message,
+        statusCode: statusCode,
+        code: code,
+      );
+      if (fields['grant_type'] == 'refresh_token' &&
+          (statusCode == 400 || statusCode == 401) &&
+          const <String>{
+            'invalid_grant',
+            'invalid_token',
+            'unauthorized_client',
+          }.contains(code)) {
+        throw TokenRefreshRejectedException(message, code: code);
+      }
+      throw exception;
     }
   }
 

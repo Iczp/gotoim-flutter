@@ -41,6 +41,7 @@ class ChatSettingsController extends ChangeNotifier {
   int totalCount = 0;
 
   String get title => friend?.title ?? '聊天设置';
+  String? get sessionId => friend?.raw['sessionId']?.toString();
   Map<String, dynamic> get setting => asMap(friend?.raw['setting']);
   bool get isTopping =>
       setting['isTopping'] == true || setting['isTop'] == true;

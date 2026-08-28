@@ -66,7 +66,15 @@ class MemberTile extends StatelessWidget {
         ],
       ),
       subtitle: Text(
-        '${member.lastSendTime == null ? '加入时间' : '最后发言'}：${_formatDate(date)}',
+        <String>[
+          '${member.lastSendTime == null ? '加入时间' : '最后发言'}：${_formatDate(date)}',
+          if (member.organizationList.isNotEmpty)
+            '部门：${member.organizationList.map((item) => item.name).join('、')}',
+          if (member.tagList.isNotEmpty)
+            '标签：${member.tagList.map((item) => item.name).join('、')}',
+        ].join('\n'),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
       ),
       trailing: const Icon(Icons.chevron_right),
     );

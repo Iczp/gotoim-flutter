@@ -8,6 +8,9 @@ class MessageDao {
   Future<void> markOpened(String localId) =>
       _database.markMessageOpened(localId);
 
+  Future<void> deleteAll(Iterable<String> localIds) =>
+      _database.deleteMessageRows(localIds);
+
   Future<List<ChatMessage>> readPage({
     required int ownerId,
     required String sessionUnitId,

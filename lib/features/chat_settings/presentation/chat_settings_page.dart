@@ -95,6 +95,19 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                 ]),
                 const SizedBox(height: 10),
                 _section(<Widget>[
+                  if (controller.objectType == 2)
+                    ListTile(
+                      leading: const Icon(Icons.admin_panel_settings_outlined),
+                      title: const Text('群管理'),
+                      subtitle: const Text('组织部门、角色与权限'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap:
+                          controller.sessionId == null
+                              ? null
+                              : () => context.push(
+                                '/group-management/${Uri.encodeComponent(controller.sessionId!)}',
+                              ),
+                    ),
                   SwitchListTile(
                     title: const Text('免打扰'),
                     value: controller.isImmersed,

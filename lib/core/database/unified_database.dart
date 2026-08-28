@@ -526,6 +526,16 @@ class UnifiedDatabase {
     );
   }
 
+  Future<void> deleteMessageRows(Iterable<String> localIds) async {
+    await initialize();
+    for (final localId in localIds) {
+      await _connection.runDelete(
+        'DELETE FROM Messages WHERE id = ?',
+        <Object?>[localId],
+      );
+    }
+  }
+
   Future<void> upsertMessageRows(List<Map<String, Object?>> rows) async {
     if (rows.isEmpty) return;
     await initialize();

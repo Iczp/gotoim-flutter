@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../../../../core/services/file/file_picker_service.dart';
 import '../../../session/data/datasources/session_dao.dart';
 import '../../../session/data/session_change_bus.dart';
+import '../../../session/data/models/session_summary_helpers.dart';
+import '../../../session/data/models/session_summary.dart';
 import '../datasources/message_api.dart';
 import '../datasources/message_dao.dart';
 import '../models/chat_message.dart';
@@ -23,6 +25,97 @@ class MessageRepository {
   final SessionChangeBus? _sessionChangeBus;
 
   Future<void> markOpened(String localId) => _dao.markOpened(localId);
+  Future<void> deleteLocal(Iterable<String> localIds) =>
+      _dao.deleteAll(localIds);
+
+  Future<SessionSummary> setRead({
+    required int ownerId,
+    required String sessionUnitId,
+    required int messageId,
+  }) async {
+    final raw = await _api.setRead(
+      sessionUnitId: sessionUnitId,
+      messageId: messageId,
+    );
+    final friend = SessionSummary.fromJson(<String, dynamic>{
+      ...raw,
+      'ownerId': raw['ownerId'] ?? ownerId,
+    });
+    await _sessionDao?.upsertAll(<SessionSummary>[friend]);
+    _sessionChangeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
+    return friend;
+  }
+
+  Future<void> deleteRemote(ChatMessage message) async {
+    if (message.serverId == null) return;
+    await _api.deleteMessage(
+      sessionUnitId: message.sessionUnitId,
+      messageId: message.serverId!,
+    );
+    await _dao.deleteAll(<String>[message.localId]);
+    final newest = await _dao.readPage(
+      ownerId: message.ownerId,
+      sessionUnitId: message.sessionUnitId,
+      limit: 1,
+    );
+    if (newest.isNotEmpty) {
+      await _updateSessionSummary(newest.first);
+    } else {
+      await _sessionDao?.resetMessages(message.ownerId, message.sessionUnitId);
+      _sessionChangeBus?.publish(
+        ownerId: message.ownerId,
+        sessionUnitId: message.sessionUnitId,
+      );
+    }
+  }
+
+  Future<ChatMessage> rollback(ChatMessage message) async {
+    if (message.serverId == null) throw StateError('消息尚未发送成功');
+    await _api.rollback(message.serverId!);
+    final updated = message.copyWith(
+      raw: <String, dynamic>{
+        ...message.raw,
+        'isRollbacked': true,
+        'rollbackTime': DateTime.now().toIso8601String(),
+      },
+    );
+    await _dao.upsertAll(<ChatMessage>[updated]);
+    return updated;
+  }
+
+  Future<List<ChatMessage>> forward({
+    required ChatMessage message,
+    required List<String> targetSessionUnitIds,
+  }) async {
+    if (message.serverId == null) throw StateError('消息尚未发送成功');
+    final values = await _api.forward(
+      sessionUnitId: message.sessionUnitId,
+      messageId: message.serverId!,
+      targetSessionUnitIds: targetSessionUnitIds,
+    );
+    return values
+        .map(
+          (json) => ChatMessage.fromJson(
+            json,
+            ownerId: message.ownerId,
+            sessionUnitId:
+                json['sessionUnitId']?.toString() ?? message.sessionUnitId,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> forwardHistory({
+    required String targetSessionUnitId,
+    required List<int> messageIds,
+  }) async {
+    if (messageIds.isEmpty) throw StateError('请至少选择一条已发送消息');
+    await _api.sendHistory(
+      sessionUnitId: targetSessionUnitId,
+      clientMessageId: '${DateTime.now().microsecondsSinceEpoch}',
+      messageIds: messageIds,
+    );
+  }
 
   Future<MessagePage> loadInitialLocal({
     required int ownerId,
@@ -145,6 +238,8 @@ class MessageRepository {
     required int ownerId,
     required String sessionUnitId,
     required String text,
+    ChatMessage? quote,
+    List<String> remindList = const <String>[],
   }) async {
     final clientId = '${DateTime.now().microsecondsSinceEpoch}';
     final maxScore = await _dao.maxScore(ownerId, sessionUnitId);
@@ -162,6 +257,9 @@ class MessageRepository {
       raw: <String, dynamic>{
         'messageType': 0,
         'content': <String, dynamic>{'text': text},
+        if (quote?.serverId != null) 'quoteMessageId': quote!.serverId,
+        if (quote != null) 'quoteMessage': quote.raw,
+        if (remindList.isNotEmpty) 'remindList': remindList,
       },
     );
     await _dao.upsertAll(<ChatMessage>[local]);
@@ -170,6 +268,8 @@ class MessageRepository {
         sessionUnitId: sessionUnitId,
         clientMessageId: clientId,
         text: text,
+        quoteMessageId: quote?.serverId,
+        remindList: remindList,
       );
       final serverId =
           response['id'] is num
@@ -179,7 +279,12 @@ class MessageRepository {
         serverId: serverId,
         score: serverId == null ? local.score : serverId * 1000000,
         state: 'sent',
-        raw: response,
+        raw: <String, dynamic>{
+          ...local.raw,
+          ...response,
+          if (response['quoteMessage'] == null && quote != null)
+            'quoteMessage': quote.raw,
+        },
       );
     } catch (_) {
       local = local.copyWith(state: 'failed');
@@ -187,6 +292,184 @@ class MessageRepository {
     await _dao.upsertAll(<ChatMessage>[local]);
     if (local.state == 'sent') await _updateSessionSummary(local);
     return local;
+  }
+
+  Future<ChatMessage?> applyRealtimePayload({
+    required int ownerId,
+    required String sessionUnitId,
+    required Object? payload,
+  }) async {
+    Map<String, dynamic>? findMessage(Object? value) {
+      if (value is Map) {
+        final map = Map<String, dynamic>.from(value);
+        if (map['id'] != null &&
+            (map['messageType'] != null || map['content'] != null)) {
+          return map;
+        }
+        for (final child in map.values) {
+          final found = findMessage(child);
+          if (found != null) return found;
+        }
+      } else if (value is List) {
+        for (final child in value) {
+          final found = findMessage(child);
+          if (found != null) return found;
+        }
+      }
+      return null;
+    }
+
+    final json = findMessage(payload);
+    if (json == null) return null;
+    final payloadSessionId = firstNonEmpty(<Object?>[
+      json['sessionUnitId'],
+      asMap(json['sessionUnit'])['id'],
+    ]);
+    if (payloadSessionId.isNotEmpty && payloadSessionId != sessionUnitId) {
+      return null;
+    }
+    final message = ChatMessage.fromJson(
+      json,
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+    );
+    await _dao.upsertAll(<ChatMessage>[message]);
+    await _updateSessionSummary(message);
+    return message;
+  }
+
+  Future<ChatMessage> createLocalImage({
+    required int ownerId,
+    required String sessionUnitId,
+    required SelectedFile file,
+  }) async {
+    final clientId = '${DateTime.now().microsecondsSinceEpoch}';
+    final maxScore = await _dao.maxScore(ownerId, sessionUnitId);
+    final now = DateTime.now();
+    final message = ChatMessage(
+      localId: clientId,
+      serverId: null,
+      clientMessageId: clientId,
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      senderSessionUnitId: sessionUnitId,
+      messageType: 2,
+      state: 'sending',
+      score: maxScore + 1,
+      createdAt: now,
+      raw: <String, dynamic>{
+        'messageType': 2,
+        'creationTime': now.toIso8601String(),
+        'content': <String, dynamic>{
+          'fileName': file.name,
+          'contentType': file.mimeType ?? 'image/jpeg',
+          'size': file.size,
+          'suffix': file.extension == null ? '' : '.${file.extension}',
+          if (file.originalPath != null) 'path': file.originalPath,
+        },
+      },
+    );
+    await _dao.upsertAll(<ChatMessage>[message]);
+    return message;
+  }
+
+  Future<ChatMessage> createLocalVideo({
+    required int ownerId,
+    required String sessionUnitId,
+    required SelectedFile file,
+  }) async {
+    final clientId = '${DateTime.now().microsecondsSinceEpoch}';
+    final maxScore = await _dao.maxScore(ownerId, sessionUnitId);
+    final now = DateTime.now();
+    final message = ChatMessage(
+      localId: clientId,
+      serverId: null,
+      clientMessageId: clientId,
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      senderSessionUnitId: sessionUnitId,
+      messageType: 4,
+      state: 'sending',
+      score: maxScore + 1,
+      createdAt: now,
+      raw: <String, dynamic>{
+        'messageType': 4,
+        'creationTime': now.toIso8601String(),
+        'content': <String, dynamic>{
+          'fileName': file.name,
+          'contentType': file.mimeType ?? 'video/mp4',
+          'size': file.size,
+          'suffix': file.extension == null ? '' : '.${file.extension}',
+          'url': file.originalUri.toString(),
+          if (file.originalPath != null) 'path': file.originalPath,
+        },
+      },
+    );
+    await _dao.upsertAll(<ChatMessage>[message]);
+    return message;
+  }
+
+  Future<ChatMessage> sendLocalImage({
+    required ChatMessage local,
+    required SelectedFile file,
+    void Function(int sent, int total)? onProgress,
+  }) => _sendLocalUpload(
+    local: local,
+    file: file,
+    messageType: 2,
+    onProgress: onProgress,
+  );
+
+  Future<ChatMessage> sendLocalVideo({
+    required ChatMessage local,
+    required SelectedFile file,
+    void Function(int sent, int total)? onProgress,
+  }) => _sendLocalUpload(
+    local: local,
+    file: file,
+    messageType: 4,
+    onProgress: onProgress,
+  );
+
+  Future<ChatMessage> _sendLocalUpload({
+    required ChatMessage local,
+    required SelectedFile file,
+    required int messageType,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    var result = local;
+    try {
+      final response = await _api.sendUploadFile(
+        sessionUnitId: local.sessionUnitId,
+        fileName: file.name,
+        fileLength: file.size,
+        openRead: file.readAsByteStream,
+        messageType: messageType,
+        onProgress: onProgress,
+      );
+      final serverId = asInt(response['id']);
+      result = local.copyWith(
+        serverId: serverId,
+        score: serverId == null ? local.score : serverId * 1000000,
+        state: 'sent',
+        raw: <String, dynamic>{
+          ...response,
+          'messageType': messageType,
+          'content': <String, dynamic>{
+            ...local.content,
+            ...asMap(response['content']),
+          },
+        },
+      );
+    } catch (error) {
+      result = local.copyWith(
+        state: 'failed',
+        raw: <String, dynamic>{...local.raw, 'error': '$error'},
+      );
+    }
+    await _dao.upsertAll(<ChatMessage>[result]);
+    if (result.state == 'sent') await _updateSessionSummary(result);
+    return result;
   }
 
   Future<ChatMessage> createLocalFile({
@@ -280,6 +563,7 @@ class MessageRepository {
         fileName: file.name,
         fileLength: file.size,
         openRead: file.readAsByteStream,
+        messageType: 3,
       );
       final serverId =
           response['id'] is num

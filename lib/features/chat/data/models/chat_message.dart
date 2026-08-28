@@ -108,6 +108,48 @@ class ChatMessage {
   }
 
   Map<String, dynamic> get content => asMap(raw['content']);
+  bool get isRollbacked =>
+      raw['isRollbacked'] == true || raw['rollbackTime'] != null;
+  int? get quoteMessageId => asInt(raw['quoteMessageId']);
+  Map<String, dynamic> get quoteMessage => asMap(raw['quoteMessage']);
+  String get quoteSenderName {
+    final quote = quoteMessage;
+    final sender = asMap(quote['senderSessionUnit']);
+    final owner = asMap(sender['owner']);
+    return firstNonEmpty(<Object?>[
+      owner['fullPathName'],
+      quote['senderName'],
+      sender['displayName'],
+      owner['displayName'],
+      '未知用户',
+    ]).replaceAll('/', ':');
+  }
+
+  String get quotePreview {
+    final quote = quoteMessage;
+    final quoteContent = asMap(quote['content']);
+    final type = asInt(quote['messageType']) ?? 0;
+    if (type == 0) {
+      return firstNonEmpty(<Object?>[quoteContent['text'], quote['text']]);
+    }
+    return switch (type) {
+      2 => '[图片]',
+      3 => '[语音]',
+      4 => '[视频]',
+      5 => '[文件]',
+      _ => '[消息]',
+    };
+  }
+
+  String? get mediaUrl {
+    final value = firstNonEmpty(<Object?>[
+      content['url'],
+      content['thumbnailUrl'],
+      content['imageUrl'],
+    ]);
+    return value.isEmpty ? null : value;
+  }
+
   String get fileName =>
       firstNonEmpty(<Object?>[content['fileName'], content['name']]);
   int get fileSize => asInt(content['size']) ?? 0;

@@ -2,6 +2,18 @@ import 'dart:convert';
 
 import '../../../session/data/models/session_summary_helpers.dart';
 
+class MemberIdName {
+  const MemberIdName({required this.id, required this.name});
+
+  factory MemberIdName.fromJson(Map<String, dynamic> json) => MemberIdName(
+    id: json['id']?.toString() ?? '',
+    name: firstNonEmpty(<Object?>[json['name'], json['displayName'], '-']),
+  );
+
+  final String id;
+  final String name;
+}
+
 class ChatMember {
   const ChatMember({
     required this.id,
@@ -11,6 +23,8 @@ class ChatMember {
     required this.isCreator,
     required this.joinTime,
     required this.lastSendTime,
+    required this.organizationList,
+    required this.tagList,
     required this.raw,
   });
 
@@ -35,6 +49,8 @@ class ChatMember {
           setting['isCreator'] == true || asInt(setting['isCreator']) == 1,
       joinTime: asDate(json['creationTime']),
       lastSendTime: asDate(setting['lastSendTime']),
+      organizationList: _idNameList(json['organizationList']),
+      tagList: _idNameList(json['tagList']),
       raw: Map<String, dynamic>.unmodifiable(json),
     );
   }
@@ -51,6 +67,8 @@ class ChatMember {
   final bool isCreator;
   final DateTime? joinTime;
   final DateTime? lastSendTime;
+  final List<MemberIdName> organizationList;
+  final List<MemberIdName> tagList;
   final Map<String, dynamic> raw;
 
   Map<String, Object?> toDatabaseValues(
@@ -73,3 +91,12 @@ class ChatMember {
     'raw': jsonEncode(raw),
   };
 }
+
+List<MemberIdName> _idNameList(Object? value) =>
+    value is List
+        ? value
+            .whereType<Map>()
+            .map((item) => MemberIdName.fromJson(item.cast<String, dynamic>()))
+            .where((item) => item.id.isNotEmpty)
+            .toList(growable: false)
+        : const <MemberIdName>[];

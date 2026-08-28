@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 class ChatDiagnosticsPage extends StatefulWidget {
   const ChatDiagnosticsPage({super.key});
@@ -11,12 +12,16 @@ class _ChatDiagnosticsPageState extends State<ChatDiagnosticsPage> {
   final ownerId = TextEditingController(text: '1');
   final sessionUnitId = TextEditingController();
   final title = TextEditingController(text: '聊天诊断');
+  final markdown = TextEditingController(
+    text: '**Markdown 消息**\n\n- 引用、链接与 `code`\n- 支持多行文本',
+  );
 
   @override
   void dispose() {
     ownerId.dispose();
     sessionUnitId.dispose();
     title.dispose();
+    markdown.dispose();
     super.dispose();
   }
 
@@ -53,6 +58,32 @@ class _ChatDiagnosticsPageState extends State<ChatDiagnosticsPage> {
           ),
         ),
         const SizedBox(height: 16),
+        TextField(
+          controller: markdown,
+          minLines: 4,
+          maxLines: 10,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'Markdown 文本消息输入',
+            helperText: '输入会立即经过聊天页相同的 Markdown 渲染器',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text('实际渲染结果'),
+                const Divider(),
+                MarkdownBody(data: markdown.text, selectable: true),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         FilledButton(
           onPressed: () {
             final owner = int.tryParse(ownerId.text);
@@ -75,6 +106,7 @@ class _ChatDiagnosticsPageState extends State<ChatDiagnosticsPage> {
                 ownerId.text = '1';
                 sessionUnitId.clear();
                 title.text = '聊天诊断';
+                markdown.text = '**Markdown 消息**\n\n- 引用、链接与 `code`\n- 支持多行文本';
               }),
           child: const Text('恢复默认'),
         ),

@@ -88,6 +88,7 @@ class DioApiClient implements ApiClient {
     Map<String, Object?>? query,
     required MultipartUploadFile file,
     String fieldName = 'file',
+    void Function(int sent, int total)? onProgress,
     bool retryOnUnauthorized = true,
   }) => _request<T>(
     path: path,
@@ -102,6 +103,7 @@ class DioApiClient implements ApiClient {
           ),
         }),
     retryOnUnauthorized: retryOnUnauthorized,
+    onSendProgress: onProgress,
   );
 
   Future<T> _request<T>({
@@ -116,6 +118,7 @@ class DioApiClient implements ApiClient {
     ResponseType? responseType,
     Object? cancelTag,
     void Function(int received, int total)? onReceiveProgress,
+    void Function(int sent, int total)? onSendProgress,
   }) async {
     final usesStoredAccessToken = headers?.containsKey('Authorization') != true;
     var accessToken = await _tokenStorage.readAccessToken();
@@ -150,6 +153,7 @@ class DioApiClient implements ApiClient {
                 ? null
                 : (_cancelTokens[cancelTag] = CancelToken()),
         onReceiveProgress: onReceiveProgress,
+        onSendProgress: onSendProgress,
       );
       if (cancelTag != null) _cancelTokens.remove(cancelTag);
       return _unwrap<T>(response.data);
@@ -164,7 +168,7 @@ class DioApiClient implements ApiClient {
           if (currentToken == accessToken) {
             await _refreshOnce();
           }
-        } catch (_) {
+        } on TokenRefreshRejectedException {
           await _invalidateSession();
           rethrow;
         }
@@ -180,7 +184,14 @@ class DioApiClient implements ApiClient {
           responseType: responseType,
           cancelTag: cancelTag,
           onReceiveProgress: onReceiveProgress,
+          onSendProgress: onSendProgress,
         );
+      }
+      if (retryOnUnauthorized &&
+          usesStoredAccessToken &&
+          hasRetriedAfterRefresh &&
+          error.response?.statusCode == 401) {
+        await _invalidateSession();
       }
       throw _toApiException(error);
     }
@@ -199,7 +210,7 @@ class DioApiClient implements ApiClient {
   Future<void> _refreshOrClear() async {
     try {
       await _refreshOnce();
-    } catch (_) {
+    } on TokenRefreshRejectedException {
       await _invalidateSession();
       rethrow;
     }
