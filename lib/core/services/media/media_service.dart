@@ -173,6 +173,7 @@ class DefaultMediaService implements MediaService {
   final ImagePicker _imagePicker;
   final AudioRecorder _audioRecorder;
   final VideoProcessingService _videoProcessingService;
+  DateTime? _lastAmplitudeDebugLogAt;
 
   @override
   Future<List<SelectedFile>> chooseImage(MediaPickRequest request) async {
@@ -403,14 +404,34 @@ class DefaultMediaService implements MediaService {
   }
 
   @override
-  Stream<double> audioRecordingLevels(Duration interval) => _audioRecorder
-      .onAmplitudeChanged(interval)
-      .map((amplitude) => _normalizeAmplitude(amplitude.current));
+  Stream<double> audioRecordingLevels(
+    Duration interval,
+  ) => _audioRecorder.onAmplitudeChanged(interval).map((amplitude) {
+    final level = _normalizeAmplitude(amplitude.current);
+    assert(() {
+      final now = DateTime.now();
+      if (_lastAmplitudeDebugLogAt == null ||
+          now.difference(_lastAmplitudeDebugLogAt!) >=
+              const Duration(milliseconds: 500)) {
+        _lastAmplitudeDebugLogAt = now;
+        debugPrint(
+          '[voiceAmplitude] rawDbfs=${amplitude.current.toStringAsFixed(1)} '
+          'normalized=${level.toStringAsFixed(3)}',
+        );
+      }
+      return true;
+    }());
+    return level;
+  });
 
   static double _normalizeAmplitude(double dbfs) {
-    if (!dbfs.isFinite || dbfs == 0) return 0.06;
-    final linear = ((dbfs + 78) / 63).clamp(0.0, 1.0);
-    return math.sqrt(linear).clamp(0.04, 1.0);
+    // `record` reports a dBFS value. Device logs show ambient noise around
+    // -38 dBFS, while normal speech reaches roughly -25 dBFS. Keep the former
+    // at zero and spread the latter range across the visual meter.
+    // This value drives UI only; it never changes the recorded audio.
+    if (!dbfs.isFinite || dbfs <= -38) return 0;
+    final normalized = ((dbfs + 38) / 14).clamp(0.0, 1.0);
+    return math.pow(normalized, 1.35).toDouble();
   }
 
   Future<SelectedFile?> _pickOneImage(

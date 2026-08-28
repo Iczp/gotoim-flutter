@@ -1682,7 +1682,7 @@ class _ComposerState extends State<_Composer> {
   Duration _recordingDuration = Duration.zero;
   // The waveform is a sliding window: samples are removed from the front and
   // appended at the end, so this must be a growable list.
-  final List<double> _levels = List<double>.filled(24, 0.08, growable: true);
+  final List<double> _levels = List<double>.filled(24, 0, growable: true);
   int _amplitudeSampleCount = 0;
   int _page = 0;
   bool _mentionSheetOpen = false;
@@ -1787,7 +1787,7 @@ class _ComposerState extends State<_Composer> {
       _recordingDuration = Duration.zero;
       _amplitudeSampleCount = 0;
       _finishingRecording = false;
-      _levels.fillRange(0, _levels.length, 0.04);
+      _levels.fillRange(0, _levels.length, 0);
     });
     try {
       final permitted = await widget.controller.hasVoiceRecordingPermission();
@@ -1840,21 +1840,27 @@ class _ComposerState extends State<_Composer> {
   void _sampleRecordingLevel(double level) {
     if (!_recording || !mounted) return;
     _amplitudeSampleCount++;
-    if (_amplitudeSampleCount == 1) {
-      debugPrint('[voiceAmplitude] stream=true level=$level');
-    }
-    // Recorder amplitudes tend to cluster near the low end. Apply a visual
-    // (not recording) gain curve so normal speech has a clearly visible wave.
-    final normalized = ((level - 0.05) / 0.95).clamp(0.0, 1.0);
-    final boosted = 0.10 + math.pow(normalized, 0.42).toDouble() * 0.90;
-    // Fast attack makes a spoken syllable immediately noticeable; the slower
-    // release keeps the waveform lively without abrupt drop-outs.
-    final response = boosted > _levels.last ? 0.88 : 0.46;
+    // The media service has already calibrated dBFS into the desired visual
+    // range. Do not re-amplify weak ambient sound here.
+    final boosted = level.clamp(0.0, 1.0);
+    // Fast attack preserves peaks; a gentler release keeps adjacent samples
+    // connected without flattening the contrast between silence and speech.
+    final response = boosted > _levels.last ? 0.94 : 0.30;
     final smoothed = _levels.last * (1 - response) + boosted * response;
+    if (_amplitudeSampleCount == 1 || _amplitudeSampleCount % 8 == 0) {
+      final height = 5 + smoothed * 75;
+      debugPrint(
+        '[voiceWave] sample=$_amplitudeSampleCount '
+        'level=${level.toStringAsFixed(3)} '
+        'boosted=${boosted.toStringAsFixed(3)} '
+        'smoothed=${smoothed.toStringAsFixed(3)} '
+        'height=${height.toStringAsFixed(1)}px',
+      );
+    }
     setState(() {
       _levels
         ..removeAt(0)
-        ..add(smoothed.clamp(0.06, 1.0));
+        ..add(smoothed.clamp(0.0, 1.0));
     });
     _recordingOverlay?.markNeedsBuild();
   }
@@ -2248,7 +2254,7 @@ class _RecordingPanel extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final seconds = duration.inSeconds;
     return Container(
-      height: 126,
+      height: 142,
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(22, 16, 22, 12),
       decoration: BoxDecoration(
@@ -2316,8 +2322,12 @@ class _VoiceWavePainter extends CustomPainter {
     final step = size.width / levels.length;
     final center = size.height / 2;
     for (var index = 0; index < levels.length; index++) {
-      final normalized = levels[index].clamp(0.06, 1.0);
-      final height = normalized * size.height * 0.96;
+      // Keep silence visibly alive at 5px and allow speech to reach 80px
+      // (or the available panel height on a constrained screen).
+      final normalized = levels[index].clamp(0.0, 1.0);
+      final minHeight = 5.0;
+      final maxHeight = math.min(80.0, size.height * 0.98);
+      final height = minHeight + normalized * (maxHeight - minHeight);
       final x = step * (index + 0.5);
       canvas.drawLine(
         Offset(x, center - height / 2),
