@@ -18,15 +18,15 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
   ParametricBubbleConfig _config = const ParametricBubbleConfig();
 
   Map<String, double> get _generatedParameters => <String, double>{
-    'leadingCurveBend': _config.leadingCurveBend,
-    'trailingCurveBend': _config.trailingCurveBend,
+    'lineABBend': _config.lineABBend,
+    'lineACBend': _config.lineACBend,
   };
 
   Set<int> get _uniformBendSelection {
-    if (_config.leadingCurveBend == 1 && _config.trailingCurveBend == 1) {
+    if (_config.lineABBend == 1 && _config.lineACBend == 1) {
       return <int>{1};
     }
-    if (_config.leadingCurveBend == -1 && _config.trailingCurveBend == -1) {
+    if (_config.lineABBend == -1 && _config.lineACBend == -1) {
       return <int>{-1};
     }
     return <int>{};
@@ -34,8 +34,8 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
 
   void _setUniformBend(int direction) => setState(() {
     _config = _config.copyWith(
-      leadingCurveBend: direction.toDouble(),
-      trailingCurveBend: direction.toDouble(),
+      lineABBend: direction.toDouble(),
+      lineACBend: direction.toDouble(),
     );
   });
 
@@ -116,23 +116,19 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       _CurveSlider(
-                        label: '第一段曲线凹向',
-                        value: _config.leadingCurveBend,
+                        label: '线 A-B 弧度（A 为尖点）',
+                        value: _config.lineABBend,
                         onChanged:
                             (value) => setState(() {
-                              _config = _config.copyWith(
-                                leadingCurveBend: value,
-                              );
+                              _config = _config.copyWith(lineABBend: value);
                             }),
                       ),
                       _CurveSlider(
-                        label: '第二段曲线凹向',
-                        value: _config.trailingCurveBend,
+                        label: '线 A-C 弧度（A 为尖点）',
+                        value: _config.lineACBend,
                         onChanged:
                             (value) => setState(() {
-                              _config = _config.copyWith(
-                                trailingCurveBend: value,
-                              );
+                              _config = _config.copyWith(lineACBend: value);
                             }),
                       ),
                       const SizedBox(height: 16),
@@ -145,19 +141,23 @@ class _ChatBubbleDiagnosticsPageState extends State<ChatBubbleDiagnosticsPage> {
                       const SizedBox(height: 12),
                       Row(
                         children: <Widget>[
-                          OutlinedButton.icon(
-                            onPressed:
-                                () => setState(() {
-                                  _config = const ParametricBubbleConfig();
-                                }),
-                            icon: const Icon(Icons.restart_alt_rounded),
-                            label: const Text('恢复默认'),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  () => setState(() {
+                                    _config = const ParametricBubbleConfig();
+                                  }),
+                              icon: const Icon(Icons.restart_alt_rounded),
+                              label: const Text('恢复默认'),
+                            ),
                           ),
                           const SizedBox(width: 12),
-                          FilledButton.icon(
-                            onPressed: _copyJson,
-                            icon: const Icon(Icons.content_copy_outlined),
-                            label: const Text('复制参数'),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _copyJson,
+                              icon: const Icon(Icons.content_copy_outlined),
+                              label: const Text('复制参数'),
+                            ),
                           ),
                         ],
                       ),
@@ -197,7 +197,7 @@ class _PreviewCard extends StatelessWidget {
             config: config,
             color: colors.surfaceContainerHighest,
             child: Text(
-              '独立调节两段曲线的凹向。',
+              'A 是尖点；分别调节线 A-B 和线 A-C 的弧度。',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),

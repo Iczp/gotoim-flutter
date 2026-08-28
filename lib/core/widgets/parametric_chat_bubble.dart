@@ -9,8 +9,8 @@ class ParametricBubbleConfig {
   const ParametricBubbleConfig({
     this.side = ParametricBubbleSide.left,
     this.anchor = ParametricBubbleAnchor.top,
-    this.leadingCurveBend = 1,
-    this.trailingCurveBend = 1,
+    this.lineABBend = 1,
+    this.lineACBend = 1,
     this.offset = 10,
     this.tailLength = 16,
     this.tailHeight = 18,
@@ -22,11 +22,13 @@ class ParametricBubbleConfig {
   final ParametricBubbleSide side;
   final ParametricBubbleAnchor anchor;
 
-  /// -1 is upward concavity; 1 is downward concavity for the first curve.
-  final double leadingCurveBend;
+  /// Arc direction for line A-B: -1 is upward; 1 is downward.
+  /// A is the tail apex and B is the upper/root attachment point.
+  final double lineABBend;
 
-  /// -1 is upward concavity; 1 is downward concavity for the second curve.
-  final double trailingCurveBend;
+  /// Arc direction for line A-C: -1 is upward; 1 is downward.
+  /// A is the tail apex and C is the lower/root attachment point.
+  final double lineACBend;
   final double offset;
   final double tailLength;
   final double tailHeight;
@@ -37,8 +39,8 @@ class ParametricBubbleConfig {
   ParametricBubbleConfig copyWith({
     ParametricBubbleSide? side,
     ParametricBubbleAnchor? anchor,
-    double? leadingCurveBend,
-    double? trailingCurveBend,
+    double? lineABBend,
+    double? lineACBend,
     double? offset,
     double? tailLength,
     double? tailHeight,
@@ -48,10 +50,8 @@ class ParametricBubbleConfig {
   }) => ParametricBubbleConfig(
     side: side ?? this.side,
     anchor: anchor ?? this.anchor,
-    leadingCurveBend:
-        (leadingCurveBend ?? this.leadingCurveBend).clamp(-1, 1).toDouble(),
-    trailingCurveBend:
-        (trailingCurveBend ?? this.trailingCurveBend).clamp(-1, 1).toDouble(),
+    lineABBend: (lineABBend ?? this.lineABBend).clamp(-1, 1).toDouble(),
+    lineACBend: (lineACBend ?? this.lineACBend).clamp(-1, 1).toDouble(),
     offset: (offset ?? this.offset).clamp(0, 100).toDouble(),
     tailLength: (tailLength ?? this.tailLength).clamp(4, 48).toDouble(),
     tailHeight: (tailHeight ?? this.tailHeight).clamp(8, 48).toDouble(),
@@ -63,8 +63,8 @@ class ParametricBubbleConfig {
   Map<String, Object> toJson() => <String, Object>{
     'side': side.name,
     'anchor': anchor.name,
-    'leadingCurveBend': _rounded(leadingCurveBend),
-    'trailingCurveBend': _rounded(trailingCurveBend),
+    'lineABBend': _rounded(lineABBend),
+    'lineACBend': _rounded(lineACBend),
     'offset': _rounded(offset),
     'tailLength': _rounded(tailLength),
     'tailHeight': _rounded(tailHeight),
@@ -160,24 +160,27 @@ class _ParametricBubblePainter extends CustomPainter {
     // Higher sharpness places the cubic control points almost on the apex,
     // producing a thin, crisp pick. Lower values keep a softer rounded tip.
     final apexReach = length * (.015 + (1 - sharpness) * .58);
-    final leadingBend = config.leadingCurveBend.clamp(-1, 1).toDouble();
-    final trailingBend = config.trailingCurveBend.clamp(-1, 1).toDouble();
-    final rootBend = height * (.10 + inversion * .22);
-    final apexBend = height * (.05 + (1 - sharpness) * .22);
+    final lineABBend = config.lineABBend.clamp(-1, 1).toDouble();
+    final lineACBend = config.lineACBend.clamp(-1, 1).toDouble();
+    // Give A-B / A-C a deliberately broad vertical range. Their independent
+    // bend values are the visual control exposed by the diagnostic tuner, so
+    // ±1 must produce an unmistakable large arc rather than a subtle wobble.
+    final rootBend = height * (.18 + inversion * .52);
+    final apexBend = height * (.18 + (1 - sharpness) * .36);
     final path = Path()..moveTo(start.dx, start.dy);
     path.cubicTo(
       start.dx - direction * rootInset,
-      start.dy + leadingBend * rootBend,
+      start.dy + lineABBend * rootBend,
       apex.dx - direction * apexReach,
-      apex.dy + leadingBend * apexBend,
+      apex.dy + lineABBend * apexBend,
       apex.dx,
       apex.dy,
     );
     path.cubicTo(
       apex.dx - direction * apexReach,
-      apex.dy + trailingBend * apexBend,
+      apex.dy + lineACBend * apexBend,
       end.dx - direction * rootInset,
-      end.dy + trailingBend * rootBend,
+      end.dy + lineACBend * rootBend,
       end.dx,
       end.dy,
     );

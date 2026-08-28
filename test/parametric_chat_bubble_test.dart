@@ -9,8 +9,8 @@ void main() {
     final config = base.copyWith(
       side: ParametricBubbleSide.right,
       anchor: ParametricBubbleAnchor.bottom,
-      leadingCurveBend: -3,
-      trailingCurveBend: 3,
+      lineABBend: -3,
+      lineACBend: 3,
       offset: 140,
       tailLength: 1,
       tailHeight: 90,
@@ -28,8 +28,8 @@ void main() {
     expect(config.toJson(), <String, Object>{
       'side': 'right',
       'anchor': 'bottom',
-      'leadingCurveBend': -1.0,
-      'trailingCurveBend': 1.0,
+      'lineABBend': -1.0,
+      'lineACBend': 1.0,
       'offset': 100.0,
       'tailLength': 4.0,
       'tailHeight': 48.0,

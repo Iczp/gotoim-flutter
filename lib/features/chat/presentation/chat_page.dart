@@ -111,7 +111,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     icon: const Icon(Icons.arrow_downward),
                     label: Text('${controller.newMessageCount} 条新消息'),
                   )
-                  : null,
+                  // Keep the Scaffold FAB slot stable while the count changes.
+                  // Replacing a FAB with null during a pointer packet can leave
+                  // Flutter's built-in FAB transition without a laid-out child.
+                  : const SizedBox.shrink(),
           appBar: AppBar(
             title: Text(controller.title, overflow: TextOverflow.ellipsis),
             actions: <Widget>[
