@@ -22,7 +22,7 @@ class ContactsPage extends ConsumerStatefulWidget {
 class _ContactsPageState extends ConsumerState<ContactsPage> {
   // 联系人行高与分组标题高度集中配置，修改时会同步影响滚动定位。
   static const _rowExtent = 56.0;
-  static const _groupHeaderExtent = 40.0;
+  static const _groupHeaderExtent = 36.0;
   static const _titleBarExtent = 56.0;
   // 右侧字母索引拖动时，暂时关闭吸顶标题毛玻璃；松手后自动恢复。
   static const _disablePinnedHeaderBlurWhileIndexDragging = true;
@@ -420,8 +420,9 @@ class _PinnedContactGroup {
   final ContactGroup group;
 }
 
-/// Opaque so Android's system status bar and the in-app title surface have
-/// exactly the same color in both light and dark themes.
+/// 通讯录状态栏、标题栏和分组标题的统一背景色。
+/// 默认跟随 [ColorScheme.surfaceContainerHighest]；如需只调整通讯录，改这里。
+/// 保持不透明，避免 Android 状态栏与应用内标题栏出现合成后的色差。
 Color _contactHeaderBackground(BuildContext context) =>
     Theme.of(context).colorScheme.surfaceContainerHighest;
 
@@ -486,7 +487,10 @@ class _QuickActions extends StatelessWidget {
                   color: item.$3,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(item.$2, color: Colors.white),
+                child: Icon(
+                  item.$2,
+                  color: const Color.fromRGBO(255, 255, 255, 0.5),
+                ),
               ),
               title: Text(item.$1),
               trailing: const Icon(Icons.chevron_right, size: 18),

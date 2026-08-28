@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/theme_mode_controller.dart';
+import '../../../core/theme/overscroll_style_controller.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../session/application/session_list_controller.dart';
@@ -11,6 +12,7 @@ import '../../session/presentation/chat_object_avatar.dart';
 import '../../session/presentation/session_list_page.dart';
 import '../../explore/presentation/explore_page.dart';
 import '../../contact/presentation/contacts_page.dart';
+import '../../workbench/presentation/workbench_page.dart';
 
 /// Top-level section page router for the IM home shell.
 class HomeSectionPage extends StatelessWidget {
@@ -34,10 +36,8 @@ class HomeSectionPage extends StatelessWidget {
       return const ContactsPage();
     }
     if (section == HomeSection.workbench) {
-      return _HomeSectionWithTitle(
-        title: section.label,
-        child: _WorkbenchEntry(isCompact: isCompact),
-      );
+      // 工作台内容直接作为 Tab 页面渲染，不再经过“打开工作台”的中转页。
+      return const WorkbenchPage();
     }
     if (section == HomeSection.explore) {
       return _HomeSectionWithTitle(
@@ -127,92 +127,6 @@ class _HomeSectionWithTitle extends StatelessWidget {
   }
 }
 
-class _EmptyFeatureState extends StatelessWidget {
-  const _EmptyFeatureState({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.actionLabel,
-    required this.onAction,
-    required this.isCompact,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final String actionLabel;
-  final VoidCallback onAction;
-  final bool isCompact;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: isCompact ? 360 : 440),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withValues(alpha: 0.35),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 44, color: colorScheme.primary),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                title,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: onAction,
-                icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                label: Text(actionLabel),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkbenchEntry extends StatelessWidget {
-  const _WorkbenchEntry({required this.isCompact});
-
-  final bool isCompact;
-
-  @override
-  Widget build(BuildContext context) {
-    return _EmptyFeatureState(
-      icon: Icons.apps_outlined,
-      title: '工作台',
-      description: '已接入的应用可在工作台中加载，并支持 Deep Link 唤醒。',
-      actionLabel: '打开工作台',
-      onAction: () => context.push('/workbench'),
-      isCompact: isCompact,
-    );
-  }
-}
-
 class _ProfileSettingsPage extends ConsumerWidget {
   const _ProfileSettingsPage({
     required this.isCompact,
@@ -227,6 +141,7 @@ class _ProfileSettingsPage extends ConsumerWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final themeMode = ref.watch(themeModeProvider);
+    final overscrollStyle = ref.watch(overscrollStyleProvider);
     final sessionController = ref.watch(sessionListControllerProvider);
     final currentOwner = sessionController.currentOwner;
 
@@ -336,6 +251,39 @@ class _ProfileSettingsPage extends ConsumerWidget {
                     ref
                         .read(themeModeControllerProvider.notifier)
                         .setThemeMode(selected.first);
+                  }
+                },
+              ),
+              const SizedBox(height: 18),
+              Text(
+                '列表过界效果',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '可选择 iOS 式回弹或 Android 式拉伸效果。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              SegmentedButton<OverscrollStyle>(
+                segments: OverscrollStyle.values
+                    .map(
+                      (style) => ButtonSegment<OverscrollStyle>(
+                        value: style,
+                        label: Text(style.label),
+                      ),
+                    )
+                    .toList(growable: false),
+                selected: {overscrollStyle},
+                onSelectionChanged: (selected) {
+                  if (selected.isNotEmpty) {
+                    ref
+                        .read(overscrollStyleControllerProvider.notifier)
+                        .setStyle(selected.first);
                   }
                 },
               ),

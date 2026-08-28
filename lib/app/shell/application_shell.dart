@@ -19,6 +19,9 @@ class ApplicationShell extends ConsumerStatefulWidget {
 class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   HomeSection _section = HomeSection.messages;
+  // Tabs are created on first visit only, then kept alive so switching does
+  // not recreate lists, restart requests, or reset their scroll positions.
+  final Set<HomeSection> _visitedSections = <HomeSection>{HomeSection.messages};
   DateTime? _lastMessagesTabTap;
 
   void _select(HomeSection section) {
@@ -34,7 +37,10 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       return;
     }
     _lastMessagesTabTap = section == HomeSection.messages ? now : null;
-    setState(() => _section = section);
+    setState(() {
+      _section = section;
+      _visitedSections.add(section);
+    });
   }
 
   void _openOwnerDrawer() => _scaffoldKey.currentState?.openDrawer();
@@ -43,6 +49,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    // 与各 Tab 的页面内标题栏使用同一主题色，避免状态栏出现色差。
     final headerColor = theme.colorScheme.surfaceContainerHighest;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -55,8 +62,9 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         builder: (context, constraints) {
           final layout = AppBreakpoints.resolve(constraints.maxWidth);
           final isCompact = layout == WindowLayout.mobile;
-          final content = HomeSectionPage(
-            section: _section,
+          final content = _LazyHomeSectionStack(
+            selected: _section,
+            visited: _visitedSections,
             isCompact: isCompact,
             onOpenOwnerDrawer: _openOwnerDrawer,
           );
@@ -90,6 +98,51 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
           );
         },
       ),
+    );
+  }
+}
+
+/// Non-PageView tab host: pages are lazy-created and their state is retained.
+///
+/// [Offstage] avoids painting inactive lists, while [TickerMode] pauses their
+/// animations. This keeps a tab switch lightweight without eager-initing all
+/// five top-level pages.
+class _LazyHomeSectionStack extends StatelessWidget {
+  const _LazyHomeSectionStack({
+    required this.selected,
+    required this.visited,
+    required this.isCompact,
+    required this.onOpenOwnerDrawer,
+  });
+
+  final HomeSection selected;
+  final Set<HomeSection> visited;
+  final bool isCompact;
+  final VoidCallback onOpenOwnerDrawer;
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = HomeSection.values
+        .where(visited.contains)
+        .toList(growable: false);
+    return Stack(
+      fit: StackFit.expand,
+      children: sections
+          .map(
+            (section) => Offstage(
+              offstage: section != selected,
+              child: TickerMode(
+                enabled: section == selected,
+                child: HomeSectionPage(
+                  key: PageStorageKey<String>('home-section-${section.name}'),
+                  section: section,
+                  isCompact: isCompact,
+                  onOpenOwnerDrawer: onOpenOwnerDrawer,
+                ),
+              ),
+            ),
+          )
+          .toList(growable: false),
     );
   }
 }

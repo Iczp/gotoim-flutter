@@ -30,7 +30,14 @@ abstract final class AppColors {
   static const Color lightSurfaceContainerLow = Color(0xFFF1F5F9);
   static const Color lightSurfaceContainer = Color(0xFFE2E8F0);
   static const Color lightSurfaceContainerHigh = Color(0xFFCBD5E1);
-  static const Color lightSurfaceContainerHighest = Color(0xFF94A3B8);
+  // 首页状态栏、各 Tab 标题栏、通讯录标题与分组标题共用的浅色主题底色。
+  // 如需统一调整这些区域的颜色，修改此处即可。
+  static const Color lightSurfaceContainerHighest = Color.fromARGB(
+    255,
+    240,
+    240,
+    242,
+  );
 
   static const Color lightOutline = Color(0xFF94A3B8);
   static const Color lightOutlineVariant = Color(0xFFCBD5E1);
@@ -60,6 +67,7 @@ abstract final class AppColors {
   static const Color darkSurfaceContainerLow = Color(0xFF131D31);
   static const Color darkSurfaceContainer = Color(0xFF1E293B);
   static const Color darkSurfaceContainerHigh = Color(0xFF28354A);
+  // 首页状态栏、各 Tab 标题栏、通讯录标题与分组标题共用的深色主题底色。
   static const Color darkSurfaceContainerHighest = Color(0xFF334155);
 
   static const Color darkOutline = Color(0xFF475569);

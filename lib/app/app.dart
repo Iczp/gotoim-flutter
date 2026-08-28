@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/theme/overscroll_style_controller.dart';
 import '../core/theme/theme_mode_controller.dart';
+import '../core/widgets/app_scroll_behavior.dart';
 import 'application_providers.dart';
 import 'router/app_router.dart';
 
@@ -29,6 +31,7 @@ class _GotoImAppState extends ConsumerState<GotoImApp> {
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
+    final overscrollStyle = ref.watch(overscrollStyleProvider);
 
     return MaterialApp.router(
       title: 'Goto IM',
@@ -36,6 +39,7 @@ class _GotoImAppState extends ConsumerState<GotoImApp> {
       theme: AppTheme.lightTheme(),
       darkTheme: AppTheme.darkTheme(),
       themeMode: themeMode,
+      scrollBehavior: AppScrollBehavior(style: overscrollStyle),
       routerConfig: ref.watch(appRouterProvider),
     );
   }
