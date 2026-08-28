@@ -19,8 +19,11 @@ class ContactsPage extends ConsumerStatefulWidget {
 }
 
 class _ContactsPageState extends ConsumerState<ContactsPage> {
+  // 联系人行高与分组标题高度集中配置，修改时会同步影响滚动定位。
   static const _rowExtent = 56.0;
   static const _groupHeaderExtent = 40.0;
+  // 右侧字母索引拖动时，暂时关闭吸顶标题毛玻璃；松手后自动恢复。
+  static const _disablePinnedHeaderBlurWhileIndexDragging = true;
   static const _quickActionsExtent = _rowExtent * 4;
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<String?> _draggingIndex = ValueNotifier<String?>(null);
@@ -65,6 +68,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       );
     }
     final groups = contacts.groups;
+    final isInitialLoading =
+        groups.isEmpty && (contacts.isLoading || contacts.ownerId != ownerId);
     _syncGroupOffsets(groups);
     if (groups.isNotEmpty &&
         (_activeGroupIndex.value.isEmpty ||
@@ -101,10 +106,9 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                                       : contacts.refresh,
                             ),
                           ),
-                        if (groups.isEmpty && contacts.isLoading)
-                          const SliverFillRemaining(
-                            hasScrollBody: false,
-                            child: Center(child: CircularProgressIndicator()),
+                        if (isInitialLoading)
+                          const SliverToBoxAdapter(
+                            child: _ContactsLoadingSkeleton(),
                           )
                         else if (groups.isEmpty)
                           const SliverFillRemaining(
@@ -149,7 +153,9 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                                       header.group,
                                       initial,
                                     ),
-                                showBlur: !isDragging,
+                                showBlur:
+                                    !_disablePinnedHeaderBlurWhileIndexDragging ||
+                                    !isDragging,
                               ),
                         ),
                       );
@@ -192,6 +198,19 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                             decoration: BoxDecoration(
                               color: Colors.black.withValues(alpha: .58),
                               shape: BoxShape.circle,
+                              boxShadow: <BoxShadow>[
+                                BoxShadow(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: .52),
+                                  blurRadius: 24,
+                                  spreadRadius: 5,
+                                ),
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: .36),
+                                  blurRadius: 14,
+                                ),
+                              ],
                             ),
                             child: Text(
                               key,
@@ -621,30 +640,44 @@ class _ContactRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      border:
-          showDivider
-              ? Border(
-                bottom: BorderSide(
-                  color: Theme.of(context).dividerColor,
-                  width: .5,
-                ),
-              )
-              : null,
-    ),
-    child: ListTile(
-      leading: ChatObjectAvatar(
-        name: contact.displayName,
-        imageUrl: contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
-        radius: 21,
-      ),
-      title: Text(
-        contact.displayName,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
       onTap: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          const SizedBox(width: 16),
+          ChatObjectAvatar(
+            name: contact.displayName,
+            imageUrl: contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
+            radius: 21,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Container(
+              height: _ContactsPageState._rowExtent,
+              alignment: Alignment.centerLeft,
+              decoration:
+                  showDivider
+                      ? BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Theme.of(context).dividerColor,
+                            width: .5,
+                          ),
+                        ),
+                      )
+                      : null,
+              child: Text(
+                contact.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -707,6 +740,8 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
   @override
   Widget build(BuildContext context) {
     final shownKey = _draggingKey ?? widget.activeKey;
+    final isTouching = _draggingKey != null;
+    final colors = Theme.of(context).colorScheme;
     return Center(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -715,9 +750,22 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
         onPanEnd: (_) => _stopDragging(),
         onPanCancel: _stopDragging,
         onTapUp: (_) => _stopDragging(),
-        child: Material(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: .78),
-          borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: colors.surface.withValues(alpha: isTouching ? .88 : .22),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow:
+                isTouching
+                    ? <BoxShadow>[
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: .12),
+                        blurRadius: 8,
+                      ),
+                    ]
+                    : null,
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               vertical: _verticalPadding,
@@ -741,10 +789,12 @@ class _AlphabetIndexBarState extends State<_AlphabetIndexBar> {
                                     : FontWeight.w500,
                             color:
                                 key == shownKey
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
+                                    ? colors.primary.withValues(
+                                      alpha: isTouching ? 1 : .56,
+                                    )
+                                    : colors.onSurfaceVariant.withValues(
+                                      alpha: isTouching ? .9 : .36,
+                                    ),
                           ),
                         ),
                       ),
@@ -781,4 +831,47 @@ class _NoContacts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Center(child: Text('暂无联系人'));
+}
+
+class _ContactsLoadingSkeleton extends StatelessWidget {
+  const _ContactsLoadingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.surfaceContainerHighest;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        children: <Widget>[
+          Container(
+            height: _ContactsPageState._groupHeaderExtent,
+            color: color,
+          ),
+          ...List<Widget>.generate(
+            7,
+            (index) => SizedBox(
+              height: _ContactsPageState._rowExtent,
+              child: Row(
+                children: <Widget>[
+                  const SizedBox(width: 16),
+                  CircleAvatar(radius: 21, backgroundColor: color),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: index.isEven ? .42 : .58,
+                        child: Container(height: 14, color: color),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
