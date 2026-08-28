@@ -141,7 +141,9 @@ abstract class MediaService {
 
   Future<void> cancelAudioRecording();
 
-  /// Normalized live microphone level in the 0...1 range.
+  /// Live microphone level mapped from dBFS to an integer-like 0...100
+  /// percentage for presentation consumers. `0` means silence and `100`
+  /// represents the configured visual peak; it does not alter recorded audio.
   Future<double> audioRecordingLevel();
 
   Stream<double> audioRecordingLevels(Duration interval);
@@ -400,14 +402,14 @@ class DefaultMediaService implements MediaService {
   @override
   Future<double> audioRecordingLevel() async {
     final amplitude = await _audioRecorder.getAmplitude();
-    return _normalizeAmplitude(amplitude.current);
+    return _dbfsToLevelPercent(amplitude.current);
   }
 
   @override
   Stream<double> audioRecordingLevels(
     Duration interval,
   ) => _audioRecorder.onAmplitudeChanged(interval).map((amplitude) {
-    final level = _normalizeAmplitude(amplitude.current);
+    final level = _dbfsToLevelPercent(amplitude.current);
     assert(() {
       final now = DateTime.now();
       if (_lastAmplitudeDebugLogAt == null ||
@@ -416,7 +418,7 @@ class DefaultMediaService implements MediaService {
         _lastAmplitudeDebugLogAt = now;
         debugPrint(
           '[voiceAmplitude] rawDbfs=${amplitude.current.toStringAsFixed(1)} '
-          'normalized=${level.toStringAsFixed(3)}',
+          'levelPercent=${level.toStringAsFixed(1)}',
         );
       }
       return true;
@@ -424,14 +426,14 @@ class DefaultMediaService implements MediaService {
     return level;
   });
 
-  static double _normalizeAmplitude(double dbfs) {
+  static double _dbfsToLevelPercent(double dbfs) {
     // `record` reports a dBFS value. Device logs show ambient noise around
     // -38 dBFS, while normal speech reaches roughly -25 dBFS. Keep the former
     // at zero and spread the latter range across the visual meter.
     // This value drives UI only; it never changes the recorded audio.
     if (!dbfs.isFinite || dbfs <= -38) return 0;
     final normalized = ((dbfs + 38) / 14).clamp(0.0, 1.0);
-    return math.pow(normalized, 1.35).toDouble();
+    return math.pow(normalized, 1.35).toDouble() * 100;
   }
 
   Future<SelectedFile?> _pickOneImage(

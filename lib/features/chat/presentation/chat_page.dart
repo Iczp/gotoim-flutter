@@ -1682,7 +1682,11 @@ class _ComposerState extends State<_Composer> {
   Duration _recordingDuration = Duration.zero;
   // The waveform is a sliding window: samples are removed from the front and
   // appended at the end, so this must be a growable list.
-  final List<double> _levels = List<double>.filled(24, 0, growable: true);
+  final List<double> _levelPercentages = List<double>.filled(
+    24,
+    0,
+    growable: true,
+  );
   int _amplitudeSampleCount = 0;
   int _page = 0;
   bool _mentionSheetOpen = false;
@@ -1699,6 +1703,13 @@ class _ComposerState extends State<_Composer> {
     _ChatFunction('红包', Icons.wallet_giftcard_outlined),
     _ChatFunction('收藏', Icons.bookmark_border_rounded),
   ];
+
+  // UI-only visual calibration. The media service provides a 0...100 input
+  // level; this mapping removes the idle noise floor before drawing.
+  static const _voiceWaveVisualConfig = _VoiceWaveVisualConfig(
+    inputFloorPercent: 30,
+    inputPeakPercent: 80,
+  );
 
   @override
   void dispose() {
@@ -1787,7 +1798,7 @@ class _ComposerState extends State<_Composer> {
       _recordingDuration = Duration.zero;
       _amplitudeSampleCount = 0;
       _finishingRecording = false;
-      _levels.fillRange(0, _levels.length, 0);
+      _levelPercentages.fillRange(0, _levelPercentages.length, 0);
     });
     try {
       final permitted = await widget.controller.hasVoiceRecordingPermission();
@@ -1837,30 +1848,32 @@ class _ComposerState extends State<_Composer> {
     }
   }
 
-  void _sampleRecordingLevel(double level) {
+  void _sampleRecordingLevel(double levelPercent) {
     if (!_recording || !mounted) return;
     _amplitudeSampleCount++;
-    // The media service has already calibrated dBFS into the desired visual
-    // range. Do not re-amplify weak ambient sound here.
-    final boosted = level.clamp(0.0, 1.0);
+    // The media service maps dBFS to 0...100. The UI consumes only that
+    // percentage and applies its own configurable display range.
+    final inputPercent = levelPercent.clamp(0.0, 100.0);
+    final percentage = _voiceWaveVisualConfig.mapInput(inputPercent);
     // Fast attack preserves peaks; a gentler release keeps adjacent samples
     // connected without flattening the contrast between silence and speech.
-    final response = boosted > _levels.last ? 0.94 : 0.30;
-    final smoothed = _levels.last * (1 - response) + boosted * response;
+    final response = percentage > _levelPercentages.last ? 0.94 : 0.30;
+    final smoothed =
+        _levelPercentages.last * (1 - response) + percentage * response;
     if (_amplitudeSampleCount == 1 || _amplitudeSampleCount % 8 == 0) {
-      final height = 5 + smoothed * 75;
+      final height = 5 + smoothed / 100 * 75;
       debugPrint(
         '[voiceWave] sample=$_amplitudeSampleCount '
-        'level=${level.toStringAsFixed(3)} '
-        'boosted=${boosted.toStringAsFixed(3)} '
-        'smoothed=${smoothed.toStringAsFixed(3)} '
+        'inputPercent=${inputPercent.toStringAsFixed(1)} '
+        'displayPercent=${percentage.toStringAsFixed(1)} '
+        'smoothedPercent=${smoothed.toStringAsFixed(1)} '
         'height=${height.toStringAsFixed(1)}px',
       );
     }
     setState(() {
-      _levels
+      _levelPercentages
         ..removeAt(0)
-        ..add(smoothed.clamp(0.0, 1.0));
+        ..add(smoothed.clamp(0.0, 100.0));
     });
     _recordingOverlay?.markNeedsBuild();
   }
@@ -1920,7 +1933,8 @@ class _ComposerState extends State<_Composer> {
               child: Material(
                 color: Colors.transparent,
                 child: _RecordingPanel(
-                  levels: _levels,
+                  levelPercentages: _levelPercentages,
+                  visualConfig: _voiceWaveVisualConfig,
                   duration: _recordingDuration,
                   cancelling: _cancelRecording,
                 ),
@@ -2241,11 +2255,13 @@ class _FunctionPanel extends StatelessWidget {
 
 class _RecordingPanel extends StatelessWidget {
   const _RecordingPanel({
-    required this.levels,
+    required this.levelPercentages,
+    required this.visualConfig,
     required this.duration,
     required this.cancelling,
   });
-  final List<double> levels;
+  final List<double> levelPercentages;
+  final _VoiceWaveVisualConfig visualConfig;
   final Duration duration;
   final bool cancelling;
 
@@ -2276,7 +2292,8 @@ class _RecordingPanel extends StatelessWidget {
           Expanded(
             child: CustomPaint(
               painter: _VoiceWavePainter(
-                levels: levels,
+                levelPercentages: levelPercentages,
+                visualConfig: visualConfig,
                 color:
                     cancelling
                         ? colorScheme.error
@@ -2307,26 +2324,33 @@ class _RecordingPanel extends StatelessWidget {
 }
 
 class _VoiceWavePainter extends CustomPainter {
-  const _VoiceWavePainter({required this.levels, required this.color});
-  final List<double> levels;
+  const _VoiceWavePainter({
+    required this.levelPercentages,
+    required this.visualConfig,
+    required this.color,
+  });
+  final List<double> levelPercentages;
+  final _VoiceWaveVisualConfig visualConfig;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (levels.isEmpty || size.isEmpty) return;
+    if (levelPercentages.isEmpty || size.isEmpty) return;
     final paint =
         Paint()
           ..color = color
           ..strokeWidth = 4
           ..strokeCap = StrokeCap.round;
-    final step = size.width / levels.length;
+    final step = size.width / levelPercentages.length;
     final center = size.height / 2;
-    for (var index = 0; index < levels.length; index++) {
-      // Keep silence visibly alive at 5px and allow speech to reach 80px
-      // (or the available panel height on a constrained screen).
-      final normalized = levels[index].clamp(0.0, 1.0);
-      final minHeight = 5.0;
-      final maxHeight = math.min(80.0, size.height * 0.98);
+    for (var index = 0; index < levelPercentages.length; index++) {
+      // The input value has already been mapped to a display percentage.
+      final normalized = (levelPercentages[index] / 100).clamp(0.0, 1.0);
+      final minHeight = visualConfig.idleBarHeight;
+      final maxHeight = math.min(
+        visualConfig.peakBarHeight,
+        size.height * 0.98,
+      );
       final height = minHeight + normalized * (maxHeight - minHeight);
       final x = step * (index + 0.5);
       canvas.drawLine(
@@ -2339,6 +2363,36 @@ class _VoiceWavePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_VoiceWavePainter oldDelegate) => true;
+}
+
+/// Converts the media layer's 0...100 level into the percentage displayed by
+/// the chat waveform. Tune the two input thresholds per product/UI needs
+/// without changing microphone or dBFS handling.
+class _VoiceWaveVisualConfig {
+  const _VoiceWaveVisualConfig({
+    required this.inputFloorPercent,
+    required this.inputPeakPercent,
+    this.idleBarHeight = 5,
+    this.peakBarHeight = 80,
+  }) : assert(inputFloorPercent >= 0),
+       assert(inputPeakPercent > inputFloorPercent),
+       assert(inputPeakPercent <= 100),
+       assert(idleBarHeight > 0),
+       assert(peakBarHeight >= idleBarHeight);
+
+  /// An input at or below this percentage is drawn as zero activity.
+  final double inputFloorPercent;
+
+  /// An input at or above this percentage is drawn as 100% activity.
+  final double inputPeakPercent;
+
+  final double idleBarHeight;
+  final double peakBarHeight;
+
+  double mapInput(double inputPercent) => ((inputPercent - inputFloorPercent) /
+          (inputPeakPercent - inputFloorPercent) *
+          100)
+      .clamp(0.0, 100.0);
 }
 
 class _ChatFunction {
