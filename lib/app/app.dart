@@ -6,6 +6,7 @@ import '../core/theme/overscroll_style_controller.dart';
 import '../core/theme/theme_mode_controller.dart';
 import '../core/widgets/app_scroll_behavior.dart';
 import 'application_providers.dart';
+import 'app_navigation.dart';
 import 'router/app_router.dart';
 
 class GotoImApp extends ConsumerStatefulWidget {
@@ -40,6 +41,7 @@ class _GotoImAppState extends ConsumerState<GotoImApp> {
       darkTheme: AppTheme.darkTheme(),
       themeMode: themeMode,
       scrollBehavior: AppScrollBehavior(style: overscrollStyle),
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       routerConfig: ref.watch(appRouterProvider),
     );
   }

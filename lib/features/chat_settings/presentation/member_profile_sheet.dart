@@ -11,6 +11,7 @@ Future<void> showMemberProfileSheet(
   VoidCallback? onSendMessage,
 }) => showHalfPageSheet<void>(
   context: context,
+  options: const HalfPageSheetOptions(heightFactor: .58),
   builder:
       (sheetContext) =>
           MemberProfileSheet(member: member, onSendMessage: onSendMessage),

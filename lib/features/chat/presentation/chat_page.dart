@@ -11,6 +11,7 @@ import '../../../core/services/media/media_service.dart';
 import '../../../core/services/media/audio_playback_service.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../../../core/config/app_environment.dart';
+import '../../../core/widgets/half_page_sheet.dart';
 import '../../auth/application/auth_controller.dart';
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
@@ -339,9 +340,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _showMessageActions(ChatMessage message) async {
     FocusManager.instance.primaryFocus?.unfocus();
-    await showModalBottomSheet<void>(
+    await showHalfPageSheet<void>(
       context: context,
-      showDragHandle: true,
+      options: const HalfPageSheetOptions(
+        isScrollControlled: false,
+        keyboardBehavior: HalfPageSheetKeyboardBehavior.overlay,
+      ),
       builder:
           (sheetContext) => SafeArea(
             child: Wrap(
@@ -441,11 +445,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       sourceOwnerId: friend.ownerId,
       sessionUnitId: widget.sessionUnitId,
     )..initialize();
-    final transferred = await showModalBottomSheet<bool>(
+    final transferred = await showHalfPageSheet<bool>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
+      options: const HalfPageSheetOptions(heightFactor: .62),
       builder: (_) => _TransferSheet(controller: transfer),
     );
     transfer.dispose();
@@ -482,52 +484,49 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _showForwardTargets(ChatMessage message) async {
     final targets = await controller.loadForwardTargets();
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    await showHalfPageSheet<void>(
       context: context,
-      showDragHandle: true,
+      options: const HalfPageSheetOptions(heightFactor: .62),
       builder:
           (sheetContext) => SafeArea(
-            child: SizedBox(
-              height: MediaQuery.sizeOf(sheetContext).height * .62,
-              child: Column(
-                children: <Widget>[
-                  const ListTile(title: Text('选择转发会话'), subtitle: Text('逐条转发')),
-                  Expanded(
-                    child:
-                        targets.isEmpty
-                            ? const Center(child: Text('没有可转发的会话'))
-                            : ListView.builder(
-                              itemCount: targets.length,
-                              itemBuilder: (_, index) {
-                                final target = targets[index];
-                                return ListTile(
-                                  leading: ChatObjectAvatar(
-                                    name: target.title,
-                                    imageUrl: null,
-                                    radius: 18,
-                                  ),
-                                  title: Text(target.title),
-                                  subtitle: Text(
-                                    target.preview,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  onTap: () async {
-                                    Navigator.pop(sheetContext);
-                                    await _runMessageAction(
-                                      () => controller.forwardMessage(
-                                        message,
-                                        target.id,
-                                      ),
-                                      success: '消息已转发',
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                  ),
-                ],
-              ),
+            child: Column(
+              children: <Widget>[
+                const ListTile(title: Text('选择转发会话'), subtitle: Text('逐条转发')),
+                Expanded(
+                  child:
+                      targets.isEmpty
+                          ? const Center(child: Text('没有可转发的会话'))
+                          : ListView.builder(
+                            itemCount: targets.length,
+                            itemBuilder: (_, index) {
+                              final target = targets[index];
+                              return ListTile(
+                                leading: ChatObjectAvatar(
+                                  name: target.title,
+                                  imageUrl: null,
+                                  radius: 18,
+                                ),
+                                title: Text(target.title),
+                                subtitle: Text(
+                                  target.preview,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap: () async {
+                                  Navigator.pop(sheetContext);
+                                  await _runMessageAction(
+                                    () => controller.forwardMessage(
+                                      message,
+                                      target.id,
+                                    ),
+                                    success: '消息已转发',
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                ),
+              ],
             ),
           ),
     );
@@ -538,49 +537,46 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (count == 0) return;
     final targets = await controller.loadForwardTargets();
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    await showHalfPageSheet<void>(
       context: context,
-      showDragHandle: true,
+      options: const HalfPageSheetOptions(heightFactor: .62),
       builder:
           (sheetContext) => SafeArea(
-            child: SizedBox(
-              height: MediaQuery.sizeOf(sheetContext).height * .62,
-              child: Column(
-                children: <Widget>[
-                  ListTile(
-                    title: const Text('合并转发'),
-                    subtitle: Text('将 $count 条消息作为一张聊天记录发送'),
-                  ),
-                  Expanded(
-                    child:
-                        targets.isEmpty
-                            ? const Center(child: Text('没有可转发的会话'))
-                            : ListView.builder(
-                              itemCount: targets.length,
-                              itemBuilder: (_, index) {
-                                final target = targets[index];
-                                return ListTile(
-                                  leading: ChatObjectAvatar(
-                                    name: target.title,
-                                    imageUrl: null,
-                                    radius: 18,
-                                  ),
-                                  title: Text(target.title),
-                                  onTap: () async {
-                                    Navigator.pop(sheetContext);
-                                    await _runMessageAction(
-                                      () => controller.forwardSelectedAsHistory(
-                                        target.id,
-                                      ),
-                                      success: '已合并转发 $count 条消息',
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                  ),
-                ],
-              ),
+            child: Column(
+              children: <Widget>[
+                ListTile(
+                  title: const Text('合并转发'),
+                  subtitle: Text('将 $count 条消息作为一张聊天记录发送'),
+                ),
+                Expanded(
+                  child:
+                      targets.isEmpty
+                          ? const Center(child: Text('没有可转发的会话'))
+                          : ListView.builder(
+                            itemCount: targets.length,
+                            itemBuilder: (_, index) {
+                              final target = targets[index];
+                              return ListTile(
+                                leading: ChatObjectAvatar(
+                                  name: target.title,
+                                  imageUrl: null,
+                                  radius: 18,
+                                ),
+                                title: Text(target.title),
+                                onTap: () async {
+                                  Navigator.pop(sheetContext);
+                                  await _runMessageAction(
+                                    () => controller.forwardSelectedAsHistory(
+                                      target.id,
+                                    ),
+                                    success: '已合并转发 $count 条消息',
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                ),
+              ],
             ),
           ),
     );
@@ -1021,28 +1017,25 @@ class _MentionBottomSheetState extends State<_MentionBottomSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => FractionallySizedBox(
-    heightFactor: .55,
-    child: AnimatedBuilder(
-      animation: widget.controller,
-      builder:
-          (context, _) => _MentionPanel(
-            members: widget.controller.mentionMembers,
-            loading: widget.controller.mentionLoading,
-            hasMore: widget.controller.mentionHasMore,
-            onLoadMore: widget.controller.loadMoreMentions,
-            isSelected:
-                (member) => widget.controller.isMemberMentioned(
-                  member,
-                  widget.input.text,
-                ),
-            onSelected: _toggle,
-            search: _search,
-            onSearchChanged: widget.controller.updateMentionKeyword,
-            onComplete: _finish,
-            onDismiss: () => Navigator.pop(context, false),
-          ),
-    ),
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.controller,
+    builder:
+        (context, _) => _MentionPanel(
+          members: widget.controller.mentionMembers,
+          loading: widget.controller.mentionLoading,
+          hasMore: widget.controller.mentionHasMore,
+          onLoadMore: widget.controller.loadMoreMentions,
+          isSelected:
+              (member) => widget.controller.isMemberMentioned(
+                member,
+                widget.input.text,
+              ),
+          onSelected: _toggle,
+          search: _search,
+          onSearchChanged: widget.controller.updateMentionKeyword,
+          onComplete: _finish,
+          onDismiss: () => Navigator.pop(context, false),
+        ),
   );
 }
 
@@ -1268,11 +1261,9 @@ class _ComposerState extends State<_Composer> {
 
   Future<void> _showMentionSheet() async {
     _mentionSheetOpen = true;
-    final selected = await showModalBottomSheet<bool>(
+    final selected = await showHalfPageSheet<bool>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
+      options: const HalfPageSheetOptions(heightFactor: .55),
       builder:
           (_) => _MentionBottomSheet(
             controller: widget.controller,
@@ -1973,128 +1964,124 @@ class _TransferSheetState extends State<_TransferSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => FractionallySizedBox(
-    heightFactor: .62,
-    child: AnimatedBuilder(
-      animation: widget.controller,
-      builder: (context, _) {
-        final controller = widget.controller;
-        return Material(
-          color: Theme.of(context).colorScheme.surface,
-          child: Column(
-            children: <Widget>[
-              ListTile(
-                title: const Text('转接给'),
-                subtitle: const Text('选择同一店铺内可服务的店主或客服'),
-                trailing: IconButton(
-                  tooltip: '关闭',
-                  onPressed:
-                      controller.isSubmitting
-                          ? null
-                          : () => Navigator.pop(context, false),
-                  icon: const Icon(Icons.close),
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.controller,
+    builder: (context, _) {
+      final controller = widget.controller;
+      return Material(
+        color: Theme.of(context).colorScheme.surface,
+        child: Column(
+          children: <Widget>[
+            ListTile(
+              title: const Text('转接给'),
+              subtitle: const Text('选择同一店铺内可服务的店主或客服'),
+              trailing: IconButton(
+                tooltip: '关闭',
+                onPressed:
+                    controller.isSubmitting
+                        ? null
+                        : () => Navigator.pop(context, false),
+                icon: const Icon(Icons.close),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                controller: _search,
+                onChanged: controller.updateKeyword,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: '搜索店主或客服',
+                  isDense: true,
+                  border: OutlineInputBorder(),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: TextField(
-                  controller: _search,
-                  onChanged: controller.updateKeyword,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: '搜索店主或客服',
-                    isDense: true,
-                    border: OutlineInputBorder(),
+            ),
+            if (controller.error != null)
+              MaterialBanner(
+                content: Text('加载或转接失败：${controller.error}'),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: controller.isLoading ? null : controller.refresh,
+                    child: const Text('重试'),
                   ),
-                ),
+                ],
               ),
-              if (controller.error != null)
-                MaterialBanner(
-                  content: Text('加载或转接失败：${controller.error}'),
-                  actions: <Widget>[
-                    TextButton(
-                      onPressed:
-                          controller.isLoading ? null : controller.refresh,
-                      child: const Text('重试'),
-                    ),
-                  ],
-                ),
-              Expanded(
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.extentAfter < 100 &&
-                        controller.hasMore &&
-                        !controller.isLoading) {
-                      controller.loadMore();
-                    }
-                    return false;
-                  },
-                  child:
-                      controller.targets.isEmpty && controller.isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : controller.targets.isEmpty
-                          ? const Center(child: Text('暂无可转接的客服'))
-                          : ListView.builder(
-                            itemCount:
-                                controller.targets.length +
-                                (controller.hasMore || controller.isLoading
-                                    ? 1
-                                    : 0),
-                            itemBuilder: (context, index) {
-                              if (index == controller.targets.length) {
-                                return SizedBox(
-                                  height: 48,
-                                  child: Center(
-                                    child:
-                                        controller.isLoading
-                                            ? const SizedBox.square(
-                                              dimension: 18,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            )
-                                            : const Text('上拉加载更多'),
-                                  ),
-                                );
-                              }
-                              final target = controller.targets[index];
-                              final subtitle = <String>[
-                                target.roleLabel,
-                                if (target.serviceStatusDescription.isNotEmpty)
-                                  target.serviceStatusDescription,
-                              ].join(' · ');
-                              return ListTile(
-                                enabled: !controller.isSubmitting,
-                                leading: ChatObjectAvatar(
-                                  name: target.name,
-                                  imageUrl:
-                                      target.avatarUrl.isEmpty
-                                          ? null
-                                          : target.avatarUrl,
-                                  radius: 20,
+            Expanded(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification.metrics.extentAfter < 100 &&
+                      controller.hasMore &&
+                      !controller.isLoading) {
+                    controller.loadMore();
+                  }
+                  return false;
+                },
+                child:
+                    controller.targets.isEmpty && controller.isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : controller.targets.isEmpty
+                        ? const Center(child: Text('暂无可转接的客服'))
+                        : ListView.builder(
+                          itemCount:
+                              controller.targets.length +
+                              (controller.hasMore || controller.isLoading
+                                  ? 1
+                                  : 0),
+                          itemBuilder: (context, index) {
+                            if (index == controller.targets.length) {
+                              return SizedBox(
+                                height: 48,
+                                child: Center(
+                                  child:
+                                      controller.isLoading
+                                          ? const SizedBox.square(
+                                            dimension: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                          : const Text('上拉加载更多'),
                                 ),
-                                title: Text(target.name),
-                                subtitle: Text(subtitle),
-                                trailing:
-                                    controller.isSubmitting
-                                        ? const SizedBox.square(
-                                          dimension: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                        : const Icon(Icons.chevron_right),
-                                onTap: () => _select(target),
                               );
-                            },
-                          ),
-                ),
+                            }
+                            final target = controller.targets[index];
+                            final subtitle = <String>[
+                              target.roleLabel,
+                              if (target.serviceStatusDescription.isNotEmpty)
+                                target.serviceStatusDescription,
+                            ].join(' · ');
+                            return ListTile(
+                              enabled: !controller.isSubmitting,
+                              leading: ChatObjectAvatar(
+                                name: target.name,
+                                imageUrl:
+                                    target.avatarUrl.isEmpty
+                                        ? null
+                                        : target.avatarUrl,
+                                radius: 20,
+                              ),
+                              title: Text(target.name),
+                              subtitle: Text(subtitle),
+                              trailing:
+                                  controller.isSubmitting
+                                      ? const SizedBox.square(
+                                        dimension: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : const Icon(Icons.chevron_right),
+                              onTap: () => _select(target),
+                            );
+                          },
+                        ),
               ),
-            ],
-          ),
-        );
-      },
-    ),
+            ),
+          ],
+        ),
+      );
+    },
   );
 }
 

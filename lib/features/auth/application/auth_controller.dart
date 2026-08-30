@@ -78,10 +78,11 @@ class AuthController extends ChangeNotifier {
 
   Future<void> _restore() async {
     try {
-      final hasSession = await _repository.restoreSession().timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => false,
-      );
+      // A stored session is valid for offline use. In particular, never turn
+      // a slow or unavailable refresh endpoint into a local logout here.
+      // [restoreSession] only returns false when there is no usable local
+      // session or the authorization server definitively rejects it.
+      final hasSession = await _repository.restoreSession();
       _status =
           hasSession ? AuthStatus.authenticated : AuthStatus.unauthenticated;
       if (hasSession) _connectRealtime();

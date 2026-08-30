@@ -94,6 +94,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/chat'),
           ),
           _Item(
+            icon: Icons.keyboard_arrow_up_outlined,
+            title: '半屏页组件',
+            subtitle: '高度、键盘避让、拖拽、关闭、圆角与实际返回结果',
+            onTap: () => context.push('/diagnostics/half-page-sheet'),
+          ),
+          _Item(
             icon: Icons.bubble_chart_outlined,
             title: '聊天气泡参数',
             subtitle: '实时调节反角 S 曲线尾巴并生成 JSON 参数',

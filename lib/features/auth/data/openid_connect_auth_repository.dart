@@ -1,11 +1,9 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../../core/config/app_environment.dart';
 import '../../../core/device/client_device_context.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/client_credentials_token_storage.dart';
-import '../../../core/network/jwt_token_expiry.dart';
 import '../../../core/network/token_refresher.dart';
 import '../../../core/network/token_storage.dart';
 import '../domain/auth_repository.dart';
@@ -218,24 +216,12 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   Future<bool> restoreSession() async {
     final accessToken = await _tokenStorage.readAccessToken();
     if (accessToken == null || accessToken.isEmpty) return false;
-    if (!shouldRefreshJwt(accessToken)) return true;
-    final refreshToken = await _tokenStorage.readRefreshToken();
-    if (refreshToken == null || refreshToken.isEmpty) {
-      await clearSession();
-      return false;
-    }
-    try {
-      await refreshSession();
-      return true;
-    } on TokenRefreshRejectedException {
-      await clearSession();
-      return false;
-    } catch (error) {
-      // Keep the local session for offline/poor-network startup. Business
-      // requests will retry refresh when connectivity recovers.
-      debugPrint('[authRestore][refresh-deferred] error=$error');
-      return true;
-    }
+
+    // Startup must be offline-first: an expired access token is still enough
+    // to restore the locally cached IM data. The first authenticated API call
+    // refreshes it through DioApiClient; only an explicit refresh rejection
+    // then clears the session and redirects to login.
+    return true;
   }
 
   @override
