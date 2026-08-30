@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../core/utils/api_url_resolver.dart';
 import '../../data/models/chat_message.dart';
 
 /// Displays a video message preview and opens its player on demand.
@@ -19,10 +20,8 @@ class VideoMessageContent extends StatelessWidget {
   Uri? get _uri {
     final source = message.mediaUrl ?? message.localFilePath ?? '';
     if (source.isEmpty) return null;
-    final parsed = Uri.tryParse(source);
-    if (parsed?.hasScheme == true) return parsed;
     if (message.localFilePath != null) return Uri.file(source);
-    return Uri.parse(apiBaseUrl).resolve(source);
+    return Uri.tryParse(resolveApiUrl(source, apiBaseUrl));
   }
 
   @override

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/api_url_resolver.dart';
 import '../../data/models/chat_message.dart';
 
 /// Displays an image message and its upload overlay.
@@ -20,12 +21,7 @@ class ImageMessageContent extends StatelessWidget {
   final String apiBaseUrl;
   final double? progress;
 
-  String get _url {
-    final source = message.mediaUrl ?? '';
-    final uri = Uri.tryParse(source);
-    if (uri?.hasScheme == true || source.isEmpty) return source;
-    return Uri.parse(apiBaseUrl).resolve(source).toString();
-  }
+  String get _url => resolveApiUrl(message.mediaUrl, apiBaseUrl);
 
   @override
   Widget build(BuildContext context) {

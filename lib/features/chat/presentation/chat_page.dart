@@ -27,6 +27,9 @@ import 'message_content/image_message_content.dart';
 import 'message_content/text_message_content.dart';
 import 'message_content/video_message_content.dart';
 import 'message_content/voice_message_content.dart';
+import 'widgets/chat_input_area.dart';
+import 'widgets/chat_message_list.dart';
+import 'widgets/chat_title_bar.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
@@ -118,184 +121,36 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   // Replacing a FAB with null during a pointer packet can leave
                   // Flutter's built-in FAB transition without a laid-out child.
                   : const SizedBox.shrink(),
-          appBar: AppBar(
-            title: Text(controller.title, overflow: TextOverflow.ellipsis),
-            actions: <Widget>[
-              if (controller.friend?.isShopkeeperOrWaiter == true)
-                IconButton(
-                  tooltip: '转接',
-                  onPressed: _openTransferSheet,
-                  icon: const Icon(Icons.electrical_services_outlined),
-                ),
-              IconButton(
-                tooltip: '聊天设置',
-                onPressed: () async {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  final cleared = await context.push<bool>(
-                    '/chat/${Uri.encodeComponent(widget.sessionUnitId)}/settings'
-                    '?ownerId=${widget.ownerId}',
-                  );
-                  if (cleared == true) {
-                    controller.handleMessagesCleared();
-                  }
-                },
-                icon: const Icon(Icons.more_horiz),
-              ),
-            ],
+          appBar: ChatTitleBar(
+            title: controller.title,
+            showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
+            onTransfer: _openTransferSheet,
+            onOpenSettings: _openChatSettings,
           ),
           body: Column(
             children: <Widget>[
               Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    _composerKey.currentState?.closeInputArea();
-                  },
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: (notification) {
-                      controller.setViewingLatest(
-                        notification.metrics.pixels <= 32,
-                      );
-                      final isUserPaging =
-                          (notification is ScrollUpdateNotification &&
-                              notification.dragDetails != null) ||
-                          notification is OverscrollNotification;
-                      if (isUserPaging &&
-                          notification.metrics.extentAfter < 180) {
-                        controller.loadMore();
-                      }
-                      return false;
-                    },
-                    child:
-                        controller.messages.isEmpty
-                            ? _EmptyMessagesState(controller: controller)
-                            : Align(
-                              alignment: Alignment.topCenter,
-                              child: ListView.builder(
-                                controller: _scrollController,
-                                keyboardDismissBehavior:
-                                    ScrollViewKeyboardDismissBehavior.onDrag,
-                                reverse: true,
-                                shrinkWrap: true,
-                                findChildIndexCallback: (key) {
-                                  if (key is! ValueKey<String>) return null;
-                                  final index = controller.messages.indexWhere(
-                                    (message) => message.localId == key.value,
-                                  );
-                                  return index < 0 ? null : index;
-                                },
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 16,
-                                ),
-                                itemCount: controller.messages.length + 1,
-                                itemBuilder: (context, index) {
-                                  if (index == controller.messages.length) {
-                                    if (controller.isLoading) {
-                                      return const Center(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(16),
-                                          child: CircularProgressIndicator(),
-                                        ),
-                                      );
-                                    }
-                                    if (controller.error != null) {
-                                      return TextButton(
-                                        style: _compactTextButtonStyle,
-                                        onPressed: controller.loadMore,
-                                        child: Text(
-                                          '加载失败，点击重试：${controller.error}',
-                                        ),
-                                      );
-                                    }
-                                    return Center(
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(16),
-                                        child:
-                                            controller.hasMore
-                                                ? TextButton(
-                                                  style:
-                                                      _compactTextButtonStyle,
-                                                  onPressed:
-                                                      controller.loadMore,
-                                                  child: const Text('加载更多消息'),
-                                                )
-                                                : const Text('美好生活从这里开始'),
-                                      ),
-                                    );
-                                  }
-                                  final message = controller.messages[index];
-                                  final older =
-                                      index + 1 < controller.messages.length
-                                          ? controller.messages[index + 1]
-                                          : null;
-                                  return _MessageRow(
-                                    key: ValueKey<String>(message.localId),
-                                    message: message,
-                                    showTime: _showTime(message, older),
-                                    onUserTap:
-                                        () => _showSenderProfile(message),
-                                    onVoiceOpened:
-                                        () =>
-                                            controller.markVoiceOpened(message),
-                                    onRetry:
-                                        (message.messageType == 5 ||
-                                                    message.messageType == 2 ||
-                                                    message.messageType == 4 ||
-                                                    message.messageType == 3) &&
-                                                message.state == 'failed'
-                                            ? () =>
-                                                controller.retryFile(message)
-                                            : null,
-                                    imageBytes: controller.imagePreview(
-                                      message.localId,
-                                    ),
-                                    uploadProgress:
-                                        controller.uploadProgress[message
-                                            .localId],
-                                    apiBaseUrl:
-                                        ref
-                                            .read(appEnvironmentProvider)
-                                            .apiBaseUrl,
-                                    selected: controller.selectedLocalIds
-                                        .contains(message.localId),
-                                    selectionMode: controller.selectionMode,
-                                    onTap:
-                                        controller.selectionMode
-                                            ? () => controller.toggleSelection(
-                                              message,
-                                            )
-                                            : null,
-                                    onLongPress:
-                                        () => _showMessageActions(message),
-                                    onQuoteTap: () => _scrollToQuoted(message),
-                                    showUnreadDivider:
-                                        message.serverId != null &&
-                                        controller.friend?.readMessageId ==
-                                            message.serverId &&
-                                        index > 0,
-                                    showPeerRead:
-                                        message.isMine &&
-                                        message.serverId != null &&
-                                        controller.friend?.peerReadMessageId ==
-                                            message.serverId,
-                                  );
-                                },
-                              ),
-                            ),
-                  ),
+                child: ChatMessageList(
+                  messages: controller.messages,
+                  scrollController: _scrollController,
+                  isLoading: controller.isLoading,
+                  hasMore: controller.hasMore,
+                  error: controller.error,
+                  onViewingLatestChanged: controller.setViewingLatest,
+                  onLoadMore: controller.loadMore,
+                  onTapOutside: _closeInputArea,
+                  itemBuilder: _buildMessageItem,
                 ),
               ),
-              if (controller.selectionMode)
-                _SelectionBar(
+              ChatInputArea(
+                selectionMode: controller.selectionMode,
+                selectionActions: _SelectionBar(
                   count: controller.selectedLocalIds.length,
                   onCancel: controller.cancelSelection,
-                  onDelete: () => _deleteSelectedMessages(),
-                  onMergeForward: () => _showMergeForwardTargets(),
-                )
-              else
-                SafeArea(
+                  onDelete: _deleteSelectedMessages,
+                  onMergeForward: _showMergeForwardTargets,
+                ),
+                composer: SafeArea(
                   top: false,
                   child: _Composer(
                     key: _composerKey,
@@ -303,10 +158,70 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     input: input,
                   ),
                 ),
+              ),
             ],
           ),
         ),
   );
+
+  void _closeInputArea() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    _composerKey.currentState?.closeInputArea();
+  }
+
+  Future<void> _openChatSettings() async {
+    _closeInputArea();
+    final cleared = await context.push<bool>(
+      '/chat/${Uri.encodeComponent(widget.sessionUnitId)}/settings'
+      '?ownerId=${widget.ownerId}',
+    );
+    if (cleared == true) controller.handleMessagesCleared();
+  }
+
+  Widget _buildMessageItem(
+    BuildContext context,
+    ChatMessage message,
+    int index,
+  ) {
+    final older =
+        index + 1 < controller.messages.length
+            ? controller.messages[index + 1]
+            : null;
+    final supportsFileRetry = switch (message.messageType) {
+      2 || 3 || 4 || 5 => true,
+      _ => false,
+    };
+    return _MessageRow(
+      key: ValueKey<String>(message.localId),
+      message: message,
+      showTime: _showTime(message, older),
+      onUserTap: () => _showSenderProfile(message),
+      onVoiceOpened: () => controller.markVoiceOpened(message),
+      onRetry:
+          supportsFileRetry && message.state == 'failed'
+              ? () => controller.retryFile(message)
+              : null,
+      imageBytes: controller.imagePreview(message.localId),
+      uploadProgress: controller.uploadProgress[message.localId],
+      apiBaseUrl: ref.read(appEnvironmentProvider).apiBaseUrl,
+      selected: controller.selectedLocalIds.contains(message.localId),
+      selectionMode: controller.selectionMode,
+      onTap:
+          controller.selectionMode
+              ? () => controller.toggleSelection(message)
+              : null,
+      onLongPress: () => _showMessageActions(message),
+      onQuoteTap: () => _scrollToQuoted(message),
+      showUnreadDivider:
+          message.serverId != null &&
+          controller.friend?.readMessageId == message.serverId &&
+          index > 0,
+      showPeerRead:
+          message.isMine &&
+          message.serverId != null &&
+          controller.friend?.peerReadMessageId == message.serverId,
+    );
+  }
 
   bool _showTime(ChatMessage current, ChatMessage? older) {
     if (_timeVisibilityResetMarker != controller.timeVisibilityResetMarker) {
@@ -605,28 +520,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
         context,
       ).showSnackBar(const SnackBar(content: Text('引用消息已不在可加载的历史范围内')));
     }
-  }
-}
-
-class _EmptyMessagesState extends StatelessWidget {
-  const _EmptyMessagesState({required this.controller});
-  final ChatController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    if (controller.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (controller.error != null) {
-      return Center(
-        child: TextButton(
-          style: _compactTextButtonStyle,
-          onPressed: controller.loadMore,
-          child: Text('消息加载失败，点击重试：${controller.error}'),
-        ),
-      );
-    }
-    return const Center(child: Text('暂无消息'));
   }
 }
 
@@ -2084,8 +1977,3 @@ class _TransferSheetState extends State<_TransferSheet> {
     },
   );
 }
-
-final ButtonStyle _compactTextButtonStyle = TextButton.styleFrom(
-  minimumSize: const Size(0, 40),
-  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-);
