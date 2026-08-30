@@ -13,5 +13,7 @@ class TextMessageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      MarkdownBody(data: message.text, selectable: true, shrinkWrap: true);
+  // Text belongs to the outer message timeline. Keeping it non-selectable
+  // prevents a nested selection region from claiming drag gestures.
+  MarkdownBody(data: message.text, selectable: false, shrinkWrap: true);
 }

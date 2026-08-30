@@ -34,9 +34,12 @@ class ChatMessageList extends StatelessWidget {
   final ChatMessageItemBuilder itemBuilder;
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) => Listener(
     behavior: HitTestBehavior.translucent,
-    onTap: onTapOutside,
+    // A listener observes pointer input without joining Flutter's gesture
+    // arena. This keeps the surrounding chat region from competing with the
+    // ListView's vertical-drag recognizer.
+    onPointerDown: (_) => onTapOutside(),
     child: NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         onViewingLatestChanged(notification.metrics.pixels <= 32);
@@ -56,38 +59,35 @@ class ChatMessageList extends StatelessWidget {
                 error: error,
                 onRetry: onLoadMore,
               )
-              : Align(
-                alignment: Alignment.topCenter,
-                child: ListView.builder(
-                  controller: scrollController,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  reverse: true,
-                  shrinkWrap: true,
-                  findChildIndexCallback: (key) {
-                    if (key is! ValueKey<String>) return null;
-                    final index = messages.indexWhere(
-                      (message) => message.localId == key.value,
-                    );
-                    return index < 0 ? null : index;
-                  },
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 16,
-                  ),
-                  itemCount: messages.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == messages.length) {
-                      return _ChatHistoryFooter(
-                        isLoading: isLoading,
-                        hasMore: hasMore,
-                        error: error,
-                        onLoadMore: onLoadMore,
-                      );
-                    }
-                    return itemBuilder(context, messages[index], index);
-                  },
+              : ListView.builder(
+                controller: scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                reverse: true,
+                findChildIndexCallback: (key) {
+                  if (key is! ValueKey<String>) return null;
+                  final index = messages.indexWhere(
+                    (message) => message.localId == key.value,
+                  );
+                  return index < 0 ? null : index;
+                },
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 16,
                 ),
+                itemCount: messages.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == messages.length) {
+                    return _ChatHistoryFooter(
+                      isLoading: isLoading,
+                      hasMore: hasMore,
+                      error: error,
+                      onLoadMore: onLoadMore,
+                    );
+                  }
+                  return itemBuilder(context, messages[index], index);
+                },
               ),
     ),
   );
