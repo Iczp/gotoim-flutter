@@ -9,7 +9,9 @@ import '../core/database/unified_database.dart';
 import '../core/deep_link/deep_link_handler.dart';
 import '../core/deep_link/deep_link_parser.dart';
 import '../core/deep_link/deep_link_service.dart';
+import '../core/devtools/remote_debug/remote_dev_server.dart';
 import '../core/jsbridge/js_api_dispatcher.dart';
+import '../core/logging/app_logger.dart';
 import '../core/notifications/local_notification_service.dart';
 import '../core/platform/platform_facade.dart';
 import '../core/services/clipboard_service.dart';
@@ -43,6 +45,9 @@ Future<void> bootstrap() async {
       } catch (_) {}
     }
     final environment = AppEnvironment.fromDotEnv(flavor);
+    // The server is deliberately created, but not started, at bootstrap. A
+    // developer must explicitly start it from the diagnostics center.
+    final remoteDevServer = RemoteDevServer();
     try {
       environment.validate();
     } catch (validationError) {
@@ -87,12 +92,11 @@ Future<void> bootstrap() async {
       navigatorProvider: () => rootNavigatorKey.currentState,
       uploadService: fileUploadService,
     );
-    final appTaskManager =
-        platformFacade.kind == PlatformKind.android
-            ? AndroidAppTaskManager()
-            : StubAppTaskManager(
-              navigatorProvider: () => rootNavigatorKey.currentState,
-            );
+    final appTaskManager = platformFacade.kind == PlatformKind.android
+        ? AndroidAppTaskManager()
+        : StubAppTaskManager(
+            navigatorProvider: () => rootNavigatorKey.currentState,
+          );
     final workbenchRepository = MockWorkbenchRepository();
     final deepLinkParser = DeepLinkParser(
       allowedCustomSchemes: environment.deepLinkCustomSchemes,
@@ -129,11 +133,19 @@ Future<void> bootstrap() async {
           appTaskManagerProvider.overrideWithValue(appTaskManager),
           workbenchRepositoryProvider.overrideWithValue(workbenchRepository),
           deepLinkServiceProvider.overrideWith((ref) => deepLinkService),
+          remoteDevServerProvider.overrideWithValue(remoteDevServer),
         ],
         child: const GotoImApp(),
       ),
     );
   } catch (error, stackTrace) {
+    AppLogger.instance.fatal(
+      'Application bootstrap error',
+      category: 'bootstrap',
+      event: 'bootstrap_error',
+      error: error,
+      stackTrace: stackTrace,
+    );
     debugPrint('Fatal bootstrap error: $error\n$stackTrace');
     runApp(BootstrapErrorApp(error: error, stackTrace: stackTrace));
   }

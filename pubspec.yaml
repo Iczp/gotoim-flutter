@@ -69,6 +69,7 @@ flutter:
     - .env.production
     - assets/file_web/
     - assets/file_web/assets/
+    - assets/devtools/remote/
 
 # hooks:
 #   user_defines:

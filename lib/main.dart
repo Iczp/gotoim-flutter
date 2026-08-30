@@ -3,10 +3,18 @@ import 'package:flutter/widgets.dart';
 import 'app/bootstrap.dart';
 import 'app/bootstrap_error_app.dart';
 import 'app/mini_app_bootstrap.dart';
+import 'core/logging/app_logger.dart';
 
 Future<void> main() async {
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
+    AppLogger.instance.error(
+      'Flutter framework error',
+      category: 'flutter',
+      event: 'flutter_error',
+      error: details.exception,
+      stackTrace: details.stack,
+    );
     debugPrint('Flutter error: ${details.exception}\n${details.stack}');
   };
 
@@ -27,6 +35,13 @@ Future<void> miniAppMain() async {
   try {
     await miniAppBootstrap();
   } catch (error, stackTrace) {
+    AppLogger.instance.fatal(
+      'MiniApp bootstrap error',
+      category: 'bootstrap',
+      event: 'mini_app_bootstrap_error',
+      error: error,
+      stackTrace: stackTrace,
+    );
     // miniAppBootstrap initializes the binding before any await. Keeping the
     // fallback runApp in this same async zone avoids a binding-zone mismatch.
     debugPrint('MiniApp unhandled error: $error\n$stackTrace');

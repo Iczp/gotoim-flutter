@@ -22,6 +22,12 @@ class DiagnosticsHomePage extends StatelessWidget {
       body: ListView(
         children: [
           _Item(
+            icon: Icons.lan_outlined,
+            title: 'Remote DevTools / AI 日志',
+            subtitle: '真机局域网日志、WebSocket 控制台、脱敏日志与异常源码定位',
+            onTap: () => context.push('/diagnostics/remote-devtools'),
+          ),
+          _Item(
             icon: Icons.key_outlined,
             title: '认证与敏感凭据',
             subtitle: '登录、Token、检查、撤销、退出与复制',
@@ -162,10 +168,10 @@ class _Item extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: Icon(icon),
-    title: Text(title),
-    subtitle: Text(subtitle),
-    trailing: const Icon(Icons.chevron_right),
-    onTap: onTap,
-  );
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      );
 }
