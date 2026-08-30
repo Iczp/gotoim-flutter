@@ -214,7 +214,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       onQuoteTap: () => _scrollToQuoted(message),
       showUnreadDivider:
           message.serverId != null &&
-          controller.friend?.readMessageId == message.serverId &&
+          controller.initialUnreadDividerMessageId == message.serverId &&
           index > 0,
       showPeerRead:
           message.isMine &&

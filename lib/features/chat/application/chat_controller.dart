@@ -13,6 +13,7 @@ import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
 import '../../../core/services/media/audio_playback_service.dart';
 import '../../../core/services/media/voice_cache_service.dart';
+import 'chat_unread_divider.dart';
 import '../data/datasources/message_api.dart';
 import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
@@ -95,6 +96,7 @@ class ChatController extends ChangeNotifier {
   int newMessageCount = 0;
   bool _viewingLatest = true;
   int? _lastSubmittedReadMessageId;
+  int? _initialUnreadDividerMessageId;
   final Set<String> selectedLocalIds = <String>{};
   final List<ChatMember> mentionMembers = <ChatMember>[];
   final Map<String, String> _mentionedTokens = <String, String>{};
@@ -110,6 +112,7 @@ class ChatController extends ChangeNotifier {
   bool get isMuted => friend?.isMuted == true;
   Uint8List? imagePreview(String localId) => _imagePreviews[localId];
   String get mentionKeyword => _mentionKeyword;
+  int? get initialUnreadDividerMessageId => _initialUnreadDividerMessageId;
 
   Future<void> initialize() async {
     _realtimeSubscription = _signalRGateway.events.listen(_handleRealtimeEvent);
@@ -127,6 +130,13 @@ class ChatController extends ChangeNotifier {
     if (_messages.isEmpty && hasMore) {
       await loadMore();
     }
+    // Snapshot the local read position before the asynchronous read receipt is
+    // submitted. Later realtime messages must never create a historical
+    // unread divider while the user is already viewing the latest message.
+    _initialUnreadDividerMessageId = findInitialUnreadDividerMessageId(
+      messages: _messages,
+      readMessageId: friend?.readMessageId,
+    );
     if (_messages.isNotEmpty) {
       unawaited(loadLatest().then((_) => markLatestRead()));
     }
@@ -816,6 +826,7 @@ class ChatController extends ChangeNotifier {
 
   void handleMessagesCleared() {
     _messages.clear();
+    _initialUnreadDividerMessageId = null;
     _timeVisibilityResetMarker++;
     hasMore = true;
     error = null;
