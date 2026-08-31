@@ -138,27 +138,34 @@ class _FloatingWindowViewState extends State<FloatingWindowView> {
                 BoxShadow(color: Colors.black38, blurRadius: 12),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Stack(
-                children: [
-                  Positioned.fill(child: content),
-                  if (entry.options.resizable)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: GestureDetector(
-                        onPanStart:
-                            (_) => widget.manager.bringToFront(entry.id),
-                        onPanUpdate: _resize,
-                        child: const SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: Icon(Icons.drag_handle, size: 18),
+            child: TooltipVisibility(
+              // FloatingWindowLayer is a sibling of the app Navigator rather
+              // than a descendant of its Overlay. Tooltips therefore cannot
+              // create their overlay entries here; keep the touch controls
+              // usable without triggering debugCheckHasOverlay.
+              visible: false,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  children: [
+                    Positioned.fill(child: content),
+                    if (entry.options.resizable)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: GestureDetector(
+                          onPanStart:
+                              (_) => widget.manager.bringToFront(entry.id),
+                          onPanUpdate: _resize,
+                          child: const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: Icon(Icons.drag_handle, size: 18),
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

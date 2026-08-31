@@ -1615,22 +1615,31 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
           // This is the Flutter counterpart of the UniApp keyboard-area: the
           // function panel is swapped inside one stable tray rather than
           // inserted beneath the input row after the system keyboard closes.
-          AnimatedContainer(
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(end: _showFunctions ? 1 : 0),
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
-            height: _showFunctions ? _keyboardTrayHeight : 0,
-            child: ClipRect(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: _FunctionPanel(
-                  items: _functions,
-                  pageController: _pageController,
-                  page: _page,
-                  onPageChanged: (value) => setState(() => _page = value),
-                  onSelected: _selectFunction,
-                ),
+            child: SizedBox(
+              height: _keyboardTrayHeight,
+              child: _FunctionPanel(
+                items: _functions,
+                pageController: _pageController,
+                page: _page,
+                onPageChanged: (value) => setState(() => _page = value),
+                onSelected: _selectFunction,
               ),
             ),
+            builder:
+                (context, heightFactor, child) => ClipRect(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    // Keep the panel at its natural height, then clip its visual
+                    // extent. Animating an enclosing fixed-height box shrinks the
+                    // panel's layout constraints and makes its Column overflow.
+                    heightFactor: heightFactor,
+                    child: child,
+                  ),
+                ),
           ),
         ],
       ),

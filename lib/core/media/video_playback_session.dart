@@ -36,20 +36,37 @@ class VideoPlaybackSession extends ChangeNotifier {
   }
 
   Future<void> togglePlayback() async {
+    if (_disposed) return;
     final controller = _controller;
     if (controller == null) return;
-    if (controller.value.isPlaying) {
-      await controller.pause();
-    } else {
-      await controller.play();
+    try {
+      // A close action can dispose the controller while a queued tap gesture
+      // is still resolving. Only use the controller while this session still
+      // owns that exact instance.
+      if (_disposed || !identical(_controller, controller)) return;
+      if (controller.value.isPlaying) {
+        await controller.pause();
+      } else {
+        await controller.play();
+      }
+    } catch (error) {
+      // Native teardown can race with an already accepted tap. The session is
+      // gone in that case, so there is no useful playback error to surface.
+      if (_disposed || !identical(_controller, controller)) return;
+      _error = error;
+      notifyListeners();
     }
   }
 
   @override
   void dispose() {
     _disposed = true;
-    _controller?.removeListener(notifyListeners);
-    _controller?.dispose();
+    final controller = _controller;
+    // Clear the public reference before disposing. Any late gesture then sees
+    // no playable controller instead of calling into a disposed notifier.
+    _controller = null;
+    controller?.removeListener(notifyListeners);
+    controller?.dispose();
     super.dispose();
   }
 }

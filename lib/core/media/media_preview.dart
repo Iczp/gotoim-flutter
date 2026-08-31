@@ -206,6 +206,7 @@ class _Video extends StatefulWidget {
 class _VideoState extends State<_Video> {
   late final VideoPlaybackSession _session;
   bool _handedOff = false;
+  bool _handoffPending = false;
 
   @override
   void initState() {
@@ -228,32 +229,41 @@ class _VideoState extends State<_Video> {
   }
 
   void _minimize() {
+    if (_handoffPending || _handedOff) return;
     final manager = FloatingWindowScope.of(context);
     final id = _sessionId;
     final navigator = Navigator.of(context);
-    _handedOff = true;
-    manager.show(
-      id: id,
-      type: FloatingWindowType.video,
-      options: FloatingWindowOptions.video(),
-      child: _FloatingVideoContent(
-        session: _session,
-        label: widget.item.id,
-        onClose: () {
-          VideoPlaybackSessionRegistry.release(id, _session);
-          manager.close(id);
-        },
-        onRestore: () {
-          manager.close(id);
-          MediaPreview.openWithNavigator(
-            navigator,
-            items: widget.items,
-            initialIndex: widget.initialIndex,
-          );
-        },
-      ),
-    );
-    Navigator.of(context).pop();
+    // A single Android video texture cannot be mounted by both the fullscreen
+    // route and the floating window at the same time. Remove this host first,
+    // then attach the retained session to the floating window on the next
+    // frame.
+    setState(() => _handoffPending = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _handedOff = true;
+      manager.show(
+        id: id,
+        type: FloatingWindowType.video,
+        options: FloatingWindowOptions.video(),
+        child: _FloatingVideoContent(
+          session: _session,
+          label: widget.item.id,
+          onClose: () {
+            VideoPlaybackSessionRegistry.release(id, _session);
+            manager.close(id);
+          },
+          onRestore: () {
+            manager.close(id);
+            MediaPreview.openWithNavigator(
+              navigator,
+              items: widget.items,
+              initialIndex: widget.initialIndex,
+            );
+          },
+        ),
+      );
+      navigator.pop();
+    });
   }
 
   @override
@@ -269,6 +279,7 @@ class _VideoState extends State<_Video> {
 
   @override
   Widget build(BuildContext context) {
+    if (_handoffPending) return const SizedBox.shrink();
     if (_session.error != null) {
       return Text(
         '视频加载失败：${_session.error}',
