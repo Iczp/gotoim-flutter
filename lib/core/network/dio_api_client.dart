@@ -89,6 +89,7 @@ class DioApiClient implements ApiClient {
   Future<T> postMultipart<T>(
     String path, {
     Map<String, Object?>? query,
+    Map<String, Object?>? extraFields,
     required MultipartUploadFile file,
     String fieldName = 'file',
     void Function(int sent, int total)? onProgress,
@@ -104,6 +105,9 @@ class DioApiClient implements ApiClient {
             file.length,
             filename: file.name,
           ),
+          if (extraFields != null)
+            for (final entry in extraFields.entries)
+              if (entry.value != null) entry.key: entry.value!,
         }),
         retryOnUnauthorized: retryOnUnauthorized,
         onSendProgress: onProgress,

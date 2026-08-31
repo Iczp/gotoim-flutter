@@ -793,7 +793,11 @@ class ChatController extends ChangeNotifier {
     _messages.insert(0, local);
     _messages.sort((a, b) => b.score.compareTo(a.score));
     notifyListeners();
-    final sent = await _repository.sendLocalVoice(local: local, file: file);
+    final sent = await _repository.sendLocalVoice(
+      local: local,
+      file: file,
+      duration: duration,
+    );
     _replaceMessage(sent);
     if (sent.state == 'sent') _pendingFiles.remove(local.localId);
     notifyListeners();

@@ -76,21 +76,35 @@ class MessageApi {
     required int fileLength,
     required Stream<List<int>> Function() openRead,
     int messageType = 5,
+    Map<String, Object?>? extraFields,
     void Function(int sent, int total)? onProgress,
-  }) => _client.postMultipart<Map<String, dynamic>>(
+  }) {
+    late final String path;
     switch (messageType) {
-      2 => '/api/chat/message-sender/send-upload-image/$sessionUnitId',
-      3 => '/api/chat/message-sender/send-upload-sound/$sessionUnitId',
-      4 => '/api/chat/message-sender/send-upload-video/$sessionUnitId',
-      _ => '/api/chat/message-sender/send-upload-file/$sessionUnitId',
-    },
-    file: MultipartUploadFile(
-      name: fileName,
-      length: fileLength,
-      openRead: openRead,
-    ),
-    onProgress: onProgress,
-  );
+      case 2:
+        path = '/api/chat/message-sender/send-upload-image/$sessionUnitId';
+        break;
+      case 3:
+        path = '/api/chat/message-sender/send-upload-sound/$sessionUnitId';
+        break;
+      case 4:
+        path = '/api/chat/message-sender/send-upload-video/$sessionUnitId';
+        break;
+      default:
+        path = '/api/chat/message-sender/send-upload-file/$sessionUnitId';
+        break;
+    }
+    return _client.postMultipart<Map<String, dynamic>>(
+      path,
+      file: MultipartUploadFile(
+        name: fileName,
+        length: fileLength,
+        openRead: openRead,
+      ),
+      extraFields: extraFields,
+      onProgress: onProgress,
+    );
+  }
 
   Future<Map<String, dynamic>> setRead({
     required String sessionUnitId,

@@ -18,6 +18,7 @@ abstract class ApiClient {
   Future<T> postMultipart<T>(
     String path, {
     Map<String, Object?>? query,
+    Map<String, Object?>? extraFields,
     required MultipartUploadFile file,
     String fieldName = 'file',
     void Function(int sent, int total)? onProgress,
@@ -30,7 +31,8 @@ abstract class ApiClient {
     String path, {
     Object? cancelTag,
     void Function(int received, int total)? onProgress,
-  }) => throw UnsupportedError('Binary download is not supported.');
+  }) =>
+      throw UnsupportedError('Binary download is not supported.');
 }
 
 class MultipartUploadFile {
