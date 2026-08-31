@@ -766,6 +766,10 @@ class _ContactRow extends StatelessWidget {
                 contact.displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ),
@@ -775,6 +779,7 @@ class _ContactRow extends StatelessWidget {
   );
 }
 
+// indexed bar
 class _AlphabetIndexBar extends StatefulWidget {
   const _AlphabetIndexBar({
     required this.keys,
