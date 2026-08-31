@@ -493,20 +493,20 @@ class ChatOwnerDrawer extends ConsumerWidget {
                 ],
               ),
             ),
-            if (controller.connectionState != SessionRealtimeStatus.connected)
-              _SignalRStatusBar(
-                state: controller.connectionState,
-                onReconnect: controller.reconnectSignalR,
-              ),
-            _CurrentDeviceBar(
-              label: controller.currentDeviceLabel,
-              deviceCount: controller.devices.length,
-              isLoading: controller.isLoadingDevices,
-              onPressed: () => context.push('/devices'),
-            ),
+            // if (controller.connectionState != SessionRealtimeStatus.connected)
+            //   _SignalRStatusBar(
+            //     state: controller.connectionState,
+            //     onReconnect: controller.reconnectSignalR,
+            //   ),
+            // _CurrentDeviceBar(
+            //   label: controller.currentDeviceLabel,
+            //   deviceCount: controller.devices.length,
+            //   isLoading: controller.isLoadingDevices,
+            //   onPressed: () => context.push('/devices'),
+            // ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                 children: [
                   for (final owner in controller.owners)
                     Padding(
@@ -519,12 +519,17 @@ class ChatOwnerDrawer extends ConsumerWidget {
                         ),
                         title: Text(
                           owner.name,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
                         subtitle:
                             owner.typeDescription.isEmpty
                                 ? null
-                                : Text(owner.typeDescription),
+                                : Text(
+                                  owner.typeDescription,
+                                  style: TextStyle(
+                                    color: Color.fromARGB(77, 53, 53, 53),
+                                  ),
+                                ),
                         trailing:
                             controller.currentOwner?.id == owner.id
                                 ? Icon(
@@ -548,13 +553,17 @@ class ChatOwnerDrawer extends ConsumerWidget {
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 )
                                 : owner.immersedCount > 0
                                 ? const Badge()
-                                : const Icon(Icons.chevron_right, size: 18),
+                                : const Icon(
+                                  Icons.chevron_right,
+                                  size: 18,
+                                  color: Color.fromRGBO(0, 0, 0, 0.3),
+                                ),
                         selected: controller.currentOwner?.id == owner.id,
                         selectedTileColor: colorScheme.primaryContainer
                             .withValues(alpha: 0.3),
