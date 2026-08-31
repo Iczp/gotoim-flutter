@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -130,6 +131,8 @@ abstract class MediaService {
 
   Future<void> startAudioRecording(AudioRecordingRequest request);
 
+  Future<bool> hasAudioRecordingPermission();
+
   Future<void> pauseAudioRecording();
 
   Future<void> resumeAudioRecording();
@@ -137,10 +140,18 @@ abstract class MediaService {
   Future<SelectedFile?> stopAudioRecording();
 
   Future<void> cancelAudioRecording();
+
+  /// Live microphone level mapped from dBFS to an integer-like 0...100
+  /// percentage for presentation consumers. `0` means silence and `100`
+  /// represents the configured visual peak; it does not alter recorded audio.
+  Future<double> audioRecordingLevel();
+
+  Stream<double> audioRecordingLevels(Duration interval);
 }
 
 AssetPickerTextDelegate _resolveAssetPickerTextDelegate(BuildContext context) {
-  final locale = Localizations.maybeLocaleOf(context) ??
+  final locale =
+      Localizations.maybeLocaleOf(context) ??
       WidgetsBinding.instance.platformDispatcher.locale;
   return assetPickerTextDelegateFromLocale(locale);
 }
@@ -164,13 +175,17 @@ class DefaultMediaService implements MediaService {
   final ImagePicker _imagePicker;
   final AudioRecorder _audioRecorder;
   final VideoProcessingService _videoProcessingService;
+  DateTime? _lastAmplitudeDebugLogAt;
 
   @override
   Future<List<SelectedFile>> chooseImage(MediaPickRequest request) async {
     final context = rootNavigatorKey.currentContext;
-    if (context != null &&
-        (_platformFacade.kind == PlatformKind.android ||
-            _platformFacade.kind == PlatformKind.ios)) {
+    // On Android, wechat_assets_picker requests a thumbnail for each album's
+    // first asset even for an image-only picker. A corrupt or unsupported
+    // video in an album then throws from MediaMetadataRetriever on a detached
+    // future, which cannot be handled by this method's try/catch. Use the
+    // system picker there so one bad gallery asset cannot break image picking.
+    if (context != null && _platformFacade.kind == PlatformKind.ios) {
       try {
         final result = await AssetPicker.pickAssets(
           context,
@@ -183,21 +198,18 @@ class DefaultMediaService implements MediaService {
         if (result != null) {
           final xFiles = <XFile>[];
           for (final asset in result) {
-            final file = request.preserveOriginal
-                ? await asset.originFile
-                : await asset.file;
+            final file =
+                request.preserveOriginal
+                    ? await asset.originFile
+                    : await asset.file;
             if (file != null) {
               xFiles.add(
-                XFile(
-                  file.path,
-                  name: asset.title,
-                  mimeType: asset.mimeType,
-                ),
+                XFile(file.path, name: asset.title, mimeType: asset.mimeType),
               );
             }
           }
           if (xFiles.isNotEmpty) {
-            return Future.wait(xFiles.map(SelectedFile.fromXFile));
+            return await Future.wait(xFiles.map(SelectedFile.fromXFile));
           }
           return const <SelectedFile>[];
         } else {
@@ -242,9 +254,9 @@ class DefaultMediaService implements MediaService {
   @override
   Future<SelectedFile?> chooseVideo(MediaPickRequest request) async {
     final context = rootNavigatorKey.currentContext;
-    if (context != null &&
-        (_platformFacade.kind == PlatformKind.android ||
-            _platformFacade.kind == PlatformKind.ios)) {
+    // See [chooseImage] for why Android uses the system picker instead of
+    // wechat_assets_picker.
+    if (context != null && _platformFacade.kind == PlatformKind.ios) {
       try {
         final result = await AssetPicker.pickAssets(
           context,
@@ -255,10 +267,9 @@ class DefaultMediaService implements MediaService {
           ),
         );
         if (result != null && result.isNotEmpty) {
-          final file =
-              await result.first.originFile ?? await result.first.file;
+          final file = await result.first.originFile ?? await result.first.file;
           if (file != null) {
-            return SelectedFile.fromXFile(
+            return await SelectedFile.fromXFile(
               XFile(
                 file.path,
                 name: result.first.title,
@@ -372,6 +383,9 @@ class DefaultMediaService implements MediaService {
   }
 
   @override
+  Future<bool> hasAudioRecordingPermission() => _audioRecorder.hasPermission();
+
+  @override
   Future<void> pauseAudioRecording() => _audioRecorder.pause();
 
   @override
@@ -386,6 +400,43 @@ class DefaultMediaService implements MediaService {
   @override
   Future<void> cancelAudioRecording() async {
     await _audioRecorder.cancel();
+  }
+
+  @override
+  Future<double> audioRecordingLevel() async {
+    final amplitude = await _audioRecorder.getAmplitude();
+    return _dbfsToLevelPercent(amplitude.current);
+  }
+
+  @override
+  Stream<double> audioRecordingLevels(
+    Duration interval,
+  ) => _audioRecorder.onAmplitudeChanged(interval).map((amplitude) {
+    final level = _dbfsToLevelPercent(amplitude.current);
+    assert(() {
+      final now = DateTime.now();
+      if (_lastAmplitudeDebugLogAt == null ||
+          now.difference(_lastAmplitudeDebugLogAt!) >=
+              const Duration(milliseconds: 500)) {
+        _lastAmplitudeDebugLogAt = now;
+        debugPrint(
+          '[voiceAmplitude] rawDbfs=${amplitude.current.toStringAsFixed(1)} '
+          'levelPercent=${level.toStringAsFixed(1)}',
+        );
+      }
+      return true;
+    }());
+    return level;
+  });
+
+  static double _dbfsToLevelPercent(double dbfs) {
+    // `record` reports a dBFS value. Device logs show ambient noise around
+    // -38 dBFS, while normal speech reaches roughly -25 dBFS. Keep the former
+    // at zero and spread the latter range across the visual meter.
+    // This value drives UI only; it never changes the recorded audio.
+    if (!dbfs.isFinite || dbfs <= -38) return 0;
+    final normalized = ((dbfs + 38) / 14).clamp(0.0, 1.0);
+    return math.pow(normalized, 1.35).toDouble() * 100;
   }
 
   Future<SelectedFile?> _pickOneImage(

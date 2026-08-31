@@ -8,11 +8,7 @@ import 'bootstrap.dart';
 /// Ensures the application never displays a blank white screen, and gives the
 /// developer/user immediate diagnostic details and actions.
 class BootstrapErrorApp extends StatelessWidget {
-  const BootstrapErrorApp({
-    super.key,
-    required this.error,
-    this.stackTrace,
-  });
+  const BootstrapErrorApp({super.key, required this.error, this.stackTrace});
 
   final Object error;
   final StackTrace? stackTrace;
@@ -65,13 +61,12 @@ class BootstrapErrorApp extends StatelessWidget {
                                 children: [
                                   Text(
                                     '应用初始化失败',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.red.shade900,
-                                        ),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red.shade900,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -79,9 +74,7 @@ class BootstrapErrorApp extends StatelessWidget {
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium
-                                        ?.copyWith(
-                                          color: Colors.grey.shade700,
-                                        ),
+                                        ?.copyWith(color: Colors.grey.shade700),
                                   ),
                                 ],
                               ),
@@ -93,9 +86,7 @@ class BootstrapErrorApp extends StatelessWidget {
                         const SizedBox(height: 12),
                         Text(
                           '异常信息 (Error Message):',
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelLarge
+                          style: Theme.of(context).textTheme.labelLarge
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
@@ -147,12 +138,11 @@ class BootstrapErrorApp extends StatelessWidget {
                           children: [
                             OutlinedButton.icon(
                               onPressed: () {
-                                final text = 'Error: $error\nStack:\n$stackTrace';
+                                final text =
+                                    'Error: $error\nStack:\n$stackTrace';
                                 Clipboard.setData(ClipboardData(text: text));
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('已复制错误信息到剪贴板'),
-                                  ),
+                                  const SnackBar(content: Text('已复制错误信息到剪贴板')),
                                 );
                               },
                               icon: const Icon(Icons.copy_outlined, size: 18),

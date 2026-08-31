@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/device/client_device_context.dart';
 import '../../../core/network/secure_token_storage.dart';
+import '../../../core/network/client_credentials_token_storage.dart';
 import '../../../core/network/token_storage.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../../core/realtime/signalr_gateway_factory.dart';
@@ -68,11 +69,20 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> sessionInvalidated() async {
+    await _signalRGateway.disconnect();
+    _status = AuthStatus.unauthenticated;
+    _errorMessage = '登录已过期，请重新登录。';
+    notifyListeners();
+  }
+
   Future<void> _restore() async {
     try {
-      final hasSession = await _repository
-          .restoreSession()
-          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+      // A stored session is valid for offline use. In particular, never turn
+      // a slow or unavailable refresh endpoint into a local logout here.
+      // [restoreSession] only returns false when there is no usable local
+      // session or the authorization server definitively rejects it.
+      final hasSession = await _repository.restoreSession();
       _status =
           hasSession ? AuthStatus.authenticated : AuthStatus.unauthenticated;
       if (hasSession) _connectRealtime();
@@ -96,6 +106,11 @@ final tokenStorageProvider = Provider<TokenStorage>(
   (ref) => SecureTokenStorage(),
 );
 
+final clientCredentialsTokenStorageProvider =
+    Provider<ClientCredentialsTokenStorage>(
+      (ref) => ClientCredentialsTokenStorage(),
+    );
+
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final environment = ref.watch(appEnvironmentProvider);
   final deviceContext = ref.watch(clientDeviceContextProvider);
@@ -103,6 +118,9 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     dio: OpenIdConnectAuthRepository.createDio(environment, deviceContext),
     environment: environment,
     tokenStorage: ref.watch(tokenStorageProvider),
+    clientCredentialsTokenStorage: ref.watch(
+      clientCredentialsTokenStorageProvider,
+    ),
     deviceContext: deviceContext,
   );
 });

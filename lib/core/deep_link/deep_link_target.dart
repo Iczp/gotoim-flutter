@@ -36,10 +36,7 @@ sealed class DeepLinkTarget {
 /// - `https://gotoim.com/chat/{sessionId}`
 /// - `https://gotoim.com/chat/{sessionId}/message/{messageId}`
 class ChatDeepLink extends DeepLinkTarget {
-  const ChatDeepLink({
-    required this.sessionId,
-    this.messageId,
-  });
+  const ChatDeepLink({required this.sessionId, this.messageId});
 
   final String sessionId;
   final int? messageId;
@@ -52,9 +49,9 @@ class ChatDeepLink extends DeepLinkTarget {
 
   @override
   Map<String, dynamic> toMap() => {
-        'sessionId': sessionId,
-        if (messageId != null) 'messageId': messageId,
-      };
+    'sessionId': sessionId,
+    if (messageId != null) 'messageId': messageId,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -248,10 +245,7 @@ class WorkbenchDeepLink extends DeepLinkTarget {
 /// - `gotoim-dev://oauth/callback?code={code}&state={state}`
 /// - `https://gotoim.com/oauth/callback?code={code}&state={state}`
 class OAuthCallbackDeepLink extends DeepLinkTarget {
-  const OAuthCallbackDeepLink({
-    required this.code,
-    this.state,
-  });
+  const OAuthCallbackDeepLink({required this.code, this.state});
 
   final String code;
   final String? state;
@@ -264,9 +258,9 @@ class OAuthCallbackDeepLink extends DeepLinkTarget {
 
   @override
   Map<String, dynamic> toMap() => {
-        'code': code,
-        if (state != null) 'state': state,
-      };
+    'code': code,
+    if (state != null) 'state': state,
+  };
 
   @override
   bool operator ==(Object other) =>

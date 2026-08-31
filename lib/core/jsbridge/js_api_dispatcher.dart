@@ -130,6 +130,33 @@ class JsApiDispatcher {
       case 'getNetworkType':
       case 'network.getNetworkType':
         return (await _capabilities.getNetworkType()).toJson();
+      case 'getWifiInfo':
+      case 'network.getWifiInfo':
+        return (await _capabilities.getWifiInfo()).toJson();
+      case 'requestWifiInfoPermission':
+      case 'permission.requestWifiInfo':
+        return (await _capabilities.requestWifiInfoPermission()).toJson();
+      case 'requestPermission':
+      case 'permission.request':
+        final value = _requiredString(request.data, 'permission');
+        final permission = switch (value) {
+          'photos' => ClientPermissionKind.photos,
+          'camera' => ClientPermissionKind.camera,
+          'microphone' => ClientPermissionKind.microphone,
+          'location' => ClientPermissionKind.location,
+          'wifiInfo' => ClientPermissionKind.wifiInfo,
+          _ => null,
+        };
+        if (permission == null) {
+          throw JsBridgeException('INVALID_ARGUMENT', '不支持的权限类型：$value');
+        }
+        return (await _capabilities.requestPermission(permission)).toJson();
+      case 'openWifiSettings':
+      case 'system.openWifiSettings':
+        return (await _capabilities.openWifiSettings()).toJson();
+      case 'openAppSettings':
+      case 'system.openAppSettings':
+        return (await _capabilities.openAppSettings()).toJson();
       case 'onNetworkStatusChange':
       case 'network.onStatusChange':
         return _subscribeNetworkStatus(request.data);
@@ -409,11 +436,34 @@ class JsApiDispatcher {
         final value = (request.data['value'] as num?)?.toDouble() ?? 1.0;
         final ok = await Native.setScreenBrightness(value);
         return <String, Object>{'ok': ok, 'value': value.clamp(0.0, 1.0)};
+      case 'setFlashlight':
+      case 'device.setFlashlight':
+        final enabled = request.data['enabled'] as bool? ?? false;
+        final ok = await Native.setFlashlight(enabled);
+        return <String, Object>{'ok': ok, 'enabled': enabled};
+      case 'getSystemVolume':
+      case 'device.getSystemVolume':
+        final value = await Native.getSystemVolume();
+        return <String, Object>{
+          'supported': value >= 0,
+          if (value >= 0) 'value': value,
+        };
+      case 'setSystemVolume':
+      case 'device.setSystemVolume':
+        final value =
+            _requiredDouble(request.data, 'value').clamp(0.0, 1.0).toDouble();
+        final ok = await Native.setSystemVolume(value);
+        return <String, Object>{'ok': ok, 'value': value};
       case 'makePhoneCall':
       case 'system.makePhoneCall':
         final phoneNumber = _requiredString(request.data, 'phoneNumber');
         final ok = await Native.makePhoneCall(phoneNumber);
         return <String, bool>{'ok': ok};
+      case 'setDesktopBadge':
+      case 'desktop.setBadge':
+        final count = _optionalInt(request.data, 'count') ?? 0;
+        final ok = await Native.setDesktopBadge(count);
+        return <String, Object>{'ok': ok, 'count': count > 0 ? count : 0};
       case 'onUserCaptureScreen':
       case 'system.onUserCaptureScreen':
         final subId =
@@ -842,7 +892,8 @@ class JsApiDispatcher {
   MediaPickRequest _mediaPickRequest(Map<String, dynamic> data) {
     final count = _optionalInt(data, 'count') ?? _optionalInt(data, 'maxCount');
     return MediaPickRequest(
-      allowMultiple: data['allowMultiple'] == true || (count != null && count > 1),
+      allowMultiple:
+          data['allowMultiple'] == true || (count != null && count > 1),
       maxCount: count,
       preserveOriginal: data['preserveOriginal'] != false,
       imageQuality: _optionalInt(data, 'imageQuality'),
@@ -859,21 +910,26 @@ class JsApiDispatcher {
     final count = _optionalInt(data, 'count') ?? _optionalInt(data, 'maxCount');
     final rawExt = data['allowedExtensions'] ?? data['extensions'];
     final extensions = rawExt is List ? _stringList(rawExt) : <String>[];
-    final typeString = _optionalString(data, 'fileType') ?? _optionalString(data, 'type');
+    final typeString =
+        _optionalString(data, 'fileType') ?? _optionalString(data, 'type');
     final category = switch (typeString?.toLowerCase()) {
       'image' || 'images' => FileTypeCategory.image,
       'video' || 'videos' => FileTypeCategory.video,
       'audio' || 'audios' => FileTypeCategory.audio,
       'media' => FileTypeCategory.media,
       'custom' => FileTypeCategory.custom,
-      _ => extensions.isNotEmpty ? FileTypeCategory.custom : FileTypeCategory.any,
+      _ =>
+        extensions.isNotEmpty ? FileTypeCategory.custom : FileTypeCategory.any,
     };
     return FilePickerRequest(
-      allowMultiple: data['allowMultiple'] == true || (count != null && count > 1),
+      allowMultiple:
+          data['allowMultiple'] == true || (count != null && count > 1),
       maxCount: count,
       allowedExtensions: extensions,
       fileType: category,
-      dialogTitle: _optionalString(data, 'title') ?? _optionalString(data, 'dialogTitle'),
+      dialogTitle:
+          _optionalString(data, 'title') ??
+          _optionalString(data, 'dialogTitle'),
     );
   }
 
@@ -893,6 +949,14 @@ class JsApiDispatcher {
     if (value == null) return null;
     if (value is num) return value.toDouble();
     throw JsBridgeException('INVALID_ARGUMENT', '$key 必须是数字。');
+  }
+
+  double _requiredDouble(Map<String, dynamic> data, String key) {
+    final value = _optionalDouble(data, key);
+    if (value == null) {
+      throw JsBridgeException('INVALID_ARGUMENT', '$key 必须是数字。');
+    }
+    return value;
   }
 
   ImageOutputFormat _imageFormat(Object? value) => switch (value) {

@@ -37,9 +37,8 @@ abstract interface class MiniAppLaunchHandler {
 /// Provider for the application task manager. Overridden at bootstrap with the
 /// platform-appropriate implementation.
 final appTaskManagerProvider = Provider<AppTaskManager>(
-  (ref) => throw UnimplementedError(
-    'AppTaskManager must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError('AppTaskManager must be provided at bootstrap.'),
 );
 
 /// Helper that opens a [WorkbenchApp] using the appropriate mechanism based
@@ -73,8 +72,10 @@ Future<void> openWorkbenchApp(
       );
     case AppOpenMode.current:
       // Future: open inside the current container.
-      debugPrint('[AppTask] openMode=current is not yet implemented, '
-          'falling back to page mode for ${app.appId}');
+      debugPrint(
+        '[AppTask] openMode=current is not yet implemented, '
+        'falling back to page mode for ${app.appId}',
+      );
       await taskManager.openMiniApp(
         MiniAppTaskRequest(
           appId: app.appId,

@@ -47,12 +47,12 @@ class DeepLinkExecutionResult {
   bool get isNotImplemented => status == DeepLinkExecutionStatus.notImplemented;
 
   Map<String, dynamic> toMap() => {
-        'status': status.name,
-        if (target != null) 'target': target!.toMap(),
-        if (target != null) 'targetType': target!.targetType,
-        'message': message,
-        'elapsedMs': elapsedMs,
-      };
+    'status': status.name,
+    if (target != null) 'target': target!.toMap(),
+    if (target != null) 'targetType': target!.targetType,
+    'message': message,
+    'elapsedMs': elapsedMs,
+  };
 
   @override
   String toString() =>
@@ -322,12 +322,15 @@ class DeepLinkHandler {
           return DeepLinkExecutionResult(
             status: DeepLinkExecutionStatus.success,
             target: target,
-            message: '成功通过 DeepLink 打开独立应用: ${matchedApp.name} (${matchedApp.appId})',
+            message:
+                '成功通过 DeepLink 打开独立应用: ${matchedApp.name} (${matchedApp.appId})',
             elapsedMs: stopwatch.elapsedMilliseconds,
           );
         }
       } catch (e) {
-        debugPrint('[DeepLinkHandler] Failed to launch workbench app "$appId": $e');
+        debugPrint(
+          '[DeepLinkHandler] Failed to launch workbench app "$appId": $e',
+        );
       }
     }
 

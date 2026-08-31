@@ -179,134 +179,138 @@ class _ScanLoginConfirmationPageState
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                          if (_remainingSeconds != null)
-                            Center(
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 7,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: countdownColor.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  expiryWarning
-                                      ? '即将过期  $_countdownText'
-                                      : '剩余时间  $_countdownText',
-                                  style: theme.textTheme.labelLarge?.copyWith(
-                                    color: countdownColor,
-                                    fontWeight: FontWeight.w700,
+                            if (_remainingSeconds != null)
+                              Center(
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 300),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 7,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: countdownColor.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    expiryWarning
+                                        ? '即将过期  $_countdownText'
+                                        : '剩余时间  $_countdownText',
+                                    style: theme.textTheme.labelLarge?.copyWith(
+                                      color: countdownColor,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          const SizedBox(height: 12),
-                          Icon(
-                            Icons.devices_outlined,
-                            size: 52,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            _expired ? '登录二维码已过期' : '是否允许此设备登录？',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 20),
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _DeviceField(
-                                    '应用',
-                                    request.device.appName ?? '未提供',
-                                  ),
-                                  _DeviceField(
-                                    '设备',
-                                    request.device.deviceInfo ?? '未提供',
-                                  ),
-                                  _DeviceField(
-                                    '客户端',
-                                    request.device.clientId ?? '未提供',
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            '授权账号：${request.scanUserName ?? '当前账号'}',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '四位校验码',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.labelLarge,
-                          ),
-                          const SizedBox(height: 8),
-                          VerificationCodeBoxes(
-                            code: request.state,
-                            color: countdownColor,
-                          ),
-                          if (controller.error != null) ...[
                             const SizedBox(height: 12),
-                            Text(
-                              controller.authorizationAttempted
-                                  ? '授权请求未确认，请返回后重新扫码。'
-                                  : '操作失败：${controller.error}',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: theme.colorScheme.error),
+                            Icon(
+                              Icons.devices_outlined,
+                              size: 52,
+                              color: theme.colorScheme.primary,
                             ),
-                          ],
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed:
-                                      controller.submitting ||
-                                              controller
-                                                  .authorizationAttempted ||
-                                              _expired
-                                          ? null
-                                          : () => _submit(approved: false),
-                                  child: const Text('拒绝'),
+                            const SizedBox(height: 20),
+                            Text(
+                              _expired ? '登录二维码已过期' : '是否允许此设备登录？',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.headlineSmall,
+                            ),
+                            const SizedBox(height: 20),
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _DeviceField(
+                                      '应用',
+                                      request.device.appName ?? '未提供',
+                                    ),
+                                    _DeviceField(
+                                      '设备',
+                                      request.device.deviceInfo ?? '未提供',
+                                    ),
+                                    _DeviceField(
+                                      '客户端',
+                                      request.device.clientId ?? '未提供',
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: FilledButton(
-                                  onPressed:
-                                      controller.submitting ||
-                                              controller
-                                                  .authorizationAttempted ||
-                                              !request.canAuthorize ||
-                                              _expired
-                                          ? null
-                                          : () => _submit(approved: true),
-                                  child:
-                                      controller.submitting
-                                          ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                          : const Text('同意登录'),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              '授权账号：${request.scanUserName ?? '当前账号'}',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '四位校验码',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.labelLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            VerificationCodeBoxes(
+                              code: request.state,
+                              color: countdownColor,
+                            ),
+                            if (controller.error != null) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                controller.authorizationAttempted
+                                    ? '授权请求未确认，请返回后重新扫码。'
+                                    : '操作失败：${controller.error}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
                                 ),
                               ),
                             ],
-                          ),
-                        ],
+                            const SizedBox(height: 24),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed:
+                                        controller.submitting ||
+                                                controller
+                                                    .authorizationAttempted ||
+                                                _expired
+                                            ? null
+                                            : () => _submit(approved: false),
+                                    child: const Text('拒绝'),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: FilledButton(
+                                    onPressed:
+                                        controller.submitting ||
+                                                controller
+                                                    .authorizationAttempted ||
+                                                !request.canAuthorize ||
+                                                _expired
+                                            ? null
+                                            : () => _submit(approved: true),
+                                    child:
+                                        controller.submitting
+                                            ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                            : const Text('同意登录'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
             ),
           ),
         ),

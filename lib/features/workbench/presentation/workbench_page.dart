@@ -65,9 +65,9 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('打开 ${app.name} 失败：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('打开 ${app.name} 失败：$e')));
       }
     }
   }
@@ -92,9 +92,9 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deep Link 打开失败：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Deep Link 打开失败：$e')));
       }
     }
   }
@@ -162,9 +162,9 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
                   onTap: () {
                     Navigator.pop(context);
                     Clipboard.setData(ClipboardData(text: deepLinkStr));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('已复制：$deepLinkStr')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('已复制：$deepLinkStr')));
                   },
                 ),
               ],
@@ -211,9 +211,11 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
             return _AppGridItem(
               app: app,
               useDeepLink: _useDeepLinkMode,
-              onTap: () => _useDeepLinkMode
-                  ? _openAppViaDeepLink(app)
-                  : _openAppDirect(app),
+              onTap:
+                  () =>
+                      _useDeepLinkMode
+                          ? _openAppViaDeepLink(app)
+                          : _openAppDirect(app),
               onLongPress: () => _showAppActionSheet(app),
             );
           },
@@ -232,9 +234,10 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
                 Icon(
                   _useDeepLinkMode ? Icons.link : Icons.open_in_new,
                   size: 18,
-                  color: _useDeepLinkMode
-                      ? Theme.of(context).colorScheme.primary
-                      : Colors.grey,
+                  color:
+                      _useDeepLinkMode
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -242,9 +245,10 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: _useDeepLinkMode
-                        ? Theme.of(context).colorScheme.primary
-                        : Colors.grey,
+                    color:
+                        _useDeepLinkMode
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
                 Switch(
@@ -305,7 +309,7 @@ class _AppGridItem extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
+                      color: colorScheme.shadow.withValues(alpha: 0.08),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),

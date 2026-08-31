@@ -138,7 +138,10 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                     decoration: InputDecoration(
                       labelText: 'Harness 地址',
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       errorText: _inputError,
                       border: const OutlineInputBorder(),
                     ),
@@ -236,7 +239,10 @@ class _HostPingResult extends StatelessWidget {
                     child: SelectionArea(
                       child: Text(
                         'Flutter → H5 Ping 回执\n$value',
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ),

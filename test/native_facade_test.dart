@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/native/native.dart';
 
@@ -22,51 +21,73 @@ void main() {
   });
 
   group('Native Device Capabilities', () {
-    test('Native.getBatteryInfo returns default safe battery info in test environment', () async {
-      final info = await Native.getBatteryInfo();
-      expect(info.level, isNonNegative);
-      expect(info.status, isNotNull);
-    });
+    test(
+      'Native.getBatteryInfo returns default safe battery info in test environment',
+      () async {
+        final info = await Native.getBatteryInfo();
+        expect(info.level, isNonNegative);
+        expect(info.status, isNotNull);
+      },
+    );
 
-    test('Native.getScreenBrightness returns valid clamped brightness', () async {
-      final brightness = await Native.getScreenBrightness();
-      expect(brightness, inInclusiveRange(0.0, 1.0));
-    });
+    test(
+      'Native.getScreenBrightness returns valid clamped brightness',
+      () async {
+        final brightness = await Native.getScreenBrightness();
+        expect(brightness, inInclusiveRange(0.0, 1.0));
+      },
+    );
 
     test('Native.vibrate completes without unhandled exception', () async {
       await expectLater(Native.vibrate(HapticFeedbackType.light), completes);
       await expectLater(Native.vibrate(HapticFeedbackType.medium), completes);
       await expectLater(Native.vibrate(HapticFeedbackType.heavy), completes);
-      await expectLater(Native.vibrate(HapticFeedbackType.selection), completes);
+      await expectLater(
+        Native.vibrate(HapticFeedbackType.selection),
+        completes,
+      );
     });
+
+    test(
+      'new device controls safely report unsupported in a test runtime',
+      () async {
+        expect(await Native.setFlashlight(true), isFalse);
+        expect(await Native.getSystemVolume(), -1);
+        expect(await Native.setSystemVolume(0.5), isFalse);
+        expect(await Native.setDesktopBadge(7), isFalse);
+      },
+    );
   });
 
   group('Native Sensor Lifecycle & Cancellation', () {
-    test('Native.sensor manages subscription and cancellation lifecycle safely', () {
-      var accCount = 0;
-      final accSub = Native.onAccelerometerChange((event) {
-        accCount++;
-      });
-      expect(accSub, isNotNull);
-      Native.offAccelerometer();
+    test(
+      'Native.sensor manages subscription and cancellation lifecycle safely',
+      () {
+        var accCount = 0;
+        final accSub = Native.onAccelerometerChange((event) {
+          accCount++;
+        });
+        expect(accSub, isNotNull);
+        Native.offAccelerometer();
 
-      var gyroCount = 0;
-      final gyroSub = Native.onGyroscopeChange((event) {
-        gyroCount++;
-      });
-      expect(gyroSub, isNotNull);
-      Native.offGyroscope();
+        var gyroCount = 0;
+        final gyroSub = Native.onGyroscopeChange((event) {
+          gyroCount++;
+        });
+        expect(gyroSub, isNotNull);
+        Native.offGyroscope();
 
-      var proxCount = 0;
-      final proxSub = Native.onProximityChange((event) {
-        proxCount++;
-      });
-      expect(proxSub, isNotNull);
-      Native.offProximity();
+        var proxCount = 0;
+        final proxSub = Native.onProximityChange((event) {
+          proxCount++;
+        });
+        expect(proxSub, isNotNull);
+        Native.offProximity();
 
-      expect(accCount, 0);
-      expect(gyroCount, 0);
-      expect(proxCount, 0);
-    });
+        expect(accCount, 0);
+        expect(gyroCount, 0);
+        expect(proxCount, 0);
+      },
+    );
   });
 }

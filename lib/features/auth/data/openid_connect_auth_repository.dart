@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/device/client_device_context.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/network/client_credentials_token_storage.dart';
 import '../../../core/network/token_refresher.dart';
 import '../../../core/network/token_storage.dart';
 import '../domain/auth_repository.dart';
@@ -15,17 +16,21 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     required Dio dio,
     required AppEnvironment environment,
     required TokenStorage tokenStorage,
+    required ClientCredentialsTokenStorage clientCredentialsTokenStorage,
     required ClientDeviceContext deviceContext,
   }) : _dio = dio,
        _environment = environment,
        _tokenStorage = tokenStorage,
+       _clientCredentialsTokenStorage = clientCredentialsTokenStorage,
        _deviceContext = deviceContext;
 
   final Dio _dio;
   final AppEnvironment _environment;
   final TokenStorage _tokenStorage;
+  final ClientCredentialsTokenStorage _clientCredentialsTokenStorage;
   final ClientDeviceContext _deviceContext;
   Future<AuthSession>? _refreshInFlight;
+  final Map<String, Future<String>> _clientCredentialsInFlight = {};
 
   static Dio createDio(
     AppEnvironment environment,
@@ -68,13 +73,70 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
 
   @override
   Future<String> getClientCredentialsAccessToken() async {
-    final session = await _requestToken(
-      const <String, String>{'grant_type': 'client_credentials'},
+    return _getClientCredentialsToken(
+      cacheKey: 'scan-login',
       tokenUrl: _environment.scanLoginAuthTokenUrl,
       clientId: _environment.scanLoginAuthClientId,
       clientSecret: _environment.scanLoginAuthClientSecret,
       scope: _environment.scanLoginAuthScope,
     );
+  }
+
+  /// Token for `/api/chat/device/register`; it never shares user-token state.
+  Future<String> getDeviceRegistrationAccessToken() =>
+      _getClientCredentialsToken(
+        cacheKey: 'device-register',
+        tokenUrl: _environment.authTokenUrl,
+        clientId: _environment.authClientId,
+        clientSecret: _environment.authClientSecret,
+        scope: 'IM',
+      );
+
+  Future<String> _getClientCredentialsToken({
+    required String cacheKey,
+    required String tokenUrl,
+    required String clientId,
+    required String clientSecret,
+    required String scope,
+  }) async {
+    final stored = await _clientCredentialsTokenStorage.readValidAccessToken(
+      cacheKey,
+    );
+    if (stored != null) return stored;
+    return _clientCredentialsInFlight[cacheKey] ??= _requestClientCredentials(
+      cacheKey: cacheKey,
+      tokenUrl: tokenUrl,
+      clientId: clientId,
+      clientSecret: clientSecret,
+      scope: scope,
+    ).whenComplete(() => _clientCredentialsInFlight.remove(cacheKey));
+  }
+
+  Future<String> _requestClientCredentials({
+    required String cacheKey,
+    required String tokenUrl,
+    required String clientId,
+    required String clientSecret,
+    required String scope,
+  }) async {
+    final session = await _requestToken(
+      const <String, String>{'grant_type': 'client_credentials'},
+      tokenUrl: tokenUrl,
+      clientId: clientId,
+      clientSecret: clientSecret,
+      scope: scope,
+    );
+    // OpenIddict normally returns expires_in, but it is optional in the DTO.
+    // Never invent a lifetime: without it the token is returned for this call
+    // and will be acquired again next time instead of being persisted stale.
+    final expiresIn = session.expiresIn;
+    if (expiresIn != null) {
+      await _clientCredentialsTokenStorage.save(
+        cacheKey,
+        accessToken: session.accessToken,
+        expiresIn: expiresIn,
+      );
+    }
     return session.accessToken;
   }
 
@@ -151,7 +213,16 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   }
 
   @override
-  Future<bool> restoreSession() => _tokenStorage.hasToken();
+  Future<bool> restoreSession() async {
+    final accessToken = await _tokenStorage.readAccessToken();
+    if (accessToken == null || accessToken.isEmpty) return false;
+
+    // Startup must be offline-first: an expired access token is still enough
+    // to restore the locally cached IM data. The first authenticated API call
+    // refreshes it through DioApiClient; only an explicit refresh rejection
+    // then clears the session and redirects to login.
+    return true;
+  }
 
   @override
   Future<void> revoke(RevocationTokenType tokenType) async {
@@ -169,7 +240,10 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   Future<AuthSession> _refresh() async {
     final refreshToken = await _tokenStorage.readRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) {
-      throw const ApiException('No refresh token is available.');
+      throw const TokenRefreshRejectedException(
+        'No refresh token is available.',
+        code: 'missing_refresh_token',
+      );
     }
     final session = await _requestToken(<String, String>{
       'grant_type': 'refresh_token',
@@ -214,7 +288,23 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
           body is Map && body['error_description'] != null
               ? body['error_description'].toString()
               : 'Login failed. Please check your network and credentials.';
-      throw ApiException(message, statusCode: error.response?.statusCode);
+      final code = body is Map ? body['error']?.toString() : null;
+      final statusCode = error.response?.statusCode;
+      final exception = ApiException(
+        message,
+        statusCode: statusCode,
+        code: code,
+      );
+      if (fields['grant_type'] == 'refresh_token' &&
+          (statusCode == 400 || statusCode == 401) &&
+          const <String>{
+            'invalid_grant',
+            'invalid_token',
+            'unauthorized_client',
+          }.contains(code)) {
+        throw TokenRefreshRejectedException(message, code: code);
+      }
+      throw exception;
     }
   }
 

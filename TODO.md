@@ -26,11 +26,11 @@
 1. 做自定义渲染
 2. 消息文本渲染
 
-### 文件选择
+### 文件选择（OK）
 
 单选和多选，支持文件类型，多选时，选择器要有多选框，要有最大选择数，
 
-### 数据库方案
+### 数据库方案(OK)
 
 迁移数据库，统一封装，原项目使用了Sqlite和IndexDb，主要是因为Web端不支持Sqlite，现在使用Flutter,  也是兼容多平台，移动端、桌面端，和WEB端。  能统一方案是最好的。
 
@@ -76,7 +76,7 @@
 
 ### 生物认证
 
-### 开始 SOTER 生物认证。 startSoterAuthentication
+开始 SOTER 生物认证。 startSoterAuthentication
 
 获取本机支持的 SOTER 生物认证方式
 
@@ -111,4 +111,28 @@
 ### Maps模块管理地图控件
 
 ### 桌面角标
+
+
+
+当前未完成的主要功能（已于 2026-08-30 更新）：
+
+- SignalR 重连后的全量补偿、跨账号事件路由和真实服务端事件样本联调；当前已实现全局事件落库与缓存身份的增量同步。
+- 联系人索引缓存失效策略、远端删除/隐藏联系人处理和大联系人集分页；当前已支持本地索引快照与会话缓存降级。
+- 端到端 IM 联调：多端收发、撤回/删除/已读、离线重启和冲突去重。
+- 群组创建与管理、成员、会话设置、资料/个人中心、设备管理的完整业务闭环。
+- HTML 消息渲染及尚未接入的消息类型（位置、名片、音视频通话、红包、收藏）。
+- 推送/离线通知、设备注册、桌面角标与独立聊天窗口。
+- 生物认证、分享、统计、统一日志、头像裁剪、地图/位置等 [`TODO.md`](F:\\Dev\\GotoIM\\gotoim-flutter\\TODO.md) 项目。
+- `freezed`、`json_serializable`、`build_runner` 尚未接入；这与项目规范中的 DTO/Model 生成要求不一致。
+- 工作台应从 Mock 数据源替换为 API + Drift 缓存；需要后端先提供并确认应用列表契约，禁止猜测接口路径。
+- Auth 配置允许可选 `AUTH_CLIENT_SECRET` 打包进 `.env`；生产环境必须改为公开客户端 / PKCE，不能在客户端保存真实 secret。
+
+建议下一步先做“真实服务端联调与同步可靠性”：
+
+1. 建立 `features/session` 和 `features/chat` 的 DTO、领域模型、Drift 表/DAO；补齐 `localId / serverId / clientMessageId / sessionId / sessionMessageId` 与消息状态。
+2. 实现 `SessionRepository`、`MessageRepository`：本地先展示、HTTP 增量拉取、SignalR 事件落库、发送 Pending→Sent/Failed。
+3. 给这条链路补并发、去重、分页、401 刷新、SignalR 同步测试，并在诊断中心加入“会话/消息同步测试”。
+4. 再基于这些流构建响应式会话列表；聊天页随后用 `CustomScrollView/SliverList` 实现分页与稳定滚动。
+
+这条顺序最稳：先让 IM 数据可离线、可同步、可测试，再做页面，避免未来把 UI 与 HTTP/SignalR 直接绑死。
 

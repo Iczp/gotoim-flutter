@@ -10,7 +10,8 @@ abstract class AuthRepository {
   Future<void> loginWithScanToken(String scanToken);
 
   /// Gets a short-lived public-client token used only to establish an
-  /// unauthenticated scan-login challenge. It is never persisted.
+  /// unauthenticated scan-login challenge. It is stored separately from the
+  /// signed-in user's credential pair.
   Future<String> getClientCredentialsAccessToken();
 
   Future<void> logout();

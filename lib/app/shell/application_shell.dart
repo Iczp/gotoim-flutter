@@ -1,66 +1,224 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
 
-import '../../core/config/app_environment.dart';
-import '../../core/platform/platform_facade.dart';
-import '../../features/auth/application/auth_controller.dart';
+import '../../core/widgets/glass_container.dart';
+import '../../features/home/presentation/home_sections.dart';
+import '../../features/session/application/session_list_controller.dart';
+import '../../features/session/presentation/session_list_page.dart';
 import '../layout/app_breakpoints.dart';
 
-/// A platform-neutral host for future feature routes.
-///
-/// It intentionally contains no migrated IM business page or business state.
-class ApplicationShell extends ConsumerWidget {
+/// Responsive host for the IM's top-level sections.
+class ApplicationShell extends ConsumerStatefulWidget {
   const ApplicationShell({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final platform = ref.watch(platformFacadeProvider);
-    final environment = ref.watch(appEnvironmentProvider);
+  ConsumerState<ApplicationShell> createState() => _ApplicationShellState();
+}
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final layout = AppBreakpoints.resolve(constraints.maxWidth);
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Goto IM'),
-            actions: [
-              if (kDebugMode)
-                IconButton(
-                  tooltip: '开发诊断中心',
-                  icon: const Icon(Icons.network_check),
-                  onPressed: () => context.go('/diagnostics'),
-                ),
-              IconButton(
-                tooltip: '扫码登录',
-                icon: const Icon(Icons.qr_code_scanner_outlined),
-                onPressed: () => context.push('/scan-login/scan'),
-              ),
-              IconButton(
-                tooltip: '退出登录',
-                icon: const Icon(Icons.logout),
-                onPressed: () => ref.read(authControllerProvider).logout(),
-              ),
-            ],
-          ),
-          body: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Cross-platform foundation ready\n'
-                  'environment: ${environment.flavor.name}\n'
-                  'runtime: ${platform.kind.name}\n'
-                  'layout: ${layout.name}',
-                  textAlign: TextAlign.center,
+class _ApplicationShellState extends ConsumerState<ApplicationShell> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  HomeSection _section = HomeSection.messages;
+  // Tabs are created on first visit only, then kept alive so switching does
+  // not recreate lists, restart requests, or reset their scroll positions.
+  final Set<HomeSection> _visitedSections = <HomeSection>{HomeSection.messages};
+  DateTime? _lastMessagesTabTap;
+
+  void _select(HomeSection section) {
+    final now = DateTime.now();
+    if (section == HomeSection.messages && _section == HomeSection.messages) {
+      final previous = _lastMessagesTabTap;
+      _lastMessagesTabTap = now;
+      if (previous != null &&
+          now.difference(previous) <= const Duration(milliseconds: 450)) {
+        _lastMessagesTabTap = null;
+        ref.read(sessionListControllerProvider).requestFocusUnread();
+      }
+      return;
+    }
+    _lastMessagesTabTap = section == HomeSection.messages ? now : null;
+    setState(() {
+      _section = section;
+      _visitedSections.add(section);
+    });
+  }
+
+  void _openOwnerDrawer() => _scaffoldKey.currentState?.openDrawer();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    // 与工作台 AppBar 及各 Tab 的页面内标题栏使用同一主题色，避免色差。
+    final headerColor = theme.colorScheme.surface;
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: headerColor,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final layout = AppBreakpoints.resolve(constraints.maxWidth);
+          final isCompact = layout == WindowLayout.mobile;
+          final content = _LazyHomeSectionStack(
+            selected: _section,
+            visited: _visitedSections,
+            isCompact: isCompact,
+            onOpenOwnerDrawer: _openOwnerDrawer,
+          );
+
+          return Scaffold(
+            key: _scaffoldKey,
+            drawer: ChatOwnerDrawer(
+              controller: ref.watch(sessionListControllerProvider),
+            ),
+            body:
+                isCompact
+                    ? content
+                    : Row(
+                      children: [
+                        _HomeNavigationRail(
+                          selected: _section,
+                          extended: layout == WindowLayout.desktop,
+                          onSelected: _select,
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(child: content),
+                      ],
+                    ),
+            bottomNavigationBar:
+                isCompact
+                    ? _HomeNavigationBar(
+                      selected: _section,
+                      onSelected: _select,
+                    )
+                    : null,
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Non-PageView tab host: pages are lazy-created and their state is retained.
+///
+/// [Offstage] avoids painting inactive lists, while [TickerMode] pauses their
+/// animations. This keeps a tab switch lightweight without eager-initing all
+/// five top-level pages.
+class _LazyHomeSectionStack extends StatelessWidget {
+  const _LazyHomeSectionStack({
+    required this.selected,
+    required this.visited,
+    required this.isCompact,
+    required this.onOpenOwnerDrawer,
+  });
+
+  final HomeSection selected;
+  final Set<HomeSection> visited;
+  final bool isCompact;
+  final VoidCallback onOpenOwnerDrawer;
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = HomeSection.values
+        .where(visited.contains)
+        .toList(growable: false);
+    return Stack(
+      fit: StackFit.expand,
+      children: sections
+          .map(
+            (section) => Offstage(
+              offstage: section != selected,
+              child: TickerMode(
+                enabled: section == selected,
+                child: HomeSectionPage(
+                  key: PageStorageKey<String>('home-section-${section.name}'),
+                  section: section,
+                  isCompact: isCompact,
+                  onOpenOwnerDrawer: onOpenOwnerDrawer,
                 ),
               ),
             ),
-          ),
-        );
-      },
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
+class _HomeNavigationBar extends StatelessWidget {
+  const _HomeNavigationBar({required this.selected, required this.onSelected});
+
+  final HomeSection selected;
+  final ValueChanged<HomeSection> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final dividerColor = Theme.of(context).dividerColor.withValues(alpha: .55);
+    return GlassContainer(
+      borderRadius: BorderRadius.zero,
+      borderWidth: 0,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: dividerColor, width: .8)),
+        ),
+        child: NavigationBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          selectedIndex: HomeSection.values.indexOf(selected),
+          onDestinationSelected:
+              (index) => onSelected(HomeSection.values[index]),
+          destinations:
+              HomeSection.values
+                  .map(
+                    (section) => NavigationDestination(
+                      icon: Icon(section.icon),
+                      selectedIcon: Icon(section.selectedIcon),
+                      label: section.label,
+                    ),
+                  )
+                  .toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeNavigationRail extends StatelessWidget {
+  const _HomeNavigationRail({
+    required this.selected,
+    required this.extended,
+    required this.onSelected,
+  });
+
+  final HomeSection selected;
+  final bool extended;
+  final ValueChanged<HomeSection> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassContainer(
+      borderRadius: BorderRadius.zero,
+      borderWidth: 0,
+      child: NavigationRail(
+        backgroundColor: Colors.transparent,
+        extended: extended,
+        minExtendedWidth: 180,
+        selectedIndex: HomeSection.values.indexOf(selected),
+        onDestinationSelected: (index) => onSelected(HomeSection.values[index]),
+        labelType: extended ? null : NavigationRailLabelType.all,
+        destinations:
+            HomeSection.values
+                .map(
+                  (section) => NavigationRailDestination(
+                    icon: Icon(section.icon),
+                    selectedIcon: Icon(section.selectedIcon),
+                    label: Text(section.label),
+                  ),
+                )
+                .toList(),
+      ),
     );
   }
 }

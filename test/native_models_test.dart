@@ -6,11 +6,7 @@ void main() {
 
   group('Native Models Serialization & Deserialization', () {
     test('BatteryInfo parses from map and serializes to map', () {
-      final map = {
-        'level': 88,
-        'isCharging': true,
-        'status': 'charging',
-      };
+      final map = {'level': 88, 'isCharging': true, 'status': 'charging'};
 
       final info = BatteryInfo.fromMap(map);
       expect(info.level, 88);
@@ -31,11 +27,7 @@ void main() {
     });
 
     test('AccelerometerEvent parses from map correctly', () {
-      final map = {
-        'x': 0.12,
-        'y': 9.81,
-        'z': -0.05,
-      };
+      final map = {'x': 0.12, 'y': 9.81, 'z': -0.05};
 
       final event = AccelerometerEvent.fromMap(map);
       expect(event.x, 0.12);
@@ -50,11 +42,7 @@ void main() {
     });
 
     test('GyroscopeEvent parses from map correctly', () {
-      final map = {
-        'x': 0.01,
-        'y': -0.02,
-        'z': 0.05,
-      };
+      final map = {'x': 0.01, 'y': -0.02, 'z': 0.05};
 
       final event = GyroscopeEvent.fromMap(map);
       expect(event.x, 0.01);
@@ -69,17 +57,12 @@ void main() {
     });
 
     test('ProximityEvent parses distance and calculates isNear correctly', () {
-      final nearMap = {
-        'distance': 1.5,
-        'isNear': true,
-      };
+      final nearMap = {'distance': 1.5, 'isNear': true};
       final nearEvent = ProximityEvent.fromMap(nearMap);
       expect(nearEvent.distance, 1.5);
       expect(nearEvent.isNear, isTrue);
 
-      final farMap = {
-        'distance': 10.0,
-      };
+      final farMap = {'distance': 10.0};
       final farEvent = ProximityEvent.fromMap(farMap);
       expect(farEvent.distance, 10.0);
       expect(farEvent.isNear, isFalse);

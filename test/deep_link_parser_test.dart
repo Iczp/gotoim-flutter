@@ -109,10 +109,7 @@ void main() {
       final result = parser.parse(uri);
 
       expect(result.status, DeepLinkParseStatus.success);
-      expect(
-        result.target,
-        equals(const ScanLoginDeepLink(qrCode: 'abc123')),
-      );
+      expect(result.target, equals(const ScanLoginDeepLink(qrCode: 'abc123')));
     });
 
     test('parses scan-login with query parameter code', () {
@@ -131,10 +128,7 @@ void main() {
       final result = parser.parse(uri);
 
       expect(result.status, DeepLinkParseStatus.success);
-      expect(
-        result.target,
-        equals(const WorkbenchDeepLink(appId: 'mail')),
-      );
+      expect(result.target, equals(const WorkbenchDeepLink(appId: 'mail')));
     });
 
     test('parses OAuth callback link with code and state', () {
@@ -151,7 +145,9 @@ void main() {
 
   group('DeepLinkParser Security & Token Restrictions', () {
     test('rejects URI containing access_token', () {
-      final uri = Uri.parse('gotoim-dev://oauth/callback?access_token=secret_token');
+      final uri = Uri.parse(
+        'gotoim-dev://oauth/callback?access_token=secret_token',
+      );
       final result = parser.parse(uri);
 
       expect(result.status, DeepLinkParseStatus.invalid);
@@ -159,7 +155,9 @@ void main() {
     });
 
     test('rejects URI containing refresh_token', () {
-      final uri = Uri.parse('gotoim-dev://oauth/callback?refresh_token=secret_refresh');
+      final uri = Uri.parse(
+        'gotoim-dev://oauth/callback?refresh_token=secret_refresh',
+      );
       final result = parser.parse(uri);
 
       expect(result.status, DeepLinkParseStatus.invalid);
@@ -184,13 +182,16 @@ void main() {
       expect(result.reason, contains('Missing sessionId'));
     });
 
-    test('returns invalid when chat link with trailing slash lacks sessionId', () {
-      final uri = Uri.parse('gotoim-dev://chat/');
-      final result = parser.parse(uri);
+    test(
+      'returns invalid when chat link with trailing slash lacks sessionId',
+      () {
+        final uri = Uri.parse('gotoim-dev://chat/');
+        final result = parser.parse(uri);
 
-      expect(result.status, DeepLinkParseStatus.invalid);
-      expect(result.reason, contains('Missing sessionId'));
-    });
+        expect(result.status, DeepLinkParseStatus.invalid);
+        expect(result.reason, contains('Missing sessionId'));
+      },
+    );
 
     test('returns invalid when chat message link lacks messageId', () {
       final uri = Uri.parse('gotoim-dev://chat/123/message');

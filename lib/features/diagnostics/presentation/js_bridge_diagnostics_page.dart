@@ -127,7 +127,8 @@ class _JsBridgeDiagnosticsPageState
       final response = await _invoke(offAction, <String, Object?>{
         'subscriptionId': currentSubId,
       });
-      if ((response?['success'] == true || response?['data'] is Map) && mounted) {
+      if ((response?['success'] == true || response?['data'] is Map) &&
+          mounted) {
         setState(() => onSubIdChanged(null));
       }
     }
@@ -220,7 +221,10 @@ class _JsBridgeDiagnosticsPageState
           const SizedBox(height: 16),
 
           // 2. Preset Buttons Categories
-          Text('快捷预设请求 (Presets)', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            '快捷预设请求 (Presets)',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           _buildPresetsSection(),
           const SizedBox(height: 16),
@@ -233,20 +237,22 @@ class _JsBridgeDiagnosticsPageState
             uploadTaskId: _uploadTaskId,
             working: _working,
             onChooseFile: _chooseUploadFile,
-            onSubscribe: () => _toggleSubscription(
-              onAction: 'file.onUploadEvent',
-              offAction: 'file.offUploadEvent',
-              currentSubId: _uploadSubId,
-              onSubIdChanged: (id) => _uploadSubId = id,
-            ),
+            onSubscribe:
+                () => _toggleSubscription(
+                  onAction: 'file.onUploadEvent',
+                  offAction: 'file.offUploadEvent',
+                  currentSubId: _uploadSubId,
+                  onSubIdChanged: (id) => _uploadSubId = id,
+                ),
             onStart: _startUpload,
             onCancel: _cancelUpload,
-            onUnsubscribe: () => _toggleSubscription(
-              onAction: 'file.onUploadEvent',
-              offAction: 'file.offUploadEvent',
-              currentSubId: _uploadSubId,
-              onSubIdChanged: (id) => _uploadSubId = id,
-            ),
+            onUnsubscribe:
+                () => _toggleSubscription(
+                  onAction: 'file.onUploadEvent',
+                  offAction: 'file.offUploadEvent',
+                  currentSubId: _uploadSubId,
+                  onSubIdChanged: (id) => _uploadSubId = id,
+                ),
           ),
           const SizedBox(height: 20),
 
@@ -285,7 +291,10 @@ class _JsBridgeDiagnosticsPageState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('异步事件流 (Events Stream)', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                '异步事件流 (Events Stream)',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               TextButton(
                 onPressed: () => setState(() => _events = '尚未收到事件。'),
                 child: const Text('清空'),
@@ -309,9 +318,15 @@ class _JsBridgeDiagnosticsPageState
           children: [
             Row(
               children: [
-                Icon(Icons.subscriptions, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.subscriptions,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
-                Text('JSBridge 事件订阅与注销管理', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'JSBridge 事件订阅与注销管理',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ],
             ),
             const SizedBox(height: 4),
@@ -325,98 +340,106 @@ class _JsBridgeDiagnosticsPageState
               actionName: 'onNetworkStatusChange / offNetworkStatusChange',
               subId: _networkSubId,
               icon: Icons.wifi,
-              onToggle: () => _toggleSubscription(
-                onAction: 'onNetworkStatusChange',
-                offAction: 'offNetworkStatusChange',
-                currentSubId: _networkSubId,
-                onSubIdChanged: (id) => _networkSubId = id,
-              ),
+              onToggle:
+                  () => _toggleSubscription(
+                    onAction: 'onNetworkStatusChange',
+                    offAction: 'offNetworkStatusChange',
+                    currentSubId: _networkSubId,
+                    onSubIdChanged: (id) => _networkSubId = id,
+                  ),
             ),
             _subscriptionRow(
               title: '截屏主动捕获',
               actionName: 'onUserCaptureScreen / offUserCaptureScreen',
               subId: _screenshotSubId,
               icon: Icons.camera_alt,
-              onToggle: () => _toggleSubscription(
-                onAction: 'onUserCaptureScreen',
-                offAction: 'offUserCaptureScreen',
-                currentSubId: _screenshotSubId,
-                onSubIdChanged: (id) => _screenshotSubId = id,
-              ),
+              onToggle:
+                  () => _toggleSubscription(
+                    onAction: 'onUserCaptureScreen',
+                    offAction: 'offUserCaptureScreen',
+                    currentSubId: _screenshotSubId,
+                    onSubIdChanged: (id) => _screenshotSubId = id,
+                  ),
             ),
             _subscriptionRow(
               title: '加速度计 (~5次/秒)',
               actionName: 'onAccelerometerChange / offAccelerometerChange',
               subId: _accSubId,
               icon: Icons.speed,
-              onToggle: () => _toggleSubscription(
-                onAction: 'onAccelerometerChange',
-                offAction: 'offAccelerometerChange',
-                currentSubId: _accSubId,
-                onSubIdChanged: (id) => _accSubId = id,
-                onData: const {'interval': 200},
-              ),
+              onToggle:
+                  () => _toggleSubscription(
+                    onAction: 'onAccelerometerChange',
+                    offAction: 'offAccelerometerChange',
+                    currentSubId: _accSubId,
+                    onSubIdChanged: (id) => _accSubId = id,
+                    onData: const {'interval': 200},
+                  ),
             ),
             _subscriptionRow(
               title: '陀螺仪角速度',
               actionName: 'onGyroscopeChange / offGyroscopeChange',
               subId: _gyroSubId,
               icon: Icons.screen_rotation,
-              onToggle: () => _toggleSubscription(
-                onAction: 'onGyroscopeChange',
-                offAction: 'offGyroscopeChange',
-                currentSubId: _gyroSubId,
-                onSubIdChanged: (id) => _gyroSubId = id,
-                onData: const {'interval': 200},
-              ),
+              onToggle:
+                  () => _toggleSubscription(
+                    onAction: 'onGyroscopeChange',
+                    offAction: 'offGyroscopeChange',
+                    currentSubId: _gyroSubId,
+                    onSubIdChanged: (id) => _gyroSubId = id,
+                    onData: const {'interval': 200},
+                  ),
             ),
             _subscriptionRow(
               title: '距离传感器 (贴近)',
               actionName: 'onProximityChange / offProximityChange',
               subId: _proxSubId,
               icon: Icons.sensors,
-              onToggle: () => _toggleSubscription(
-                onAction: 'onProximityChange',
-                offAction: 'offProximityChange',
-                currentSubId: _proxSubId,
-                onSubIdChanged: (id) => _proxSubId = id,
-              ),
+              onToggle:
+                  () => _toggleSubscription(
+                    onAction: 'onProximityChange',
+                    offAction: 'offProximityChange',
+                    currentSubId: _proxSubId,
+                    onSubIdChanged: (id) => _proxSubId = id,
+                  ),
             ),
             _subscriptionRow(
               title: '系统明暗主题',
               actionName: 'onThemeChange / offThemeChange',
               subId: _themeSubId,
               icon: Icons.brightness_6,
-              onToggle: () => _toggleSubscription(
-                onAction: 'onThemeChange',
-                offAction: 'offThemeChange',
-                currentSubId: _themeSubId,
-                onSubIdChanged: (id) => _themeSubId = id,
-              ),
+              onToggle:
+                  () => _toggleSubscription(
+                    onAction: 'onThemeChange',
+                    offAction: 'offThemeChange',
+                    currentSubId: _themeSubId,
+                    onSubIdChanged: (id) => _themeSubId = id,
+                  ),
             ),
             _subscriptionRow(
               title: '窗口与旋转尺寸',
               actionName: 'onResize / offResize',
               subId: _resizeSubId,
               icon: Icons.aspect_ratio,
-              onToggle: () => _toggleSubscription(
-                onAction: 'onResize',
-                offAction: 'offResize',
-                currentSubId: _resizeSubId,
-                onSubIdChanged: (id) => _resizeSubId = id,
-              ),
+              onToggle:
+                  () => _toggleSubscription(
+                    onAction: 'onResize',
+                    offAction: 'offResize',
+                    currentSubId: _resizeSubId,
+                    onSubIdChanged: (id) => _resizeSubId = id,
+                  ),
             ),
             _subscriptionRow(
               title: '系统低内存告警',
               actionName: 'onMemoryWarning / offMemoryWarning',
               subId: _memorySubId,
               icon: Icons.memory,
-              onToggle: () => _toggleSubscription(
-                onAction: 'onMemoryWarning',
-                offAction: 'offMemoryWarning',
-                currentSubId: _memorySubId,
-                onSubIdChanged: (id) => _memorySubId = id,
-              ),
+              onToggle:
+                  () => _toggleSubscription(
+                    onAction: 'onMemoryWarning',
+                    offAction: 'offMemoryWarning',
+                    currentSubId: _memorySubId,
+                    onSubIdChanged: (id) => _memorySubId = id,
+                  ),
             ),
           ],
         ),
@@ -436,13 +459,23 @@ class _JsBridgeDiagnosticsPageState
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: isSubscribed ? Colors.green : Colors.grey),
+          Icon(
+            icon,
+            size: 20,
+            color: isSubscribed ? Colors.green : Colors.grey,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
                 Text(
                   isSubscribed ? '已订阅 (ID: $subId)' : '未订阅 · $actionName',
                   style: TextStyle(
@@ -456,23 +489,29 @@ class _JsBridgeDiagnosticsPageState
           const SizedBox(width: 8),
           isSubscribed
               ? OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    visualDensity: VisualDensity.compact,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
                   ),
-                  onPressed: _working ? null : onToggle,
-                  child: const Text('取消订阅'),
-                )
-              : FilledButton.tonal(
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: _working ? null : onToggle,
-                  child: const Text('订阅 (on)'),
+                  visualDensity: VisualDensity.compact,
                 ),
+                onPressed: _working ? null : onToggle,
+                child: const Text('取消订阅'),
+              )
+              : FilledButton.tonal(
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: _working ? null : onToggle,
+                child: const Text('订阅 (on)'),
+              ),
         ],
       ),
     );
@@ -483,92 +522,243 @@ class _JsBridgeDiagnosticsPageState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 1. Basic & Device API Presets
-        const Text('1. 基础与设备控制 API', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        const Text(
+          '1. 基础与设备控制 API',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        ),
         const SizedBox(height: 4),
         Wrap(
           spacing: 6,
           runSpacing: 6,
           children: [
-            OutlinedButton(onPressed: () => _preset('sys-info', 'getSystemInfo'), child: const Text('系统信息')),
-            OutlinedButton(onPressed: () => _preset('dev-info', 'getDeviceInfo'), child: const Text('设备信息')),
-            OutlinedButton(onPressed: () => _preset('net-type', 'getNetworkType'), child: const Text('网络类型')),
-            OutlinedButton(onPressed: () => _preset('battery', 'getBatteryInfo'), child: const Text('电池电量')),
             OutlinedButton(
-              onPressed: () => _preset('vibrate', 'vibrate', <String, Object?>{'style': 'medium', 'duration': 200}),
+              onPressed: () => _preset('sys-info', 'getSystemInfo'),
+              child: const Text('系统信息'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('dev-info', 'getDeviceInfo'),
+              child: const Text('设备信息'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('net-type', 'getNetworkType'),
+              child: const Text('网络类型'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('wifi-info', 'getWifiInfo'),
+              child: const Text('Wi-Fi 信息'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset('wifi-permission', 'requestWifiInfoPermission'),
+              child: const Text('Wi-Fi 权限'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('wifi-settings', 'openWifiSettings'),
+              child: const Text('Wi-Fi 设置'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset(
+                    'photo-permission',
+                    'requestPermission',
+                    <String, Object?>{'permission': 'photos'},
+                  ),
+              child: const Text('相册权限'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset(
+                    'camera-permission',
+                    'requestPermission',
+                    <String, Object?>{'permission': 'camera'},
+                  ),
+              child: const Text('相机权限'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('app-settings', 'openAppSettings'),
+              child: const Text('应用设置'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('battery', 'getBatteryInfo'),
+              child: const Text('电池电量'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset('vibrate', 'vibrate', <String, Object?>{
+                    'style': 'medium',
+                    'duration': 200,
+                  }),
               child: const Text('设备振动'),
             ),
-            OutlinedButton(onPressed: () => _preset('brightness', 'getScreenBrightness'), child: const Text('读取亮度')),
             OutlinedButton(
-              onPressed: () => _preset('set-bri', 'setScreenBrightness', <String, Object?>{'value': 0.8}),
+              onPressed: () => _preset('brightness', 'getScreenBrightness'),
+              child: const Text('读取亮度'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset(
+                    'set-bri',
+                    'setScreenBrightness',
+                    <String, Object?>{'value': 0.8},
+                  ),
               child: const Text('设置亮度 (0.8)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('call', 'makePhoneCall', <String, Object?>{'phoneNumber': '10086'}),
+              onPressed:
+                  () => _preset('flash-on', 'setFlashlight', <String, Object?>{
+                    'enabled': true,
+                  }),
+              child: const Text('开启闪光灯'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset('flash-off', 'setFlashlight', <String, Object?>{
+                    'enabled': false,
+                  }),
+              child: const Text('关闭闪光灯'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('volume', 'getSystemVolume'),
+              child: const Text('读取音量'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset(
+                    'set-volume',
+                    'setSystemVolume',
+                    <String, Object?>{'value': 0.5},
+                  ),
+              child: const Text('设置音量 (0.5)'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset(
+                    'desktop-badge',
+                    'setDesktopBadge',
+                    <String, Object?>{'count': 7},
+                  ),
+              child: const Text('桌面角标 (7)'),
+            ),
+            OutlinedButton(
+              onPressed:
+                  () => _preset('call', 'makePhoneCall', <String, Object?>{
+                    'phoneNumber': '10086',
+                  }),
               child: const Text('拨打电话'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('file-single', 'chooseFile', <String, Object?>{'allowMultiple': false}),
+              onPressed:
+                  () => _preset('file-single', 'chooseFile', <String, Object?>{
+                    'allowMultiple': false,
+                  }),
               child: const Text('单选文件'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('file-multi', 'chooseFile', <String, Object?>{
-                'allowMultiple': true,
-                'maxCount': 5,
-                'allowedExtensions': ['pdf', 'docx', 'xlsx', 'txt'],
-              }),
+              onPressed:
+                  () => _preset('file-multi', 'chooseFile', <String, Object?>{
+                    'allowMultiple': true,
+                    'maxCount': 5,
+                    'allowedExtensions': ['pdf', 'docx', 'xlsx', 'txt'],
+                  }),
               child: const Text('多选文件 (限5/文档)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('img-single', 'chooseImage', <String, Object?>{'allowMultiple': false}),
+              onPressed:
+                  () => _preset('img-single', 'chooseImage', <String, Object?>{
+                    'allowMultiple': false,
+                  }),
               child: const Text('单选图片'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('img-multi', 'chooseImage', <String, Object?>{'allowMultiple': true, 'maxCount': 9}),
+              onPressed:
+                  () => _preset('img-multi', 'chooseImage', <String, Object?>{
+                    'allowMultiple': true,
+                    'maxCount': 9,
+                  }),
               child: const Text('多选图片 (限9张)'),
             ),
-            OutlinedButton(onPressed: () => _preset('photo', 'takePhoto'), child: const Text('拍照')),
-            OutlinedButton(onPressed: () => _preset('audio', 'startAudioRecording'), child: const Text('开始录音')),
+            OutlinedButton(
+              onPressed: () => _preset('photo', 'takePhoto'),
+              child: const Text('拍照'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('audio', 'startAudioRecording'),
+              child: const Text('开始录音'),
+            ),
           ],
         ),
         const SizedBox(height: 10),
 
         // 2. Subscribe (on*) Presets
-        const Text('2. 事件订阅 (on*)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green)),
+        const Text(
+          '2. 事件订阅 (on*)',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: Colors.green,
+          ),
+        ),
         const SizedBox(height: 4),
         Wrap(
           spacing: 6,
           runSpacing: 6,
           children: [
             OutlinedButton(
-              onPressed: () => _preset('sub-net', 'onNetworkStatusChange', const {'subscriptionId': 'net-1'}),
+              onPressed:
+                  () => _preset('sub-net', 'onNetworkStatusChange', const {
+                    'subscriptionId': 'net-1',
+                  }),
               child: const Text('订阅网络 (on)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('sub-ss', 'onUserCaptureScreen', const {'subscriptionId': 'ss-1'}),
+              onPressed:
+                  () => _preset('sub-ss', 'onUserCaptureScreen', const {
+                    'subscriptionId': 'ss-1',
+                  }),
               child: const Text('订阅截屏 (on)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('sub-acc', 'onAccelerometerChange', const {'subscriptionId': 'acc-1', 'interval': 200}),
+              onPressed:
+                  () => _preset('sub-acc', 'onAccelerometerChange', const {
+                    'subscriptionId': 'acc-1',
+                    'interval': 200,
+                  }),
               child: const Text('订阅加速度 (on)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('sub-gyro', 'onGyroscopeChange', const {'subscriptionId': 'gyro-1', 'interval': 200}),
+              onPressed:
+                  () => _preset('sub-gyro', 'onGyroscopeChange', const {
+                    'subscriptionId': 'gyro-1',
+                    'interval': 200,
+                  }),
               child: const Text('订阅陀螺仪 (on)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('sub-prox', 'onProximityChange', const {'subscriptionId': 'prox-1'}),
+              onPressed:
+                  () => _preset('sub-prox', 'onProximityChange', const {
+                    'subscriptionId': 'prox-1',
+                  }),
               child: const Text('订阅距离 (on)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('sub-theme', 'onThemeChange', const {'subscriptionId': 'theme-1'}),
+              onPressed:
+                  () => _preset('sub-theme', 'onThemeChange', const {
+                    'subscriptionId': 'theme-1',
+                  }),
               child: const Text('订阅主题 (on)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('sub-resize', 'onResize', const {'subscriptionId': 'resize-1'}),
+              onPressed:
+                  () => _preset('sub-resize', 'onResize', const {
+                    'subscriptionId': 'resize-1',
+                  }),
               child: const Text('订阅尺寸 (on)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('sub-mem', 'onMemoryWarning', const {'subscriptionId': 'mem-1'}),
+              onPressed:
+                  () => _preset('sub-mem', 'onMemoryWarning', const {
+                    'subscriptionId': 'mem-1',
+                  }),
               child: const Text('订阅内存告警 (on)'),
             ),
           ],
@@ -576,42 +766,73 @@ class _JsBridgeDiagnosticsPageState
         const SizedBox(height: 10),
 
         // 3. Unsubscribe (off*) Presets
-        const Text('3. 取消订阅 (off*)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red)),
+        const Text(
+          '3. 取消订阅 (off*)',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: Colors.red,
+          ),
+        ),
         const SizedBox(height: 4),
         Wrap(
           spacing: 6,
           runSpacing: 6,
           children: [
             OutlinedButton(
-              onPressed: () => _preset('off-net', 'offNetworkStatusChange', const {'subscriptionId': 'net-1'}),
+              onPressed:
+                  () => _preset('off-net', 'offNetworkStatusChange', const {
+                    'subscriptionId': 'net-1',
+                  }),
               child: const Text('取消网络 (off)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('off-ss', 'offUserCaptureScreen', const {'subscriptionId': 'ss-1'}),
+              onPressed:
+                  () => _preset('off-ss', 'offUserCaptureScreen', const {
+                    'subscriptionId': 'ss-1',
+                  }),
               child: const Text('取消截屏 (off)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('off-acc', 'offAccelerometerChange', const {'subscriptionId': 'acc-1'}),
+              onPressed:
+                  () => _preset('off-acc', 'offAccelerometerChange', const {
+                    'subscriptionId': 'acc-1',
+                  }),
               child: const Text('取消加速度 (off)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('off-gyro', 'offGyroscopeChange', const {'subscriptionId': 'gyro-1'}),
+              onPressed:
+                  () => _preset('off-gyro', 'offGyroscopeChange', const {
+                    'subscriptionId': 'gyro-1',
+                  }),
               child: const Text('取消陀螺仪 (off)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('off-prox', 'offProximityChange', const {'subscriptionId': 'prox-1'}),
+              onPressed:
+                  () => _preset('off-prox', 'offProximityChange', const {
+                    'subscriptionId': 'prox-1',
+                  }),
               child: const Text('取消距离 (off)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('off-theme', 'offThemeChange', const {'subscriptionId': 'theme-1'}),
+              onPressed:
+                  () => _preset('off-theme', 'offThemeChange', const {
+                    'subscriptionId': 'theme-1',
+                  }),
               child: const Text('取消主题 (off)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('off-resize', 'offResize', const {'subscriptionId': 'resize-1'}),
+              onPressed:
+                  () => _preset('off-resize', 'offResize', const {
+                    'subscriptionId': 'resize-1',
+                  }),
               child: const Text('取消尺寸 (off)'),
             ),
             OutlinedButton(
-              onPressed: () => _preset('off-mem', 'offMemoryWarning', const {'subscriptionId': 'mem-1'}),
+              onPressed:
+                  () => _preset('off-mem', 'offMemoryWarning', const {
+                    'subscriptionId': 'mem-1',
+                  }),
               child: const Text('取消内存告警 (off)'),
             ),
           ],
@@ -701,10 +922,7 @@ class _UploadTaskTestCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '文件上传与进度事件闭环',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('文件上传与进度事件闭环', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             const Text(
               '完整链路：选择文件 → 订阅上传事件 → 发起上传任务 → 接收 progress/completed 事件 → 取消或退订。',

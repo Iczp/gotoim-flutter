@@ -219,6 +219,20 @@ class FlutterLocalNotificationService implements LocalNotificationService {
         channelDescription: 'Goto IM 本地通知',
         importance: Importance.max,
         priority: Priority.high,
+        ongoing: request.ongoing,
+        onlyAlertOnce: request.ongoing,
+        autoCancel: !request.ongoing,
+        actions:
+            request.actions
+                .map(
+                  (action) => AndroidNotificationAction(
+                    action.id,
+                    action.title,
+                    showsUserInterface: action.showsUserInterface,
+                    cancelNotification: false,
+                  ),
+                )
+                .toList(),
       ),
       iOS: const DarwinNotificationDetails(
         presentAlert: true,

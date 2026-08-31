@@ -66,6 +66,8 @@ class LocalNotificationRequest {
     required this.body,
     this.payload = '',
     this.delay = Duration.zero,
+    this.ongoing = false,
+    this.actions = const [],
   });
 
   final int id;
@@ -75,6 +77,28 @@ class LocalNotificationRequest {
   final String body;
   final String payload;
   final Duration delay;
+
+  /// Android uses this for a non-dismissible status notification while a
+  /// long-running user-visible feature (such as LAN sharing) is active.
+  final bool ongoing;
+
+  /// Optional user actions. Unsupported platforms safely ignore them.
+  final List<LocalNotificationAction> actions;
+}
+
+class LocalNotificationAction {
+  const LocalNotificationAction({
+    required this.id,
+    required this.title,
+    this.showsUserInterface = false,
+  });
+
+  final String id;
+  final String title;
+
+  /// Android actions that must execute application state changes should bring
+  /// the app to foreground unless a dedicated background callback is supplied.
+  final bool showsUserInterface;
 }
 
 enum LocalNotificationDispatchStatus { shown, queued, unsupported }

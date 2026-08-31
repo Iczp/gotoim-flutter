@@ -55,6 +55,7 @@ class AppEnvironment {
   final String authClientSecret;
   final String authScope;
   final String authLoginGrantType;
+
   final String authUserInfoPath;
   final String authIntrospectionPath;
   final String authRevocationPath;

@@ -10,8 +10,7 @@ import 'app_task_manager.dart';
 /// `FLAG_ACTIVITY_NEW_DOCUMENT` and `documentLaunchMode="intoExisting"`.
 class AndroidAppTaskManager implements AppTaskManager {
   AndroidAppTaskManager({MethodChannel? channel})
-    : _channel = channel ??
-          const MethodChannel('com.gotoim.task_manager');
+    : _channel = channel ?? const MethodChannel('com.gotoim.task_manager');
 
   final MethodChannel _channel;
 
@@ -20,8 +19,10 @@ class AndroidAppTaskManager implements AppTaskManager {
 
   @override
   Future<void> openMiniApp(MiniAppTaskRequest request) async {
-    debugPrint('[AppTask] open appId=${request.appId} '
-        'url=${request.url} reuse=${request.reuseExisting}');
+    debugPrint(
+      '[AppTask] open appId=${request.appId} '
+      'url=${request.url} reuse=${request.reuseExisting}',
+    );
     await _channel.invokeMethod<void>('openMiniApp', request.toJson());
   }
 

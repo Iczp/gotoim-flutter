@@ -83,7 +83,11 @@ JS Bridge 位于 `lib/core/jsbridge/`，由 `JsApiDispatcher` 完成 JSON 协议
 | `getBatteryInfo` | `device.getBatteryInfo` | `{}` | `{level:int,isCharging:boolean,status:string}` |
 | `getScreenBrightness` | `device.getScreenBrightness` | `{}` | `{value:double}`（0.0 ~ 1.0） |
 | `setScreenBrightness` | `device.setScreenBrightness` | `{value:double}`（0.0 ~ 1.0） | `{ok:boolean,value:double}` |
+| `setFlashlight` | `device.setFlashlight` | `{enabled:boolean}` | `{ok:boolean,enabled:boolean}` |
+| `getSystemVolume` | `device.getSystemVolume` | `{}` | `{supported:boolean,value?:double}` |
+| `setSystemVolume` | `device.setSystemVolume` | `{value:double}`（0.0 ~ 1.0） | `{ok:boolean,value:double}` |
 | `makePhoneCall` | `system.makePhoneCall` | `{phoneNumber:string}` | `{ok:boolean}` |
+| `setDesktopBadge` | `desktop.setBadge` | `{count?:int}`（非正数清除） | `{ok:boolean,count:int}` |
 | `onUserCaptureScreen` | `system.onUserCaptureScreen` | `{subscriptionId?:string}` | `{subscriptionId:string}` |
 | `offUserCaptureScreen` | `system.offUserCaptureScreen` | `{subscriptionId:string}` | `{removed:boolean}` |
 | `onThemeChange` | `system.onThemeChange` | `{subscriptionId?:string}` | `{subscriptionId,currentBrightness:light\|dark}` |

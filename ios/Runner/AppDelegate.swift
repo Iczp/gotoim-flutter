@@ -1,10 +1,14 @@
 import UIKit
 import Flutter
+import CoreMotion
+import AVFoundation
+import MediaPlayer
 
 @UIApplicationMain
 @objc class AppDelegate: FlutterAppDelegate {
   private var screenshotEventSink: FlutterEventSink?
   private var proximityEventSink: FlutterEventSink?
+  private let systemVolumeView = MPVolumeView(frame: .zero)
 
   override func application(
     _ application: UIApplication,
@@ -13,6 +17,9 @@ import Flutter
     GeneratedPluginRegistrant.register(with: self)
 
     if let controller = window?.rootViewController as? FlutterViewController {
+      systemVolumeView.alpha = 0.01
+      systemVolumeView.frame = .zero
+      controller.view.addSubview(systemVolumeView)
       setupNativeChannels(binaryMessenger: controller.binaryMessenger)
     }
 
@@ -67,6 +74,37 @@ import Flutter
           result(false)
         }
 
+      case "setFlashlight":
+        let enabled = (call.arguments as? [String: Any])?["enabled"] as? Bool ?? false
+        guard let camera = AVCaptureDevice.default(for: .video), camera.hasTorch else {
+          result(false)
+          return
+        }
+        do {
+          try camera.lockForConfiguration()
+          defer { camera.unlockForConfiguration() }
+          if enabled {
+            try camera.setTorchModeOn(level: AVCaptureDevice.maxAvailableTorchLevel)
+          } else {
+            camera.torchMode = .off
+          }
+          result(true)
+        } catch {
+          result(false)
+        }
+
+      case "getSystemVolume":
+        result(Double(AVAudioSession.sharedInstance().outputVolume))
+
+      case "setSystemVolume":
+        let volume = ((call.arguments as? [String: Any])?["volume"] as? NSNumber)?.floatValue ?? 0
+        if let slider = self.systemVolumeView.subviews.first(where: { $0 is UISlider }) as? UISlider {
+          slider.value = min(max(volume, 0), 1)
+          result(true)
+        } else {
+          result(false)
+        }
+
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -79,6 +117,22 @@ import Flutter
     // Proximity Event Channel
     let proximityChannel = FlutterEventChannel(name: "com.gotoim.native/proximity", binaryMessenger: binaryMessenger)
     proximityChannel.setStreamHandler(ProximityStreamHandler())
+
+    // Motion Event Channels. Both streams emit at approximately five samples
+    // per second, matching the Dart Native sensor contract.
+    let accelerometerChannel = FlutterEventChannel(
+      name: "com.gotoim.native/accelerometer",
+      binaryMessenger: binaryMessenger
+    )
+    accelerometerChannel.setStreamHandler(
+      MotionStreamHandler(kind: .accelerometer)
+    )
+
+    let gyroscopeChannel = FlutterEventChannel(
+      name: "com.gotoim.native/gyroscope",
+      binaryMessenger: binaryMessenger
+    )
+    gyroscopeChannel.setStreamHandler(MotionStreamHandler(kind: .gyroscope))
   }
 }
 
@@ -127,6 +181,82 @@ class ProximityStreamHandler: NSObject, FlutterStreamHandler {
       observer = nil
     }
     UIDevice.current.isProximityMonitoringEnabled = false
+    return nil
+  }
+}
+
+private enum MotionKind {
+  case accelerometer
+  case gyroscope
+}
+
+/// Bridges CoreMotion into the same EventChannel payload used by Android:
+/// `{x, y, z}`. CoreMotion only runs while Flutter has an active listener,
+/// and is stopped immediately when that listener is cancelled.
+private final class MotionStreamHandler: NSObject, FlutterStreamHandler {
+  private let kind: MotionKind
+  private let motionManager = CMMotionManager()
+  private let operationQueue = OperationQueue.main
+
+  init(kind: MotionKind) {
+    self.kind = kind
+    super.init()
+  }
+
+  func onListen(
+    withArguments arguments: Any?,
+    eventSink events: @escaping FlutterEventSink
+  ) -> FlutterError? {
+    let interval = 0.2 // Approximately 5 Hz, consistent with Android.
+
+    switch kind {
+    case .accelerometer:
+      guard motionManager.isAccelerometerAvailable else {
+        return FlutterError(
+          code: "NOT_SUPPORTED",
+          message: "This device does not provide an accelerometer.",
+          details: nil
+        )
+      }
+      motionManager.accelerometerUpdateInterval = interval
+      motionManager.startAccelerometerUpdates(to: operationQueue) {
+        data, error in
+        guard error == nil, let acceleration = data?.acceleration else { return }
+        events([
+          "x": acceleration.x,
+          "y": acceleration.y,
+          "z": acceleration.z,
+        ])
+      }
+
+    case .gyroscope:
+      guard motionManager.isGyroAvailable else {
+        return FlutterError(
+          code: "NOT_SUPPORTED",
+          message: "This device does not provide a gyroscope.",
+          details: nil
+        )
+      }
+      motionManager.gyroUpdateInterval = interval
+      motionManager.startGyroUpdates(to: operationQueue) { data, error in
+        guard error == nil, let rotationRate = data?.rotationRate else { return }
+        events([
+          "x": rotationRate.x,
+          "y": rotationRate.y,
+          "z": rotationRate.z,
+        ])
+      }
+    }
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    switch kind {
+    case .accelerometer:
+      motionManager.stopAccelerometerUpdates()
+    case .gyroscope:
+      motionManager.stopGyroUpdates()
+    }
     return nil
   }
 }

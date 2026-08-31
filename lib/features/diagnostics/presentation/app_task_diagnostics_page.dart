@@ -20,9 +20,7 @@ class _AppTaskDiagnosticsPageState
     extends ConsumerState<AppTaskDiagnosticsPage> {
   final _appIdController = TextEditingController(text: 'test-app');
   final _titleController = TextEditingController(text: 'Test App');
-  final _urlController = TextEditingController(
-    text: 'https://flutter.dev',
-  );
+  final _urlController = TextEditingController(text: 'https://flutter.dev');
   bool _reuseExisting = true;
   String _result = '尚未执行。';
   bool _working = false;
@@ -53,10 +51,12 @@ class _AppTaskDiagnosticsPageState
       stopwatch.stop();
       if (mounted) {
         setState(
-          () => _result = '$label 失败\n'
-              '耗时：${stopwatch.elapsedMilliseconds} ms\n'
-              '异常：$error\n'
-              '${stack.toString().split('\n').take(5).join('\n')}',
+          () =>
+              _result =
+                  '$label 失败\n'
+                  '耗时：${stopwatch.elapsedMilliseconds} ms\n'
+                  '异常：$error\n'
+                  '${stack.toString().split('\n').take(5).join('\n')}',
         );
       }
     } finally {
@@ -112,9 +112,7 @@ class _AppTaskDiagnosticsPageState
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) {
-      return const Scaffold(
-        body: Center(child: Text('开发诊断仅在 Debug 模式可用。')),
-      );
+      return const Scaffold(body: Center(child: Text('开发诊断仅在 Debug 模式可用。')));
     }
 
     final taskManager = ref.read(appTaskManagerProvider);
@@ -131,10 +129,11 @@ class _AppTaskDiagnosticsPageState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('平台信息',
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Text('平台信息', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  Text('支持 System Task：${taskManager.isSupported ? '✓ 是' : '✗ 否（降级为页面模式）'}'),
+                  Text(
+                    '支持 System Task：${taskManager.isSupported ? '✓ 是' : '✗ 否（降级为页面模式）'}',
+                  ),
                   Text('平台：${defaultTargetPlatform.name}'),
                 ],
               ),
@@ -149,8 +148,7 @@ class _AppTaskDiagnosticsPageState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('任务栈测试',
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Text('任务栈测试', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 4),
                   const Text('输入参数并打开独立 Task。同一 appId 再次打开应复用已有 Task。'),
                   const SizedBox(height: 12),
@@ -216,35 +214,46 @@ class _AppTaskDiagnosticsPageState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('快捷测试',
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Text('快捷测试', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
                       FilledButton.tonal(
-                        onPressed: _working
-                            ? null
-                            : () => _openQuickApp(
-                                'app-a', 'MiniApp A', 'https://flutter.dev'),
+                        onPressed:
+                            _working
+                                ? null
+                                : () => _openQuickApp(
+                                  'app-a',
+                                  'MiniApp A',
+                                  'https://flutter.dev',
+                                ),
                         child: const Text('MiniApp A'),
                       ),
                       FilledButton.tonal(
-                        onPressed: _working
-                            ? null
-                            : () => _openQuickApp(
-                                'app-b', 'MiniApp B', 'https://dart.dev'),
+                        onPressed:
+                            _working
+                                ? null
+                                : () => _openQuickApp(
+                                  'app-b',
+                                  'MiniApp B',
+                                  'https://dart.dev',
+                                ),
                         child: const Text('MiniApp B'),
                       ),
                       FilledButton.tonal(
-                        onPressed: _working
-                            ? null
-                            : () {
-                                final id = 'rand-${Random().nextInt(9999)}';
-                                _openQuickApp(id, 'Random $id',
-                                    'https://example.com/$id');
-                              },
+                        onPressed:
+                            _working
+                                ? null
+                                : () {
+                                  final id = 'rand-${Random().nextInt(9999)}';
+                                  _openQuickApp(
+                                    id,
+                                    'Random $id',
+                                    'https://example.com/$id',
+                                  );
+                                },
                         child: const Text('随机 AppId'),
                       ),
                     ],
@@ -262,36 +271,48 @@ class _AppTaskDiagnosticsPageState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('工作台动态测试',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  const Text(
-                    '验证动态增加应用后无需修改 Manifest 即可创建独立 Task。',
+                  Text(
+                    '工作台动态测试',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
+                  const SizedBox(height: 4),
+                  const Text('验证动态增加应用后无需修改 Manifest 即可创建独立 Task。'),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
                       OutlinedButton(
-                        onPressed: _working
-                            ? null
-                            : () => _addDynamicApp('cloud-drive',
-                                'Cloud Drive', 'https://drive.gotoim.com'),
+                        onPressed:
+                            _working
+                                ? null
+                                : () => _addDynamicApp(
+                                  'cloud-drive',
+                                  'Cloud Drive',
+                                  'https://drive.gotoim.com',
+                                ),
                         child: const Text('+ Cloud Drive'),
                       ),
                       OutlinedButton(
-                        onPressed: _working
-                            ? null
-                            : () => _addDynamicApp(
-                                'erp', 'ERP', 'https://erp.gotoim.com'),
+                        onPressed:
+                            _working
+                                ? null
+                                : () => _addDynamicApp(
+                                  'erp',
+                                  'ERP',
+                                  'https://erp.gotoim.com',
+                                ),
                         child: const Text('+ ERP'),
                       ),
                       OutlinedButton(
-                        onPressed: _working
-                            ? null
-                            : () => _addDynamicApp('project', 'Project',
-                                'https://project.gotoim.com'),
+                        onPressed:
+                            _working
+                                ? null
+                                : () => _addDynamicApp(
+                                  'project',
+                                  'Project',
+                                  'https://project.gotoim.com',
+                                ),
                         child: const Text('+ Project'),
                       ),
                     ],
@@ -300,22 +321,28 @@ class _AppTaskDiagnosticsPageState
                     const SizedBox(height: 12),
                     const Divider(),
                     const SizedBox(height: 8),
-                    ...(_dynamicApps.map((app) => ListTile(
-                          dense: true,
-                          leading: CircleAvatar(
-                            radius: 16,
-                            child: Text(app.name[0]),
-                          ),
-                          title: Text(app.name),
-                          subtitle: Text(app.appId),
-                          trailing: FilledButton.tonal(
-                            onPressed: _working
-                                ? null
-                                : () => _openQuickApp(
-                                    app.appId, app.name, app.url.toString()),
-                            child: const Text('打开'),
-                          ),
-                        ))),
+                    ...(_dynamicApps.map(
+                      (app) => ListTile(
+                        dense: true,
+                        leading: CircleAvatar(
+                          radius: 16,
+                          child: Text(app.name[0]),
+                        ),
+                        title: Text(app.name),
+                        subtitle: Text(app.appId),
+                        trailing: FilledButton.tonal(
+                          onPressed:
+                              _working
+                                  ? null
+                                  : () => _openQuickApp(
+                                    app.appId,
+                                    app.name,
+                                    app.url.toString(),
+                                  ),
+                          child: const Text('打开'),
+                        ),
+                      ),
+                    )),
                   ],
                 ],
               ),

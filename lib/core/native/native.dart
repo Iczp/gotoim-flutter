@@ -47,9 +47,7 @@ class Native {
   }
 
   /// Listens to window size and orientation changes.
-  static StreamSubscription<Size> onResize(
-    void Function(Size size) callback,
-  ) {
+  static StreamSubscription<Size> onResize(void Function(Size size) callback) {
     return system.onResize.listen(callback);
   }
 
@@ -81,6 +79,26 @@ class Native {
   /// Sets application window screen brightness.
   static Future<bool> setScreenBrightness(double brightness) {
     return device.setScreenBrightness(brightness);
+  }
+
+  /// Enables/disables the rear-camera flashlight when supported.
+  static Future<bool> setFlashlight(bool enabled) {
+    return device.setFlashlight(enabled);
+  }
+
+  /// Returns media output volume (0.0-1.0), or -1 when unsupported.
+  static Future<double> getSystemVolume() {
+    return device.getSystemVolume();
+  }
+
+  /// Sets media output volume (0.0-1.0).
+  static Future<bool> setSystemVolume(double volume) {
+    return device.setSystemVolume(volume);
+  }
+
+  /// Sets the desktop app-icon badge; currently supported by macOS Dock.
+  static Future<bool> setDesktopBadge(int? count) {
+    return system.setDesktopBadge(count);
   }
 
   // --- Sensor Capabilities ---

@@ -23,6 +23,9 @@ dependencies:
   mobile_scanner: ^7.4.0
   # Used by the unified scanner to decode QR/barcodes from an album image.
   image_picker: ^1.2.3
+  # Interactive 1:1 avatar cropper on Android/iOS/Web. Desktop falls back to
+  # the project-owned center-crop processor until a native desktop crop UI is added.
+  image_cropper: ^12.2.1
   # Desktop and web use an explicit file-upload flow when no camera is present.
   file_picker: ^12.0.0
   # Pure Dart QR image decoder used as the web/desktop upload fallback.
@@ -31,6 +34,10 @@ dependencies:
   # Unified client capability adapters. These remain behind a project service
   # so business/UI code never depends on their plugin APIs.
   connectivity_plus: ^7.3.1
+  network_info_plus: ^8.2.1
+  app_settings: ^9.0.0
+  open_filex: ^4.7.0
+  permission_handler: ^12.0.1
   device_info_plus: ^13.2.0
   # Media/file capability adapters. Video processing is mobile/macOS only;
   # other platforms keep the contract and return an explicit unsupported result.
@@ -47,6 +54,10 @@ dependencies:
   flutter_inappwebview: ^6.2.0-beta.3
   app_links: 7.2.1
   wechat_assets_picker: ^10.1.3
+  cached_network_image: ^3.4.1
+  audioplayers: ^6.8.1
+  flutter_markdown_plus: ^1.0.12
+  video_player: ^2.14.0
 
 dev_dependencies:
   flutter_test:
@@ -59,6 +70,10 @@ flutter:
     - .env.development
     - .env.staging
     - .env.production
+    - assets/file_web/
+    - assets/file_web/assets/
+    - assets/devtools/remote/
+    - assets/devtools/remote/assets/
 
 # hooks:
 #   user_defines:
