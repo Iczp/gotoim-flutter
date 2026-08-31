@@ -20,11 +20,20 @@ class ChatMessage {
     required int ownerId,
     required String sessionUnitId,
   }) {
-    final serverId = asInt(json['id']);
-    final clientId = json['clientMessageId']?.toString();
+    final serverId = asInt(json['id']) ?? asInt(json['messageId']);
+    final rawClientMessageId = json['clientMessageId']?.toString().trim();
+    final clientId = (rawClientMessageId == null ||
+            rawClientMessageId.isEmpty ||
+            rawClientMessageId == 'null')
+        ? null
+        : rawClientMessageId;
     final sender = asMap(json['senderSessionUnit']);
+    final effectiveLocalId = clientId ??
+        (serverId != null
+            ? 'server-$serverId'
+            : '${DateTime.now().microsecondsSinceEpoch}');
     return ChatMessage(
-      localId: clientId ?? 'server-$serverId',
+      localId: effectiveLocalId,
       serverId: serverId,
       clientMessageId: clientId,
       ownerId: ownerId,
@@ -40,10 +49,15 @@ class ChatMessage {
 
   factory ChatMessage.fromDatabaseRow(Map<String, Object?> row) {
     final raw = decodeJsonObject(row['raw'] as String);
+    final rawClientId = row['clientMessageId']?.toString().trim();
+    final clientId =
+        (rawClientId == null || rawClientId.isEmpty || rawClientId == 'null')
+            ? null
+            : rawClientId;
     return ChatMessage(
       localId: row['id'] as String,
       serverId: asInt(row['serverId']),
-      clientMessageId: row['clientMessageId']?.toString(),
+      clientMessageId: clientId,
       ownerId: asInt(row['ownerId']) ?? 0,
       sessionUnitId: row['sessionUnitId'] as String,
       senderSessionUnitId: row['senderSessionUnitId']?.toString(),
@@ -137,12 +151,10 @@ class ChatMessage {
   /// Original media dimensions supplied by the message contract. Both image
   /// and video messages have used the generic and image-prefixed forms.
   double? get mediaAspectRatio {
-    final width =
-        asInt(content['imageWidth']) ??
+    final width = asInt(content['imageWidth']) ??
         asInt(content['width']) ??
         asInt(content['videoWidth']);
-    final height =
-        asInt(content['imageHeight']) ??
+    final height = asInt(content['imageHeight']) ??
         asInt(content['height']) ??
         asInt(content['videoHeight']);
     if (width == null || height == null || width <= 0 || height <= 0) {
@@ -155,21 +167,20 @@ class ChatMessage {
       firstNonEmpty(<Object?>[content['fileName'], content['name']]);
   int get fileSize => asInt(content['size']) ?? 0;
   Duration get audioDuration => Duration(
-    milliseconds:
-        asInt(content['time']) ??
-        asInt(content['duration']) ??
-        asInt(content['durationMs']) ??
-        0,
-  );
+        milliseconds: asInt(content['time']) ??
+            asInt(content['duration']) ??
+            asInt(content['durationMs']) ??
+            0,
+      );
   String? get audioUrl {
     final value = firstNonEmpty(<Object?>[content['url'], content['audioUrl']]);
     return value.isEmpty ? null : value;
   }
 
   String get fileSuffix => firstNonEmpty(<Object?>[
-    content['suffix'],
-    fileName.contains('.') ? '.${fileName.split('.').last}' : '',
-  ]);
+        content['suffix'],
+        fileName.contains('.') ? '.${fileName.split('.').last}' : '',
+      ]);
   String? get localFilePath {
     final value = content['path']?.toString();
     return value == null || value.isEmpty ? null : value;
@@ -198,31 +209,35 @@ class ChatMessage {
     String? state,
     int? score,
     Map<String, dynamic>? raw,
-  }) => ChatMessage(
-    localId: localId,
-    serverId: serverId ?? this.serverId,
-    clientMessageId: clientMessageId,
-    ownerId: ownerId,
-    sessionUnitId: sessionUnitId,
-    senderSessionUnitId: senderSessionUnitId,
-    messageType: messageType,
-    state: state ?? this.state,
-    score: score ?? this.score,
-    createdAt: createdAt,
-    raw: raw ?? this.raw,
-  );
+  }) =>
+      ChatMessage(
+        localId: localId,
+        serverId: serverId ?? this.serverId,
+        clientMessageId: clientMessageId,
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        senderSessionUnitId: senderSessionUnitId,
+        messageType: messageType,
+        state: state ?? this.state,
+        score: score ?? this.score,
+        createdAt: createdAt,
+        raw: raw ?? this.raw,
+      );
 
   Map<String, Object?> toDatabaseValues() => <String, Object?>{
-    'id': localId,
-    'serverId': serverId,
-    'score': score,
-    'clientMessageId': clientMessageId,
-    'ownerId': ownerId,
-    'sessionUnitId': sessionUnitId,
-    'senderSessionUnitId': senderSessionUnitId,
-    'messageType': messageType,
-    'state': state,
-    'createTime': createdAt?.millisecondsSinceEpoch,
-    'raw': encodeJson(raw),
-  };
+        'id': localId,
+        'serverId': serverId,
+        'score': score,
+        'clientMessageId':
+            (clientMessageId == null || clientMessageId!.trim().isEmpty)
+                ? null
+                : clientMessageId!.trim(),
+        'ownerId': ownerId,
+        'sessionUnitId': sessionUnitId,
+        'senderSessionUnitId': senderSessionUnitId,
+        'messageType': messageType,
+        'state': state,
+        'createTime': createdAt?.millisecondsSinceEpoch,
+        'raw': encodeJson(raw),
+      };
 }

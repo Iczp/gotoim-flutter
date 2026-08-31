@@ -16,14 +16,14 @@ class UnifiedDatabase {
   UnifiedDatabase(this._connection);
 
   factory UnifiedDatabase.openDefault() => UnifiedDatabase(
-    driftDatabase(
-      name: databaseName,
-      web: DriftWebOptions(
-        sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-        driftWorker: Uri.parse('drift_worker.js'),
-      ),
-    ),
-  );
+        driftDatabase(
+          name: databaseName,
+          web: DriftWebOptions(
+            sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+            driftWorker: Uri.parse('drift_worker.js'),
+          ),
+        ),
+      );
 
   static const databaseName = 'gotoim';
   static const schemaVersion = 1;
@@ -49,10 +49,9 @@ class UnifiedDatabase {
   bool get isInitialized =>
       _initializationError == null && _initialization != null;
 
-  String get storageDescription =>
-      kIsWeb
-          ? 'SQLite WASM（浏览器 OPFS / IndexedDB 持久化）'
-          : 'SQLite 文件（应用 Documents 目录）';
+  String get storageDescription => kIsWeb
+      ? 'SQLite WASM（浏览器 OPFS / IndexedDB 持久化）'
+      : 'SQLite 文件（应用 Documents 目录）';
 
   /// Runs idempotent schema creation on first open, and keeps a SQLite
   /// [schemaVersion] for later additive migrations.
@@ -568,8 +567,14 @@ class UnifiedDatabase {
         'INSERT INTO Messages (id, serverId, score, clientMessageId, ownerId, '
         'sessionUnitId, senderSessionUnitId, messageType, state, createTime, raw) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET '
-        'serverId = excluded.serverId, score = excluded.score, state = excluded.state, '
-        'raw = excluded.raw, updateTime = excluded.createTime',
+        'serverId = COALESCE(excluded.serverId, Messages.serverId), '
+        'score = excluded.score, '
+        'clientMessageId = COALESCE(excluded.clientMessageId, Messages.clientMessageId), '
+        'ownerId = excluded.ownerId, '
+        'sessionUnitId = excluded.sessionUnitId, '
+        'state = excluded.state, '
+        'raw = excluded.raw, '
+        'updateTime = excluded.createTime',
         <Object?>[
           row['id'],
           row['serverId'],
@@ -648,11 +653,11 @@ class DatabaseOverview {
   final List<DatabaseTableInfo> tables;
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'name': name,
-    'schemaVersion': schemaVersion,
-    'storage': storage,
-    'tables': tables.map((table) => table.toJson()).toList(),
-  };
+        'name': name,
+        'schemaVersion': schemaVersion,
+        'storage': storage,
+        'tables': tables.map((table) => table.toJson()).toList(),
+      };
 }
 
 class DatabaseTableInfo {
@@ -667,10 +672,10 @@ class DatabaseTableInfo {
   final String createSql;
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'name': name,
-    'rowCount': rowCount,
-    'createSql': createSql,
-  };
+        'name': name,
+        'rowCount': rowCount,
+        'createSql': createSql,
+      };
 }
 
 class DatabaseDiagnosticRecord {
@@ -700,12 +705,12 @@ class DatabaseDiagnosticRecord {
   final int updatedAt;
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'id': id,
-    'title': title,
-    'payload': payload,
-    'createdAt': createdAt,
-    'updatedAt': updatedAt,
-  };
+        'id': id,
+        'title': title,
+        'payload': payload,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+      };
 }
 
 const _version1Schema = <String>[
@@ -756,7 +761,7 @@ const _version1Schema = <String>[
     quoteMessageId INTEGER, renderHeight INTEGER, createTime INTEGER,
     updateTime INTEGER, expireTime INTEGER, raw TEXT
   )''',
-  'CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_id ON Messages (clientMessageId)',
+  'CREATE INDEX IF NOT EXISTS idx_messages_client_id ON Messages (clientMessageId)',
   'CREATE INDEX IF NOT EXISTS idx_messages_server_id ON Messages (serverId)',
   'CREATE INDEX IF NOT EXISTS idx_messages_cursor ON Messages (ownerId, sessionUnitId, score DESC)',
   'CREATE INDEX IF NOT EXISTS idx_messages_cursor_server_id ON Messages (ownerId, sessionUnitId, serverId)',
