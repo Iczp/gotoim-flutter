@@ -123,18 +123,13 @@ class RemoteDevServer {
         return;
       }
       final path = request.uri.path;
-      if (path == '/' || path == '/index.html') {
-        await _html(request);
-        return;
-      }
-      if (path == '/app.js') {
-        await _asset(request, 'assets/devtools/remote/app.js',
-            ContentType('application', 'javascript', charset: 'utf-8'));
-        return;
-      }
-      if (path == '/app.css') {
-        await _asset(
-            request, 'assets/devtools/remote/app.css', ContentType.text);
+      if (path == '/' ||
+          path == '/index.html' ||
+          path.startsWith('/assets/') ||
+          path == '/app.js' ||
+          path == '/app.css' ||
+          path == '/favicon.svg') {
+        await _serveAsset(request);
         return;
       }
       if (path == '/api/status') {
@@ -361,30 +356,65 @@ class RemoteDevServer {
     await request.response.close();
   }
 
-  Future<void> _html(HttpRequest request) async {
-    request.response.headers.contentType = ContentType.html;
+  Future<void> _serveAsset(HttpRequest request) async {
+    final rawPath = request.uri.path;
+    final assetPath = rawPath == '/' ? 'index.html' : rawPath.substring(1);
+    if (assetPath.contains('..')) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    request.response.headers.set('Access-Control-Allow-Origin', '*');
     try {
-      request.response.write(
-        await rootBundle.loadString('assets/devtools/remote/index.html'),
+      final data = await rootBundle.load('assets/devtools/remote/$assetPath');
+      request.response.headers.contentType = _contentType(assetPath);
+      request.response.add(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
       );
     } catch (_) {
-      request.response.write(_page);
+      try {
+        final indexData =
+            await rootBundle.load('assets/devtools/remote/index.html');
+        request.response.headers.contentType = ContentType.html;
+        request.response.add(
+          indexData.buffer.asUint8List(
+              indexData.offsetInBytes, indexData.lengthInBytes),
+        );
+      } catch (_) {
+        request.response.headers.contentType = ContentType.html;
+        request.response.write(_page);
+      }
     }
     await request.response.close();
   }
 
-  Future<void> _asset(
-    HttpRequest request,
-    String asset,
-    ContentType contentType,
-  ) async {
-    request.response.headers.contentType = contentType;
-    try {
-      request.response.write(await rootBundle.loadString(asset));
-    } catch (_) {
-      request.response.statusCode = HttpStatus.notFound;
+  ContentType _contentType(String path) {
+    final extension = path.split('.').last.toLowerCase();
+    switch (extension) {
+      case 'html':
+        return ContentType.html;
+      case 'js':
+        return ContentType('application', 'javascript', charset: 'utf-8');
+      case 'css':
+        return ContentType('text', 'css', charset: 'utf-8');
+      case 'json':
+        return ContentType.json;
+      case 'svg':
+        return ContentType('image', 'svg+xml');
+      case 'png':
+        return ContentType('image', 'png');
+      case 'jpg':
+      case 'jpeg':
+        return ContentType('image', 'jpeg');
+      case 'woff2':
+        return ContentType('font', 'woff2');
+      case 'woff':
+        return ContentType('font', 'woff');
+      case 'ttf':
+        return ContentType('font', 'ttf');
+      default:
+        return ContentType.binary;
     }
-    await request.response.close();
   }
 }
 
