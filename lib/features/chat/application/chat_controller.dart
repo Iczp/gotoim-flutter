@@ -40,21 +40,21 @@ final voiceCacheServiceProvider = Provider<VoiceCacheService>(
 
 final audioPlaybackServiceProvider =
     ChangeNotifierProvider<AudioPlaybackService>((ref) {
-      return AudioPlaybackService(
-        environment: ref.watch(appEnvironmentProvider),
-        voiceCacheService: ref.watch(voiceCacheServiceProvider),
-        nativeSensor: ref.watch(nativeSensorProvider),
-      );
-    });
+  return AudioPlaybackService(
+    environment: ref.watch(appEnvironmentProvider),
+    voiceCacheService: ref.watch(voiceCacheServiceProvider),
+    nativeSensor: ref.watch(nativeSensorProvider),
+  );
+});
 
 final attachmentTransferServiceProvider =
     ChangeNotifierProvider<AttachmentTransferService>((ref) {
-      return AttachmentTransferService(
-        client: ref.watch(apiClientProvider),
-        environment: ref.watch(appEnvironmentProvider),
-        filePickerService: ref.watch(filePickerServiceProvider),
-      );
-    });
+  return AttachmentTransferService(
+    client: ref.watch(apiClientProvider),
+    environment: ref.watch(appEnvironmentProvider),
+    filePickerService: ref.watch(filePickerServiceProvider),
+  );
+});
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -70,14 +70,14 @@ class ChatController extends ChangeNotifier {
     required this.ownerId,
     required this.sessionUnitId,
     required String initialTitle,
-  }) : _filePickerService = filePickerService,
-       _attachmentTransferService = attachmentTransferService,
-       _mediaService = mediaService,
-       _audioPlaybackService = audioPlaybackService,
-       _sessionChangeBus = sessionChangeBus,
-       _clipboardService = clipboardService,
-       _chatSettingsRepository = chatSettingsRepository,
-       _title = initialTitle;
+  })  : _filePickerService = filePickerService,
+        _attachmentTransferService = attachmentTransferService,
+        _mediaService = mediaService,
+        _audioPlaybackService = audioPlaybackService,
+        _sessionChangeBus = sessionChangeBus,
+        _clipboardService = clipboardService,
+        _chatSettingsRepository = chatSettingsRepository,
+        _title = initialTitle;
   static const pageSize = 30;
   static const initialPageSize = 10;
   final MessageRepository _repository;
@@ -670,7 +670,8 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<List<SessionSummary>> loadForwardTargets() async =>
-      (await _sessionRepository.loadFriends(ownerId: ownerId, limit: 100)).items
+      (await _sessionRepository.loadFriends(ownerId: ownerId, limit: 100))
+          .items
           .where((item) => item.id != sessionUnitId)
           .toList(growable: false);
 
@@ -691,9 +692,8 @@ class ChatController extends ChangeNotifier {
     if (selected.any((message) => message.serverId == null)) {
       throw StateError('请等待所选消息发送完成后再合并转发');
     }
-    final ids = selected
-        .map((message) => message.serverId!)
-        .toList(growable: false);
+    final ids =
+        selected.map((message) => message.serverId!).toList(growable: false);
     await _repository.forwardHistory(
       targetSessionUnitId: targetSessionUnitId,
       messageIds: ids,
@@ -706,20 +706,31 @@ class ChatController extends ChangeNotifier {
         .where((item) => !item.isMine && item.serverId != null)
         .map((item) => item.serverId!)
         .fold<int>(0, (max, id) => id > max ? id : max);
-    if (messageId <= 0 || messageId == _lastSubmittedReadMessageId) return;
+    if (messageId <= 0) return;
+    if (_lastSubmittedReadMessageId != null &&
+        _lastSubmittedReadMessageId! >= messageId) {
+      return;
+    }
+    if (friend?.readMessageId != null && friend!.readMessageId! >= messageId) {
+      _lastSubmittedReadMessageId = friend!.readMessageId;
+      return;
+    }
+    _lastSubmittedReadMessageId = messageId;
+    newMessageCount = 0;
     try {
       friend = await _repository.setRead(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
         messageId: messageId,
       );
-      _lastSubmittedReadMessageId = messageId;
-      newMessageCount = 0;
       notifyListeners();
     } catch (exception) {
       debugPrint(
         '[setRead][failed] session=$sessionUnitId messageId=$messageId error=$exception',
       );
+      if (_lastSubmittedReadMessageId == messageId) {
+        _lastSubmittedReadMessageId = null;
+      }
     }
   }
 
@@ -756,8 +767,8 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> startVoiceRecording() => _mediaService.startAudioRecording(
-    const AudioRecordingRequest(fileNamePrefix: 'gotoim_voice'),
-  );
+        const AudioRecordingRequest(fileNamePrefix: 'gotoim_voice'),
+      );
 
   Future<bool> hasVoiceRecordingPermission() =>
       _mediaService.hasAudioRecordingPermission();
@@ -813,14 +824,13 @@ class ChatController extends ChangeNotifier {
     final sending = message.copyWith(state: 'sending');
     _replaceMessage(sending);
     notifyListeners();
-    final sent =
-        message.messageType == 3
-            ? await _repository.sendLocalVoice(local: sending, file: file)
-            : message.messageType == 2
+    final sent = message.messageType == 3
+        ? await _repository.sendLocalVoice(local: sending, file: file)
+        : message.messageType == 2
             ? await _repository.sendLocalImage(local: sending, file: file)
             : message.messageType == 4
-            ? await _repository.sendLocalVideo(local: sending, file: file)
-            : await _repository.sendLocalFile(local: sending, file: file);
+                ? await _repository.sendLocalVideo(local: sending, file: file)
+                : await _repository.sendLocalFile(local: sending, file: file);
     _replaceMessage(sent);
     if (sent.state == 'sent') _pendingFiles.remove(message.localId);
     notifyListeners();
