@@ -265,6 +265,52 @@ void main() {
     expect(remote.title, '网络新标题');
     expect(local?.title, '网络新标题');
   });
+
+  test(
+    'contact index identity changes persist into offline friend cache',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = SessionDao(database);
+      await dao.upsertAll(<SessionSummary>[
+        SessionSummary.fromJson(<String, dynamic>{
+          'id': 'friend-1',
+          'ownerId': 7,
+          'score': 10,
+          'ticks': 10,
+          'destination': <String, dynamic>{
+            'displayName': '旧昵称',
+            'thumbnail': '/old-avatar.png',
+          },
+        }),
+      ]);
+      final repository = SessionRepository(
+        api: SessionUnitApi(_FakeApiClient()),
+        dao: dao,
+      );
+
+      await repository.mergeContactIdentitySnapshots(
+        ownerId: 7,
+        snapshots: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'friend-1',
+            'name': '新昵称',
+            'thumbnail': '/new-avatar.png',
+          },
+        ],
+      );
+
+      final cached = await repository.loadLocalFriendDetail('friend-1');
+      expect(cached?.title, '新昵称');
+      expect(cached?.raw['destination'], isA<Map>());
+      expect(
+        (cached!.raw['destination'] as Map)['thumbnail'],
+        '/new-avatar.png',
+      );
+    },
+  );
 }
 
 class _FakeApiClient implements ApiClient {

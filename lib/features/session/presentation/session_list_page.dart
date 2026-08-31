@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../user/presentation/profile_page.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/chat_owner.dart';
 import '../data/models/session_summary.dart';
@@ -594,7 +595,15 @@ class ChatOwnerDrawer extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right, size: 18),
               onTap: () {
                 Navigator.pop(context);
-                context.push('/diagnostics/auth');
+                final owner = controller.currentOwner;
+                if (owner != null) {
+                  openProfilePage(
+                    context,
+                    subject: ProfileSubject.owner(owner),
+                  );
+                } else {
+                  context.push('/settings/avatar');
+                }
               },
             ),
             Padding(

@@ -15,6 +15,10 @@ import '../../features/diagnostics/presentation/scan_code_diagnostics_page.dart'
 import '../../features/diagnostics/presentation/client_capabilities_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/js_bridge_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/media_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/media_preview_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/floating_window_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/webview_session_diagnostics_page.dart';
+import '../../features/user/presentation/avatar_settings_page.dart';
 import '../../features/diagnostics/presentation/js_bridge_harness_page.dart';
 import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/session_list_diagnostics_page.dart';
@@ -26,6 +30,7 @@ import '../../features/diagnostics/presentation/native_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/device_registration_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/theme_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/half_page_sheet_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/adaptive_page_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/remote_devtools_diagnostics_page.dart';
 import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/local_file_server/pages/terminal_details_page.dart';
@@ -60,9 +65,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/', builder: (context, state) => const ApplicationShell()),
       GoRoute(
         path: '/group-management/:sessionId',
-        builder: (context, state) => GroupManagementPage(
-          sessionId: state.pathParameters['sessionId']!,
-        ),
+        builder:
+            (context, state) => GroupManagementPage(
+              sessionId: state.pathParameters['sessionId']!,
+            ),
       ),
       GoRoute(
         path: '/local-file-server',
@@ -74,11 +80,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/local-file-server/terminal/:terminalId',
-        builder: (context, state) => TerminalDetailsPage(
-          terminalId: state.pathParameters['terminalId']!,
-        ),
+        builder:
+            (context, state) => TerminalDetailsPage(
+              terminalId: state.pathParameters['terminalId']!,
+            ),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/settings/avatar',
+        builder: (context, state) => const AvatarSettingsPage(),
+      ),
       GoRoute(
         path: '/scan-login',
         builder: (context, state) {
@@ -135,6 +146,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const MediaDiagnosticsPage(),
       ),
       GoRoute(
+        path: '/diagnostics/media-preview',
+        builder: (context, state) => const MediaPreviewDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/floating-window',
+        builder: (context, state) => const FloatingWindowDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/webview-session',
+        builder: (context, state) => const WebViewSessionDiagnosticsPage(),
+      ),
+      GoRoute(
         path: '/diagnostics/database',
         builder: (context, state) => const DatabaseDiagnosticsPage(),
       ),
@@ -179,6 +202,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ThemeDiagnosticsPage(),
       ),
       GoRoute(
+        path: '/diagnostics/adaptive-page',
+        builder: (context, state) => const AdaptivePageDiagnosticsPage(),
+      ),
+      GoRoute(
         path: '/diagnostics/half-page-sheet',
         builder: (context, state) => const HalfPageSheetDiagnosticsPage(),
       ),
@@ -192,28 +219,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/chat/:sessionUnitId/settings',
-        builder: (context, state) => ChatSettingsPage(
-          ownerId:
-              int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
-          sessionUnitId: state.pathParameters['sessionUnitId']!,
-        ),
+        builder:
+            (context, state) => ChatSettingsPage(
+              ownerId:
+                  int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
+              sessionUnitId: state.pathParameters['sessionUnitId']!,
+            ),
       ),
       GoRoute(
         path: '/chat/:sessionUnitId/members',
-        builder: (context, state) => MemberListPage(
-          ownerId:
-              int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
-          sessionUnitId: state.pathParameters['sessionUnitId']!,
-        ),
+        builder:
+            (context, state) => MemberListPage(
+              ownerId:
+                  int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
+              sessionUnitId: state.pathParameters['sessionUnitId']!,
+            ),
       ),
       GoRoute(
         path: '/chat/:sessionUnitId',
-        builder: (context, state) => ChatPage(
-          ownerId:
-              int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
-          sessionUnitId: state.pathParameters['sessionUnitId']!,
-          title: state.uri.queryParameters['title'] ?? '聊天',
-        ),
+        builder:
+            (context, state) => ChatPage(
+              ownerId:
+                  int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
+              sessionUnitId: state.pathParameters['sessionUnitId']!,
+              title: state.uri.queryParameters['title'] ?? '聊天',
+            ),
       ),
     ],
   );

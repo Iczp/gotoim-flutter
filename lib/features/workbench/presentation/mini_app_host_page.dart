@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import '../../../core/floating_window/floating_window.dart';
+import '../application/webview_session.dart';
 import '../data/workbench_models.dart';
 
 /// WebView container page for a MiniApp.
@@ -16,7 +19,7 @@ import '../data/workbench_models.dart';
 /// - Back navigation (WebView goBack → close task).
 /// - Network error page with one-tap retry.
 /// - Close button to finish and cleanup the task.
-class MiniAppHostPage extends StatefulWidget {
+class MiniAppHostPage extends ConsumerStatefulWidget {
   const MiniAppHostPage({
     required this.request,
     this.channel = const MethodChannel('com.gotoim.mini_app'),
@@ -27,21 +30,28 @@ class MiniAppHostPage extends StatefulWidget {
   final MethodChannel channel;
 
   @override
-  State<MiniAppHostPage> createState() => _MiniAppHostPageState();
+  ConsumerState<MiniAppHostPage> createState() => _MiniAppHostPageState();
 }
 
-class _MiniAppHostPageState extends State<MiniAppHostPage> {
+class _MiniAppHostPageState extends ConsumerState<MiniAppHostPage> {
   InAppWebViewController? _webController;
+  late final WebViewSession _session;
   bool _isLoading = true;
   double _progress = 0.0;
   String? _error;
   String _title = '';
   bool _canGoBack = false;
+  bool _isMinimized = false;
   Timer? _timeoutTimer;
 
   @override
   void initState() {
     super.initState();
+    _session = WebViewSessionRegistry.shared.obtain(
+      id: '${widget.request.appId}:${widget.request.url}',
+      url: widget.request.url,
+      title: widget.request.title,
+    );
     _title = widget.request.title ?? widget.request.appId;
     _startTimeoutWatchdog();
   }
@@ -61,6 +71,9 @@ class _MiniAppHostPageState extends State<MiniAppHostPage> {
   @override
   void dispose() {
     _timeoutTimer?.cancel();
+    final webController = _webController;
+    if (webController != null) _session.detach(webController);
+    WebViewSessionRegistry.shared.release(_session.id);
     super.dispose();
   }
 
@@ -95,6 +108,7 @@ class _MiniAppHostPageState extends State<MiniAppHostPage> {
   }
 
   Future<void> _closeTask() async {
+    ref.read(floatingWindowManagerProvider).close(_floatingWindowId);
     try {
       await widget.channel.invokeMethod<void>('closeTask');
     } catch (e) {
@@ -103,6 +117,34 @@ class _MiniAppHostPageState extends State<MiniAppHostPage> {
         Navigator.of(context).pop();
       }
     }
+  }
+
+  String get _floatingWindowId => 'webview-session:${_session.id}';
+
+  void _minimize() {
+    ref
+        .read(floatingWindowManagerProvider)
+        .show(
+          id: _floatingWindowId,
+          options: const FloatingWindowOptions(
+            initialSize: Size(232, 92),
+            snapToEdge: true,
+            resizable: false,
+          ),
+          child: _MiniAppRestoreWindow(
+            title: _title.isEmpty ? widget.request.appId : _title,
+            onRestore: _restore,
+            onClose: _closeTask,
+          ),
+        );
+    _session.minimize();
+    setState(() => _isMinimized = true);
+  }
+
+  void _restore() {
+    ref.read(floatingWindowManagerProvider).close(_floatingWindowId);
+    _session.restore();
+    if (mounted) setState(() => _isMinimized = false);
   }
 
   @override
@@ -121,6 +163,11 @@ class _MiniAppHostPageState extends State<MiniAppHostPage> {
           ),
           title: Text(_title.isNotEmpty ? _title : widget.request.appId),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.picture_in_picture_alt_outlined),
+              tooltip: '缩小并保持页面',
+              onPressed: _isMinimized ? _restore : _minimize,
+            ),
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: '刷新',
@@ -155,73 +202,83 @@ class _MiniAppHostPageState extends State<MiniAppHostPage> {
           children: [
             // WebView layer
             if (_error == null)
-              InAppWebView(
-                initialUrlRequest: URLRequest(
-                  url: WebUri.uri(widget.request.url),
-                ),
-                initialSettings: InAppWebViewSettings(
-                  javaScriptEnabled: true,
-                  domStorageEnabled: true,
-                  useOnLoadResource: false,
-                  useShouldOverrideUrlLoading: false,
-                  mediaPlaybackRequiresUserGesture: false,
-                  transparentBackground: true,
-                ),
-                onWebViewCreated: (controller) {
-                  _webController = controller;
-                },
-                onLoadStart: (controller, url) {
-                  if (mounted) {
-                    setState(() {
-                      _isLoading = true;
-                      _error = null;
-                    });
-                  }
-                },
-                onProgressChanged: (controller, progress) {
-                  if (!mounted) return;
-                  final normalizedProgress = progress / 100.0;
-                  setState(() {
-                    _progress = normalizedProgress;
-                    if (progress >= 85) {
-                      _isLoading = false;
-                      _timeoutTimer?.cancel();
+              Offstage(
+                offstage: _isMinimized,
+                child: InAppWebView(
+                  initialUrlRequest: URLRequest(
+                    url: WebUri.uri(widget.request.url),
+                  ),
+                  initialSettings: InAppWebViewSettings(
+                    javaScriptEnabled: true,
+                    domStorageEnabled: true,
+                    useOnLoadResource: false,
+                    useShouldOverrideUrlLoading: false,
+                    mediaPlaybackRequiresUserGesture: false,
+                    transparentBackground: true,
+                  ),
+                  onWebViewCreated: (controller) {
+                    _webController = controller;
+                    _session.attach(controller);
+                  },
+                  onLoadStart: (controller, url) {
+                    _session.didStart(url);
+                    if (mounted) {
+                      setState(() {
+                        _isLoading = true;
+                        _error = null;
+                      });
                     }
-                  });
-                },
-                onLoadStop: (controller, url) async {
-                  if (!mounted) return;
-                  final canGoBack = await controller.canGoBack();
-                  setState(() {
-                    _isLoading = false;
-                    _progress = 1.0;
-                    _canGoBack = canGoBack;
-                  });
-                  _timeoutTimer?.cancel();
-                },
-                onReceivedError: (controller, request, error) {
-                  if (mounted) {
+                  },
+                  onProgressChanged: (controller, progress) {
+                    _session.didProgress(progress);
+                    if (!mounted) return;
+                    final normalizedProgress = progress / 100.0;
+                    setState(() {
+                      _progress = normalizedProgress;
+                      if (progress >= 85) {
+                        _isLoading = false;
+                        _timeoutTimer?.cancel();
+                      }
+                    });
+                  },
+                  onLoadStop: (controller, url) async {
+                    await _session.didStop(controller, url);
+                    if (!mounted) return;
+                    final canGoBack = await controller.canGoBack();
                     setState(() {
                       _isLoading = false;
-                      _error = '${error.description} (${error.type})';
+                      _progress = 1.0;
+                      _canGoBack = canGoBack;
                     });
                     _timeoutTimer?.cancel();
-                  }
-                },
-                onTitleChanged: (controller, title) {
-                  if (mounted && title != null && title.isNotEmpty) {
-                    setState(() => _title = title);
-                  }
-                },
-                onUpdateVisitedHistory: (controller, url, isReload) async {
-                  if (!mounted) return;
-                  final canGoBack = await controller.canGoBack();
-                  setState(() => _canGoBack = canGoBack);
-                },
+                  },
+                  onReceivedError: (controller, request, error) {
+                    _session.didFail(error);
+                    if (mounted) {
+                      setState(() {
+                        _isLoading = false;
+                        _error = '${error.description} (${error.type})';
+                      });
+                      _timeoutTimer?.cancel();
+                    }
+                  },
+                  onTitleChanged: (controller, title) {
+                    _session.didChangeTitle(title);
+                    if (mounted && title != null && title.isNotEmpty) {
+                      setState(() => _title = title);
+                    }
+                  },
+                  onUpdateVisitedHistory: (controller, url, isReload) async {
+                    await _session.didVisit(controller, url);
+                    if (!mounted) return;
+                    final canGoBack = await controller.canGoBack();
+                    setState(() => _canGoBack = canGoBack);
+                  },
+                ),
               ),
 
             // Loading overlay with smooth fade out
-            if (_error == null)
+            if (_error == null && !_isMinimized)
               IgnorePointer(
                 ignoring: !_isLoading,
                 child: AnimatedOpacity(
@@ -255,6 +312,45 @@ class _MiniAppHostPageState extends State<MiniAppHostPage> {
       ),
     );
   }
+}
+
+class _MiniAppRestoreWindow extends StatelessWidget {
+  const _MiniAppRestoreWindow({
+    required this.title,
+    required this.onRestore,
+    required this.onClose,
+  });
+
+  final String title;
+  final VoidCallback onRestore;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.web_outlined),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          IconButton(
+            tooltip: '恢复 WebView',
+            onPressed: onRestore,
+            icon: const Icon(Icons.open_in_full),
+          ),
+          IconButton(
+            tooltip: '关闭 WebView',
+            onPressed: onClose,
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// Rich loading overlay preventing white screen during MiniApp engine/network initialization.

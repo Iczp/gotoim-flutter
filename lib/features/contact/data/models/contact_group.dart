@@ -43,6 +43,8 @@ class ContactEntry {
   final String thumbnail;
   final Map<String, dynamic> raw;
 
+  Map<String, dynamic> toJson() => Map<String, dynamic>.from(raw);
+
   String get displayName => rename.trim().isNotEmpty ? rename.trim() : name;
   String get avatarUrl => thumbnail.trim().isNotEmpty ? thumbnail : portrait;
   String get surnameInitial {
@@ -79,6 +81,11 @@ class ContactGroup {
   final List<ContactEntry> contacts;
   int get count => contacts.length;
 
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'index': index,
+    'list': contacts.map((contact) => contact.toJson()).toList(),
+  };
+
   /// A group header shows every distinct surname/first character once, in the
   /// same ordering as the server response.
   List<String> get surnameInitials {
@@ -96,6 +103,10 @@ List<ContactGroup> localContactGroups(
 ) {
   final grouped = <String, List<ContactEntry>>{};
   for (final friend in friends) {
+    final destination =
+        friend.raw['destination'] is Map
+            ? Map<String, dynamic>.from(friend.raw['destination'] as Map)
+            : const <String, dynamic>{};
     final entry = ContactEntry(
       id: friend.id,
       ownerId: friend.ownerId,
@@ -105,11 +116,11 @@ List<ContactGroup> localContactGroups(
             : null,
       ),
       name: friend.title,
-      rename: '',
+      rename: destination['memberName']?.toString() ?? '',
       abbr: '',
       nameSpelling: '',
-      portrait: '',
-      thumbnail: '',
+      portrait: destination['portrait']?.toString() ?? '',
+      thumbnail: destination['thumbnail']?.toString() ?? '',
       raw: friend.raw,
     );
     final initial = _normalizedIndex(entry.surnameInitial);

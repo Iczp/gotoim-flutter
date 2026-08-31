@@ -23,6 +23,19 @@ class MessageDao {
     limit: limit,
   )).map(ChatMessage.fromDatabaseRow).toList(growable: false);
 
+  Future<ChatMessage?> findByServerId({
+    required int ownerId,
+    required String sessionUnitId,
+    required int serverId,
+  }) async {
+    final row = await _database.readMessageRowByServerId(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      serverId: serverId,
+    );
+    return row == null ? null : ChatMessage.fromDatabaseRow(row);
+  }
+
   Future<void> upsertAll(List<ChatMessage> messages) =>
       _database.upsertMessageRows(
         messages

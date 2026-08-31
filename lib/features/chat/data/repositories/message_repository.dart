@@ -28,6 +28,54 @@ class MessageRepository {
   Future<void> deleteLocal(Iterable<String> localIds) =>
       _dao.deleteAll(localIds);
 
+  Future<List<ChatMessage>> loadLocalLatest({
+    required int ownerId,
+    required String sessionUnitId,
+    int limit = 99,
+  }) => _dao.readPage(
+    ownerId: ownerId,
+    sessionUnitId: sessionUnitId,
+    limit: limit,
+  );
+
+  Future<ChatMessage?> findLocalByServerId({
+    required int ownerId,
+    required String sessionUnitId,
+    required int serverId,
+  }) => _dao.findByServerId(
+    ownerId: ownerId,
+    sessionUnitId: sessionUnitId,
+    serverId: serverId,
+  );
+
+  /// Retries a failed text message in-place so its local identity and UI slot
+  /// remain stable instead of inserting a duplicate bubble.
+  Future<ChatMessage> retryText(ChatMessage message) async {
+    if (message.messageType != 0 || message.state == 'sending') return message;
+    var result = message.copyWith(state: 'sending');
+    await _dao.upsertAll(<ChatMessage>[result]);
+    try {
+      final response = await _api.sendText(
+        sessionUnitId: message.sessionUnitId,
+        clientMessageId: message.clientMessageId ?? message.localId,
+        text: message.text,
+        quoteMessageId: _asInt(message.raw['quoteMessageId']),
+      );
+      final serverId = _asInt(response['id']);
+      result = result.copyWith(
+        serverId: serverId,
+        score: serverId == null ? result.score : serverId * 1000000,
+        state: 'sent',
+        raw: <String, dynamic>{...result.raw, ...response},
+      );
+    } catch (_) {
+      result = result.copyWith(state: 'failed');
+    }
+    await _dao.upsertAll(<ChatMessage>[result]);
+    if (result.state == 'sent') await _updateSessionSummary(result);
+    return result;
+  }
+
   Future<SessionSummary> setRead({
     required int ownerId,
     required String sessionUnitId,
@@ -299,27 +347,7 @@ class MessageRepository {
     required String sessionUnitId,
     required Object? payload,
   }) async {
-    Map<String, dynamic>? findMessage(Object? value) {
-      if (value is Map) {
-        final map = Map<String, dynamic>.from(value);
-        if (map['id'] != null &&
-            (map['messageType'] != null || map['content'] != null)) {
-          return map;
-        }
-        for (final child in map.values) {
-          final found = findMessage(child);
-          if (found != null) return found;
-        }
-      } else if (value is List) {
-        for (final child in value) {
-          final found = findMessage(child);
-          if (found != null) return found;
-        }
-      }
-      return null;
-    }
-
-    final json = findMessage(payload);
+    final json = _findRealtimeMessage(payload);
     if (json == null) return null;
     final payloadSessionId = firstNonEmpty(<Object?>[
       json['sessionUnitId'],
@@ -336,6 +364,28 @@ class MessageRepository {
     await _dao.upsertAll(<ChatMessage>[message]);
     await _updateSessionSummary(message);
     return message;
+  }
+
+  /// Stores a realtime message even when its chat page is not open. The
+  /// session cache supplies the authoritative local owner association.
+  Future<ChatMessage?> applyRealtimePayloadFromCachedSession(
+    Object? payload,
+  ) async {
+    final json = _findRealtimeMessage(payload);
+    if (json == null) return null;
+    final sessionUnitId = firstNonEmpty(<Object?>[
+      json['sessionUnitId'],
+      asMap(json['sessionUnit'])['id'],
+    ]);
+    if (sessionUnitId.isEmpty) return null;
+    final session = await _sessionDao?.readById(sessionUnitId);
+    final ownerId = session?.ownerId;
+    if (ownerId == null) return null;
+    return applyRealtimePayload(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      payload: json,
+    );
   }
 
   Future<ChatMessage> createLocalImage({
@@ -654,10 +704,33 @@ class MessageRepository {
       sessionUnitId: message.sessionUnitId,
     );
   }
+
+  int? _asInt(Object? value) =>
+      value is num ? value.toInt() : int.tryParse('$value');
 }
 
 class MessagePage {
   const MessagePage(this.items, this.hasMore);
   final List<ChatMessage> items;
   final bool hasMore;
+}
+
+Map<String, dynamic>? _findRealtimeMessage(Object? value) {
+  if (value is Map) {
+    final map = Map<String, dynamic>.from(value);
+    if (map['id'] != null &&
+        (map['messageType'] != null || map['content'] != null)) {
+      return map;
+    }
+    for (final child in map.values) {
+      final found = _findRealtimeMessage(child);
+      if (found != null) return found;
+    }
+  } else if (value is List) {
+    for (final child in value) {
+      final found = _findRealtimeMessage(child);
+      if (found != null) return found;
+    }
+  }
+  return null;
 }

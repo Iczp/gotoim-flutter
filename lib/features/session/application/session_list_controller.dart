@@ -68,6 +68,7 @@ class SessionListController extends ChangeNotifier {
   ChatOwner? _currentOwner;
   bool _isLoading = false;
   bool _isRefreshing = false;
+  bool _remoteInitialized = false;
   bool _hasMore = true;
   int? _totalCount;
   Object? _error;
@@ -81,6 +82,7 @@ class SessionListController extends ChangeNotifier {
   ChatOwner? get currentOwner => _currentOwner;
   bool get isLoading => _isLoading;
   bool get isRefreshing => _isRefreshing;
+  bool get isRemoteInitialized => _remoteInitialized;
   bool get hasMore => _hasMore;
   int? get totalCount => _totalCount;
   Object? get error => _error;
@@ -109,8 +111,11 @@ class SessionListController extends ChangeNotifier {
 
   Future<void> reconnectSignalR() => _signalRGateway.connect();
 
-  Future<void> initialize() async {
-    if (_isLoading || _currentOwner != null) return;
+  /// Loads Drift first, then fetches remote owners and the first friend page.
+  /// A failed offline attempt deliberately remains retryable: callers can run
+  /// this again after connectivity returns without recreating the controller.
+  Future<void> initialize({bool forceRemote = false}) async {
+    if (_isLoading || (_remoteInitialized && !forceRemote)) return;
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -157,10 +162,14 @@ class SessionListController extends ChangeNotifier {
             remoteOwners.first;
         await _repository.saveCurrentOwnerId(_currentOwner!.id);
         await _loadNextPageInternal(reset: true);
+        _remoteInitialized = true;
       }
       unawaited(loadDevices(silent: true));
     } catch (error) {
-      if (_currentOwner == null || _sessions.isEmpty) {
+      // A cached identity is sufficient to render the identity drawer and an
+      // empty (but usable) offline session list. Do not replace it with a
+      // blocking error simply because this owner currently has no friends.
+      if (_currentOwner == null) {
         _error = error;
       } else {
         debugPrint(
@@ -260,6 +269,15 @@ class SessionListController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     await loadNextPage();
+  }
+
+  Future<void> updateCurrentOwner(ChatOwner owner) async {
+    _owners = _owners
+        .map((item) => item.id == owner.id ? owner : item)
+        .toList(growable: false);
+    if (_currentOwner?.id == owner.id) _currentOwner = owner;
+    await _repository.saveOwner(owner);
+    notifyListeners();
   }
 
   Future<void> loadNextPage() async {

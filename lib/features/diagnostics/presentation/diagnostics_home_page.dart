@@ -100,6 +100,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/chat'),
           ),
           _Item(
+            icon: Icons.fullscreen_outlined,
+            title: 'AdaptivePage 半屏 / 普通页',
+            subtitle: '半屏/完整页转换、状态保留、拖拽长列表与键盘避让',
+            onTap: () => context.push('/diagnostics/adaptive-page'),
+          ),
+          _Item(
             icon: Icons.keyboard_arrow_up_outlined,
             title: '半屏页组件',
             subtitle: '高度、键盘避让、拖拽、关闭、圆角与实际返回结果',
@@ -116,6 +122,30 @@ class DiagnosticsHomePage extends StatelessWidget {
             title: '媒体与文件测试',
             subtitle: '相册、拍照、视频、缩略图、压缩、录音、图片识码与另存为',
             onTap: () => context.push('/diagnostics/media'),
+          ),
+          _Item(
+            icon: Icons.fullscreen,
+            title: '统一媒体预览',
+            subtitle: '图片缩放、左右切换、下拉关闭与视频播放器生命周期',
+            onTap: () => context.push('/diagnostics/media-preview'),
+          ),
+          _Item(
+            icon: Icons.account_circle_outlined,
+            title: '头像与裁剪',
+            subtitle: '圆/方显示、1:1 裁剪、上传头像、缓存失效与当前身份刷新',
+            onTap: () => context.push('/settings/avatar'),
+          ),
+          _Item(
+            icon: Icons.picture_in_picture_alt_outlined,
+            title: 'Floating Window 浮动窗口',
+            subtitle: '多窗口、拖动、吸边、键盘避让、跨路由与窗口缩放',
+            onTap: () => context.push('/diagnostics/floating-window'),
+          ),
+          _Item(
+            icon: Icons.web_asset_outlined,
+            title: 'WebView Session',
+            subtitle: '真实 URL、历史、Cookie、导航、JSBridge 状态与平台验收清单',
+            onTap: () => context.push('/diagnostics/webview-session'),
           ),
           _Item(
             icon: Icons.tab_outlined,
@@ -168,10 +198,10 @@ class _Item extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      );
+    leading: Icon(icon),
+    title: Text(title),
+    subtitle: Text(subtitle),
+    trailing: const Icon(Icons.chevron_right),
+    onTap: onTap,
+  );
 }

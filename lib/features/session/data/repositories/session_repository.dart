@@ -32,6 +32,8 @@ class SessionRepository {
     return owners;
   }
 
+  Future<void> saveOwner(ChatOwner owner) => _dao.upsertOwners([owner]);
+
   Future<int?> readCurrentOwnerId() => _dao.readCurrentOwnerId();
 
   Future<void> saveCurrentOwnerId(int ownerId) =>
@@ -41,7 +43,7 @@ class SessionRepository {
       (await _api.getDevices()).items;
 
   Future<ChatOwner> resolveCurrentOwner() async {
-    final owners = await _api.getOwners();
+    final owners = await loadOwners();
     if (owners.isEmpty) {
       throw StateError('当前账号没有可用的聊天对象');
     }
@@ -138,6 +140,49 @@ class SessionRepository {
     int limit = 50,
   }) => _dao.readPage(ownerId: ownerId, cursor: cursor, limit: limit);
 
+  /// Persists identity fields returned by the contacts index into the same
+  /// Friends rows used by the session list and offline chat headers.
+  Future<void> mergeContactIdentitySnapshots({
+    required int ownerId,
+    required Iterable<Map<String, dynamic>> snapshots,
+  }) async {
+    final updated = <SessionSummary>[];
+    for (final snapshot in snapshots) {
+      final id = snapshot['id']?.toString() ?? '';
+      if (id.isEmpty) continue;
+      final current = await _dao.readById(id);
+      if (current == null || current.ownerId != ownerId) continue;
+      final destination = <String, dynamic>{
+        ..._map(current.raw['destination']),
+      };
+      final displayName = _firstNonEmpty(
+        snapshot['rename'],
+        snapshot['name'],
+        snapshot['displayName'],
+      );
+      if (displayName.isNotEmpty) destination['displayName'] = displayName;
+      _copyIfPresent(snapshot, destination, 'thumbnail');
+      _copyIfPresent(snapshot, destination, 'portrait');
+      _copyIfPresent(snapshot, destination, 'objectType');
+      final raw = <String, dynamic>{...current.raw, 'destination': destination};
+      updated.add(
+        SessionSummary.fromJson(<String, dynamic>{
+          ...raw,
+          'id': current.id,
+          'ownerId': ownerId,
+        }),
+      );
+    }
+    if (updated.isEmpty) return;
+    await _dao.upsertAll(updated);
+    for (final item in updated) {
+      _changeBus?.publish(ownerId: ownerId, sessionUnitId: item.id);
+    }
+    debugPrint(
+      '[contactIdentity][persisted] ownerId=$ownerId count=${updated.length}',
+    );
+  }
+
   Future<SessionSummary?> loadLocalFriendDetail(String sessionUnitId) =>
       _dao.readById(sessionUnitId);
 
@@ -211,6 +256,26 @@ class SessionRepository {
     await _dao.resetMessages(ownerId, sessionUnitId);
     _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
   }
+}
+
+Map<String, dynamic> _map(Object? value) =>
+    value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+
+String _firstNonEmpty(Object? first, Object? second, Object? third) {
+  for (final value in <Object?>[first, second, third]) {
+    final text = value?.toString().trim() ?? '';
+    if (text.isNotEmpty) return text;
+  }
+  return '';
+}
+
+void _copyIfPresent(
+  Map<String, dynamic> source,
+  Map<String, dynamic> destination,
+  String key,
+) {
+  final value = source[key];
+  if (value?.toString().trim().isNotEmpty == true) destination[key] = value;
 }
 
 class LoadFriendsResult {

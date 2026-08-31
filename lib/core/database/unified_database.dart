@@ -501,6 +501,20 @@ class UnifiedDatabase {
     return (rows.single['count'] as num?)?.toInt() ?? 0;
   }
 
+  Future<Map<String, Object?>?> readMessageRowByServerId({
+    required int ownerId,
+    required String sessionUnitId,
+    required int serverId,
+  }) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT * FROM Messages WHERE ownerId = ? AND sessionUnitId = ? '
+      'AND serverId = ? LIMIT 1',
+      <Object?>[ownerId, sessionUnitId, serverId],
+    );
+    return rows.isEmpty ? null : rows.single;
+  }
+
   Future<int> readMaxMessageScore(int ownerId, String sessionUnitId) async {
     await initialize();
     final rows = await _connection.runSelect(

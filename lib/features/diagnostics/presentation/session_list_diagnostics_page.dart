@@ -20,6 +20,7 @@ class SessionListDiagnosticsPage extends ConsumerWidget {
       'hasMore': controller.hasMore,
       'isLoading': controller.isLoading,
       'isRefreshing': controller.isRefreshing,
+      'remoteInitialized': controller.isRemoteInitialized,
       'error': controller.error?.toString(),
       'cursor':
           controller.sessions.isEmpty
@@ -44,7 +45,9 @@ class SessionListDiagnosticsPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('功能：Owner、Drift 本地分页、线上补页与 changes 增量刷新。'),
+          const Text(
+            '功能：真实 Owner、Drift 本地分页、线上补页与 changes 增量刷新。无网时先显示缓存；恢复联网后再次初始化即可补齐远端数据。',
+          ),
           const SizedBox(height: 8),
           const Text('支持：Android/iOS/iPad/Windows/macOS/Linux/Web'),
           const SizedBox(height: 16),
@@ -54,7 +57,7 @@ class SessionListDiagnosticsPage extends ConsumerWidget {
             children: [
               FilledButton(
                 onPressed: controller.isLoading ? null : controller.initialize,
-                child: const Text('初始化'),
+                child: const Text('本地优先初始化 / 联网重试'),
               ),
               OutlinedButton(
                 onPressed:

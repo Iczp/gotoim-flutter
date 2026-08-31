@@ -125,22 +125,6 @@ class ChatMessage {
     ]).replaceAll('/', ':');
   }
 
-  String get quotePreview {
-    final quote = quoteMessage;
-    final quoteContent = asMap(quote['content']);
-    final type = asInt(quote['messageType']) ?? 0;
-    if (type == 0) {
-      return firstNonEmpty(<Object?>[quoteContent['text'], quote['text']]);
-    }
-    return switch (type) {
-      2 => '[图片]',
-      3 => '[语音]',
-      4 => '[视频]',
-      5 => '[文件]',
-      _ => '[消息]',
-    };
-  }
-
   String? get mediaUrl {
     final value = firstNonEmpty(<Object?>[
       content['url'],
@@ -173,6 +157,24 @@ class ChatMessage {
     final value = content['path']?.toString();
     return value == null || value.isEmpty ? null : value;
   }
+
+  String get linkUrl =>
+      firstNonEmpty(<Object?>[content['url'], content['link']]);
+  String get linkTitle =>
+      firstNonEmpty(<Object?>[content['title'], content['name'], linkUrl]);
+  String get linkDescription =>
+      firstNonEmpty(<Object?>[content['description'], content['content']]);
+  String? get linkImageUrl {
+    final value = firstNonEmpty(<Object?>[
+      content['image'],
+      content['thumbnail'],
+    ]);
+    return value.isEmpty ? null : value;
+  }
+
+  String get historyTitle => firstNonEmpty(<Object?>[content['title'], '聊天记录']);
+  String get historyDescription =>
+      firstNonEmpty(<Object?>[content['description'], content['content']]);
 
   ChatMessage copyWith({
     int? serverId,

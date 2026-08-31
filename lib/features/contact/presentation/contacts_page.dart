@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../session/application/session_list_controller.dart';
 import '../../session/presentation/chat_object_avatar.dart';
+import '../../user/presentation/profile_page.dart';
 import '../application/contacts_controller.dart';
 import '../data/models/contact_group.dart';
 
@@ -275,7 +276,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
               return _ContactRow(
                 contact: contact,
                 showDivider: index + 1 < group.contacts.length,
-                onTap: () => _openChat(context, contact, ownerId),
+                onTap: () => _openContactProfile(context, contact, ownerId),
               );
             }, childCount: group.contacts.length),
           ),
@@ -290,6 +291,16 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       '&title=${Uri.encodeQueryComponent(contact.displayName)}',
     );
   }
+
+  Future<void> _openContactProfile(
+    BuildContext context,
+    ContactEntry contact,
+    int? ownerId,
+  ) => openProfilePage(
+    context,
+    subject: ProfileSubject.contact(contact),
+    onSendMessage: () => _openChat(context, contact, ownerId),
+  );
 
   void _syncGroupOffsets(List<ContactGroup> groups) {
     final unchanged =

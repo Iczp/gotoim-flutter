@@ -33,4 +33,25 @@ void main() {
     expect(groups.map((group) => group.index), <String>['A', 'B', '#']);
     expect(groups.first.contacts.single.displayName, 'Alice');
   });
+
+  test('local fallback preserves cached contact avatar and rename', () {
+    final groups = localContactGroups(
+      <({String id, int? ownerId, String title, Map<String, dynamic> raw})>[
+        (
+          id: 'a',
+          ownerId: 1,
+          title: 'Alice',
+          raw: const <String, dynamic>{
+            'destination': <String, dynamic>{
+              'memberName': '阿丽丝',
+              'thumbnail': '/cached-avatar.png',
+            },
+          },
+        ),
+      ],
+    );
+
+    expect(groups.single.contacts.single.displayName, '阿丽丝');
+    expect(groups.single.contacts.single.avatarUrl, '/cached-avatar.png');
+  });
 }

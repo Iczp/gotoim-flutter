@@ -180,9 +180,12 @@ class DefaultMediaService implements MediaService {
   @override
   Future<List<SelectedFile>> chooseImage(MediaPickRequest request) async {
     final context = rootNavigatorKey.currentContext;
-    if (context != null &&
-        (_platformFacade.kind == PlatformKind.android ||
-            _platformFacade.kind == PlatformKind.ios)) {
+    // On Android, wechat_assets_picker requests a thumbnail for each album's
+    // first asset even for an image-only picker. A corrupt or unsupported
+    // video in an album then throws from MediaMetadataRetriever on a detached
+    // future, which cannot be handled by this method's try/catch. Use the
+    // system picker there so one bad gallery asset cannot break image picking.
+    if (context != null && _platformFacade.kind == PlatformKind.ios) {
       try {
         final result = await AssetPicker.pickAssets(
           context,
@@ -251,9 +254,9 @@ class DefaultMediaService implements MediaService {
   @override
   Future<SelectedFile?> chooseVideo(MediaPickRequest request) async {
     final context = rootNavigatorKey.currentContext;
-    if (context != null &&
-        (_platformFacade.kind == PlatformKind.android ||
-            _platformFacade.kind == PlatformKind.ios)) {
+    // See [chooseImage] for why Android uses the system picker instead of
+    // wechat_assets_picker.
+    if (context != null && _platformFacade.kind == PlatformKind.ios) {
       try {
         final result = await AssetPicker.pickAssets(
           context,

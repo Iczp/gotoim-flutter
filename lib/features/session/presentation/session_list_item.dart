@@ -47,49 +47,68 @@ List<SessionListItem> buildSessionListItems(
   required bool hasMore,
   DateTime? now,
 }) {
-  final items = [...source]..sort((a, b) {
-    final pinned = (b.isPinned ? 1 : 0).compareTo(a.isPinned ? 1 : 0);
-    if (pinned != 0) return pinned;
-    final score = b.score.compareTo(a.score);
-    if (score != 0) return score;
-    final ticks = b.ticks.compareTo(a.ticks);
-    return ticks != 0 ? ticks : b.id.compareTo(a.id);
-  });
-  final result = <SessionListItem>[];
-  final pinnedCount = items.where((item) => item.isPinned).length;
-  String? previousCategory;
-  for (var index = 0; index < items.length; index++) {
-    final item = items[index];
-    if (!item.isPinned && index == pinnedCount && pinnedCount > 0) {
-      result.add(
-        SessionListItem.pinnedDivider(count: pinnedCount, hasMore: hasMore),
+  final items = [...source];
+  final pinned =
+      items.where((item) => item.isPinned).toList()..sort(_compareSessions);
+  final grouped = <String, List<SessionSummary>>{};
+  for (final item in items.where((item) => !item.isPinned)) {
+    final group = sessionTimeGroup(item.ticks, now: now);
+    (grouped[group] ??= <SessionSummary>[]).add(item);
+  }
+  final groups =
+      grouped.entries.toList()..sort(
+        (a, b) => sessionTimeGroupOrder(
+          a.key,
+        ).compareTo(sessionTimeGroupOrder(b.key)),
       );
-    }
-    if (!item.isPinned) {
-      final group = sessionTimeGroup(item.ticks, now: now);
-      if (group != previousCategory) {
-        final count =
-            items
-                .where(
-                  (candidate) =>
-                      !candidate.isPinned &&
-                      sessionTimeGroup(candidate.ticks, now: now) == group,
-                )
-                .length;
-        result.add(
-          SessionListItem.timeDivider(
-            title: group,
-            count: count,
-            hasMore: hasMore && index + count >= items.length,
-          ),
-        );
-      }
-      previousCategory = group;
-    }
-    result.add(SessionListItem.session(item));
+  for (final group in groups) {
+    group.value.sort(_compareSessions);
+  }
+
+  final result = <SessionListItem>[];
+  result.addAll(pinned.map(SessionListItem.session));
+  if (pinned.isNotEmpty && groups.isNotEmpty) {
+    result.add(
+      SessionListItem.pinnedDivider(count: pinned.length, hasMore: false),
+    );
+  }
+  for (var index = 0; index < groups.length; index++) {
+    final group = groups[index];
+    result.add(
+      SessionListItem.timeDivider(
+        title: group.key,
+        count: group.value.length,
+        hasMore: hasMore && index == groups.length - 1,
+      ),
+    );
+    result.addAll(group.value.map(SessionListItem.session));
   }
   return result;
 }
+
+int _compareSessions(SessionSummary a, SessionSummary b) {
+  final score = b.score.compareTo(a.score);
+  if (score != 0) return score;
+  final ticks = b.ticks.compareTo(a.ticks);
+  return ticks != 0 ? ticks : b.id.compareTo(a.id);
+}
+
+int sessionTimeGroupOrder(String group) => switch (group) {
+  '今天' => 0,
+  '昨天' => 1,
+  '三天前' => 2,
+  '近一周' => 3,
+  '两周前' => 4,
+  '一个月前' => 5,
+  '两个月前' => 6,
+  '三个月前' => 7,
+  '半年前' => 8,
+  '1年前' => 9,
+  '2年前' => 10,
+  '3年前' => 11,
+  '4年前' => 12,
+  _ => 13,
+};
 
 String sessionTimeGroup(int ticks, {DateTime? now}) {
   if (ticks <= 0) return '很久以前（5年前以上）';

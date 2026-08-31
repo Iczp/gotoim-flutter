@@ -7,28 +7,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/file/file_picker_service.dart';
+import '../../../core/services/file/attachment_transfer_service.dart';
 import '../../../core/services/media/media_service.dart';
 import '../../../core/services/media/audio_playback_service.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../../../core/config/app_environment.dart';
+import '../../../core/media/media_preview.dart';
+import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/half_page_sheet.dart';
-import '../../auth/application/auth_controller.dart';
+import '../../../core/widgets/chat_bubble.dart';
+import '../../../core/widgets/floating_popover.dart';
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
 import '../../chat_settings/data/models/chat_member.dart';
 import '../../chat_settings/application/chat_settings_controller.dart';
 import '../../chat_settings/presentation/member_profile_sheet.dart';
 import '../../session/application/session_list_controller.dart';
+import '../../session/data/session_change_bus.dart';
 import '../../session/presentation/chat_object_avatar.dart';
 import '../../call_center/application/call_center_controller.dart';
 import '../../call_center/data/models/transfer_target.dart';
-import 'message_content/file_message_content.dart';
-import 'message_content/image_message_content.dart';
-import 'message_content/text_message_content.dart';
-import 'message_content/video_message_content.dart';
-import 'message_content/voice_message_content.dart';
+import 'message_content/chat_message_content_renderer.dart';
+import 'message_content/chat_message_presentation.dart';
+import 'message_menu/chat_message_menu.dart';
 import 'widgets/chat_input_area.dart';
 import 'widgets/chat_message_list.dart';
+import 'widgets/chat_message_delivery_state.dart';
+import 'widgets/chat_quote_preview.dart';
+import 'widgets/chat_selection_bar.dart';
 import 'widgets/chat_title_bar.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -53,7 +59,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final input = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<_ComposerState> _composerKey = GlobalKey<_ComposerState>();
+  final Map<String, GlobalKey> _messageKeys = <String, GlobalKey>{};
+  final Map<int, ChatMessage> _quotedMessageCache = <int, ChatMessage>{};
+  final Set<int> _quotedMessageLookups = <int>{};
   final Map<String, bool> _timeVisibility = <String, bool>{};
+  List<MediaPreviewItem> _mediaItems = const <MediaPreviewItem>[];
+  String _mediaItemsFingerprint = '';
   int _timeVisibilityResetMarker = 0;
 
   @override
@@ -65,9 +76,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ref.read(messageRepositoryProvider),
       ref.read(sessionRepositoryProvider),
       filePickerService: ref.read(filePickerServiceProvider),
+      attachmentTransferService: ref.read(attachmentTransferServiceProvider),
       mediaService: ref.read(mediaServiceProvider),
       audioPlaybackService: _audioPlayback,
-      signalRGateway: ref.read(signalRGatewayProvider),
+      sessionChangeBus: ref.read(sessionChangeBusProvider),
       clipboardService: ref.read(clipboardServiceProvider),
       chatSettingsRepository: ref.read(chatSettingsRepositoryProvider),
       ownerId: widget.ownerId,
@@ -99,69 +111,75 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
-    builder:
-        (context, _) => Scaffold(
-          floatingActionButton:
-              controller.newMessageCount > 0
-                  ? FloatingActionButton.extended(
-                    onPressed: () async {
-                      if (_scrollController.hasClients) {
-                        await _scrollController.animateTo(
-                          0,
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeOut,
-                        );
-                      }
-                      controller.clearNewMessageCount();
-                    },
-                    icon: const Icon(Icons.arrow_downward),
-                    label: Text('${controller.newMessageCount} 条新消息'),
-                  )
-                  // Keep the Scaffold FAB slot stable while the count changes.
-                  // Replacing a FAB with null during a pointer packet can leave
-                  // Flutter's built-in FAB transition without a laid-out child.
-                  : const SizedBox.shrink(),
-          appBar: ChatTitleBar(
-            title: controller.title,
-            showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
-            onTransfer: _openTransferSheet,
-            onOpenSettings: _openChatSettings,
-          ),
-          body: Column(
-            children: <Widget>[
-              Expanded(
-                child: ChatMessageList(
-                  messages: controller.messages,
-                  scrollController: _scrollController,
-                  isLoading: controller.isLoading,
-                  hasMore: controller.hasMore,
-                  error: controller.error,
-                  onViewingLatestChanged: controller.setViewingLatest,
-                  onLoadMore: controller.loadMore,
-                  onTapOutside: _closeInputArea,
-                  itemBuilder: _buildMessageItem,
-                ),
-              ),
-              ChatInputArea(
-                selectionMode: controller.selectionMode,
-                selectionActions: _SelectionBar(
-                  count: controller.selectedLocalIds.length,
-                  onCancel: controller.cancelSelection,
-                  onDelete: _deleteSelectedMessages,
-                  onMergeForward: _showMergeForwardTargets,
-                ),
-                composer: SafeArea(
-                  top: false,
-                  child: _Composer(
-                    key: _composerKey,
-                    controller: controller,
-                    input: input,
-                  ),
-                ),
-              ),
-            ],
-          ),
+    builder: (context, _) {
+      final mediaItems = _mediaItemsFor(controller.messages);
+      return Scaffold(
+        floatingActionButton:
+            controller.newMessageCount > 0
+                ? FloatingActionButton.extended(
+                  onPressed: () async {
+                    if (_scrollController.hasClients) {
+                      await _scrollController.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                    controller.clearNewMessageCount();
+                  },
+                  icon: const Icon(Icons.arrow_downward),
+                  label: Text('${controller.newMessageCount} 条新消息'),
+                )
+                // Keep the Scaffold FAB slot stable while the count changes.
+                // Replacing a FAB with null during a pointer packet can leave
+                // Flutter's built-in FAB transition without a laid-out child.
+                : const SizedBox.shrink(),
+        appBar: ChatTitleBar(
+          title: controller.title,
+          showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
+          onTransfer: _openTransferSheet,
+          onOpenSettings: _openChatSettings,
         ),
+        body: Column(
+          children: <Widget>[
+            Expanded(
+              child: ChatMessageList(
+                messages: controller.messages,
+                scrollController: _scrollController,
+                isLoading: controller.isLoading,
+                hasMore: controller.hasMore,
+                error: controller.error,
+                onViewingLatestChanged: controller.setViewingLatest,
+                onLoadMore: controller.loadMore,
+                onTapOutside: _closeInputArea,
+                itemBuilder:
+                    (context, message, index) =>
+                        _buildMessageItem(context, message, index, mediaItems),
+              ),
+            ),
+            ChatInputArea(
+              selectionMode: controller.selectionMode,
+              selectionActions: ChatSelectionBar(
+                count: controller.selectedLocalIds.length,
+                onCancel: controller.cancelSelection,
+                onDelete: _deleteSelectedMessages,
+                onMergeForward: _showMergeForwardTargets,
+              ),
+              composer: SafeArea(
+                top: false,
+                child: _Composer(
+                  key: _composerKey,
+                  controller: controller,
+                  input: input,
+                  quoteContentBuilder:
+                      (quote) => _buildQuotedContent(quote, _mediaItems),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
   );
 
   void _closeInputArea() {
@@ -182,6 +200,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     BuildContext context,
     ChatMessage message,
     int index,
+    List<MediaPreviewItem> mediaItems,
   ) {
     final older =
         index + 1 < controller.messages.length
@@ -191,12 +210,44 @@ class _ChatPageState extends ConsumerState<ChatPage>
       2 || 3 || 4 || 5 => true,
       _ => false,
     };
-    return _MessageRow(
-      key: ValueKey<String>(message.localId),
+    final menuController = FloatingPopoverController();
+    final menuItems = const ChatMessageMenuBuilder().build(
+      ChatMessageMenuContext(
+        message: message,
+        canRecall:
+            message.isMine && message.serverId != null && !message.isRollbacked,
+        canRetry: controller.canRetryMessage(message),
+        onAction:
+            (action, target) =>
+                _handleMessageMenuAction(menuController, action, target),
+      ),
+    );
+    final quote = _restoreQuoteMessage(message);
+    final row = _MessageRow(
+      key: _messageKeyFor(message.localId),
       message: message,
       showTime: _showTime(message, older),
       onUserTap: () => _showSenderProfile(message),
       onVoiceOpened: () => controller.markVoiceOpened(message),
+      onLinkTap: () => _copyLink(message),
+      mediaItems: mediaItems,
+      mediaInitialIndex: mediaItems.indexWhere(
+        (item) => item.id == message.localId,
+      ),
+      attachmentState: controller.attachmentState(message.localId),
+      onAttachmentDownload:
+          () => _runAttachmentAction(
+            () => controller.downloadAttachment(message),
+            success: '附件已下载',
+          ),
+      onAttachmentCancel: () => controller.cancelAttachmentDownload(message),
+      onAttachmentOpen:
+          () => _runAttachmentAction(() => controller.openAttachment(message)),
+      onAttachmentSaveAs:
+          () => _runAttachmentAction(
+            () => controller.saveAttachmentAs(message),
+            success: '已打开另存为窗口',
+          ),
       onRetry:
           supportsFileRetry && message.state == 'failed'
               ? () => controller.retryFile(message)
@@ -210,8 +261,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
           controller.selectionMode
               ? () => controller.toggleSelection(message)
               : null,
-      onLongPress: () => _showMessageActions(message),
       onQuoteTap: () => _scrollToQuoted(message),
+      quoteContent:
+          quote == null ? null : _buildQuotedContent(quote, mediaItems),
       showUnreadDivider:
           message.serverId != null &&
           controller.initialUnreadDividerMessageId == message.serverId &&
@@ -221,6 +273,192 @@ class _ChatPageState extends ConsumerState<ChatPage>
           message.serverId != null &&
           controller.friend?.peerReadMessageId == message.serverId,
     );
+    return KeyedSubtree(
+      key: ValueKey<String>(message.localId),
+      child:
+          menuItems.isEmpty
+              ? row
+              : FloatingPopover(
+                controller: menuController,
+                contentBuilder: (_) => ChatMessageMenu(items: menuItems),
+                child: row,
+              ),
+    );
+  }
+
+  ChatMessage? _restoreQuoteMessage(ChatMessage owner) {
+    if (owner.quoteMessage.isEmpty) return null;
+    final serverId = owner.quoteMessageId;
+    final canonical =
+        controller.messageByServerId(serverId) ?? _quotedMessageCache[serverId];
+    if (canonical != null) return canonical;
+    final raw = <String, dynamic>{...owner.quoteMessage};
+    raw['id'] ??= serverId;
+    raw['sessionUnitId'] ??= owner.sessionUnitId;
+    try {
+      final recovered = ChatMessage.fromJson(
+        raw,
+        ownerId: owner.ownerId,
+        sessionUnitId: owner.sessionUnitId,
+      );
+      _loadCanonicalQuoteMessage(serverId);
+      return recovered;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  void _loadCanonicalQuoteMessage(int? serverId) {
+    if (serverId == null || !_quotedMessageLookups.add(serverId)) return;
+    unawaited(() async {
+      final message = await controller.findLocalMessageByServerId(serverId);
+      if (message == null || !mounted) return;
+      setState(() => _quotedMessageCache[serverId] = message);
+    }());
+  }
+
+  Widget _buildQuotedContent(
+    ChatMessage quote,
+    List<MediaPreviewItem> mediaItems,
+  ) => ChatMessageContentRenderer(
+    message: quote,
+    attachmentState: controller.attachmentState(quote.localId),
+    onVoiceOpened: () => controller.markVoiceOpened(quote),
+    onAttachmentDownload: () => controller.downloadAttachment(quote),
+    onAttachmentCancel: () => controller.cancelAttachmentDownload(quote),
+    onAttachmentOpen: () => controller.openAttachment(quote),
+    onAttachmentSaveAs: () => controller.saveAttachmentAs(quote),
+    imageBytes: controller.imagePreview(quote.localId),
+    uploadProgress: controller.uploadProgress[quote.localId],
+    apiBaseUrl: ref.read(appEnvironmentProvider).apiBaseUrl,
+    mediaItems: mediaItems,
+    mediaInitialIndex: mediaItems.indexWhere(
+      (item) => item.id == quote.localId,
+    ),
+    onLinkTap: () => _copyLink(quote),
+    presentation: ChatMessagePresentation.quote,
+  );
+
+  Future<void> _copyLink(ChatMessage message) async {
+    if (message.linkUrl.isEmpty) return;
+    await controller.copyLink(message);
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('链接已复制')));
+    }
+  }
+
+  GlobalKey _messageKeyFor(String localId) =>
+      _messageKeys.putIfAbsent(localId, GlobalKey.new);
+
+  List<MediaPreviewItem> _mediaItemsFor(List<ChatMessage> messages) {
+    final fingerprint = messages
+        .where((item) => item.messageType == 2 || item.messageType == 4)
+        .map(
+          (item) => [
+            item.localId,
+            item.messageType,
+            item.mediaUrl,
+            item.localFilePath,
+            controller.imagePreview(item.localId)?.length,
+          ].join('|'),
+        )
+        .join(';');
+    if (fingerprint == _mediaItemsFingerprint) return _mediaItems;
+    _mediaItemsFingerprint = fingerprint;
+    final baseUrl = ref.read(appEnvironmentProvider).apiBaseUrl;
+    _mediaItems = messages
+        .where((item) => item.messageType == 2 || item.messageType == 4)
+        .map((message) {
+          final source = resolveApiUrl(
+            message.mediaUrl ?? message.localFilePath ?? '',
+            baseUrl,
+          );
+          return MediaPreviewItem(
+            id: message.localId,
+            messageId: message.localId,
+            type:
+                message.messageType == 2
+                    ? MediaPreviewType.image
+                    : MediaPreviewType.video,
+            source: source,
+            bytes: controller.imagePreview(message.localId),
+            heroTag: buildMediaHeroTag(
+              messageId: message.localId,
+              mediaId: message.localId,
+            ),
+          );
+        })
+        .where((item) => item.source.isNotEmpty || item.bytes != null)
+        .toList(growable: false);
+    return _mediaItems;
+  }
+
+  Future<void> _runAttachmentAction(
+    Future<void> Function() action, {
+    String? success,
+  }) async {
+    try {
+      await action();
+      if (success != null && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(success)));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('附件操作失败：$error')));
+      }
+    }
+  }
+
+  Future<void> _handleMessageMenuAction(
+    FloatingPopoverController menu,
+    String action,
+    ChatMessage message,
+  ) async {
+    menu.hide();
+    switch (action) {
+      case 'copy':
+        await controller.copyMessage(message);
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('已复制消息')));
+        }
+        return;
+      case 'reply':
+        if (message.serverId == null) return;
+        controller.quoteMessage(message);
+        _composerKey.currentState?.focusText();
+        return;
+      case 'retry':
+        await _runMessageAction(
+          () => controller.retryMessage(message),
+          success: '已重新发送消息',
+        );
+        return;
+      case 'delete':
+        await _runMessageAction(
+          message.serverId == null
+              ? () => controller.deleteMessages(<String>[message.localId])
+              : () => controller.deleteRemote(message),
+          success: '消息已删除',
+        );
+        return;
+      case 'recall':
+        await _runMessageAction(
+          () => controller.rollbackMessage(message),
+          success: '消息已撤回',
+        );
+        return;
+      case 'forward':
+        await _showForwardTargets(message);
+        return;
+    }
   }
 
   bool _showTime(ChatMessage current, ChatMessage? older) {
@@ -251,95 +489,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       };
     }
     return showMemberProfileSheet(context, ChatMember.fromJson(sender));
-  }
-
-  Future<void> _showMessageActions(ChatMessage message) async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    await showHalfPageSheet<void>(
-      context: context,
-      options: const HalfPageSheetOptions(
-        isScrollControlled: false,
-        keyboardBehavior: HalfPageSheetKeyboardBehavior.overlay,
-      ),
-      builder:
-          (sheetContext) => SafeArea(
-            child: Wrap(
-              children: <Widget>[
-                if (message.messageType == 0)
-                  ListTile(
-                    leading: const Icon(Icons.copy_outlined),
-                    title: const Text('复制'),
-                    onTap: () async {
-                      Navigator.pop(sheetContext);
-                      await controller.copyMessage(message);
-                    },
-                  ),
-                ListTile(
-                  leading: const Icon(Icons.format_quote),
-                  title: const Text('引用'),
-                  enabled: message.serverId != null,
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    controller.quoteMessage(message);
-                    _composerKey.currentState?.focusText();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.checklist),
-                  title: const Text('多选'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    controller.beginSelection(message);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete_outline),
-                  title: const Text('删除'),
-                  subtitle: Text(
-                    message.serverId == null
-                        ? '删除本地待发送消息'
-                        : '从当前会话身份删除，并清理本地记录',
-                  ),
-                  onTap: () async {
-                    Navigator.pop(sheetContext);
-                    await _runMessageAction(
-                      message.serverId == null
-                          ? () => controller.deleteMessages(<String>[
-                            message.localId,
-                          ])
-                          : () => controller.deleteRemote(message),
-                      success: '消息已删除',
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.undo),
-                  title: const Text('撤回'),
-                  enabled:
-                      message.isMine &&
-                      message.serverId != null &&
-                      !message.isRollbacked,
-                  onTap: () async {
-                    Navigator.pop(sheetContext);
-                    await _runMessageAction(
-                      () => controller.rollbackMessage(message),
-                      success: '消息已撤回',
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.forward),
-                  title: const Text('转发'),
-                  enabled: message.serverId != null && !message.isRollbacked,
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showForwardTargets(message);
-                  },
-                ),
-              ],
-            ),
-          ),
-    );
   }
 
   Future<void> _openTransferSheet() async {
@@ -504,13 +653,32 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final index = controller.messages.indexWhere(
         (item) => item.serverId == id,
       );
-      if (index >= 0 && _scrollController.hasClients) {
-        await _scrollController.animateTo(
-          (index * 92.0).clamp(0, _scrollController.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-        );
-        return;
+      if (index >= 0) {
+        final target = controller.messages[index];
+        var targetContext = _messageKeys[target.localId]?.currentContext;
+        if (targetContext == null && _scrollController.hasClients) {
+          // The list only builds visible children. This estimate merely brings
+          // the target into the build range; the final placement below always
+          // uses the rendered child and therefore does not assume a fixed row
+          // height.
+          final estimate = (index * 92.0).clamp(
+            0.0,
+            _scrollController.position.maxScrollExtent,
+          );
+          _scrollController.jumpTo(estimate);
+          await WidgetsBinding.instance.endOfFrame;
+          if (!mounted) return;
+          targetContext = _messageKeys[target.localId]?.currentContext;
+        }
+        if (targetContext != null && targetContext.mounted) {
+          await Scrollable.ensureVisible(
+            targetContext,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            alignment: .35,
+          );
+          return;
+        }
       }
       if (!controller.hasMore) break;
       await controller.loadMore();
@@ -529,14 +697,22 @@ class _MessageRow extends StatelessWidget {
     required this.showTime,
     required this.onUserTap,
     required this.onVoiceOpened,
+    required this.onLinkTap,
+    required this.mediaItems,
+    required this.mediaInitialIndex,
+    required this.attachmentState,
+    required this.onAttachmentDownload,
+    required this.onAttachmentCancel,
+    required this.onAttachmentOpen,
+    required this.onAttachmentSaveAs,
     this.onRetry,
     required this.imageBytes,
     required this.uploadProgress,
     required this.apiBaseUrl,
     required this.selected,
     required this.selectionMode,
-    required this.onLongPress,
     required this.onQuoteTap,
+    this.quoteContent,
     required this.showUnreadDivider,
     required this.showPeerRead,
     this.onTap,
@@ -546,20 +722,29 @@ class _MessageRow extends StatelessWidget {
   final bool showTime;
   final VoidCallback onUserTap;
   final Future<void> Function() onVoiceOpened;
+  final Future<void> Function() onLinkTap;
+  final List<MediaPreviewItem> mediaItems;
+  final int mediaInitialIndex;
+  final AttachmentTransferState attachmentState;
+  final Future<void> Function() onAttachmentDownload;
+  final Future<void> Function() onAttachmentCancel;
+  final Future<void> Function() onAttachmentOpen;
+  final Future<void> Function() onAttachmentSaveAs;
   final VoidCallback? onRetry;
   final Uint8List? imageBytes;
   final double? uploadProgress;
   final String apiBaseUrl;
   final bool selected;
   final bool selectionMode;
-  final VoidCallback onLongPress;
   final VoidCallback onQuoteTap;
+  final Widget? quoteContent;
   final bool showUnreadDivider;
   final bool showPeerRead;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final renderedQuote = quoteContent;
     if (message.messageType == 1) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -571,14 +756,6 @@ class _MessageRow extends StatelessWidget {
         ),
       );
     }
-    final text = switch (message.messageType) {
-      0 => message.text,
-      2 => '[图片]',
-      3 => '[语音]',
-      4 => '[视频]',
-      5 => message.fileName.isEmpty ? '[文件]' : message.fileName,
-      _ => message.text.isEmpty ? '[暂不支持的消息]' : message.text,
-    };
     if (message.isRollbacked) {
       return Padding(
         padding: const EdgeInsets.all(10),
@@ -587,7 +764,6 @@ class _MessageRow extends StatelessWidget {
     }
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onLongPress: onLongPress,
       onTap: onTap,
       child: Column(
         children: <Widget>[
@@ -662,13 +838,16 @@ class _MessageRow extends StatelessWidget {
                       ),
                     ),
                     Stack(
-                      clipBehavior: Clip.none,
                       children: <Widget>[
                         ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: bubbleWidth),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color:
+                          child: ChatBubble(
+                            style: ChatBubbleStyle.content(
+                              side:
+                                  message.isMine
+                                      ? ChatBubbleSide.right
+                                      : ChatBubbleSide.left,
+                              backgroundColor:
                                   message.isMine
                                       ? Theme.of(
                                         context,
@@ -676,113 +855,49 @@ class _MessageRow extends StatelessWidget {
                                       : Theme.of(
                                         context,
                                       ).colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 13,
-                                vertical: 9,
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  if (message.quoteMessage.isNotEmpty)
-                                    InkWell(
-                                      onTap: onQuoteTap,
-                                      child: Container(
-                                        width: double.infinity,
-                                        margin: const EdgeInsets.only(
-                                          bottom: 7,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 5,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .surface
-                                              .withValues(alpha: .55),
-                                          borderRadius: BorderRadius.circular(
-                                            7,
-                                          ),
-                                          border: Border(
-                                            left: BorderSide(
-                                              color:
-                                                  Theme.of(
-                                                    context,
-                                                  ).colorScheme.primary,
-                                              width: 3,
-                                            ),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '[${message.quoteSenderName}]：${message.quotePreview}',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style:
-                                              Theme.of(
-                                                context,
-                                              ).textTheme.bodySmall,
-                                        ),
-                                      ),
-                                    ),
-                                  if (message.messageType == 5)
-                                    FileMessageContent(message: message)
-                                  else if (message.messageType == 3)
-                                    VoiceMessageContent(
-                                      message: message,
-                                      onOpened: onVoiceOpened,
-                                    )
-                                  else if (message.messageType == 2)
-                                    ImageMessageContent(
-                                      message: message,
-                                      bytes: imageBytes,
-                                      apiBaseUrl: apiBaseUrl,
-                                      progress: uploadProgress,
-                                    )
-                                  else if (message.messageType == 4)
-                                    VideoMessageContent(
-                                      message: message,
-                                      apiBaseUrl: apiBaseUrl,
-                                      progress: uploadProgress,
-                                    )
-                                  else if (message.messageType == 0)
-                                    TextMessageContent(message: message)
-                                  else
-                                    Text(text),
-                                ],
-                              ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                ChatMessageContentRenderer(
+                                  message: message,
+                                  attachmentState: attachmentState,
+                                  onVoiceOpened: onVoiceOpened,
+                                  onAttachmentDownload: onAttachmentDownload,
+                                  onAttachmentCancel: onAttachmentCancel,
+                                  onAttachmentOpen: onAttachmentOpen,
+                                  onAttachmentSaveAs: onAttachmentSaveAs,
+                                  imageBytes: imageBytes,
+                                  uploadProgress: uploadProgress,
+                                  apiBaseUrl: apiBaseUrl,
+                                  mediaItems: mediaItems,
+                                  mediaInitialIndex: mediaInitialIndex,
+                                  onLinkTap: onLinkTap,
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        if (message.isMine && message.state == 'sending')
-                          const Positioned(
-                            left: -24,
-                            top: 10,
-                            child: SizedBox.square(
-                              dimension: 17,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                        if (message.isMine && message.state == 'failed')
-                          Positioned(
-                            left: -29,
-                            top: 4,
-                            child: IconButton(
-                              tooltip: '发送失败，点击重试',
-                              visualDensity: VisualDensity.compact,
-                              onPressed: onRetry,
-                              icon: const Icon(
-                                Icons.error,
-                                color: Colors.red,
-                                size: 19,
-                              ),
-                            ),
-                          ),
+                        ChatMessageDeliveryState(
+                          isMine: message.isMine,
+                          state: message.state,
+                          onRetry: onRetry,
+                        ),
                       ],
                     ),
+                    if (renderedQuote != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: bubbleWidth),
+                          child: ChatQuotePreview(
+                            senderName: message.quoteSenderName,
+                            content: renderedQuote,
+                            onTap: onQuoteTap,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               );
@@ -830,49 +945,6 @@ class _MessageRow extends StatelessWidget {
       value == null
           ? ''
           : '${value.month}-${value.day} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
-}
-
-class _SelectionBar extends StatelessWidget {
-  const _SelectionBar({
-    required this.count,
-    required this.onCancel,
-    required this.onDelete,
-    required this.onMergeForward,
-  });
-  final int count;
-  final VoidCallback onCancel;
-  final VoidCallback onDelete;
-  final VoidCallback onMergeForward;
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: Material(
-      elevation: 8,
-      child: SizedBox(
-        height: 58,
-        child: Row(
-          children: <Widget>[
-            IconButton(
-              tooltip: '取消多选',
-              onPressed: onCancel,
-              icon: const Icon(Icons.close),
-            ),
-            Expanded(child: Text('已选择 $count 条')),
-            IconButton(
-              tooltip: '合并转发',
-              onPressed: count == 0 ? null : onMergeForward,
-              icon: const Icon(Icons.reply_all_outlined),
-            ),
-            IconButton(
-              tooltip: '删除所选消息',
-              onPressed: count == 0 ? null : onDelete,
-              icon: const Icon(Icons.delete_outline),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 }
 
 class _MentionBottomSheet extends StatefulWidget {
@@ -1068,15 +1140,21 @@ class _MentionPanel extends StatelessWidget {
 }
 
 class _Composer extends StatefulWidget {
-  const _Composer({required this.controller, required this.input, super.key});
+  const _Composer({
+    required this.controller,
+    required this.input,
+    required this.quoteContentBuilder,
+    super.key,
+  });
   final ChatController controller;
   final TextEditingController input;
+  final Widget Function(ChatMessage quote) quoteContentBuilder;
 
   @override
   State<_Composer> createState() => _ComposerState();
 }
 
-class _ComposerState extends State<_Composer> {
+class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
   final FocusNode _focusNode = FocusNode();
   final PageController _pageController = PageController();
   bool _showFunctions = false;
@@ -1121,9 +1199,34 @@ class _ComposerState extends State<_Composer> {
     inputFloorPercent: 30,
     inputPeakPercent: 80,
   );
+  static const _fallbackFunctionTrayHeight = 238.0;
+  double _keyboardTrayHeight = _fallbackFunctionTrayHeight;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _captureKeyboardHeight(),
+    );
+  }
+
+  @override
+  void didChangeMetrics() {
+    _captureKeyboardHeight();
+  }
+
+  void _captureKeyboardHeight() {
+    if (!mounted) return;
+    final view = View.of(context);
+    final height = view.viewInsets.bottom / view.devicePixelRatio;
+    if (height <= 0 || (height - _keyboardTrayHeight).abs() < 1) return;
+    setState(() => _keyboardTrayHeight = height);
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_levelSubscription?.cancel());
     _durationTimer?.cancel();
     _hideRecordingOverlay();
@@ -1390,50 +1493,24 @@ class _ComposerState extends State<_Composer> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          if (widget.controller.quoting case final quote?)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              padding: const EdgeInsets.only(left: 10),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-                border: Border(
-                  left: BorderSide(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 3,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 7),
-                      child: Text(
-                        '引用 ${quote.senderName}：${quote.text.isEmpty ? '[消息]' : quote.text}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: '取消引用',
-                    onPressed: widget.controller.cancelQuote,
-                    icon: const Icon(Icons.close, size: 18),
-                  ),
-                ],
-              ),
-            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
             child: Row(
+              // A growing text field must grow upward. Keep the fixed actions
+              // on the bottom edge so their horizontal and vertical anchors do
+              // not drift as a long draft gains lines.
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
-                IconButton(
-                  tooltip: _voiceMode ? '切换键盘' : '语音输入',
-                  onPressed: _toggleVoiceMode,
-                  icon: Icon(
-                    _voiceMode ? Icons.keyboard_alt_outlined : Icons.mic_none,
+                SizedBox(
+                  width: 44,
+                  height: 42,
+                  child: IconButton(
+                    tooltip: _voiceMode ? '切换键盘' : '语音输入',
+                    onPressed: _toggleVoiceMode,
+                    padding: EdgeInsets.zero,
+                    icon: Icon(
+                      _voiceMode ? Icons.keyboard_alt_outlined : Icons.mic_none,
+                    ),
                   ),
                 ),
                 Expanded(
@@ -1465,39 +1542,45 @@ class _ComposerState extends State<_Composer> {
                               ),
                             ),
                           )
-                          : TextField(
-                            controller: widget.input,
-                            focusNode: _focusNode,
-                            onTap: () {
-                              if (_showFunctions) {
-                                setState(() => _showFunctions = false);
-                              }
-                            },
-                            onChanged: _onInputChanged,
-                            enabled: !widget.controller.isMuted,
-                            minLines: 1,
-                            // Let the composer grow with multi-line content instead
-                            // of switching to an internally scrollable text field.
-                            maxLines: null,
-                            textInputAction: TextInputAction.newline,
-                            decoration: InputDecoration(
-                              hintText:
-                                  widget.controller.isMuted
-                                      ? '你已被禁言，暂不能发言'
-                                      : '输入消息',
-                              isDense: true,
-                              border: OutlineInputBorder(),
+                          : ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 132),
+                            child: TextField(
+                              controller: widget.input,
+                              focusNode: _focusNode,
+                              onTap: () {
+                                if (_showFunctions) {
+                                  setState(() => _showFunctions = false);
+                                }
+                              },
+                              onChanged: _onInputChanged,
+                              enabled: !widget.controller.isMuted,
+                              minLines: 1,
+                              maxLines: 5,
+                              textInputAction: TextInputAction.newline,
+                              decoration: InputDecoration(
+                                hintText:
+                                    widget.controller.isMuted
+                                        ? '你已被禁言，暂不能发言'
+                                        : '输入消息',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
                             ),
                           ),
                 ),
                 if (!_voiceMode)
-                  IconButton(
-                    tooltip: _showFunctions ? '打开键盘' : '更多功能',
-                    onPressed: _toggleFunctions,
-                    icon: AnimatedRotation(
-                      turns: _showFunctions ? 0.125 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: const Icon(Icons.add_circle_outline),
+                  SizedBox(
+                    width: 44,
+                    height: 42,
+                    child: IconButton(
+                      tooltip: _showFunctions ? '打开键盘' : '更多功能',
+                      onPressed: _toggleFunctions,
+                      padding: EdgeInsets.zero,
+                      icon: AnimatedRotation(
+                        turns: _showFunctions ? 0.125 : 0,
+                        duration: const Duration(milliseconds: 180),
+                        child: const Icon(Icons.add_circle_outline),
+                      ),
                     ),
                   ),
                 if (!_voiceMode)
@@ -1520,19 +1603,34 @@ class _ComposerState extends State<_Composer> {
               ],
             ),
           ),
-          AnimatedSize(
+          if (widget.controller.quoting case final quote?)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(54, 0, 12, 8),
+              child: ChatQuotePreview(
+                senderName: quote.senderName,
+                content: widget.quoteContentBuilder(quote),
+                onClear: widget.controller.cancelQuote,
+              ),
+            ),
+          // This is the Flutter counterpart of the UniApp keyboard-area: the
+          // function panel is swapped inside one stable tray rather than
+          // inserted beneath the input row after the system keyboard closes.
+          AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
-            child:
-                _showFunctions
-                    ? _FunctionPanel(
-                      items: _functions,
-                      pageController: _pageController,
-                      page: _page,
-                      onPageChanged: (value) => setState(() => _page = value),
-                      onSelected: _selectFunction,
-                    )
-                    : const SizedBox(width: double.infinity),
+            height: _showFunctions ? _keyboardTrayHeight : 0,
+            child: ClipRect(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: _FunctionPanel(
+                  items: _functions,
+                  pageController: _pageController,
+                  page: _page,
+                  onPageChanged: (value) => setState(() => _page = value),
+                  onSelected: _selectFunction,
+                ),
+              ),
+            ),
           ),
         ],
       ),

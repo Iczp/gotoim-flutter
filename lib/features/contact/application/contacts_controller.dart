@@ -11,7 +11,10 @@ import '../data/models/contact_group.dart';
 import '../data/repositories/contacts_repository.dart';
 
 final contactsRepositoryProvider = Provider<ContactsRepository>(
-  (ref) => ContactsRepository(ContactsApi(ref.watch(apiClientProvider))),
+  (ref) => ContactsRepository(
+    ContactsApi(ref.watch(apiClientProvider)),
+    ref.watch(unifiedDatabaseProvider),
+  ),
 );
 
 final contactsControllerProvider = ChangeNotifierProvider<ContactsController>(
@@ -76,6 +79,16 @@ class ContactsController extends ChangeNotifier {
       );
       if (_ownerId != ownerId) return;
       _groups = remote;
+      await _contactsRepository.saveIndexedFriends(
+        ownerId: ownerId,
+        groups: remote,
+      );
+      await _sessionRepository.mergeContactIdentitySnapshots(
+        ownerId: ownerId,
+        snapshots: remote.expand(
+          (group) => group.contacts.map((contact) => contact.raw),
+        ),
+      );
       debugPrint(
         '[contacts][remote] ownerId=$ownerId groups=${remote.length} total=$totalCount',
       );
@@ -101,7 +114,20 @@ class ContactsController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      _groups = await _contactsRepository.loadIndexedFriends(ownerId: ownerId);
+      final remote = await _contactsRepository.loadIndexedFriends(
+        ownerId: ownerId,
+      );
+      _groups = remote;
+      await _contactsRepository.saveIndexedFriends(
+        ownerId: ownerId,
+        groups: remote,
+      );
+      await _sessionRepository.mergeContactIdentitySnapshots(
+        ownerId: ownerId,
+        snapshots: remote.expand(
+          (group) => group.contacts.map((contact) => contact.raw),
+        ),
+      );
       debugPrint(
         '[contacts][refresh] ownerId=$ownerId groups=${_groups.length} total=$totalCount',
       );
@@ -115,6 +141,10 @@ class ContactsController extends ChangeNotifier {
   }
 
   Future<List<ContactGroup>> _loadLocal(int ownerId) async {
+    final indexed = await _contactsRepository.loadLocalIndexedFriends(
+      ownerId: ownerId,
+    );
+    if (indexed.isNotEmpty) return indexed;
     final friends = await _sessionRepository.loadLocalFriends(
       ownerId: ownerId,
       limit: 2000,

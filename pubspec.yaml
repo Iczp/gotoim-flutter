@@ -23,6 +23,9 @@ dependencies:
   mobile_scanner: ^7.4.0
   # Used by the unified scanner to decode QR/barcodes from an album image.
   image_picker: ^1.2.3
+  # Interactive 1:1 avatar cropper on Android/iOS/Web. Desktop falls back to
+  # the project-owned center-crop processor until a native desktop crop UI is added.
+  image_cropper: ^12.2.1
   # Desktop and web use an explicit file-upload flow when no camera is present.
   file_picker: ^12.0.0
   # Pure Dart QR image decoder used as the web/desktop upload fallback.

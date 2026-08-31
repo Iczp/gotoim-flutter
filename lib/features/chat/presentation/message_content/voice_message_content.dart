@@ -3,17 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/chat_controller.dart';
 import '../../data/models/chat_message.dart';
+import 'chat_message_presentation.dart';
 
 /// Displays a voice message, including download and playback state.
 class VoiceMessageContent extends ConsumerWidget {
   const VoiceMessageContent({
     required this.message,
     required this.onOpened,
+    this.presentation = ChatMessagePresentation.normal,
     super.key,
   });
 
   final ChatMessage message;
   final Future<void> Function() onOpened;
+  final ChatMessagePresentation presentation;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -40,6 +43,7 @@ class VoiceMessageContent extends ConsumerWidget {
         message.isMine
             ? colorScheme.primary.withValues(alpha: .22)
             : colorScheme.primaryContainer.withValues(alpha: .78);
+    final compact = presentation == ChatMessagePresentation.quote;
     return InkWell(
       onTap:
           message.state == 'sending'
@@ -65,32 +69,34 @@ class VoiceMessageContent extends ConsumerWidget {
               },
       borderRadius: BorderRadius.circular(8),
       child: SizedBox(
-        width: (96.0 + seconds.clamp(0, 30) * 3).clamp(96.0, 186.0),
+        width:
+            compact ? 92 : (96.0 + seconds.clamp(0, 30) * 3).clamp(96.0, 186.0),
         child: Stack(
           clipBehavior: Clip.none,
           children: <Widget>[
-            Positioned(
-              left: -13,
-              top: -9,
-              right: -13,
-              bottom: -9,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: ColoredBox(
-                  color: baseColor,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: FractionallySizedBox(
-                      widthFactor: playedProgress,
-                      child: ColoredBox(
-                        color: playedColor,
-                        child: const SizedBox.expand(),
+            if (!compact)
+              Positioned(
+                left: -13,
+                top: -9,
+                right: -13,
+                bottom: -9,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: ColoredBox(
+                    color: baseColor,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: playedProgress,
+                        child: ColoredBox(
+                          color: playedColor,
+                          child: const SizedBox.expand(),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
             Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
@@ -116,13 +122,17 @@ class VoiceMessageContent extends ConsumerWidget {
                               flipX: true,
                               child:
                                   downloading
-                                      ? const _VoiceDownloadIndicator()
+                                      ? _VoiceDownloadIndicator(
+                                        progress: playback.downloadProgress,
+                                      )
                                       : _VoicePlaybackIcon(playing: playing),
                             ),
                           ]
                           : <Widget>[
                             downloading
-                                ? const _VoiceDownloadIndicator()
+                                ? _VoiceDownloadIndicator(
+                                  progress: playback.downloadProgress,
+                                )
                                 : _VoicePlaybackIcon(playing: playing),
                             const SizedBox(width: 8),
                             Expanded(child: Text(durationLabel)),
@@ -135,7 +145,7 @@ class VoiceMessageContent extends ConsumerWidget {
                               ),
                           ],
                 ),
-                if (!message.isOpened && !message.isMine)
+                if (!compact && !message.isOpened && !message.isMine)
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Container(
@@ -158,14 +168,25 @@ class VoiceMessageContent extends ConsumerWidget {
 }
 
 class _VoiceDownloadIndicator extends StatelessWidget {
-  const _VoiceDownloadIndicator();
+  const _VoiceDownloadIndicator({required this.progress});
+
+  final double progress;
 
   @override
-  Widget build(BuildContext context) => const SizedBox.square(
-    dimension: 24,
-    child: Padding(
-      padding: EdgeInsets.all(3),
-      child: CircularProgressIndicator(strokeWidth: 2),
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: 30,
+    child: Stack(
+      alignment: Alignment.center,
+      children: <Widget>[
+        SizedBox.square(
+          dimension: 24,
+          child: CircularProgressIndicator(value: progress, strokeWidth: 2),
+        ),
+        Text(
+          '${(progress * 100).clamp(0, 100).round()}%',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 8),
+        ),
+      ],
     ),
   );
 }

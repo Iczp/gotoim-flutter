@@ -61,6 +61,49 @@ void main() {
     expect(items[2].title, '今天');
   });
 
+  test(
+    'each time group is emitted once when score order interleaves groups',
+    () {
+      final items = buildSessionListItems(
+        [
+          session(
+            id: 'month-low-score',
+            ticks:
+                now.subtract(const Duration(days: 20)).millisecondsSinceEpoch,
+            score: 10,
+          ),
+          session(
+            id: 'year',
+            ticks:
+                now.subtract(const Duration(days: 200)).millisecondsSinceEpoch,
+            score: 30,
+          ),
+          session(
+            id: 'month-high-score',
+            ticks:
+                now.subtract(const Duration(days: 25)).millisecondsSinceEpoch,
+            score: 20,
+          ),
+        ],
+        hasMore: false,
+        now: now,
+      );
+
+      final dividers =
+          items
+              .where((item) => item.kind == SessionListItemKind.timeDivider)
+              .map((item) => item.title)
+              .toList();
+      expect(dividers, <String>['一个月前', '1年前']);
+      expect(
+        items
+            .where((item) => item.kind == SessionListItemKind.session)
+            .map((item) => item.session!.id),
+        <String>['month-high-score', 'month-low-score', 'year'],
+      );
+    },
+  );
+
   test('time groups match UniApp boundaries', () {
     expect(sessionTimeGroup(now.millisecondsSinceEpoch, now: now), '今天');
     expect(

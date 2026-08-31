@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../session/application/session_list_controller.dart';
+import '../../session/data/models/session_summary.dart';
+import '../../session/presentation/chat_object_avatar.dart';
+import '../../user/presentation/profile_page.dart';
 import '../application/chat_settings_controller.dart';
 import 'member_tile.dart';
 
@@ -62,6 +65,28 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                   ),
                 _MemberPreview(controller: controller),
                 const SizedBox(height: 10),
+                if (controller.friend != null) ...<Widget>[
+                  _section(<Widget>[
+                    ListTile(
+                      leading: ChatObjectAvatar(
+                        name: controller.friend!.title,
+                        imageUrl: _avatarFor(controller.friend!),
+                        radius: 23,
+                      ),
+                      title: Text(
+                        controller.objectType == 2 ? '查看群资料' : '查看好友资料',
+                      ),
+                      subtitle: Text(controller.friend!.title),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap:
+                          () => openProfilePage(
+                            context,
+                            subject: ProfileSubject.session(controller.friend!),
+                          ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                ],
                 _section(<Widget>[
                   ListTile(
                     title: const Text('类型'),
@@ -147,6 +172,15 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     color: Theme.of(context).colorScheme.surface,
     child: Column(children: children),
   );
+
+  String? _avatarFor(SessionSummary friend) {
+    final destination = friend.raw['destination'];
+    if (destination is Map) {
+      final value = destination['thumbnail'] ?? destination['portrait'];
+      if (value != null && '$value'.isNotEmpty) return '$value';
+    }
+    return null;
+  }
 
   Future<void> _confirmClear() async {
     final confirmed = await showDialog<bool>(

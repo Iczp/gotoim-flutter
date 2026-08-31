@@ -66,4 +66,13 @@ class ChatOwner {
         unreadCount: unread,
         immersedCount: immersed,
       );
+
+  ChatOwner copyWith({String? name, String? imageUrl}) => ChatOwner(
+    id: id,
+    name: name ?? this.name,
+    imageUrl: imageUrl ?? this.imageUrl,
+    typeDescription: typeDescription,
+    unreadCount: unreadCount,
+    immersedCount: immersedCount,
+  );
 }

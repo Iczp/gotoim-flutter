@@ -7,8 +7,8 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/native/native.dart';
-import '../../../core/realtime/signalr_gateway.dart';
 import '../../../core/services/clipboard_service.dart';
+import '../../../core/services/file/attachment_transfer_service.dart';
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
 import '../../../core/services/media/audio_playback_service.dart';
@@ -47,23 +47,34 @@ final audioPlaybackServiceProvider =
       );
     });
 
+final attachmentTransferServiceProvider =
+    ChangeNotifierProvider<AttachmentTransferService>((ref) {
+      return AttachmentTransferService(
+        client: ref.watch(apiClientProvider),
+        environment: ref.watch(appEnvironmentProvider),
+        filePickerService: ref.watch(filePickerServiceProvider),
+      );
+    });
+
 class ChatController extends ChangeNotifier {
   ChatController(
     this._repository,
     this._sessionRepository, {
     required FilePickerService filePickerService,
+    required AttachmentTransferService attachmentTransferService,
     required MediaService mediaService,
     required AudioPlaybackService audioPlaybackService,
-    required SignalRGateway signalRGateway,
+    required SessionChangeBus sessionChangeBus,
     required ClipboardService clipboardService,
     required ChatSettingsRepository chatSettingsRepository,
     required this.ownerId,
     required this.sessionUnitId,
     required String initialTitle,
   }) : _filePickerService = filePickerService,
+       _attachmentTransferService = attachmentTransferService,
        _mediaService = mediaService,
        _audioPlaybackService = audioPlaybackService,
-       _signalRGateway = signalRGateway,
+       _sessionChangeBus = sessionChangeBus,
        _clipboardService = clipboardService,
        _chatSettingsRepository = chatSettingsRepository,
        _title = initialTitle;
@@ -72,9 +83,10 @@ class ChatController extends ChangeNotifier {
   final MessageRepository _repository;
   final SessionRepository _sessionRepository;
   final FilePickerService _filePickerService;
+  final AttachmentTransferService _attachmentTransferService;
   final MediaService _mediaService;
   final AudioPlaybackService _audioPlaybackService;
-  final SignalRGateway _signalRGateway;
+  final SessionChangeBus _sessionChangeBus;
   final ClipboardService _clipboardService;
   final ChatSettingsRepository _chatSettingsRepository;
   final int ownerId;
@@ -90,7 +102,7 @@ class ChatController extends ChangeNotifier {
   Object? error;
   SessionSummary? friend;
   String _title;
-  StreamSubscription<SignalRAppEvent>? _realtimeSubscription;
+  StreamSubscription<SessionChangeEvent>? _sessionChangeSubscription;
   ChatMessage? quoting;
   bool selectionMode = false;
   int newMessageCount = 0;
@@ -107,15 +119,41 @@ class ChatController extends ChangeNotifier {
   int _mentionStart = -1;
   int _mentionGeneration = 0;
 
+  AttachmentTransferState attachmentState(String messageLocalId) =>
+      _attachmentTransferService.stateFor(messageLocalId);
+
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   String get title => friend?.title ?? _title;
   bool get isMuted => friend?.isMuted == true;
   Uint8List? imagePreview(String localId) => _imagePreviews[localId];
+
+  ChatMessage? messageByServerId(int? serverId) {
+    if (serverId == null) return null;
+    for (final message in _messages) {
+      if (message.serverId == serverId) return message;
+    }
+    return null;
+  }
+
+  Future<ChatMessage?> findLocalMessageByServerId(int? serverId) {
+    if (serverId == null) return Future<ChatMessage?>.value(null);
+    return _repository.findLocalByServerId(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      serverId: serverId,
+    );
+  }
+
   String get mentionKeyword => _mentionKeyword;
   int? get initialUnreadDividerMessageId => _initialUnreadDividerMessageId;
 
   Future<void> initialize() async {
-    _realtimeSubscription = _signalRGateway.events.listen(_handleRealtimeEvent);
+    _attachmentTransferService.addListener(_onAttachmentTransferChanged);
+    _sessionChangeSubscription = _sessionChangeBus.events.listen((event) {
+      if (event.ownerId == ownerId && event.sessionUnitId == sessionUnitId) {
+        unawaited(_reloadFromLocalChange());
+      }
+    });
     final local = await _sessionRepository.loadLocalFriendDetail(sessionUnitId);
     if (local != null) {
       friend = local;
@@ -140,6 +178,10 @@ class ChatController extends ChangeNotifier {
     if (_messages.isNotEmpty) {
       unawaited(loadLatest().then((_) => markLatestRead()));
     }
+  }
+
+  void _onAttachmentTransferChanged() {
+    notifyListeners();
   }
 
   Future<void> _loadInitialLocal() async {
@@ -562,6 +604,9 @@ class ChatController extends ChangeNotifier {
   Future<void> copyMessage(ChatMessage message) =>
       _clipboardService.copy(message.text);
 
+  Future<void> copyLink(ChatMessage message) =>
+      _clipboardService.copy(message.linkUrl);
+
   void beginSelection(ChatMessage message) {
     selectionMode = true;
     selectedLocalIds.add(message.localId);
@@ -686,42 +731,24 @@ class ChatController extends ChangeNotifier {
     if (value) clearNewMessageCount();
   }
 
-  void _handleRealtimeEvent(SignalRAppEvent event) {
-    if (event is! SignalRCommandEvent) return;
-    switch (event.command) {
-      case SignalRCommand.messageCreated:
-      case SignalRCommand.messageForwarded:
-      case SignalRCommand.messageUpdated:
-      case SignalRCommand.messageRollbacked:
-        unawaited(_applyRealtimeThenSync(event));
-      default:
-        break;
-    }
-  }
-
-  Future<void> _applyRealtimeThenSync(SignalRCommandEvent event) async {
-    final message = await _repository.applyRealtimePayload(
+  Future<void> _reloadFromLocalChange() async {
+    final latest = await _repository.loadLocalLatest(
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,
-      payload: event.payload,
     );
-    if (message != null) {
-      final isNewIncoming =
-          !message.isMine &&
-          !_messages.any((item) => item.serverId == message.serverId);
-      if (isNewIncoming && !_viewingLatest) newMessageCount++;
-      final serverIndex = _messages.indexWhere(
-        (item) => item.serverId != null && item.serverId == message.serverId,
+    var receivedIncoming = false;
+    for (final message in latest) {
+      final known = _messages.any(
+        (item) =>
+            item.localId == message.localId ||
+            (item.serverId != null && item.serverId == message.serverId),
       );
-      if (serverIndex >= 0) {
-        _messages[serverIndex] = message;
-      } else {
-        _replaceMessage(message);
-      }
-      notifyListeners();
-      if (isNewIncoming && _viewingLatest) unawaited(markLatestRead());
+      if (!known && !message.isMine) receivedIncoming = true;
+      _replaceMessage(message);
     }
-    await loadLatest();
+    if (receivedIncoming && !_viewingLatest) newMessageCount++;
+    notifyListeners();
+    if (receivedIncoming && _viewingLatest) unawaited(markLatestRead());
   }
 
   Future<void> startVoiceRecording() => _mediaService.startAudioRecording(
@@ -796,6 +823,47 @@ class ChatController extends ChangeNotifier {
     _playSentEffect(sent);
   }
 
+  Future<void> retryMessage(ChatMessage message) async {
+    if (message.state != 'failed') return;
+    if (message.messageType != 0) {
+      await retryFile(message);
+      return;
+    }
+    final retried = await _repository.retryText(message);
+    _replaceMessage(retried);
+    notifyListeners();
+    _playSentEffect(retried);
+  }
+
+  bool canRetryMessage(ChatMessage message) =>
+      message.state == 'failed' &&
+      (message.messageType == 0 || _pendingFiles.containsKey(message.localId));
+
+  Future<void> downloadAttachment(ChatMessage message) =>
+      _attachmentTransferService.download(
+        id: message.localId,
+        source: message.mediaUrl ?? '',
+        fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+      );
+
+  Future<void> cancelAttachmentDownload(ChatMessage message) =>
+      _attachmentTransferService.cancel(message.localId);
+
+  Future<void> openAttachment(ChatMessage message) =>
+      _attachmentTransferService.open(
+        id: message.localId,
+        source: message.mediaUrl ?? '',
+        fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+      );
+
+  Future<void> saveAttachmentAs(ChatMessage message) =>
+      _attachmentTransferService.saveAs(
+        id: message.localId,
+        source: message.mediaUrl ?? '',
+        fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        mimeType: message.content['contentType']?.toString(),
+      );
+
   void _playSentEffect(ChatMessage message) {
     if (message.state == 'sent') {
       unawaited(_audioPlaybackService.playSendEffect());
@@ -807,8 +875,13 @@ class ChatController extends ChangeNotifier {
     final updated = message.copyWith(
       raw: <String, dynamic>{...message.raw, 'isOpened': true},
     );
-    _replaceMessage(updated);
-    notifyListeners();
+    final index = _messages.indexWhere(
+      (item) => item.localId == message.localId,
+    );
+    if (index >= 0) {
+      _messages[index] = updated;
+      notifyListeners();
+    }
     await _repository.markOpened(message.localId);
   }
 
@@ -840,7 +913,8 @@ class ChatController extends ChangeNotifier {
 
   @override
   void dispose() {
-    unawaited(_realtimeSubscription?.cancel());
+    _attachmentTransferService.removeListener(_onAttachmentTransferChanged);
+    unawaited(_sessionChangeSubscription?.cancel());
     super.dispose();
   }
 }

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
 
 import '../../../../core/utils/api_url_resolver.dart';
+import '../../../../core/media/media_preview.dart';
 import '../../data/models/chat_message.dart';
+import 'chat_message_presentation.dart';
 
 /// Displays a video message preview and opens its player on demand.
 class VideoMessageContent extends StatelessWidget {
@@ -10,12 +11,18 @@ class VideoMessageContent extends StatelessWidget {
     required this.message,
     required this.apiBaseUrl,
     required this.progress,
+    required this.mediaItems,
+    required this.initialIndex,
+    this.presentation = ChatMessagePresentation.normal,
     super.key,
   });
 
   final ChatMessage message;
   final String apiBaseUrl;
   final double? progress;
+  final List<MediaPreviewItem> mediaItems;
+  final int initialIndex;
+  final ChatMessagePresentation presentation;
 
   Uri? get _uri {
     final source = message.mediaUrl ?? message.localFilePath ?? '';
@@ -25,105 +32,78 @@ class VideoMessageContent extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap:
-        _uri == null
-            ? null
-            : () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => _VideoViewer(uri: _uri!)),
-            ),
-    child: SizedBox(
-      width: 210,
-      height: 128,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.black87,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: <Widget>[
-            const Icon(Icons.play_circle_fill, color: Colors.white, size: 52),
-            Positioned(
-              left: 8,
-              right: 8,
-              bottom: 7,
-              child: Text(
-                message.fileName.isEmpty ? '视频' : message.fileName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white),
+  Widget build(BuildContext context) {
+    final item = MediaPreviewItem(
+      id: message.localId,
+      messageId: message.localId,
+      type: MediaPreviewType.video,
+      source: _uri?.toString() ?? '',
+      heroTag: buildMediaHeroTag(
+        messageId: message.localId,
+        mediaId: message.localId,
+      ),
+    );
+    final resolvedInitialIndex = mediaItems.indexWhere(
+      (candidate) => candidate.id == message.localId,
+    );
+    final previewItems =
+        resolvedInitialIndex < 0
+            ? <MediaPreviewItem>[item, ...mediaItems]
+            : mediaItems;
+    final compact = presentation == ChatMessagePresentation.quote;
+    return InkWell(
+      onTap:
+          _uri == null
+              ? null
+              : () => MediaPreview.open(
+                context,
+                items: previewItems,
+                initialIndex:
+                    resolvedInitialIndex < 0 ? 0 : resolvedInitialIndex,
+              ),
+      child: HeroMode(
+        enabled: !compact,
+        child: Hero(
+          tag: item.heroTag,
+          child: SizedBox(
+            width: compact ? 90 : 210,
+            height: compact ? 56 : 128,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: <Widget>[
+                  Icon(
+                    Icons.play_circle_fill,
+                    color: Colors.white,
+                    size: compact ? 28 : 52,
+                  ),
+                  if (!compact)
+                    Positioned(
+                      left: 8,
+                      right: 8,
+                      bottom: 7,
+                      child: Text(
+                        message.fileName.isEmpty ? '视频' : message.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  if (progress != null && progress! < 1)
+                    CircularProgressIndicator(
+                      value: progress,
+                      color: Colors.white,
+                    ),
+                ],
               ),
             ),
-            if (progress != null && progress! < 1)
-              CircularProgressIndicator(value: progress, color: Colors.white),
-          ],
+          ),
         ),
       ),
-    ),
-  );
-}
-
-class _VideoViewer extends StatefulWidget {
-  const _VideoViewer({required this.uri});
-  final Uri uri;
-
-  @override
-  State<_VideoViewer> createState() => _VideoViewerState();
-}
-
-class _VideoViewerState extends State<_VideoViewer> {
-  late final VideoPlayerController _controller;
-  Object? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.networkUrl(widget.uri)
-      ..initialize()
-          .then((_) {
-            if (mounted) setState(() {});
-          })
-          .catchError((Object error) {
-            if (mounted) setState(() => _error = error);
-          });
+    );
   }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.black,
-    appBar: AppBar(
-      backgroundColor: Colors.black,
-      foregroundColor: Colors.white,
-    ),
-    body: Center(
-      child:
-          _error != null
-              ? Text(
-                '视频加载失败：$_error',
-                style: const TextStyle(color: Colors.white),
-              )
-              : !_controller.value.isInitialized
-              ? const CircularProgressIndicator()
-              : GestureDetector(
-                onTap:
-                    () => setState(
-                      () =>
-                          _controller.value.isPlaying
-                              ? _controller.pause()
-                              : _controller.play(),
-                    ),
-                child: AspectRatio(
-                  aspectRatio: _controller.value.aspectRatio,
-                  child: VideoPlayer(_controller),
-                ),
-              ),
-    ),
-  );
 }
