@@ -23,6 +23,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   // not recreate lists, restart requests, or reset their scroll positions.
   final Set<HomeSection> _visitedSections = <HomeSection>{HomeSection.messages};
   DateTime? _lastMessagesTabTap;
+  DateTime? _lastBackPressTime;
 
   void _select(HomeSection section) {
     final now = DateTime.now();
@@ -45,6 +46,42 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
 
   void _openOwnerDrawer() => _scaffoldKey.currentState?.openDrawer();
 
+  Future<void> _handlePopScope(bool didPop) async {
+    if (didPop) return;
+
+    // 1. If drawer is open, close drawer first.
+    if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+      _scaffoldKey.currentState?.closeDrawer();
+      return;
+    }
+
+    // 2. If not on the default messages section, switch back to messages first.
+    if (_section != HomeSection.messages) {
+      _select(HomeSection.messages);
+      return;
+    }
+
+    // 3. Double-tap back within 2 seconds to exit the app.
+    final now = DateTime.now();
+    if (_lastBackPressTime == null ||
+        now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+      _lastBackPressTime = now;
+      if (mounted) {
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('再按一次退出应用'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    await SystemNavigator.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -52,32 +89,34 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
     // 与工作台 AppBar 及各 Tab 的页面内标题栏使用同一主题色，避免色差。
     final headerColor = theme.colorScheme.surface;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: headerColor,
-        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final layout = AppBreakpoints.resolve(constraints.maxWidth);
-          final isCompact = layout == WindowLayout.mobile;
-          final content = _LazyHomeSectionStack(
-            selected: _section,
-            visited: _visitedSections,
-            isCompact: isCompact,
-            onOpenOwnerDrawer: _openOwnerDrawer,
-          );
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) => _handlePopScope(didPop),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarColor: headerColor,
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final layout = AppBreakpoints.resolve(constraints.maxWidth);
+            final isCompact = layout == WindowLayout.mobile;
+            final content = _LazyHomeSectionStack(
+              selected: _section,
+              visited: _visitedSections,
+              isCompact: isCompact,
+              onOpenOwnerDrawer: _openOwnerDrawer,
+            );
 
-          return Scaffold(
-            key: _scaffoldKey,
-            drawer: ChatOwnerDrawer(
-              controller: ref.watch(sessionListControllerProvider),
-            ),
-            body:
-                isCompact
-                    ? content
-                    : Row(
+            return Scaffold(
+              key: _scaffoldKey,
+              drawer: ChatOwnerDrawer(
+                controller: ref.watch(sessionListControllerProvider),
+              ),
+              body: isCompact
+                  ? content
+                  : Row(
                       children: [
                         _HomeNavigationRail(
                           selected: _section,
@@ -88,15 +127,15 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
                         Expanded(child: content),
                       ],
                     ),
-            bottomNavigationBar:
-                isCompact
-                    ? _HomeNavigationBar(
+              bottomNavigationBar: isCompact
+                  ? _HomeNavigationBar(
                       selected: _section,
                       onSelected: _select,
                     )
-                    : null,
-          );
-        },
+                  : null,
+            );
+          },
+        ),
       ),
     );
   }
@@ -122,9 +161,8 @@ class _LazyHomeSectionStack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sections = HomeSection.values
-        .where(visited.contains)
-        .toList(growable: false);
+    final sections =
+        HomeSection.values.where(visited.contains).toList(growable: false);
     return Stack(
       fit: StackFit.expand,
       children: sections
@@ -167,18 +205,17 @@ class _HomeNavigationBar extends StatelessWidget {
           backgroundColor: Colors.transparent,
           elevation: 0,
           selectedIndex: HomeSection.values.indexOf(selected),
-          onDestinationSelected:
-              (index) => onSelected(HomeSection.values[index]),
-          destinations:
-              HomeSection.values
-                  .map(
-                    (section) => NavigationDestination(
-                      icon: Icon(section.icon),
-                      selectedIcon: Icon(section.selectedIcon),
-                      label: section.label,
-                    ),
-                  )
-                  .toList(),
+          onDestinationSelected: (index) =>
+              onSelected(HomeSection.values[index]),
+          destinations: HomeSection.values
+              .map(
+                (section) => NavigationDestination(
+                  icon: Icon(section.icon),
+                  selectedIcon: Icon(section.selectedIcon),
+                  label: section.label,
+                ),
+              )
+              .toList(),
         ),
       ),
     );
@@ -208,16 +245,15 @@ class _HomeNavigationRail extends StatelessWidget {
         selectedIndex: HomeSection.values.indexOf(selected),
         onDestinationSelected: (index) => onSelected(HomeSection.values[index]),
         labelType: extended ? null : NavigationRailLabelType.all,
-        destinations:
-            HomeSection.values
-                .map(
-                  (section) => NavigationRailDestination(
-                    icon: Icon(section.icon),
-                    selectedIcon: Icon(section.selectedIcon),
-                    label: Text(section.label),
-                  ),
-                )
-                .toList(),
+        destinations: HomeSection.values
+            .map(
+              (section) => NavigationRailDestination(
+                icon: Icon(section.icon),
+                selectedIcon: Icon(section.selectedIcon),
+                label: Text(section.label),
+              ),
+            )
+            .toList(),
       ),
     );
   }
