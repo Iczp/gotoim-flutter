@@ -74,6 +74,7 @@ flutter:
     - assets/file_web/assets/
     - assets/devtools/remote/
     - assets/devtools/remote/assets/
+    - assets/images/
 
 # hooks:
 #   user_defines:
