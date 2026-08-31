@@ -12,12 +12,12 @@ class AdaptivePageConfig {
     this.initialChildSize = .60,
     this.minChildSize = .40,
     this.maxChildSize = .95,
-    this.useRootNavigator = false,
+    this.useRootNavigator = true,
     this.fullPageMinWidth,
-  }) : assert(maxContentHeightFactor > 0 && maxContentHeightFactor <= 1),
-       assert(initialChildSize > 0 && initialChildSize <= 1),
-       assert(minChildSize > 0 && minChildSize <= initialChildSize),
-       assert(maxChildSize >= initialChildSize && maxChildSize <= 1);
+  })  : assert(maxContentHeightFactor > 0 && maxContentHeightFactor <= 1),
+        assert(initialChildSize > 0 && initialChildSize <= 1),
+        assert(minChildSize > 0 && minChildSize <= initialChildSize),
+        assert(maxChildSize >= initialChildSize && maxChildSize <= 1);
 
   final String title;
   final bool canConvertToPage;

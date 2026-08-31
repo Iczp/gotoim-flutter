@@ -30,7 +30,7 @@ abstract class AdaptivePage {
       context: effectiveContext,
       useRootNavigator: config.useRootNavigator,
       isScrollControlled: true,
-      useSafeArea: true,
+      useSafeArea: false,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => _AdaptiveSheetHost(
         controller: controller,
