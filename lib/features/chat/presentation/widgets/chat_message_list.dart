@@ -9,7 +9,7 @@ typedef ChatMessageItemBuilder =
 ///
 /// The caller supplies item rendering and behavior callbacks so the list stays
 /// presentational and does not depend on the chat controller.
-class ChatMessageList extends StatelessWidget {
+class ChatMessageList extends StatefulWidget {
   const ChatMessageList({
     required this.messages,
     required this.scrollController,
@@ -34,61 +34,134 @@ class ChatMessageList extends StatelessWidget {
   final ChatMessageItemBuilder itemBuilder;
 
   @override
+  State<ChatMessageList> createState() => _ChatMessageListState();
+}
+
+class _ChatMessageListState extends State<ChatMessageList> {
+  static const _listVerticalPadding = 32.0;
+  final Map<String, GlobalKey> _contentKeys = <String, GlobalKey>{};
+  double _viewportHeight = 0;
+  double _bottomSpacerHeight = 0;
+  bool _measurementScheduled = false;
+
+  GlobalKey _contentKeyFor(String id) =>
+      _contentKeys.putIfAbsent(id, GlobalKey.new);
+
+  void _scheduleBottomSpacerMeasurement() {
+    if (_measurementScheduled) return;
+    _measurementScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measurementScheduled = false;
+      if (!mounted || _viewportHeight <= 0) return;
+
+      final keys = <GlobalKey>[
+        _contentKeyFor('_history_footer'),
+        ...widget.messages.map((message) => _contentKeyFor(message.localId)),
+      ];
+      final renderBoxes = keys
+          .map((key) => key.currentContext?.findRenderObject() as RenderBox?)
+          .toList(growable: false);
+      // If any item is not built, the list exceeds the viewport. Do not add a
+      // spacer so the normal lazy ListView behavior remains unchanged.
+      if (renderBoxes.any((renderBox) => renderBox == null)) {
+        _setBottomSpacerHeight(0);
+        return;
+      }
+      final contentHeight = renderBoxes.fold<double>(
+        0,
+        (total, renderBox) => total + renderBox!.size.height,
+      );
+      _setBottomSpacerHeight(
+        (_viewportHeight - _listVerticalPadding - contentHeight).clamp(
+          0,
+          double.infinity,
+        ),
+      );
+    });
+  }
+
+  void _setBottomSpacerHeight(double value) {
+    if ((value - _bottomSpacerHeight).abs() < 0.5) return;
+    setState(() => _bottomSpacerHeight = value);
+  }
+
+  @override
   Widget build(BuildContext context) => Listener(
     behavior: HitTestBehavior.translucent,
     // A listener observes pointer input without joining Flutter's gesture
     // arena. This keeps the surrounding chat region from competing with the
     // ListView's vertical-drag recognizer.
-    onPointerDown: (_) => onTapOutside(),
-    child: NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        onViewingLatestChanged(notification.metrics.pixels <= 32);
-        final isUserPaging =
-            (notification is ScrollUpdateNotification &&
-                notification.dragDetails != null) ||
-            notification is OverscrollNotification;
-        if (isUserPaging && notification.metrics.extentAfter < 180) {
-          onLoadMore();
-        }
-        return false;
+    onPointerDown: (_) => widget.onTapOutside(),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        _viewportHeight = constraints.maxHeight;
+        _scheduleBottomSpacerMeasurement();
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            widget.onViewingLatestChanged(notification.metrics.pixels <= 32);
+            final isUserPaging =
+                (notification is ScrollUpdateNotification &&
+                    notification.dragDetails != null) ||
+                notification is OverscrollNotification;
+            if (isUserPaging && notification.metrics.extentAfter < 180) {
+              widget.onLoadMore();
+            }
+            return false;
+          },
+          child:
+              widget.messages.isEmpty
+                  ? _EmptyMessagesState(
+                    isLoading: widget.isLoading,
+                    error: widget.error,
+                    onRetry: widget.onLoadMore,
+                  )
+                  : ListView.builder(
+                    controller: widget.scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    reverse: true,
+                    findChildIndexCallback: (key) {
+                      if (key is! ValueKey<String>) return null;
+                      final index = widget.messages.indexWhere(
+                        (message) => message.localId == key.value,
+                      );
+                      return index < 0 ? null : index + 1;
+                    },
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 16,
+                    ),
+                    itemCount: widget.messages.length + 2,
+                    itemBuilder: (context, index) {
+                      if (index == 0) {
+                        return SizedBox(height: _bottomSpacerHeight);
+                      }
+                      if (index == widget.messages.length + 1) {
+                        return KeyedSubtree(
+                          key: _contentKeyFor('_history_footer'),
+                          child: _ChatHistoryFooter(
+                            isLoading: widget.isLoading,
+                            hasMore: widget.hasMore,
+                            error: widget.error,
+                            onLoadMore: widget.onLoadMore,
+                          ),
+                        );
+                      }
+                      final messageIndex = index - 1;
+                      final message = widget.messages[messageIndex];
+                      return KeyedSubtree(
+                        key: _contentKeyFor(message.localId),
+                        child: widget.itemBuilder(
+                          context,
+                          message,
+                          messageIndex,
+                        ),
+                      );
+                    },
+                  ),
+        );
       },
-      child:
-          messages.isEmpty
-              ? _EmptyMessagesState(
-                isLoading: isLoading,
-                error: error,
-                onRetry: onLoadMore,
-              )
-              : ListView.builder(
-                controller: scrollController,
-                physics: const AlwaysScrollableScrollPhysics(),
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                reverse: true,
-                findChildIndexCallback: (key) {
-                  if (key is! ValueKey<String>) return null;
-                  final index = messages.indexWhere(
-                    (message) => message.localId == key.value,
-                  );
-                  return index < 0 ? null : index;
-                },
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 16,
-                ),
-                itemCount: messages.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == messages.length) {
-                    return _ChatHistoryFooter(
-                      isLoading: isLoading,
-                      hasMore: hasMore,
-                      error: error,
-                      onLoadMore: onLoadMore,
-                    );
-                  }
-                  return itemBuilder(context, messages[index], index);
-                },
-              ),
     ),
   );
 }
