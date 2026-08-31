@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/app_navigation.dart';
 import 'adaptive_page_config.dart';
 import 'adaptive_page_controller.dart';
 import 'adaptive_page_presentation.dart';
 
-typedef AdaptivePageBuilder =
-    Widget Function(BuildContext context, AdaptivePageController controller);
+typedef AdaptivePageBuilder = Widget Function(
+    BuildContext context, AdaptivePageController controller);
 
 abstract class AdaptivePage {
   static Future<T?> open<T>(
@@ -13,39 +14,42 @@ abstract class AdaptivePage {
     required AdaptivePageConfig config,
     required AdaptivePageBuilder builder,
   }) {
+    final effectiveContext = (rootNavigatorKey.currentContext?.mounted == true)
+        ? rootNavigatorKey.currentContext!
+        : context;
     final fullPageMinWidth = config.fullPageMinWidth;
     if (fullPageMinWidth != null &&
-        MediaQuery.sizeOf(context).width >= fullPageMinWidth) {
-      return push<T>(context, config: config, builder: builder);
+        MediaQuery.sizeOf(effectiveContext).width >= fullPageMinWidth) {
+      return push<T>(effectiveContext, config: config, builder: builder);
     }
     final controller = AdaptivePageController(
       config,
       presentation: AdaptivePagePresentation.compact,
     );
     return showModalBottomSheet<T>(
-      context: context,
+      context: effectiveContext,
       useRootNavigator: config.useRootNavigator,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder:
-          (sheetContext) => _AdaptiveSheetHost(
-            controller: controller,
-            builder: builder,
-            onConvert: () {
-              FocusManager.instance.primaryFocus?.unfocus();
-              Navigator.of(sheetContext).pop();
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!context.mounted) return;
-                push<void>(
-                  context,
-                  config: config,
-                  builder: builder,
-                  controller: controller,
-                );
-              });
-            },
-          ),
+      builder: (sheetContext) => _AdaptiveSheetHost(
+        controller: controller,
+        builder: builder,
+        onConvert: () {
+          FocusManager.instance.primaryFocus?.unfocus();
+          Navigator.of(sheetContext).pop();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final target = rootNavigatorKey.currentContext ?? context;
+            if (!target.mounted) return;
+            push<void>(
+              target,
+              config: config,
+              builder: builder,
+              controller: controller,
+            );
+          });
+        },
+      ),
     );
   }
 
@@ -55,19 +59,19 @@ abstract class AdaptivePage {
     required AdaptivePageBuilder builder,
     AdaptivePageController? controller,
   }) {
-    final pageController =
-        controller ??
+    final pageController = controller ??
         AdaptivePageController(
           config,
           presentation: AdaptivePagePresentation.full,
         );
     pageController.setPresentation(AdaptivePagePresentation.full);
-    return Navigator.of(context).push<T>(
+    final navigator = rootNavigatorKey.currentState ??
+        Navigator.of(context, rootNavigator: config.useRootNavigator);
+    return navigator.push<T>(
       MaterialPageRoute<T>(
         settings: RouteSettings(name: '/adaptive/${config.title}'),
-        builder:
-            (pageContext) =>
-                _AdaptiveFullHost(controller: pageController, builder: builder),
+        builder: (pageContext) =>
+            _AdaptiveFullHost(controller: pageController, builder: builder),
       ),
     );
   }
@@ -166,11 +170,11 @@ class _SheetMaterial extends StatelessWidget {
   final Color color;
   @override
   Widget build(BuildContext context) => Material(
-    color: color,
-    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-    clipBehavior: Clip.antiAlias,
-    child: child,
-  );
+        color: color,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        clipBehavior: Clip.antiAlias,
+        child: child,
+      );
 }
 
 class _AdaptiveFullHost extends StatelessWidget {
@@ -192,42 +196,42 @@ class _AdaptiveHeader extends StatelessWidget {
   final AdaptivePageController controller;
   @override
   Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 36,
-        height: 4,
-        margin: const EdgeInsets.only(top: 10, bottom: 4),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.outlineVariant,
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-      Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(width: 48),
-          Expanded(
-            child: Text(
-              controller.config.title,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
+          Container(
+            width: 36,
+            height: 4,
+            margin: const EdgeInsets.only(top: 10, bottom: 4),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.outlineVariant,
+              borderRadius: BorderRadius.circular(8),
             ),
           ),
-          if (controller.canConvertToPage)
-            IconButton(
-              tooltip: '打开完整页面',
-              onPressed: controller.toPage,
-              icon: const Icon(Icons.open_in_full),
-            ),
-          IconButton(
-            tooltip: '关闭',
-            onPressed: controller.close,
-            icon: const Icon(Icons.close),
+          Row(
+            children: [
+              const SizedBox(width: 48),
+              Expanded(
+                child: Text(
+                  controller.config.title,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              if (controller.canConvertToPage)
+                IconButton(
+                  tooltip: '打开完整页面',
+                  onPressed: controller.toPage,
+                  icon: const Icon(Icons.open_in_full),
+                ),
+              IconButton(
+                tooltip: '关闭',
+                onPressed: controller.close,
+                icon: const Icon(Icons.close),
+              ),
+            ],
           ),
         ],
-      ),
-    ],
-  );
+      );
 }
 
 class _KeyboardAwareBody extends StatelessWidget {
@@ -235,9 +239,10 @@ class _KeyboardAwareBody extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) => AnimatedPadding(
-    duration: const Duration(milliseconds: 180),
-    curve: Curves.easeOutCubic,
-    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-    child: child,
-  );
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: child,
+      );
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/app_navigation.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/glass_container.dart';
@@ -597,10 +598,16 @@ class ChatOwnerDrawer extends ConsumerWidget {
                 Navigator.pop(context);
                 final owner = controller.currentOwner;
                 if (owner != null) {
-                  openProfilePage(
-                    context,
-                    subject: ProfileSubject.owner(owner),
-                  );
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    final targetContext =
+                        rootNavigatorKey.currentContext ?? context;
+                    if (targetContext.mounted) {
+                      openProfilePage(
+                        targetContext,
+                        subject: ProfileSubject.owner(owner),
+                      );
+                    }
+                  });
                 } else {
                   context.push('/settings/avatar');
                 }
