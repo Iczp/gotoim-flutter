@@ -7,6 +7,7 @@ import '../../../../core/media/media_preview.dart';
 import '../../../../core/utils/api_url_resolver.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_presentation.dart';
+import 'media_message_layout.dart';
 
 /// Displays an image message and its upload overlay.
 class ImageMessageContent extends StatelessWidget {
@@ -35,11 +36,11 @@ class ImageMessageContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final image =
         bytes != null
-            ? Image.memory(bytes!, fit: BoxFit.cover)
+            ? Image.memory(bytes!, fit: BoxFit.contain)
             : _url.isNotEmpty
             ? CachedNetworkImage(
               imageUrl: _url,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               placeholder:
                   (_, _) => const Center(
                     child: CircularProgressIndicator(strokeWidth: 2),
@@ -67,8 +68,6 @@ class ImageMessageContent extends StatelessWidget {
         resolvedInitialIndex < 0
             ? <MediaPreviewItem>[item, ...mediaItems]
             : mediaItems;
-    final width = presentation == ChatMessagePresentation.quote ? 56.0 : 190.0;
-    final height = presentation == ChatMessagePresentation.quote ? 56.0 : 190.0;
     return InkWell(
       onTap:
           () => MediaPreview.open(
@@ -80,31 +79,44 @@ class ImageMessageContent extends StatelessWidget {
         enabled: presentation == ChatMessagePresentation.normal,
         child: Hero(
           tag: item.heroTag,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: width,
-              height: height,
-              child: Stack(
-                fit: StackFit.expand,
-                children: <Widget>[
-                  image,
-                  if (progress != null && progress! < 1)
-                    ColoredBox(
-                      color: Colors.black38,
-                      child: Center(
-                        child: SizedBox.square(
-                          dimension: 46,
-                          child: CircularProgressIndicator(
-                            value: progress,
-                            color: Colors.white,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = presentation == ChatMessagePresentation.quote;
+              final size =
+                  compact
+                      ? const Size(56, 56)
+                      : MediaMessageLayout.sizeFor(
+                        constraints: constraints,
+                        aspectRatio: message.mediaAspectRatio,
+                        fallbackAspectRatio: 4 / 3,
+                      );
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: size.width,
+                  height: size.height,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      image,
+                      if (progress != null && progress! < 1)
+                        ColoredBox(
+                          color: Colors.black38,
+                          child: Center(
+                            child: SizedBox.square(
+                              dimension: 46,
+                              child: CircularProgressIndicator(
+                                value: progress,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),

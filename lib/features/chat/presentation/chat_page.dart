@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -742,6 +741,12 @@ class _MessageRow extends StatelessWidget {
   final bool showPeerRead;
   final VoidCallback? onTap;
 
+  String get _senderLabel {
+    if (!kDebugMode) return message.senderName;
+    final messageId = message.serverId?.toString() ?? message.localId;
+    return '${message.senderName} · $messageId';
+  }
+
   @override
   Widget build(BuildContext context) {
     final renderedQuote = quoteContent;
@@ -759,7 +764,7 @@ class _MessageRow extends StatelessWidget {
     if (message.isRollbacked) {
       return Padding(
         padding: const EdgeInsets.all(10),
-        child: Center(child: Text('${message.senderName} 撤回了一条消息')),
+        child: Center(child: Text('$_senderLabel 撤回了一条消息')),
       );
     }
     return GestureDetector(
@@ -829,7 +834,7 @@ class _MessageRow extends StatelessWidget {
                         child: Padding(
                           padding: const EdgeInsets.only(bottom: 4),
                           child: Text(
-                            message.senderName,
+                            _senderLabel,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.labelSmall,

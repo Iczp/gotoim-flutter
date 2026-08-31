@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/floating_window/floating_window.dart';
 import '../../../../core/utils/api_url_resolver.dart';
 import '../../../../core/media/media_preview.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_presentation.dart';
+import 'media_message_layout.dart';
 
 /// Displays a video message preview and opens its player on demand.
 class VideoMessageContent extends StatelessWidget {
@@ -55,55 +57,80 @@ class VideoMessageContent extends StatelessWidget {
       onTap:
           _uri == null
               ? null
-              : () => MediaPreview.open(
+              : () => _openOrRestore(
                 context,
-                items: previewItems,
-                initialIndex:
-                    resolvedInitialIndex < 0 ? 0 : resolvedInitialIndex,
+                previewItems,
+                resolvedInitialIndex < 0 ? 0 : resolvedInitialIndex,
               ),
       child: HeroMode(
-        enabled: !compact,
+        // The full-screen video player and its proportional chat thumbnail
+        // have incompatible layout constraints. A Hero flight between them
+        // can overflow while the route is popping, so video uses the normal
+        // route transition instead. Image messages still retain Hero zoom.
+        enabled: false,
         child: Hero(
           tag: item.heroTag,
-          child: SizedBox(
-            width: compact ? 90 : 210,
-            height: compact ? 56 : 128,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: <Widget>[
-                  Icon(
-                    Icons.play_circle_fill,
-                    color: Colors.white,
-                    size: compact ? 28 : 52,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final size =
+                  compact
+                      ? const Size(90, 56)
+                      : MediaMessageLayout.sizeFor(
+                        constraints: constraints,
+                        aspectRatio: message.mediaAspectRatio,
+                        fallbackAspectRatio: 16 / 9,
+                      );
+              return SizedBox(
+                width: size.width,
+                height: size.height,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  if (!compact)
-                    Positioned(
-                      left: 8,
-                      right: 8,
-                      bottom: 7,
-                      child: Text(
-                        message.fileName.isEmpty ? '视频' : message.fileName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: <Widget>[
+                      Icon(
+                        Icons.play_circle_fill,
+                        color: Colors.white,
+                        size: compact ? 28 : 52,
                       ),
-                    ),
-                  if (progress != null && progress! < 1)
-                    CircularProgressIndicator(
-                      value: progress,
-                      color: Colors.white,
-                    ),
-                ],
-              ),
-            ),
+                      if (!compact)
+                        Positioned(
+                          left: 8,
+                          right: 8,
+                          bottom: 7,
+                          child: Text(
+                            message.fileName.isEmpty ? '视频' : message.fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      if (progress != null && progress! < 1)
+                        CircularProgressIndicator(
+                          value: progress,
+                          color: Colors.white,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
     );
+  }
+
+  void _openOrRestore(
+    BuildContext context,
+    List<MediaPreviewItem> items,
+    int targetIndex,
+  ) {
+    final sessionId = 'video:${message.localId}:${message.localId}';
+    if (FloatingWindowScope.of(context).restore(sessionId)) return;
+    MediaPreview.open(context, items: items, initialIndex: targetIndex);
   }
 }

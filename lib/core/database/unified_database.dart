@@ -524,6 +524,16 @@ class UnifiedDatabase {
     return (rows.single['score'] as num?)?.toInt() ?? 0;
   }
 
+  Future<int> readMaxMessageServerId(int ownerId, String sessionUnitId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT MAX(serverId) AS serverId FROM Messages '
+      'WHERE ownerId = ? AND sessionUnitId = ?',
+      <Object?>[ownerId, sessionUnitId],
+    );
+    return (rows.single['serverId'] as num?)?.toInt() ?? 0;
+  }
+
   Future<void> markMessageOpened(String localId) async {
     await initialize();
     final rows = await _connection.runSelect(

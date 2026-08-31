@@ -208,6 +208,10 @@ void main() {
         )).single.serverId,
         11,
       );
+      expect(
+        await repository.maxLocalServerId(ownerId: 7, sessionUnitId: 'session'),
+        11,
+      );
     },
   );
 

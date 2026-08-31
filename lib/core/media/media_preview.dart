@@ -241,10 +241,20 @@ class _VideoState extends State<_Video> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _handedOff = true;
+      void restoreToFullscreen() {
+        manager.close(id);
+        MediaPreview.openWithNavigator(
+          navigator,
+          items: widget.items,
+          initialIndex: widget.initialIndex,
+        );
+      }
+
       manager.show(
         id: id,
         type: FloatingWindowType.video,
         options: FloatingWindowOptions.video(),
+        onRestore: restoreToFullscreen,
         child: _FloatingVideoContent(
           session: _session,
           label: widget.item.id,
@@ -252,14 +262,7 @@ class _VideoState extends State<_Video> {
             VideoPlaybackSessionRegistry.release(id, _session);
             manager.close(id);
           },
-          onRestore: () {
-            manager.close(id);
-            MediaPreview.openWithNavigator(
-              navigator,
-              items: widget.items,
-              initialIndex: widget.initialIndex,
-            );
-          },
+          onRestore: restoreToFullscreen,
         ),
       );
       navigator.pop();
@@ -377,13 +380,27 @@ class _FloatingVideoContentState extends State<_FloatingVideoContent> {
       fit: StackFit.expand,
       children: [
         GestureDetector(
-          onTap: widget.onRestore,
-          child: VideoPlayer(controller),
-        ),
-        if (!controller.value.isPlaying)
-          const Center(
-            child: Icon(Icons.play_circle_fill, color: Colors.white, size: 44),
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.session.togglePlayback,
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: controller.value.aspectRatio,
+              child: VideoPlayer(controller),
+            ),
           ),
+        ),
+        Center(
+          child: IconButton.filledTonal(
+            tooltip: controller.value.isPlaying ? '暂停播放' : '播放视频',
+            onPressed: widget.session.togglePlayback,
+            icon: Icon(
+              controller.value.isPlaying
+                  ? Icons.pause_circle_filled
+                  : Icons.play_circle_fill,
+              size: 42,
+            ),
+          ),
+        ),
         Positioned(
           left: 2,
           top: 2,

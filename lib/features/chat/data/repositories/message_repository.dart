@@ -48,6 +48,11 @@ class MessageRepository {
     serverId: serverId,
   );
 
+  Future<int> maxLocalServerId({
+    required int ownerId,
+    required String sessionUnitId,
+  }) => _dao.maxServerId(ownerId, sessionUnitId);
+
   /// Retries a failed text message in-place so its local identity and UI slot
   /// remain stable instead of inserting a duplicate bubble.
   Future<ChatMessage> retryText(ChatMessage message) async {
@@ -270,6 +275,10 @@ class MessageRepository {
     }
     final items = collected.values.toList(growable: false);
     await _dao.upsertAll(items);
+    final persistedMaxMessageId = await _dao.maxServerId(
+      ownerId,
+      sessionUnitId,
+    );
     if (items.isNotEmpty) {
       final newest = [...items]
         ..sort((a, b) => (b.serverId ?? 0).compareTo(a.serverId ?? 0));
@@ -277,7 +286,7 @@ class MessageRepository {
     }
     debugPrint(
       '[loadMessages][latest] session=$sessionUnitId minMessageId=$minMessageId '
-      'received=${items.length} persisted=${items.length}',
+      'received=${items.length} persistedMaxMessageId=$persistedMaxMessageId',
     );
     return items;
   }

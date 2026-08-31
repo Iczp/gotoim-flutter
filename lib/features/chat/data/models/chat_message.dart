@@ -134,6 +134,23 @@ class ChatMessage {
     return value.isEmpty ? null : value;
   }
 
+  /// Original media dimensions supplied by the message contract. Both image
+  /// and video messages have used the generic and image-prefixed forms.
+  double? get mediaAspectRatio {
+    final width =
+        asInt(content['imageWidth']) ??
+        asInt(content['width']) ??
+        asInt(content['videoWidth']);
+    final height =
+        asInt(content['imageHeight']) ??
+        asInt(content['height']) ??
+        asInt(content['videoHeight']);
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return null;
+    }
+    return width / height;
+  }
+
   String get fileName =>
       firstNonEmpty(<Object?>[content['fileName'], content['name']]);
   int get fileSize => asInt(content['size']) ?? 0;

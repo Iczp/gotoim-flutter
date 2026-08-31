@@ -46,6 +46,9 @@ class MessageDao {
   Future<int> maxScore(int ownerId, String sessionUnitId) =>
       _database.readMaxMessageScore(ownerId, sessionUnitId);
 
+  Future<int> maxServerId(int ownerId, String sessionUnitId) =>
+      _database.readMaxMessageServerId(ownerId, sessionUnitId);
+
   Future<bool> isLoadedAll(String sessionUnitId) =>
       _database.readFriendMessagesLoadedAll(sessionUnitId);
 

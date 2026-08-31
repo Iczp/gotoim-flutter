@@ -52,6 +52,12 @@
                 <data android:scheme="gotoim-dev" />
             </intent-filter>
         </activity>
+        <!-- image_cropper launches uCrop in a separate native Activity. Without
+             this declaration Android terminates the app after image selection. -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
         <!-- MiniApp host activity. One generic Activity handles ALL dynamic
              workbench apps. documentLaunchMode="intoExisting" + FLAG_ACTIVITY_NEW_DOCUMENT
              ensures each appId gets its own Task card in recent apps, and

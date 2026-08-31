@@ -64,6 +64,7 @@ class FloatingWindowEntry {
     required this.size,
     required this.visible,
     required this.zIndex,
+    this.onRestore,
   });
 
   final String id;
@@ -76,6 +77,9 @@ class FloatingWindowEntry {
   final bool visible;
   final int zIndex;
 
+  /// Restores this floating item to its primary presentation, if supported.
+  final VoidCallback? onRestore;
+
   FloatingWindowEntry copyWith({
     Widget? child,
     FloatingWindowOptions? options,
@@ -83,6 +87,7 @@ class FloatingWindowEntry {
     Size? size,
     bool? visible,
     int? zIndex,
+    VoidCallback? onRestore,
   }) => FloatingWindowEntry(
     id: id,
     type: type,
@@ -93,6 +98,7 @@ class FloatingWindowEntry {
     size: size ?? this.size,
     visible: visible ?? this.visible,
     zIndex: zIndex ?? this.zIndex,
+    onRestore: onRestore ?? this.onRestore,
   );
 }
 

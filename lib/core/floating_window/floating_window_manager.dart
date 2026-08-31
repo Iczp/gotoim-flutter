@@ -26,6 +26,7 @@ class FloatingWindowManager extends ChangeNotifier {
     FloatingWindowType type = FloatingWindowType.custom,
     FloatingWindowContentMode contentMode = FloatingWindowContentMode.flutter,
     FloatingWindowOptions options = const FloatingWindowOptions(),
+    VoidCallback? onRestore,
   }) {
     final existing = _entries[id];
     final position =
@@ -43,6 +44,7 @@ class FloatingWindowManager extends ChangeNotifier {
       size: existing?.size ?? options.initialSize,
       visible: true,
       zIndex: ++_nextZIndex,
+      onRestore: onRestore,
     );
     notifyListeners();
   }
@@ -55,6 +57,16 @@ class FloatingWindowManager extends ChangeNotifier {
   );
   void close(String id) {
     if (_entries.remove(id) != null) notifyListeners();
+  }
+
+  /// Restores a floating item to its original presentation.
+  ///
+  /// Returns false when the item is absent or has no restore action.
+  bool restore(String id) {
+    final action = _entries[id]?.onRestore;
+    if (action == null) return false;
+    action();
+    return true;
   }
 
   void closeAll() {

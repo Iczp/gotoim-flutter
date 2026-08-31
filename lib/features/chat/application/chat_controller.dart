@@ -248,12 +248,16 @@ class ChatController extends ChangeNotifier {
 
   Future<void> loadLatest() async {
     if (isLoadingLatest || _messages.isEmpty) return;
-    final minMessageId = _messages
-        .map((item) => item.serverId ?? 0)
-        .fold<int>(0, (max, id) => id > max ? id : max);
-    if (minMessageId <= 0) return;
     isLoadingLatest = true;
+    // The cursor must come from Drift instead of this controller's temporary
+    // page.  A new chat controller is created on re-entry, so only the local
+    // database can reliably carry forward the newest persisted server ID.
     try {
+      final minMessageId = await _repository.maxLocalServerId(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+      );
+      if (minMessageId <= 0) return;
       final latest = await _repository.loadLatest(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
