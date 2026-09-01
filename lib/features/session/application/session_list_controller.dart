@@ -236,9 +236,11 @@ class SessionListController extends ChangeNotifier {
     _localReloadTimer = Timer(const Duration(milliseconds: 80), () async {
       final owner = _currentOwner;
       if (owner == null) return;
+      final currentCount = _sessions.length;
+      final targetLimit = currentCount < pageSize ? pageSize : currentCount;
       final local = await _repository.loadLocalFriends(
         ownerId: owner.id,
-        limit: _sessions.length < pageSize ? pageSize : _sessions.length,
+        limit: targetLimit,
       );
       final changed = !listEquals(_sessions, local);
       debugPrint(
@@ -246,11 +248,36 @@ class SessionListController extends ChangeNotifier {
         'previousCount=${_sessions.length} newCount=${local.length}',
       );
       if (changed) {
-        _sessions
-          ..clear()
-          ..addAll(local);
+        _mergeLocalSessions(local);
         notifyListeners();
       }
+    });
+  }
+
+  void _mergeLocalSessions(List<SessionSummary> updated) {
+    if (updated.isEmpty) return;
+    if (_sessions.isEmpty) {
+      _sessions.addAll(updated);
+      return;
+    }
+    final updatedMap = <String, SessionSummary>{
+      for (final item in updated) item.id: item,
+    };
+    for (var i = 0; i < _sessions.length; i++) {
+      final existing = _sessions[i];
+      final fresh = updatedMap.remove(existing.id);
+      if (fresh != null) {
+        _sessions[i] = fresh;
+      }
+    }
+    if (updatedMap.isNotEmpty) {
+      _sessions.addAll(updatedMap.values);
+    }
+    _sessions.sort((a, b) {
+      final score = b.score.compareTo(a.score);
+      if (score != 0) return score;
+      final ticks = b.ticks.compareTo(a.ticks);
+      return ticks != 0 ? ticks : b.id.compareTo(a.id);
     });
   }
 
@@ -309,14 +336,14 @@ class SessionListController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      await _repository.loadChanges(ownerId: owner.id);
-      final local = await _repository.loadLocalFriends(
-        ownerId: owner.id,
-        limit: pageSize,
-      );
-      _sessions
-        ..clear()
-        ..addAll(local);
+      final changedItems = await _repository.loadChanges(ownerId: owner.id);
+      if (changedItems.isNotEmpty) {
+        debugPrint(
+          '[SessionScrollTrace] 🔄 refreshChanges | receivedChanges=${changedItems.length} '
+          'currentSessions=${_sessions.length}',
+        );
+        _mergeLocalSessions(changedItems);
+      }
     } catch (error) {
       _error = error;
       rethrow;
@@ -329,9 +356,11 @@ class SessionListController extends ChangeNotifier {
   Future<void> reloadVisibleLocal() async {
     final owner = _currentOwner;
     if (owner == null) return;
+    final currentCount = _sessions.length;
+    final targetLimit = currentCount < pageSize ? pageSize : currentCount;
     final local = await _repository.loadLocalFriends(
       ownerId: owner.id,
-      limit: _sessions.length < pageSize ? pageSize : _sessions.length,
+      limit: targetLimit,
     );
     final changed = !listEquals(_sessions, local);
     debugPrint(
@@ -339,9 +368,7 @@ class SessionListController extends ChangeNotifier {
       'previousCount=${_sessions.length} newCount=${local.length}',
     );
     if (changed) {
-      _sessions
-        ..clear()
-        ..addAll(local);
+      _mergeLocalSessions(local);
       notifyListeners();
     }
   }
