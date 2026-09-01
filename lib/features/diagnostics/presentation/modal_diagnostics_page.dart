@@ -94,39 +94,43 @@ class _ModalDiagnosticsPageState extends State<ModalDiagnosticsPage> {
                 child: Row(
                   children: [
                     const Text('进场过渡动画：'),
-                    const SizedBox(width: 12),
-                    DropdownButton<ModalTransitionType>(
-                      value: _transitionType,
-                      isDense: true,
-                      items: const [
-                        DropdownMenuItem(
-                          value: ModalTransitionType.material3,
-                          child: Text('Material 3 (缩放渐显)'),
-                        ),
-                        DropdownMenuItem(
-                          value: ModalTransitionType.scale,
-                          child: Text('Center Scale (中心放大)'),
-                        ),
-                        DropdownMenuItem(
-                          value: ModalTransitionType.fade,
-                          child: Text('Fade (淡入淡出)'),
-                        ),
-                        DropdownMenuItem(
-                          value: ModalTransitionType.slideFromBottom,
-                          child: Text('Slide Bottom (底部滑入)'),
-                        ),
-                        DropdownMenuItem(
-                          value: ModalTransitionType.slideFromTop,
-                          child: Text('Slide Top (顶部滑入)'),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setState(() => _transitionType = v);
-                      },
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButton<ModalTransitionType>(
+                        value: _transitionType,
+                        isExpanded: true,
+                        isDense: true,
+                        items: const [
+                          DropdownMenuItem(
+                            value: ModalTransitionType.material3,
+                            child: Text('Material 3 (缩放渐显)'),
+                          ),
+                          DropdownMenuItem(
+                            value: ModalTransitionType.scale,
+                            child: Text('Center Scale (中心放大)'),
+                          ),
+                          DropdownMenuItem(
+                            value: ModalTransitionType.fade,
+                            child: Text('Fade (淡入淡出)'),
+                          ),
+                          DropdownMenuItem(
+                            value: ModalTransitionType.slideFromBottom,
+                            child: Text('Slide Bottom (底部滑入)'),
+                          ),
+                          DropdownMenuItem(
+                            value: ModalTransitionType.slideFromTop,
+                            child: Text('Slide Top (顶部滑入)'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _transitionType = v);
+                        },
+                      ),
                     ),
                   ],
                 ),
               ),
+
               SwitchListTile(
                 value: _barrierDismissible,
                 onChanged: (v) => setState(() => _barrierDismissible = v),

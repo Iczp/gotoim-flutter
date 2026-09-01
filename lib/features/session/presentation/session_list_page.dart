@@ -68,10 +68,19 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               onRefresh: controller.refreshChanges,
               child: NotificationListener<ScrollNotification>(
                 onNotification: (notification) {
-                  if (notification.metrics.extentAfter < 240 &&
+                  final isUserPaging =
+                      (notification is ScrollUpdateNotification &&
+                          notification.dragDetails != null) ||
+                      notification is OverscrollNotification;
+                  if (isUserPaging &&
+                      notification.metrics.extentAfter < 240 &&
                       controller.hasMore &&
                       !controller.isLoading) {
-                    controller.loadNextPage();
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        controller.loadNextPage();
+                      }
+                    });
                   }
                   return false;
                 },
