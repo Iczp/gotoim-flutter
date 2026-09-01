@@ -55,10 +55,13 @@ abstract class MediaPreview {
     if (items.isEmpty) return Future.value();
     final safeInitialIndex = initialIndex.clamp(0, items.length - 1);
     return navigator.push<void>(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder:
-            (_) =>
+      PageRouteBuilder<void>(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 240),
+        reverseTransitionDuration: const Duration(milliseconds: 240),
+        pageBuilder:
+            (_, animation, secondaryAnimation) =>
                 _MediaPreviewPage(items: items, initialIndex: safeInitialIndex),
       ),
     );
@@ -73,82 +76,170 @@ class _MediaPreviewPage extends StatefulWidget {
   State<_MediaPreviewPage> createState() => _MediaPreviewPageState();
 }
 
-class _MediaPreviewPageState extends State<_MediaPreviewPage> {
+class _MediaPreviewPageState extends State<_MediaPreviewPage>
+    with SingleTickerProviderStateMixin {
   late final PageController _pages = PageController(
     initialPage: widget.initialIndex,
   );
   late int _index = widget.initialIndex;
   bool _chrome = true;
-  double _dragOffset = 0;
+  Offset _dragOffset = Offset.zero;
+  bool _isDragging = false;
+  double _currentScale = 1.0;
+
+  late final AnimationController _resetController;
+  Animation<Offset>? _resetAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _resetController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    )..addListener(() {
+        if (_resetAnimation != null) {
+          setState(() {
+            _dragOffset = _resetAnimation!.value;
+          });
+        }
+      });
+  }
+
   @override
   void dispose() {
+    _resetController.dispose();
     _pages.dispose();
     super.dispose();
   }
 
+  double get _dragProgress =>
+      (_dragOffset.dy.abs() / 280.0).clamp(0.0, 1.0);
+
+  double get _backgroundOpacity =>
+      (1.0 - _dragProgress * 0.95).clamp(0.0, 1.0);
+
+  double get _mediaScale => (1.0 - _dragProgress * 0.35).clamp(0.65, 1.0);
+
+  void _onVerticalDragStart(DragStartDetails details) {
+    if (_currentScale > 1.05) return;
+    _resetController.stop();
+    _isDragging = true;
+  }
+
+  void _onVerticalDragUpdate(DragUpdateDetails details) {
+    if (_currentScale > 1.05) return;
+    _isDragging = true;
+    setState(() {
+      final newDy = _dragOffset.dy + details.delta.dy;
+      final newDx = _dragOffset.dx + details.delta.dx;
+      _dragOffset = Offset(newDx, newDy);
+    });
+  }
+
+  void _onVerticalDragEnd(DragEndDetails details) {
+    if (_currentScale > 1.05) return;
+    _isDragging = false;
+    final velocity = (details.primaryVelocity ?? 0.0).abs();
+    final distance = _dragOffset.dy.abs();
+    final shouldClose = distance > 80.0 || velocity > 500.0;
+    if (shouldClose) {
+      Navigator.of(context).pop();
+    } else {
+      _resetAnimation = Tween<Offset>(
+        begin: _dragOffset,
+        end: Offset.zero,
+      ).animate(
+        CurvedAnimation(
+          parent: _resetController,
+          curve: Curves.easeOutCubic,
+        ),
+      );
+      _resetController.forward(from: 0.0);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final backgroundOpacity = (1 - _dragOffset / 300).clamp(0.4, 1.0);
+    final bgOpacity = _backgroundOpacity;
+    final chromeOpacity = (1.0 - _dragProgress * 3.0).clamp(0.0, 1.0);
+
     return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: backgroundOpacity),
+      backgroundColor: Colors.black.withValues(alpha: bgOpacity),
       body: SafeArea(
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
-          onTap: () => setState(() => _chrome = !_chrome),
-          onVerticalDragUpdate: (details) {
-            if (details.delta.dy > 0) {
-              setState(() => _dragOffset += details.delta.dy);
+          onTap: () {
+            if (_dragOffset == Offset.zero) {
+              setState(() => _chrome = !_chrome);
             }
           },
-          onVerticalDragEnd: (details) {
-            final shouldClose =
-                _dragOffset > 120 || (details.primaryVelocity ?? 0) > 800;
-            if (shouldClose) {
-              Navigator.of(context).pop();
-            } else {
-              setState(() => _dragOffset = 0);
-            }
-          },
+          onVerticalDragStart: _onVerticalDragStart,
+          onVerticalDragUpdate: _onVerticalDragUpdate,
+          onVerticalDragEnd: _onVerticalDragEnd,
           child: Stack(
+            fit: StackFit.expand,
             children: [
               Transform.translate(
-                offset: Offset(0, _dragOffset),
-                child: PageView.builder(
-                  controller: _pages,
-                  itemCount: widget.items.length,
-                  onPageChanged: (value) => setState(() => _index = value),
-                  itemBuilder:
-                      (_, index) => Center(
-                        child:
-                            widget.items[index].type == MediaPreviewType.image
-                                ? _Image(item: widget.items[index])
-                                : _Video(
-                                  item: widget.items[index],
-                                  active: index == _index,
-                                  items: widget.items,
-                                  initialIndex: index,
-                                ),
-                      ),
+                offset: _dragOffset,
+                child: Transform.scale(
+                  scale: _mediaScale,
+                  child: PageView.builder(
+                    controller: _pages,
+                    physics:
+                        _isDragging || _dragOffset != Offset.zero
+                            ? const NeverScrollableScrollPhysics()
+                            : const BouncingScrollPhysics(),
+                    itemCount: widget.items.length,
+                    onPageChanged: (value) => setState(() => _index = value),
+                    itemBuilder:
+                        (_, index) => Center(
+                          child:
+                              widget.items[index].type == MediaPreviewType.image
+                                  ? _Image(
+                                    item: widget.items[index],
+                                    onScaleChanged: (scale) {
+                                      _currentScale = scale;
+                                    },
+                                  )
+                                  : _Video(
+                                    item: widget.items[index],
+                                    active: index == _index,
+                                    items: widget.items,
+                                    initialIndex: index,
+                                  ),
+                        ),
+                  ),
                 ),
               ),
-              if (_chrome)
+              if (_chrome && chromeOpacity > 0.0)
                 Positioned(
                   top: 4,
                   left: 4,
-                  child: IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: Colors.white),
+                  child: Opacity(
+                    opacity: chromeOpacity,
+                    child: IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
                   ),
                 ),
-              if (_chrome && widget.items.length > 1)
+              if (_chrome && widget.items.length > 1 && chromeOpacity > 0.0)
                 Positioned(
                   bottom: 18,
                   left: 0,
                   right: 0,
-                  child: Text(
-                    '${_index + 1} / ${widget.items.length}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white),
+                  child: Opacity(
+                    opacity: chromeOpacity,
+                    child: Text(
+                      '${_index + 1} / ${widget.items.length}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        shadows: [
+                          Shadow(blurRadius: 4, color: Colors.black54),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -159,16 +250,52 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage> {
   }
 }
 
-class _Image extends StatelessWidget {
-  const _Image({required this.item});
+class _Image extends StatefulWidget {
+  const _Image({required this.item, this.onScaleChanged});
   final MediaPreviewItem item;
+  final ValueChanged<double>? onScaleChanged;
+
+  @override
+  State<_Image> createState() => _ImageState();
+}
+
+class _ImageState extends State<_Image> {
+  final TransformationController _transformController =
+      TransformationController();
+
+  @override
+  void initState() {
+    super.initState();
+    _transformController.addListener(_onTransformChanged);
+  }
+
+  @override
+  void dispose() {
+    _transformController.removeListener(_onTransformChanged);
+    _transformController.dispose();
+    super.dispose();
+  }
+
+  void _onTransformChanged() {
+    final scale = _transformController.value.getMaxScaleOnAxis();
+    widget.onScaleChanged?.call(scale);
+  }
+
+  void _onDoubleTap() {
+    if (_transformController.value.getMaxScaleOnAxis() > 1.05) {
+      _transformController.value = Matrix4.identity();
+    } else {
+      _transformController.value = Matrix4.identity()..scale(2.5);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final image =
-        item.bytes != null
-            ? Image.memory(item.bytes!, fit: BoxFit.contain)
+        widget.item.bytes != null
+            ? Image.memory(widget.item.bytes!, fit: BoxFit.contain)
             : Image.network(
-              item.source,
+              widget.item.source,
               fit: BoxFit.contain,
               errorBuilder:
                   (_, _, _) => const Icon(
@@ -178,11 +305,15 @@ class _Image extends StatelessWidget {
                   ),
             );
     return Hero(
-      tag: item.heroTag,
-      child: InteractiveViewer(
-        minScale: 1,
-        maxScale: 5,
-        child: Center(child: image),
+      tag: widget.item.heroTag,
+      child: GestureDetector(
+        onDoubleTap: _onDoubleTap,
+        child: InteractiveViewer(
+          transformationController: _transformController,
+          minScale: 1.0,
+          maxScale: 5.0,
+          child: Center(child: image),
+        ),
       ),
     );
   }

@@ -63,11 +63,7 @@ class VideoMessageContent extends StatelessWidget {
                 resolvedInitialIndex < 0 ? 0 : resolvedInitialIndex,
               ),
       child: HeroMode(
-        // The full-screen video player and its proportional chat thumbnail
-        // have incompatible layout constraints. A Hero flight between them
-        // can overflow while the route is popping, so video uses the normal
-        // route transition instead. Image messages still retain Hero zoom.
-        enabled: false,
+        enabled: presentation == ChatMessagePresentation.normal,
         child: Hero(
           tag: item.heroTag,
           child: LayoutBuilder(
