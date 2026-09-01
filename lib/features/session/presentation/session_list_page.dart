@@ -24,7 +24,6 @@ class SessionListPage extends ConsumerStatefulWidget {
 
 class _SessionListPageState extends ConsumerState<SessionListPage> {
   final ScrollController _scrollController = ScrollController();
-  final Map<String, GlobalKey> _sessionKeys = <String, GlobalKey>{};
   int _handledFocusUnreadRequest = 0;
 
   @override
@@ -73,8 +72,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 onNotification: (notification) {
                   final isUserPaging =
                       (notification is ScrollUpdateNotification &&
-                          notification.dragDetails != null) ||
-                      notification is OverscrollNotification;
+                          (notification.dragDetails != null ||
+                              (notification.scrollDelta != null &&
+                                  notification.scrollDelta! > 0))) ||
+                      (notification is OverscrollNotification &&
+                          notification.dragDetails != null);
                   if (isUserPaging &&
                       notification.metrics.extentAfter < 240 &&
                       controller.hasMore &&
@@ -134,10 +136,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                           final item = listItems[index];
                           return switch (item.kind) {
                             SessionListItemKind.session => SessionUnitItem(
-                              key: _sessionKeys.putIfAbsent(
-                                item.session!.id,
-                                GlobalKey.new,
-                              ),
+                              key: ValueKey(item.session!.id),
                               item: item.session!,
                               onTap:
                                   () => _openChat(
@@ -158,10 +157,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                             ),
                             SessionListItemKind.pinnedDivider =>
                               PinnedDividerItem(
+                                key: const ValueKey('pinned_divider'),
                                 count: item.count,
                                 hasMore: item.hasMore,
                               ),
                             SessionListItemKind.timeDivider => TimeDividerItem(
+                              key: ValueKey('time_divider_${item.title}'),
                               text: item.title!,
                               count: item.count,
                               hasMore: item.hasMore,
@@ -207,22 +208,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           item.session!.unreadCount > 0,
     );
     if (targetIndex < 0) return;
-    final target = listItems[targetIndex].session!;
-    final targetContext = _sessionKeys[target.id]?.currentContext;
-    if (targetContext != null) {
-      await Scrollable.ensureVisible(
-        targetContext,
-        alignment: 0.12,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutCubic,
-      );
-      return;
-    }
 
     var estimatedOffset = 0.0;
     for (var index = 0; index < targetIndex; index++) {
       estimatedOffset +=
-          listItems[index].kind == SessionListItemKind.session ? 68 : 32;
+          listItems[index].kind == SessionListItemKind.session ? 68.0 : 32.0;
     }
     final position = _scrollController.position;
     await _scrollController.animateTo(
@@ -230,18 +220,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       duration: const Duration(milliseconds: 320),
       curve: Curves.easeOutCubic,
     );
-    if (!mounted) return;
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
-    final builtContext = _sessionKeys[target.id]?.currentContext;
-    if (builtContext != null && builtContext.mounted) {
-      await Scrollable.ensureVisible(
-        builtContext,
-        alignment: 0.12,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-      );
-    }
   }
 }
 

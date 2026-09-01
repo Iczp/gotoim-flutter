@@ -240,10 +240,12 @@ class SessionListController extends ChangeNotifier {
         ownerId: owner.id,
         limit: _sessions.length < pageSize ? pageSize : _sessions.length,
       );
-      _sessions
-        ..clear()
-        ..addAll(local);
-      notifyListeners();
+      if (!listEquals(_sessions, local)) {
+        _sessions
+          ..clear()
+          ..addAll(local);
+        notifyListeners();
+      }
     });
   }
 
@@ -326,10 +328,12 @@ class SessionListController extends ChangeNotifier {
       ownerId: owner.id,
       limit: _sessions.length < pageSize ? pageSize : _sessions.length,
     );
-    _sessions
-      ..clear()
-      ..addAll(local);
-    notifyListeners();
+    if (!listEquals(_sessions, local)) {
+      _sessions
+        ..clear()
+        ..addAll(local);
+      notifyListeners();
+    }
   }
 
   Future<void> setTopping(SessionSummary session, bool value) async {

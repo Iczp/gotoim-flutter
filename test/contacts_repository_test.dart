@@ -71,6 +71,7 @@ class _NoNetworkClient implements ApiClient {
   Future<T> postMultipart<T>(
     String path, {
     Map<String, Object?>? query,
+    Map<String, Object?>? extraFields,
     required MultipartUploadFile file,
     String fieldName = 'file',
     void Function(int, int)? onProgress,

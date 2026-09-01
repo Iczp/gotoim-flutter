@@ -104,4 +104,32 @@ class SessionSummary {
     'expireTime': millis(raw['expireTime']),
     'raw': encodeJson(raw),
   };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SessionSummary &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          ownerId == other.ownerId &&
+          score == other.score &&
+          ticks == other.ticks &&
+          title == other.title &&
+          preview == other.preview &&
+          updatedAt == other.updatedAt &&
+          unreadCount == other.unreadCount &&
+          isPinned == other.isPinned;
+
+  @override
+  int get hashCode => Object.hash(
+        id,
+        ownerId,
+        score,
+        ticks,
+        title,
+        preview,
+        updatedAt,
+        unreadCount,
+        isPinned,
+      );
 }

@@ -187,6 +187,7 @@ class _FakeApiClient implements ApiClient {
   Future<T> postMultipart<T>(
     String path, {
     Map<String, Object?>? query,
+    Map<String, Object?>? extraFields,
     required MultipartUploadFile file,
     String fieldName = 'file',
     void Function(int sent, int total)? onProgress,
