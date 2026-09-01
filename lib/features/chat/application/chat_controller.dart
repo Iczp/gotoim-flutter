@@ -147,7 +147,13 @@ class ChatController extends ChangeNotifier {
   String get mentionKeyword => _mentionKeyword;
   int? get initialUnreadDividerMessageId => _initialUnreadDividerMessageId;
 
+  final Stopwatch _traceStopwatch = Stopwatch();
+
   Future<void> initialize() async {
+    _traceStopwatch.start();
+    debugPrint(
+      '[ChatTrace] ▶ [1/5] initialize started | session=$sessionUnitId',
+    );
     _attachmentTransferService.addListener(_onAttachmentTransferChanged);
     _sessionChangeSubscription = _sessionChangeBus.events.listen((event) {
       if (event.ownerId == ownerId && event.sessionUnitId == sessionUnitId) {
@@ -156,6 +162,7 @@ class ChatController extends ChangeNotifier {
     });
 
     isLoading = true;
+    final localLoadWatch = Stopwatch()..start();
     try {
       final results = await Future.wait([
         _sessionRepository.loadLocalFriendDetail(sessionUnitId),
@@ -182,8 +189,20 @@ class ChatController extends ChangeNotifier {
         messages: _messages,
         readMessageId: friend?.readMessageId,
       );
+      debugPrint(
+        '[ChatTrace] ✔ [2/5] local SQLite cache loaded | '
+        'cost=${localLoadWatch.elapsedMilliseconds}ms | '
+        'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms | '
+        'friend=${friend?.title} | '
+        'messagesCount=${_messages.length}',
+      );
     } catch (exception) {
       error = exception;
+      debugPrint(
+        '[ChatTrace] ✖ [2/5] local SQLite cache load failed | '
+        'cost=${localLoadWatch.elapsedMilliseconds}ms | '
+        'error=$exception',
+      );
     } finally {
       isLoading = false;
       notifyListeners();
@@ -196,8 +215,22 @@ class ChatController extends ChangeNotifier {
     // Defer background network synchronization until after the page route animation
     unawaited(
       Future.delayed(const Duration(milliseconds: 300), () async {
+        debugPrint(
+          '[ChatTrace] ⏳ [3/5] deferred network sync triggered | '
+          'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
+        );
         if (_messages.isNotEmpty) {
-          unawaited(loadLatest().then((_) => markLatestRead()));
+          final syncWatch = Stopwatch()..start();
+          unawaited(
+            loadLatest().then((_) {
+              debugPrint(
+                '[ChatTrace] ✔ [4/5] latest messages synced | '
+                'cost=${syncWatch.elapsedMilliseconds}ms | '
+                'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
+              );
+              return markLatestRead();
+            }),
+          );
         }
         unawaited(_refreshFriendDetail());
       }),
@@ -208,9 +241,8 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-
-
   Future<void> _refreshFriendDetail() async {
+    final watch = Stopwatch()..start();
     try {
       final remote = await _sessionRepository.loadRemoteFriendDetail(
         ownerId: ownerId,
@@ -219,10 +251,17 @@ class ChatController extends ChangeNotifier {
       friend = remote;
       _title = remote.title;
       notifyListeners();
+      debugPrint(
+        '[ChatTrace] ✔ [5/5] remote friend detail synced | '
+        'cost=${watch.elapsedMilliseconds}ms | '
+        'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms | '
+        'title=${remote.title}',
+      );
     } catch (exception) {
       debugPrint(
-        '[chatInitialize][remote-friend-failed] session=$sessionUnitId '
-        'keepLocal=${friend != null} error=$exception',
+        '[ChatTrace] ✖ [5/5] remote friend detail sync failed | '
+        'cost=${watch.elapsedMilliseconds}ms | '
+        'error=$exception',
       );
     }
   }
@@ -232,6 +271,7 @@ class ChatController extends ChangeNotifier {
     isLoading = true;
     error = null;
     notifyListeners();
+    final watch = Stopwatch()..start();
     try {
       final page = await _repository.loadHistory(
         ownerId: ownerId,
@@ -239,10 +279,23 @@ class ChatController extends ChangeNotifier {
         beforeScore: _messages.isEmpty ? null : _messages.last.score,
         limit: pageSize,
       );
-      final ids = _messages.map((item) => item.localId).toSet();
-      _messages.addAll(page.items.where((item) => ids.add(item.localId)));
-      _messages.sort((a, b) => b.score.compareTo(a.score));
-      hasMore = page.hasMore;
+      if (page.items.isEmpty) {
+        hasMore = false;
+      } else {
+        final existingIds = _messages.map((item) => item.localId).toSet();
+        for (final item in page.items) {
+          if (existingIds.add(item.localId)) {
+            _messages.add(item);
+          }
+        }
+        hasMore = page.hasMore;
+      }
+      debugPrint(
+        '[ChatTrace] 📜 loadMore history finished | '
+        'cost=${watch.elapsedMilliseconds}ms | '
+        'newItems=${page.items.length} | '
+        'total=${_messages.length}',
+      );
     } catch (exception) {
       error = exception;
     } finally {

@@ -65,11 +65,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
   List<MediaPreviewItem> _mediaItems = const <MediaPreviewItem>[];
   String _mediaItemsFingerprint = '';
   int _timeVisibilityResetMarker = 0;
+  final Stopwatch _pageStopwatch = Stopwatch();
 
   @override
   void initState() {
     super.initState();
+    _pageStopwatch.start();
+    debugPrint(
+      '[ChatTrace] 🚀 ChatPage.initState | session=${widget.sessionUnitId}',
+    );
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint(
+        '[ChatTrace] 🎨 [First Frame Painted] | '
+        'elapsed=${_pageStopwatch.elapsedMilliseconds}ms',
+      );
+    });
     _audioPlayback = ref.read(audioPlaybackServiceProvider);
     controller = ChatController(
       ref.read(messageRepositoryProvider),
@@ -89,6 +100,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   @override
   void dispose() {
+    debugPrint(
+      '[ChatTrace] 🚪 ChatPage.dispose | '
+      'totalSessionDuration=${_pageStopwatch.elapsedMilliseconds}ms',
+    );
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_audioPlayback.stop());
     controller.dispose();
@@ -96,6 +111,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _scrollController.dispose();
     super.dispose();
   }
+
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
