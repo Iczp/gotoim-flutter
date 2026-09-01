@@ -197,9 +197,18 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                     setState(() => _chrome = !_chrome);
                   }
                 },
-                onVerticalDragStart: _onVerticalDragStart,
-                onVerticalDragUpdate: _onVerticalDragUpdate,
-                onVerticalDragEnd: _onVerticalDragEnd,
+                onVerticalDragStart:
+                    widget.items[_index].type == MediaPreviewType.video
+                        ? _onVerticalDragStart
+                        : null,
+                onVerticalDragUpdate:
+                    widget.items[_index].type == MediaPreviewType.video
+                        ? _onVerticalDragUpdate
+                        : null,
+                onVerticalDragEnd:
+                    widget.items[_index].type == MediaPreviewType.video
+                        ? _onVerticalDragEnd
+                        : null,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -221,34 +230,42 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                               (value) => setState(() {
                                 _index = value;
                                 _currentScale = 1.0;
+                                _dragOffset = Offset.zero;
                               }),
-                        itemBuilder: (context, index) {
-                          final item = widget.items[index];
-                          if (item.type == MediaPreviewType.image) {
-                            return ImageViewer(
-                              heroTag: item.heroTag,
-                              source: item.source,
-                              bytes: item.bytes,
-                              onScaleChanged: (scale) {
-                                _currentScale = scale;
-                              },
-                            );
-                          } else {
-                            return VideoViewer(
-                              item: item,
-                              active: index == _index,
-                              items: widget.items,
-                              initialIndex: index,
-                            );
-                          }
-                        },
+                          itemBuilder: (context, index) {
+                            final item = widget.items[index];
+                            if (item.type == MediaPreviewType.image) {
+                              return ImageViewer(
+                                heroTag: item.heroTag,
+                                source: item.source,
+                                bytes: item.bytes,
+                                onScaleChanged: (scale) {
+                                  _currentScale = scale;
+                                },
+                                onDismissProgress: (offset) {
+                                  setState(() {
+                                    _dragOffset = offset;
+                                    _isDragging = offset != Offset.zero;
+                                  });
+                                },
+                                onDismissEnd: () => Navigator.of(context).pop(),
+                              );
+                            } else {
+                              return VideoViewer(
+                                item: item,
+                                active: index == _index,
+                                items: widget.items,
+                                initialIndex: index,
+                              );
+                            }
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                  if (_chrome && chromeOpacity > 0.0)
-                    Positioned(
-                      top: 4,
-                      left: 4,
+                    if (_chrome && chromeOpacity > 0.0)
+                      Positioned(
+                        top: 4,
+                        left: 4,
                       child: Opacity(
                         opacity: chromeOpacity,
                         child: IconButton(

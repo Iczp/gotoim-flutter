@@ -4,17 +4,20 @@ import 'package:flutter/material.dart';
 
 /// Professional image viewer with two-finger scale & twist rotation (with automatic
 /// 90-degree quadrant magnetic snapping, like system photo albums), focal double-tap
-/// zoom, and gesture conflict prevention.
+/// zoom, single-finger dismiss drag delegation, and comprehensive gesture trace logging.
 class ImageViewer extends StatefulWidget {
   const ImageViewer({
     required this.heroTag,
     required this.source,
     this.bytes,
     this.onScaleChanged,
+    this.onDismissProgress,
+    this.onDismissEnd,
     this.scaleSensitivity = 1.0,
     this.rotationSensitivity = 1.0,
     this.minScale = 1.0,
     this.maxScale = 5.0,
+    this.enableLogs = true,
     super.key,
   });
 
@@ -22,6 +25,8 @@ class ImageViewer extends StatefulWidget {
   final String source;
   final Uint8List? bytes;
   final ValueChanged<double>? onScaleChanged;
+  final ValueChanged<Offset>? onDismissProgress;
+  final VoidCallback? onDismissEnd;
 
   /// Sensitivity factor for two-finger distance zoom (default 1.0).
   final double scaleSensitivity;
@@ -34,6 +39,9 @@ class ImageViewer extends StatefulWidget {
 
   /// Maximum stable scale after release (default 5.0).
   final double maxScale;
+
+  /// Whether to print verbose [ImageGestureTrace] debug logs.
+  final bool enableLogs;
 
   @override
   State<ImageViewer> createState() => _ImageViewerState();
@@ -51,11 +59,18 @@ class _ImageViewerState extends State<ImageViewer>
   Offset _baseTranslation = Offset.zero;
 
   Offset _doubleTapPosition = Offset.zero;
+  bool _isDismissDragging = false;
 
   late final AnimationController _animController;
   Animation<double>? _scaleAnimation;
   Animation<double>? _rotationAnimation;
   Animation<Offset>? _translationAnimation;
+
+  void _log(String message) {
+    if (widget.enableLogs) {
+      debugPrint('[ImageGestureTrace] $message');
+    }
+  }
 
   @override
   void initState() {
@@ -86,15 +101,23 @@ class _ImageViewerState extends State<ImageViewer>
     _baseScale = _scale;
     _baseRotation = _rotation;
     _baseTranslation = _translation;
+    _isDismissDragging = false;
+    _log('🟢 [ScaleStart] focalPoint=${details.localFocalPoint} baseScale=${_baseScale.toStringAsFixed(2)} baseRot=${(_baseRotation * 180 / math.pi).toStringAsFixed(1)}°');
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    final hasScaleChange = (details.scale - 1.0).abs() > 0.001;
-    final hasRotationChange = details.rotation.abs() > 0.001;
-    final isMultiTouch = details.pointerCount >= 2 || hasScaleChange || hasRotationChange;
+    final count = details.pointerCount;
+    final hasScaleChange = (details.scale - 1.0).abs() > 0.005;
+    final hasRotationChange = details.rotation.abs() > 0.005;
+    final isMultiTouch = count >= 2 || hasScaleChange || hasRotationChange;
 
     if (isMultiTouch) {
-      // Two-finger pinch distance zoom & twist rotation with configurable sensitivity
+      // Multi-touch mode: pinch distance zoom & twist rotation
+      if (_isDismissDragging) {
+        _isDismissDragging = false;
+        widget.onDismissProgress?.call(Offset.zero);
+      }
+
       final effectiveScaleDelta = (details.scale - 1.0) * widget.scaleSensitivity;
       final rawScale = _baseScale * (1.0 + effectiveScaleDelta);
       _scale = rawScale.clamp(0.5, 7.0);
@@ -103,17 +126,44 @@ class _ImageViewerState extends State<ImageViewer>
       _rotation = _baseRotation + effectiveRotation;
 
       _translation = _baseTranslation + details.focalPointDelta;
+      _log('🔄 [MultiTouch] pointers=$count scale=${_scale.toStringAsFixed(2)} rot=${(_rotation * 180 / math.pi).toStringAsFixed(1)}° dx=${_translation.dx.toStringAsFixed(1)} dy=${_translation.dy.toStringAsFixed(1)}');
       widget.onScaleChanged?.call(_scale);
       setState(() {});
     } else if (_scale > 1.05) {
-      // Single finger panning when zoomed in
+      // Zoomed-in pan mode
       _translation += details.focalPointDelta;
+      _log('👆 [Pan] translation=$_translation scale=${_scale.toStringAsFixed(2)}');
       setState(() {});
+    } else {
+      // Single finger at 1.0 scale: vertical dismiss drag
+      if (details.focalPointDelta.dy != 0 || _isDismissDragging) {
+        _isDismissDragging = true;
+        _translation += Offset(details.focalPointDelta.dx * 0.7, details.focalPointDelta.dy);
+        _log('👇 [DismissDrag] dy=${_translation.dy.toStringAsFixed(1)}');
+        widget.onDismissProgress?.call(_translation);
+        setState(() {});
+      }
     }
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
+    _log('🔴 [ScaleEnd] scale=${_scale.toStringAsFixed(2)} rot=${(_rotation * 180 / math.pi).toStringAsFixed(1)}° translation=$_translation dismissDrag=$_isDismissDragging');
     final size = context.size ?? const Size(400, 600);
+
+    if (_isDismissDragging) {
+      final velocity = details.velocity.pixelsPerSecond.dy.abs();
+      final distance = _translation.dy.abs();
+      final shouldClose = distance > 80.0 || velocity > 500.0;
+      if (shouldClose) {
+        _log('🚪 [Dismiss] Trigger close velocity=$velocity distance=$distance');
+        widget.onDismissEnd?.call();
+        return;
+      }
+
+      // Reset dismiss drag offset
+      _isDismissDragging = false;
+      widget.onDismissProgress?.call(Offset.zero);
+    }
 
     // Target scale clamping to configured min/max
     final targetScale = _scale.clamp(widget.minScale, widget.maxScale);
@@ -168,6 +218,8 @@ class _ImageViewerState extends State<ImageViewer>
     } else {
       targetScale = 1.0;
     }
+
+    _log('⚡ [DoubleTap] targetScale=$targetScale atPos=$_doubleTapPosition');
 
     // Keep the current snapped quadrant
     const quarterTurn = math.pi / 2;
@@ -237,13 +289,17 @@ class _ImageViewerState extends State<ImageViewer>
       child: Material(
         type: MaterialType.transparency,
         child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
+          behavior: HitTestBehavior.opaque,
           onScaleStart: _onScaleStart,
           onScaleUpdate: _onScaleUpdate,
           onScaleEnd: _onScaleEnd,
           onDoubleTapDown: _onDoubleTapDown,
           onDoubleTap: _onDoubleTap,
-          child: Center(
+          child: Container(
+            color: Colors.transparent,
+            width: double.infinity,
+            height: double.infinity,
+            alignment: Alignment.center,
             child: Transform.translate(
               offset: _translation,
               child: Transform.rotate(
@@ -260,4 +316,5 @@ class _ImageViewerState extends State<ImageViewer>
     );
   }
 }
+
 
