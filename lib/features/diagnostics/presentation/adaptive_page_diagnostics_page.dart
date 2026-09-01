@@ -23,12 +23,16 @@ class _AdaptivePageDiagnosticsPageState
   // ── 基本 ──
   bool _convertible = true;
   bool _draggable = false;
+  bool _wrapContent = false;
   // ── 外观 ──
   bool _useBarrierColor = false;
   bool _useBgColor = false;
-  // ── 交互 ──
+  bool _useCustomDragHandle = false;
+  // ── 交互与适配 ──
   bool _dismissible = true;
   bool _enableDrag = true;
+  bool _useSafeArea = false;
+  bool _overlayKeyboard = false;
   // ── Header ──
   bool _showDragHandle = true;
   bool _showCloseBtn = true;
@@ -61,6 +65,7 @@ class _AdaptivePageDiagnosticsPageState
         sheetSizingMode: _draggable
             ? AdaptiveSheetSizingMode.draggable
             : AdaptiveSheetSizingMode.content,
+        maxContentHeightFactor: _wrapContent ? null : .75,
         // 外观
         backgroundColor: _useBgColor
             ? Colors.deepPurple.shade900.withValues(alpha: .95)
@@ -69,11 +74,18 @@ class _AdaptivePageDiagnosticsPageState
             _useBarrierColor ? Colors.blue.withValues(alpha: .4) : null,
         sheetBorderRadius: borderR,
         maxWidth: maxW,
-        // 交互
+        // 交互与适配
         isDismissible: _dismissible,
         enableDrag: _enableDrag,
+        useSafeArea: _useSafeArea,
+        keyboardBehavior: _overlayKeyboard
+            ? AdaptiveKeyboardBehavior.overlay
+            : AdaptiveKeyboardBehavior.resize,
         // Header
         showDragHandle: _showDragHandle,
+        dragHandleColor: _useCustomDragHandle ? Colors.teal : null,
+        dragHandleSize:
+            _useCustomDragHandle ? const Size(48, 6) : null,
         showCloseButton: _showCloseBtn,
         showConvertButton: _showConvertBtn,
         leadingAction: _useLeading
@@ -152,8 +164,20 @@ class _AdaptivePageDiagnosticsPageState
               ),
               SwitchListTile(
                 value: _draggable,
-                onChanged: (v) => setState(() => _draggable = v),
+                onChanged: (v) => setState(() {
+                  _draggable = v;
+                  if (v) _wrapContent = false;
+                }),
                 title: const Text('Draggable 高度拖拽模式'),
+                dense: true,
+              ),
+              SwitchListTile(
+                value: _wrapContent,
+                onChanged: (v) => setState(() {
+                  _wrapContent = v;
+                  if (v) _draggable = false;
+                }),
+                title: const Text('内容自适应高度 Wrap Content (heightFactor: null)'),
                 dense: true,
               ),
             ],
@@ -175,6 +199,12 @@ class _AdaptivePageDiagnosticsPageState
                 title: const Text('蓝色遮罩 barrierColor'),
                 dense: true,
               ),
+              SwitchListTile(
+                value: _useCustomDragHandle,
+                onChanged: (v) => setState(() => _useCustomDragHandle = v),
+                title: const Text('自定义拖拽条样式 (青色粗条 48x6)'),
+                dense: true,
+              ),
               _LabeledInput(
                 label: '顶部圆角 sheetBorderRadius',
                 controller: _borderRadiusCtrl,
@@ -188,9 +218,9 @@ class _AdaptivePageDiagnosticsPageState
             ],
           ),
 
-          // ── 交互 ──
+          // ── 交互与适配 ──
           _Section(
-            title: '交互',
+            title: '交互与适配',
             children: [
               SwitchListTile(
                 value: _dismissible,
@@ -202,6 +232,18 @@ class _AdaptivePageDiagnosticsPageState
                 value: _enableDrag,
                 onChanged: (v) => setState(() => _enableDrag = v),
                 title: const Text('拖拽关闭 enableDrag'),
+                dense: true,
+              ),
+              SwitchListTile(
+                value: _useSafeArea,
+                onChanged: (v) => setState(() => _useSafeArea = v),
+                title: const Text('启用 useSafeArea (避开系统栏/刘海)'),
+                dense: true,
+              ),
+              SwitchListTile(
+                value: _overlayKeyboard,
+                onChanged: (v) => setState(() => _overlayKeyboard = v),
+                title: const Text('键盘策略: overlay (不避让/不抬升)'),
                 dense: true,
               ),
             ],

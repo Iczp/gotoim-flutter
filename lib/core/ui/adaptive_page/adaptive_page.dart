@@ -40,11 +40,15 @@ abstract class AdaptivePage {
       context: context,
       useRootNavigator: config.useRootNavigator,
       isScrollControlled: true,
-      useSafeArea: false,
+      useSafeArea: config.useSafeArea,
       isDismissible: config.isDismissible,
       enableDrag: config.enableDrag,
       backgroundColor: Colors.transparent,
       barrierColor: config.barrierColor,
+      elevation: config.elevation,
+      shape: config.shape,
+      clipBehavior: config.clipBehavior,
+      constraints: config.constraints,
       sheetAnimationStyle: config.animationStyle,
       routeSettings: config.routeSettings,
       builder: (sheetContext) => _AdaptiveSheetHost(
@@ -169,11 +173,15 @@ class _AdaptiveSheetHostState extends State<_AdaptiveSheetHost> {
           return _SheetMaterial(
             color: surface,
             borderRadius: config.sheetBorderRadius,
+            shape: config.shape,
+            elevation: config.elevation,
+            clipBehavior: config.clipBehavior,
             child: Column(
               children: [
                 _buildHeader(context),
                 Expanded(
                   child: _KeyboardAwareBody(
+                    behavior: config.keyboardBehavior,
                     child: widget.builder(context, widget.controller),
                   ),
                 ),
@@ -184,33 +192,68 @@ class _AdaptiveSheetHostState extends State<_AdaptiveSheetHost> {
       );
     } else {
       widget.controller.setSheetScrollController(null);
-      sheetContent = FractionallySizedBox(
-        heightFactor: config.maxContentHeightFactor,
-        alignment: Alignment.bottomCenter,
-        child: _SheetMaterial(
+      final heightFactor = config.maxContentHeightFactor;
+
+      if (heightFactor != null) {
+        // 固定高度比例模式
+        sheetContent = FractionallySizedBox(
+          heightFactor: heightFactor,
+          alignment: Alignment.bottomCenter,
+          child: _SheetMaterial(
+            color: surface,
+            borderRadius: config.sheetBorderRadius,
+            shape: config.shape,
+            elevation: config.elevation,
+            clipBehavior: config.clipBehavior,
+            child: Column(
+              children: [
+                _buildHeader(context),
+                Expanded(
+                  child: _KeyboardAwareBody(
+                    behavior: config.keyboardBehavior,
+                    child: widget.builder(context, widget.controller),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else {
+        // 自适应内容高度模式 (Wrap Content)
+        sheetContent = _SheetMaterial(
           color: surface,
           borderRadius: config.sheetBorderRadius,
+          shape: config.shape,
+          elevation: config.elevation,
+          clipBehavior: config.clipBehavior,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               _buildHeader(context),
-              Expanded(
-                child: _KeyboardAwareBody(
-                  child: widget.builder(context, widget.controller),
-                ),
+              _KeyboardAwareBody(
+                behavior: config.keyboardBehavior,
+                child: widget.builder(context, widget.controller),
               ),
             ],
           ),
-        ),
-      );
+        );
+      }
     }
 
-    // maxWidth constraint
-    final maxWidth = config.maxWidth;
-    if (maxWidth != null) {
+    // 尺寸约束 (constraints 优先，其次 maxWidth)
+    if (config.constraints != null) {
       sheetContent = Align(
         alignment: Alignment.bottomCenter,
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth),
+          constraints: config.constraints!,
+          child: sheetContent,
+        ),
+      );
+    } else if (config.maxWidth != null) {
+      sheetContent = Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: config.maxWidth!),
           child: sheetContent,
         ),
       );
@@ -269,18 +312,32 @@ class _SheetMaterial extends StatelessWidget {
     required this.child,
     required this.color,
     required this.borderRadius,
+    this.shape,
+    this.elevation,
+    this.clipBehavior = Clip.antiAlias,
   });
   final Widget child;
   final Color color;
   final double borderRadius;
+  final ShapeBorder? shape;
+  final double? elevation;
+  final Clip clipBehavior;
 
   @override
-  Widget build(BuildContext context) => Material(
-        color: color,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(borderRadius)),
-        clipBehavior: Clip.antiAlias,
-        child: child,
-      );
+  Widget build(BuildContext context) {
+    final effectiveShape = shape ??
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(borderRadius)),
+        );
+
+    return Material(
+      color: color,
+      shape: effectiveShape,
+      elevation: elevation ?? 0.0,
+      clipBehavior: clipBehavior,
+      child: child,
+    );
+  }
 }
 
 // ── Adaptive Header ──────────────────────────────────────────────────────────
@@ -294,6 +351,9 @@ class _AdaptiveHeader extends StatelessWidget {
     final config = controller.config;
     final showConvert =
         config.showConvertButton ?? config.canConvertToPage;
+    final handleSize = config.dragHandleSize ?? const Size(36, 4);
+    final handleColor = config.dragHandleColor ??
+        Theme.of(context).colorScheme.outlineVariant;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -301,12 +361,12 @@ class _AdaptiveHeader extends StatelessWidget {
         // 拖拽指示条
         if (config.showDragHandle)
           Container(
-            width: 36,
-            height: 4,
+            width: handleSize.width,
+            height: handleSize.height,
             margin: const EdgeInsets.only(top: 10, bottom: 4),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.outlineVariant,
-              borderRadius: BorderRadius.circular(8),
+              color: handleColor,
+              borderRadius: BorderRadius.circular(handleSize.height),
             ),
           ),
         // 标题栏
@@ -351,14 +411,25 @@ class _AdaptiveHeader extends StatelessWidget {
 // ── Keyboard Aware Body ──────────────────────────────────────────────────────
 
 class _KeyboardAwareBody extends StatelessWidget {
-  const _KeyboardAwareBody({required this.child});
+  const _KeyboardAwareBody({
+    required this.child,
+    required this.behavior,
+  });
   final Widget child;
+  final AdaptiveKeyboardBehavior behavior;
+
   @override
-  Widget build(BuildContext context) => AnimatedPadding(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        padding:
-            EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-        child: child,
-      );
+  Widget build(BuildContext context) {
+    if (behavior == AdaptiveKeyboardBehavior.overlay) {
+      return child;
+    }
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: child,
+    );
+  }
 }
