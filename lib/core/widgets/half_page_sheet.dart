@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../ui/adaptive_page.dart';
+
 /// 键盘出现时半屏页的处理方式。
 ///
 /// [resize] 会把半屏页整体上移，适合搜索、输入、选择成员等需要保证
@@ -100,6 +102,9 @@ class HalfPageSheetOptions {
 
 /// 展示统一的底部半屏页，并返回 [Navigator.pop] 携带的结果。
 ///
+/// 内部委托给 [AdaptivePage.sheet]，共享统一的 Sheet 容器渲染、尺寸约束与
+/// 键盘避让逻辑。
+///
 /// `builder` 获得的是半屏页内部的 context；关闭时应使用该 context 调用
 /// `Navigator.pop(sheetContext, result)`。长列表应自行使用 `Expanded`，避免
 /// 内容超过 [HalfPageSheetOptions.heightFactor] 后发生 RenderFlex overflow。
@@ -117,94 +122,35 @@ Future<T?> showHalfPageSheet<T>({
   required WidgetBuilder builder,
   HalfPageSheetOptions options = const HalfPageSheetOptions(),
 }) {
-  return showModalBottomSheet<T>(
-    context: context,
-    useRootNavigator: options.useRootNavigator,
-    isScrollControlled: options.isScrollControlled,
-    useSafeArea: options.useSafeArea,
-    isDismissible: options.isDismissible,
-    enableDrag: options.enableDrag,
-    // Flutter's modal API does not expose the handle's color/size on every
-    // supported SDK. Render a small custom handle whenever either is set.
-    showDragHandle:
-        options.showDragHandle &&
-        options.dragHandleColor == null &&
-        options.dragHandleSize == null,
-    backgroundColor: options.backgroundColor,
-    barrierColor: options.barrierColor,
-    elevation: options.elevation,
-    shape: options.shape,
-    clipBehavior: options.clipBehavior,
-    constraints: options.constraints,
-    sheetAnimationStyle: options.animationStyle,
-    routeSettings: options.routeSettings,
-    builder: (sheetContext) {
-      Widget child = builder(sheetContext);
-      if (options.heightFactor != null) {
-        child = FractionallySizedBox(
-          heightFactor: options.heightFactor,
-          widthFactor: 1,
-          child: child,
-        );
-      }
-      if (options.showDragHandle &&
-          (options.dragHandleColor != null || options.dragHandleSize != null)) {
-        final content = child;
-        child = LayoutBuilder(
-          builder: (context, constraints) {
-            final handle = _HalfPageSheetDragHandle(
-              color: options.dragHandleColor,
-              size: options.dragHandleSize,
-            );
-            if (!constraints.hasBoundedHeight) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[handle, content],
-              );
-            }
-            return Column(children: <Widget>[handle, Expanded(child: content)]);
-          },
-        );
-      }
-      if (options.keyboardBehavior == HalfPageSheetKeyboardBehavior.resize) {
-        child = AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
-          ),
-          child: child,
-        );
-      }
-      return child;
-    },
+  return AdaptivePage.sheet<T>(
+    context,
+    config: AdaptivePageConfig(
+      title: '',
+      canConvertToPage: false,
+      showCloseButton: false,
+      showConvertButton: false,
+      showDragHandle: options.showDragHandle,
+      dragHandleColor: options.dragHandleColor,
+      dragHandleSize: options.dragHandleSize,
+      maxContentHeightFactor: options.heightFactor,
+      sheetSizingMode: AdaptiveSheetSizingMode.content,
+      backgroundColor: options.backgroundColor,
+      barrierColor: options.barrierColor,
+      elevation: options.elevation,
+      shape: options.shape,
+      clipBehavior: options.clipBehavior,
+      constraints: options.constraints,
+      isDismissible: options.isDismissible,
+      enableDrag: options.enableDrag,
+      useSafeArea: options.useSafeArea,
+      useRootNavigator: options.useRootNavigator,
+      keyboardBehavior:
+          options.keyboardBehavior == HalfPageSheetKeyboardBehavior.resize
+              ? AdaptiveKeyboardBehavior.resize
+              : AdaptiveKeyboardBehavior.overlay,
+      animationStyle: options.animationStyle,
+      routeSettings: options.routeSettings,
+    ),
+    builder: (sheetContext, _) => builder(sheetContext),
   );
-}
-
-/// Fallback drag handle used only when callers customize its visual style.
-class _HalfPageSheetDragHandle extends StatelessWidget {
-  const _HalfPageSheetDragHandle({this.color, this.size});
-
-  final Color? color;
-  final Size? size;
-
-  @override
-  Widget build(BuildContext context) {
-    final resolvedSize = size ?? const Size(32, 4);
-    return SizedBox(
-      height: 32,
-      child: Center(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
-            borderRadius: BorderRadius.circular(resolvedSize.height),
-          ),
-          child: SizedBox(
-            width: resolvedSize.width,
-            height: resolvedSize.height,
-          ),
-        ),
-      ),
-    );
-  }
 }

@@ -355,6 +355,16 @@ class _AdaptiveHeader extends StatelessWidget {
     final handleColor = config.dragHandleColor ??
         Theme.of(context).colorScheme.outlineVariant;
 
+    final hasTitleBar = config.title.isNotEmpty ||
+        config.leadingAction != null ||
+        config.trailingActions.isNotEmpty ||
+        config.showCloseButton ||
+        (showConvert && controller.canConvertToPage);
+
+    if (!config.showDragHandle && !hasTitleBar) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -370,39 +380,40 @@ class _AdaptiveHeader extends StatelessWidget {
             ),
           ),
         // 标题栏
-        Row(
-          children: [
-            // 左侧：自定义 leading 或占位
-            if (config.leadingAction != null)
-              config.leadingAction!
-            else
-              const SizedBox(width: 48),
-            // 标题（居中）
-            Expanded(
-              child: Text(
-                config.title,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium,
+        if (hasTitleBar)
+          Row(
+            children: [
+              // 左侧：自定义 leading 或占位
+              if (config.leadingAction != null)
+                config.leadingAction!
+              else
+                const SizedBox(width: 48),
+              // 标题（居中）
+              Expanded(
+                child: Text(
+                  config.title,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
-            ),
-            // 右侧：额外 actions
-            ...config.trailingActions,
-            // 右侧：转换按钮
-            if (showConvert && controller.canConvertToPage)
-              IconButton(
-                tooltip: '打开完整页面',
-                onPressed: controller.toPage,
-                icon: const Icon(Icons.open_in_full),
-              ),
-            // 右侧：关闭按钮
-            if (config.showCloseButton)
-              IconButton(
-                tooltip: '关闭',
-                onPressed: controller.close,
-                icon: const Icon(Icons.close),
-              ),
-          ],
-        ),
+              // 右侧：额外 actions
+              ...config.trailingActions,
+              // 右侧：转换按钮
+              if (showConvert && controller.canConvertToPage)
+                IconButton(
+                  tooltip: '打开完整页面',
+                  onPressed: controller.toPage,
+                  icon: const Icon(Icons.open_in_full),
+                ),
+              // 右侧：关闭按钮
+              if (config.showCloseButton)
+                IconButton(
+                  tooltip: '关闭',
+                  onPressed: controller.close,
+                  icon: const Icon(Icons.close),
+                ),
+            ],
+          ),
       ],
     );
   }
