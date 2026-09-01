@@ -86,19 +86,20 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    // 与工作台 AppBar 及各 Tab 的页面内标题栏使用同一主题色，避免色差。
-    final headerColor = theme.colorScheme.surface;
 
     return PopScope(
+
       canPop: false,
       onPopInvokedWithResult: (didPop, _) => _handlePopScope(didPop),
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle(
-          statusBarColor: headerColor,
+          statusBarColor: Colors.transparent,
           statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
           statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
         ),
         child: LayoutBuilder(
+
           builder: (context, constraints) {
             final layout = AppBreakpoints.resolve(constraints.maxWidth);
             final isCompact = layout == WindowLayout.mobile;

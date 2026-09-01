@@ -80,15 +80,18 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       _activeSurnameInitial.value = groups.first.contacts.first.surnameInitial;
     }
 
-    final headerColor = contactHeaderBackground(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
-        statusBarColor: headerColor,
+        statusBarColor: Colors.transparent,
         statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
         statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
       ),
       child: Scaffold(
+
+
+
         body: SafeArea(
           bottom: false,
           child: Column(

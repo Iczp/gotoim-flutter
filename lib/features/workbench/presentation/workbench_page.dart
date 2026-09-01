@@ -104,9 +104,11 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
 
     showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+
       builder: (context) {
         return SafeArea(
           child: Padding(

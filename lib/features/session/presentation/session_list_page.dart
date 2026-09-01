@@ -236,6 +236,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   ) async {
     final action = await showModalBottomSheet<_SessionMenuAction>(
       context: context,
+      useRootNavigator: true,
       showDragHandle: true,
       builder:
           (sheetContext) => SafeArea(
