@@ -117,15 +117,21 @@ class AudioPlaybackService extends ChangeNotifier {
     _operation++;
     final downloading = _downloadingMessageId;
     if (downloading != null) await _voiceCacheService.cancel(downloading);
+    _downloadingMessageId = null;
+
+    if (!_playing && _activeMessageId == null) {
+      return;
+    }
+
     await _player.stop();
     _playing = false;
     _activeMessageId = null;
     _position = Duration.zero;
     _duration = Duration.zero;
-    _downloadingMessageId = null;
     await _setEarpiece(false);
     notifyListeners();
   }
+
 
   Future<void> playSendEffect() async {
     try {

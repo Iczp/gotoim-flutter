@@ -154,56 +154,61 @@ class ChatController extends ChangeNotifier {
         unawaited(_reloadFromLocalChange());
       }
     });
-    final local = await _sessionRepository.loadLocalFriendDetail(sessionUnitId);
-    if (local != null) {
-      friend = local;
-      _title = local.title;
-      debugPrint(
-        '[chatInitialize][local-friend] session=$sessionUnitId title=$_title',
-      );
-      notifyListeners();
-    }
-    unawaited(_refreshFriendDetail());
-    await _loadInitialLocal();
-    if (_messages.isEmpty && hasMore) {
-      await loadMore();
-    }
-    // Snapshot the local read position before the asynchronous read receipt is
-    // submitted. Later realtime messages must never create a historical
-    // unread divider while the user is already viewing the latest message.
-    _initialUnreadDividerMessageId = findInitialUnreadDividerMessageId(
-      messages: _messages,
-      readMessageId: friend?.readMessageId,
-    );
-    if (_messages.isNotEmpty) {
-      unawaited(loadLatest().then((_) => markLatestRead()));
-    }
-  }
 
-  void _onAttachmentTransferChanged() {
-    notifyListeners();
-  }
-
-  Future<void> _loadInitialLocal() async {
     isLoading = true;
-    notifyListeners();
     try {
-      final page = await _repository.loadInitialLocal(
-        ownerId: ownerId,
-        sessionUnitId: sessionUnitId,
-        limit: initialPageSize,
-      );
+      final results = await Future.wait([
+        _sessionRepository.loadLocalFriendDetail(sessionUnitId),
+        _repository.loadInitialLocal(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          limit: initialPageSize,
+        ),
+      ]);
+
+      final localFriend = results[0] as SessionSummary?;
+      final localPage = results[1] as MessagePage;
+
+      if (localFriend != null) {
+        friend = localFriend;
+        _title = localFriend.title;
+      }
       _messages
         ..clear()
-        ..addAll(page.items);
-      hasMore = page.hasMore;
+        ..addAll(localPage.items);
+      hasMore = localPage.hasMore;
+
+      _initialUnreadDividerMessageId = findInitialUnreadDividerMessageId(
+        messages: _messages,
+        readMessageId: friend?.readMessageId,
+      );
     } catch (exception) {
       error = exception;
     } finally {
       isLoading = false;
       notifyListeners();
     }
+
+    if (_messages.isEmpty && hasMore) {
+      unawaited(loadMore());
+    }
+
+    // Defer background network synchronization until after the page route animation
+    unawaited(
+      Future.delayed(const Duration(milliseconds: 300), () async {
+        if (_messages.isNotEmpty) {
+          unawaited(loadLatest().then((_) => markLatestRead()));
+        }
+        unawaited(_refreshFriendDetail());
+      }),
+    );
   }
+
+  void _onAttachmentTransferChanged() {
+    notifyListeners();
+  }
+
+
 
   Future<void> _refreshFriendDetail() async {
     try {
