@@ -63,5 +63,61 @@ I/flutter (26013): null
 
 
 
+```
+I/flutter (26013): Flutter error: Build scheduled during frame.
+I/flutter (26013): While the widget tree was being built, laid out, and painted, a new frame was scheduled to rebuild the widget tree.
+I/flutter (26013): This might be because setState() was called from a layout or paint callback. If a change is needed to the widget tree, it should be applied as the tree is being built. Scheduling a change for the subsequent frame instead results in an interface that lags behind by one frame. If this was done to make your build dependent on a size measured at layout time, consider using a LayoutBuilder, CustomSingleChildLayout, or CustomMultiChildLayout. If, on the other hand, the one frame delay is the desired effect, for example because this is an animation, consider scheduling the frame in a post-frame callback using SchedulerBinding.addPostFrameCallback or using an AnimationController to trigger the animation.
+I/flutter (26013): #0      WidgetsBinding._handleBuildScheduled.<anonymous closure> (package:flutter/src/widgets/binding.dart:1435:9)
+I/flutter (26013): #1      WidgetsBinding._handleBuildScheduled (package:flutter/src/widgets/binding.dart:1458:6)
+I/flutter (26013): #2      BuildOwner.scheduleBuildFor (package:flutter/src/widgets/framework.dart:3000:24)
+I/flutter (26013): #3      Element.markNeedsBuild (package:flutter/src/widgets/framework.dart:5403:12)
+I/flutter (26013): #4      ConsumerStatefulElement.watch.<anonymous closure>.<anonymous closure> (package:flutter_riverpod/src/core/consumer.dart:492:27)
+I/flutter (26013): #5      InternalProviderContainer.runBinaryGuarded (package:riverpod/src/core/provider_container.dart:811:9)
+I/flutter (26013): #6      ProviderSubscriptionImpl._notifyData (package:riverpod/src/core/provider_subscription.dart:203:32)
+I/flutter (26013): #7      InternalProviderContainer.runBinaryGuarded (package:riverpod/src/core/provider_container.dart:811:9)
+I/flutter (26013): #8      ProviderElement._notifyListeners (package:riverpod/src/core/element.dart:910:21)
+I/flutter (26013): #9      Ref.notifyListeners (package:riverpod/src/core/ref.dart:422:16)
+I/flutter (26013): #10     _ChangeNotifierProviderElement.create.listener (package:flutter_riverpod/src/providers/legacy/change_notifier_provider.dart:231:30)
+I/flutter (26013): #11     ChangeNotifier.notifyListeners (package:flutter/src/foundation/change_notifier.dart:435:24)
+I/flutter (26013): #12     SessionListController.loadNextPage (package:gotoim_flutter/features/session/application/session_list_controller.dart:287:5)
+I/flutter (26013): #13     _SessionListPageState.build.<anonymous closure> (package:gotoim_flutter/features/session/presentation/session_list_page.dart:74:32)
+I/flutter (26013): #14     _NotificationElement.onNotification (package:flutter/src/widgets/notification_listener.dart:135:38)
+I/flutter (26013): #15     _NotificationNode.dispatchNotification (package:flutter/src/widgets/framework.dart:3508:18)
+I/flutter (26013): #16     _NotificationNode.dispatchNotification (package:flutter/src/widgets/framework.dart:3511:13)
+I/flutter (26013): #17     Element.dispatchNotification (package:flutter/src/widgets/framework.dart:5265:24)
+I/flutter (26013): #18     Notification.dispatch (package:flutter/src/widgets/notification_listener.dart:68:13)
+I/flutter (26013): #19     ScrollActivity.dispatchScrollStartNotification (package:flutter/src/widgets/scroll_activity.dart:100:65)
+I/flutter (26013): #20     ScrollPosition.didStartScroll (package:flutter/src/widgets/scroll_position.dart:1043:15)
+I/flutter (26013): #21     ScrollPosition.beginActivity (package:flutter/src/widgets/scroll_position.dart:1035:7)
+I/flutter (26013): #22     ScrollPositionWithSingleContext.beginActivity (package:flutter/src/widgets/scroll_position_with_single_context.dart:120:11)
+I/flutter (26013): #23     ScrollPositionWithSingleContext.goBallistic (package:flutter/src/widgets/scroll_position_with_single_context.dart:153:7)
+I/flutter (26013): #24     IdleScrollActivity.applyNewDimensions (package:flutter/src/widgets/scroll_activity.dart:187:14)
+I/flutter (26013): #25     ScrollPosition.applyNewDimensions (package:flutter/src/widgets/scroll_position.dart:736:15)
+I/flutter (26013): #26     ScrollPositionWithSingleContext.applyNewDimensions (package:flutter/src/widgets/scroll_position_with_single_context.dart:109:11)
+I/flutter (26013): #27     ScrollPosition.applyContentDimensions (package:flutter/src/widgets/scroll_position.dart:662:7)
+I/flutter (26013): #28     RenderViewport.performLayout (package:flutter/src/rendering/viewport.dart:1732:20)
+I/flutter (26013): #29     RenderObject._layoutWithoutResize (package:flutter/src/rendering/object.dart:2771:7)
+I/flutter (26013): #30     PipelineOwner.flushLayout (package:flutter/src/rendering/object.dart:1174:18)
+I/flutter (26013): #31     PipelineOwner.flushLayout (package:flutter/src/rendering/object.dart:1187:15)
+I/flutter (26013): #32     RendererBinding.drawFrame (package:flutter/src/rendering/binding.dart:692:23)
+I/flutter (26013): #33     WidgetsBinding.drawFrame (package:flutter/src/widgets/binding.dart:1573:13)
+I/flutter (26013): #34     RendererBinding._handlePersistentFrameCallback (package:flutter/src/rendering/binding.dart:558:5)
+I/flutter (26013): #35     SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1430:15)
+I/flutter (26013): #36     SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1345:9)
+I/flutter (26013): #37     SchedulerBinding._handleDrawFrame (package:flutter/src/scheduler/binding.dart:1198:5)
+I/flutter (26013): #38     _invoke (dart:ui/hooks.dart:441:13)
+I/flutter (26013): #39     PlatformDispatcher._drawFrame (dart:ui/platform_dispatcher.dart:450:5)
+I/flutter (26013): #40     _drawFrame (dart:ui/hooks.dart:413:31)
+```
 
+
+
+```
+进入聊天窗口有点卡 返回时，V/InputMethodManager(10385): dispatchInputEvent
+V/InputMethodManager(10385): dispatchInputEvent
+I/AudioManager(10385): abandonAudioFocusRequest focusRequest
+I/InputTransport(10385): Fun_filterMotionEvent reportMoveEvent!
+
+进入聊天窗口 都做了哪个， 列出来一下。
+```
 

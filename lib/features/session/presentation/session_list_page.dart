@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/app_theme_tokens.dart';
-import '../../../core/widgets/glass_container.dart';
 import '../application/session_list_controller.dart';
-import '../data/models/chat_owner.dart';
 import '../data/models/session_summary.dart';
-import 'chat_object_avatar.dart';
+import 'current_device_bar.dart';
+import 'current_owner_header.dart';
+
 import 'session_dividers.dart';
 import 'session_list_item.dart';
+import 'session_menu.dart';
 import 'session_unit_item.dart';
+import 'signalr_status_bar.dart';
 
 class SessionListPage extends ConsumerStatefulWidget {
   const SessionListPage({required this.onOpenOwnerDrawer, super.key});
@@ -59,7 +60,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       bottom: false,
       child: Column(
         children: [
-          _CurrentOwnerHeader(
+          CurrentOwnerHeader(
             owner: controller.currentOwner,
             hasMultiple: controller.owners.length > 1,
             isConnecting: controller.isRefreshing,
@@ -96,13 +97,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                     if (controller.connectionState !=
                         SessionRealtimeStatus.connected)
                       SliverToBoxAdapter(
-                        child: _SignalRStatusBar(
+                        child: SignalRStatusBar(
                           state: controller.connectionState,
                           onReconnect: controller.reconnectSignalR,
                         ),
                       ),
                     SliverToBoxAdapter(
-                      child: _CurrentDeviceBar(
+                      child: CurrentDeviceBar(
                         label: controller.currentDeviceLabel,
                         deviceCount: controller.devices.length,
                         isLoading: controller.isLoadingDevices,
@@ -145,10 +146,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                                     item.session!,
                                   ),
                               onLongPress:
-                                  () => _showSessionMenu(
-                                    context,
-                                    controller,
-                                    item.session!,
+                                  () => SessionMenuSheet.show(
+                                    context: context,
+                                    controller: controller,
+                                    session: item.session!,
                                   ),
                               showDivider:
                                   index + 1 < listItems.length &&
@@ -242,346 +243,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       );
     }
   }
-
-  Future<void> _showSessionMenu(
-    BuildContext context,
-    SessionListController controller,
-    SessionSummary session,
-  ) async {
-    final action = await showModalBottomSheet<_SessionMenuAction>(
-      context: context,
-      useRootNavigator: true,
-      showDragHandle: true,
-      builder:
-          (sheetContext) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                ListTile(
-                  leading: ChatObjectAvatar(
-                    name: session.title,
-                    imageUrl: null,
-                    radius: 22,
-                  ),
-                  title: Text(
-                    session.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: const Text('会话操作'),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: Icon(
-                    session.isPinned
-                        ? Icons.push_pin_outlined
-                        : Icons.push_pin_rounded,
-                  ),
-                  title: Text(session.isPinned ? '取消置顶' : '置顶会话'),
-                  onTap:
-                      () => Navigator.pop(
-                        sheetContext,
-                        _SessionMenuAction.topping,
-                      ),
-                ),
-                ListTile(
-                  leading: Icon(
-                    session.isImmersed
-                        ? Icons.notifications_active_outlined
-                        : Icons.notifications_off_outlined,
-                  ),
-                  title: Text(session.isImmersed ? '开启消息通知' : '关闭消息通知'),
-                  onTap:
-                      () => Navigator.pop(
-                        sheetContext,
-                        _SessionMenuAction.notification,
-                      ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.settings_outlined),
-                  title: const Text('聊天设置'),
-                  onTap:
-                      () => Navigator.pop(
-                        sheetContext,
-                        _SessionMenuAction.settings,
-                      ),
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.delete_sweep_outlined,
-                    color: Theme.of(sheetContext).colorScheme.error,
-                  ),
-                  title: Text(
-                    '清空聊天记录',
-                    style: TextStyle(
-                      color: Theme.of(sheetContext).colorScheme.error,
-                    ),
-                  ),
-                  onTap:
-                      () =>
-                          Navigator.pop(sheetContext, _SessionMenuAction.clear),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-    );
-    if (action == null || !context.mounted) return;
-    if (action == _SessionMenuAction.settings) {
-      await context.push(
-        '/chat/${Uri.encodeComponent(session.id)}/settings'
-        '?ownerId=${session.ownerId ?? controller.currentOwner?.id ?? 0}',
-      );
-      return;
-    }
-    if (action == _SessionMenuAction.clear) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder:
-            (dialogContext) => AlertDialog(
-              title: const Text('清空聊天记录'),
-              content: Text('确定清空“${session.title}”的全部聊天记录吗？'),
-              actions: <Widget>[
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  child: const Text('清空'),
-                ),
-              ],
-            ),
-      );
-      if (confirmed != true || !context.mounted) return;
-    }
-    try {
-      switch (action) {
-        case _SessionMenuAction.topping:
-          await controller.setTopping(session, !session.isPinned);
-        case _SessionMenuAction.notification:
-          await controller.setImmersed(session, !session.isImmersed);
-        case _SessionMenuAction.clear:
-          await controller.clearMessages(session);
-        case _SessionMenuAction.settings:
-          break;
-      }
-      if (context.mounted) {
-        final message = switch (action) {
-          _SessionMenuAction.topping => session.isPinned ? '已取消置顶' : '已置顶',
-          _SessionMenuAction.notification =>
-            session.isImmersed ? '已开启消息通知' : '已关闭消息通知',
-          _SessionMenuAction.clear => '聊天记录已清空',
-          _SessionMenuAction.settings => '',
-        };
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
-      }
-    }
-  }
-}
-
-enum _SessionMenuAction { topping, notification, settings, clear }
-
-class _CurrentOwnerHeader extends StatelessWidget {
-  const _CurrentOwnerHeader({
-    required this.owner,
-    required this.hasMultiple,
-    required this.isConnecting,
-    required this.onPressed,
-  });
-  final ChatOwner? owner;
-  final bool hasMultiple;
-  final bool isConnecting;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return GlassContainer(
-      borderRadius: BorderRadius.zero,
-      borderWidth: 0.8,
-      child: InkWell(
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              ChatObjectAvatar(
-                name: owner?.name ?? '-',
-                imageUrl: owner?.imageUrl,
-                radius: 18,
-              ),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  owner?.name ?? 'Goto IM',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              // if (isConnecting) ...[
-              //   const SizedBox(width: 8),
-              //   const SizedBox(
-              //     width: 14,
-              //     height: 14,
-              //     child: CircularProgressIndicator(strokeWidth: 2),
-              //   ),
-              // ],
-              if (hasMultiple)
-                Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SignalRStatusBar extends StatelessWidget {
-  const _SignalRStatusBar({required this.state, required this.onReconnect});
-  final SessionRealtimeStatus state;
-  final Future<void> Function() onReconnect;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final busy =
-        state == SessionRealtimeStatus.connecting ||
-        state == SessionRealtimeStatus.reconnecting;
-    final text = switch (state) {
-      SessionRealtimeStatus.connecting => 'SignalR 正在连接…',
-      SessionRealtimeStatus.reconnecting => 'SignalR 正在重新连接…',
-      SessionRealtimeStatus.disconnecting => 'SignalR 正在断开…',
-      SessionRealtimeStatus.disconnected => 'SignalR 已断开',
-      SessionRealtimeStatus.connected => '',
-    };
-    return Material(
-      color: colorScheme.errorContainer,
-      child: InkWell(
-        onTap: busy ? null : onReconnect,
-        child: SizedBox(
-          height: 38,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (busy)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                Icon(
-                  Icons.cloud_off_outlined,
-                  size: 18,
-                  color: colorScheme.onErrorContainer,
-                ),
-              const SizedBox(width: 8),
-              Text(
-                text,
-                style: TextStyle(
-                  color: colorScheme.onErrorContainer,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              if (!busy)
-                Text(
-                  '，点击重连',
-                  style: TextStyle(
-                    color: colorScheme.onErrorContainer,
-                    fontSize: 13,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CurrentDeviceBar extends StatelessWidget {
-  const _CurrentDeviceBar({
-    required this.label,
-    required this.deviceCount,
-    required this.isLoading,
-    required this.onPressed,
-  });
-  final String label;
-  final int deviceCount;
-  final bool isLoading;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final tokens = context.appTokens;
-
-    return GlassContainer(
-      borderRadius: BorderRadius.zero,
-      backgroundColor: tokens.glassSecondarySurface,
-      borderWidth: 0.6,
-      child: InkWell(
-        onTap: onPressed,
-        child: Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Row(
-            children: [
-              Icon(Icons.devices_rounded, size: 20, color: colorScheme.primary),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '当前设备：${label.isEmpty ? '未知设备' : label}'
-                  '${deviceCount > 1 ? ' · 多设备登录($deviceCount)' : ''}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              if (isLoading)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _LoadMoreFooter extends StatelessWidget {
+
+
+
   const _LoadMoreFooter({required this.controller});
   final SessionListController controller;
 
