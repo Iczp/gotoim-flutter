@@ -32,6 +32,7 @@ import '../../features/diagnostics/presentation/theme_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/half_page_sheet_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/adaptive_page_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/toast_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/modal_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/remote_devtools_diagnostics_page.dart';
 import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/local_file_server/pages/terminal_details_page.dart';
@@ -213,6 +214,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/toast',
         builder: (context, state) => const ToastDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/modal',
+        builder: (context, state) => const ModalDiagnosticsPage(),
       ),
       GoRoute(
         path: '/workbench',

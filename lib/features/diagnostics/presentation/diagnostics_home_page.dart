@@ -118,6 +118,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/toast'),
           ),
           _Item(
+            icon: Icons.chat_outlined,
+            title: 'Modal 对话框全功能',
+            subtitle: 'Alert 告警、Confirm 确认、Prompt 输入、ActionSheet 菜单与异步拦截',
+            onTap: () => context.push('/diagnostics/modal'),
+          ),
+          _Item(
             icon: Icons.bubble_chart_outlined,
             title: '聊天气泡参数',
             subtitle: '实时调节反角 S 曲线尾巴并生成 JSON 参数',
