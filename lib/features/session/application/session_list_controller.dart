@@ -240,7 +240,12 @@ class SessionListController extends ChangeNotifier {
         ownerId: owner.id,
         limit: _sessions.length < pageSize ? pageSize : _sessions.length,
       );
-      if (!listEquals(_sessions, local)) {
+      final changed = !listEquals(_sessions, local);
+      debugPrint(
+        '[SessionScrollTrace] 🔄 _scheduleLocalReload | changed=$changed '
+        'previousCount=${_sessions.length} newCount=${local.length}',
+      );
+      if (changed) {
         _sessions
           ..clear()
           ..addAll(local);
@@ -328,7 +333,12 @@ class SessionListController extends ChangeNotifier {
       ownerId: owner.id,
       limit: _sessions.length < pageSize ? pageSize : _sessions.length,
     );
-    if (!listEquals(_sessions, local)) {
+    final changed = !listEquals(_sessions, local);
+    debugPrint(
+      '[SessionScrollTrace] 🔄 reloadVisibleLocal | changed=$changed '
+      'previousCount=${_sessions.length} newCount=${local.length}',
+    );
+    if (changed) {
       _sessions
         ..clear()
         ..addAll(local);
