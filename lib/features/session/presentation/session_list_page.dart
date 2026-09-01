@@ -29,6 +29,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   @override
   void initState() {
     super.initState();
+    _handledFocusUnreadRequest =
+        ref.read(sessionListControllerProvider).focusUnreadRequest;
     Future<void>.microtask(
       () => ref.read(sessionListControllerProvider).initialize(),
     );
@@ -85,6 +87,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   return false;
                 },
                 child: CustomScrollView(
+                  key: const PageStorageKey<String>(
+                    'session_list_custom_scroll_view',
+                  ),
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
