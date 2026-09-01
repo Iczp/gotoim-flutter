@@ -116,7 +116,6 @@ class _VideoViewerState extends State<VideoViewer> {
         onRestore: restoreToFullscreen,
         child: _FloatingVideoContent(
           session: _session,
-          label: widget.item.id,
           onClose: () {
             VideoPlaybackSessionRegistry.release(id, _session);
             manager.close(id);
@@ -341,13 +340,11 @@ class _VideoViewerState extends State<VideoViewer> {
 class _FloatingVideoContent extends StatefulWidget {
   const _FloatingVideoContent({
     required this.session,
-    required this.label,
     required this.onClose,
     required this.onRestore,
   });
 
   final VideoPlaybackSession session;
-  final String label;
   final VoidCallback onClose;
   final VoidCallback onRestore;
 

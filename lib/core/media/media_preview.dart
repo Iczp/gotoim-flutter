@@ -85,6 +85,7 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
   Offset _dragOffset = Offset.zero;
   bool _isDragging = false;
   double _currentScale = 1.0;
+  int _pointerCount = 0;
 
   late final AnimationController _resetController;
   Animation<Offset>? _resetAnimation;
@@ -120,13 +121,20 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
   double get _mediaScale => (1.0 - _dragProgress * 0.35).clamp(0.65, 1.0);
 
   void _onVerticalDragStart(DragStartDetails details) {
-    if (_currentScale > 1.05) return;
+    if (_pointerCount >= 2 || _currentScale > 1.05) return;
     _resetController.stop();
     _isDragging = true;
   }
 
   void _onVerticalDragUpdate(DragUpdateDetails details) {
-    if (_currentScale > 1.05) return;
+    if (_pointerCount >= 2 || _currentScale > 1.05) {
+      if (_isDragging) {
+        _isDragging = false;
+        _dragOffset = Offset.zero;
+        setState(() {});
+      }
+      return;
+    }
     _isDragging = true;
     setState(() {
       final newDy = _dragOffset.dy + details.delta.dy;
@@ -172,35 +180,48 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
         return Scaffold(
           backgroundColor: Colors.black.withValues(alpha: bgOpacity),
           body: SafeArea(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () {
-                if (_dragOffset == Offset.zero) {
-                  setState(() => _chrome = !_chrome);
-                }
-              },
-              onVerticalDragStart: _onVerticalDragStart,
-              onVerticalDragUpdate: _onVerticalDragUpdate,
-              onVerticalDragEnd: _onVerticalDragEnd,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Transform.translate(
-                    offset: _dragOffset,
-                    child: Transform.scale(
-                      scale: _mediaScale,
-                      child: PageView.builder(
-                        controller: _pages,
-                        physics:
-                            _isDragging || _dragOffset != Offset.zero
-                                ? const NeverScrollableScrollPhysics()
-                                : const BouncingScrollPhysics(),
-                        itemCount: widget.items.length,
-                        onPageChanged:
-                            (value) => setState(() {
-                              _index = value;
-                              _currentScale = 1.0;
-                            }),
+            child: Listener(
+              onPointerDown: (_) => setState(() => _pointerCount++),
+              onPointerUp:
+                  (_) => setState(() {
+                    if (_pointerCount > 0) _pointerCount--;
+                  }),
+              onPointerCancel:
+                  (_) => setState(() {
+                    if (_pointerCount > 0) _pointerCount--;
+                  }),
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  if (_dragOffset == Offset.zero) {
+                    setState(() => _chrome = !_chrome);
+                  }
+                },
+                onVerticalDragStart: _onVerticalDragStart,
+                onVerticalDragUpdate: _onVerticalDragUpdate,
+                onVerticalDragEnd: _onVerticalDragEnd,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Transform.translate(
+                      offset: _dragOffset,
+                      child: Transform.scale(
+                        scale: _mediaScale,
+                        child: PageView.builder(
+                          controller: _pages,
+                          physics:
+                              _isDragging ||
+                                      _dragOffset != Offset.zero ||
+                                      _pointerCount >= 2 ||
+                                      _currentScale > 1.05
+                                  ? const NeverScrollableScrollPhysics()
+                                  : const BouncingScrollPhysics(),
+                          itemCount: widget.items.length,
+                          onPageChanged:
+                              (value) => setState(() {
+                                _index = value;
+                                _currentScale = 1.0;
+                              }),
                         itemBuilder: (context, index) {
                           final item = widget.items[index];
                           if (item.type == MediaPreviewType.image) {
@@ -264,7 +285,8 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
               ),
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }

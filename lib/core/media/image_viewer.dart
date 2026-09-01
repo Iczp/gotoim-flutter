@@ -73,14 +73,16 @@ class _ImageViewerState extends State<ImageViewer>
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    if (details.pointerCount == 2) {
+    if (details.pointerCount >= 2 ||
+        details.rotation.abs() > 0.001 ||
+        (details.scale - 1.0).abs() > 0.001) {
       // Two-finger pinch and twist rotation (like iOS Photos / WeChat Album)
       _scale = (_baseScale * details.scale).clamp(0.7, 6.0);
       _rotation = _baseRotation + details.rotation;
       _translation = _baseTranslation + details.focalPointDelta;
       widget.onScaleChanged?.call(_scale);
       setState(() {});
-    } else if (details.pointerCount == 1 && _scale > 1.05) {
+    } else if (_scale > 1.05) {
       // Single finger panning when zoomed in
       _translation += details.focalPointDelta;
       setState(() {});
