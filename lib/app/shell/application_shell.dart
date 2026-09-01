@@ -112,6 +112,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
 
             return Scaffold(
               key: _scaffoldKey,
+              resizeToAvoidBottomInset: false,
               drawer: ChatOwnerDrawer(
                 controller: ref.watch(sessionListControllerProvider),
               ),

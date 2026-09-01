@@ -90,9 +90,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   return false;
                 },
                 child: CustomScrollView(
-                  key: const PageStorageKey<String>(
-                    'session_list_custom_scroll_view',
-                  ),
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
@@ -188,13 +185,20 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     SessionListController controller,
     SessionSummary session,
   ) async {
+    final targetOwnerId = session.ownerId ?? controller.currentOwner?.id ?? 0;
     await context.push(
       '/chat/${Uri.encodeComponent(session.id)}'
-      '?ownerId=${session.ownerId ?? controller.currentOwner?.id ?? 0}'
+      '?ownerId=$targetOwnerId'
       '&title=${Uri.encodeQueryComponent(session.title)}',
     );
     if (!mounted) return;
     await controller.reloadVisibleLocal();
+    if (mounted &&
+        _scrollController.hasClients &&
+        _scrollController.position.pixels >
+            _scrollController.position.maxScrollExtent) {
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    }
   }
 
   Future<void> _scrollToFirstUnread(
