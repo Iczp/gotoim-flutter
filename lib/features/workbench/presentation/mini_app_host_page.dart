@@ -137,11 +137,16 @@ class _MiniAppHostPageState extends ConsumerState<MiniAppHostPage> {
 
   String get _floatingWindowId => 'webview-session:${_session.id}';
 
-  void _minimize() {
+  Future<void> _minimize() async {
     try {
-      ref
-          .read(floatingWindowManagerProvider)
-          .show(
+      await widget.channel.invokeMethod<void>('minimizeTask');
+    } catch (e) {
+      debugPrint('[MiniApp] minimizeTask channel error: $e');
+      // If running inside the same Flutter navigator (iOS / Desktop / fallback):
+      if (mounted) {
+        final title = _title.isEmpty ? widget.request.appId : _title;
+        try {
+          ref.read(floatingWindowManagerProvider).show(
             id: _floatingWindowId,
             options: const FloatingWindowOptions(
               initialSize: Size(232, 92),
@@ -149,15 +154,28 @@ class _MiniAppHostPageState extends ConsumerState<MiniAppHostPage> {
               resizable: false,
             ),
             child: _MiniAppRestoreWindow(
-              title: _title.isEmpty ? widget.request.appId : _title,
-              onRestore: _restore,
+              title: title,
+              onRestore: () {
+                ref.read(floatingWindowManagerProvider).close(_floatingWindowId);
+                if (mounted) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => MiniAppHostPage(
+                        request: widget.request,
+                        channel: widget.channel,
+                      ),
+                    ),
+                  );
+                }
+              },
               onClose: _closeTask,
             ),
           );
-      _session.minimize();
-      if (mounted) setState(() => _isMinimized = true);
-    } catch (e) {
-      debugPrint('[MiniApp] minimize error: $e');
+        } catch (_) {}
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      }
     }
   }
 
@@ -168,6 +186,7 @@ class _MiniAppHostPageState extends ConsumerState<MiniAppHostPage> {
     _session.restore();
     if (mounted) setState(() => _isMinimized = false);
   }
+
 
 
   @override

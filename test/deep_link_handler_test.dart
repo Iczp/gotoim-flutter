@@ -17,7 +17,11 @@ class _FakeAppTaskManager implements AppTaskManager {
 
   @override
   Future<void> closeCurrentTask() async {}
+
+  @override
+  Future<void> closeTaskByAppId(String appId) async {}
 }
+
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

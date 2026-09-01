@@ -10,6 +10,7 @@ import '../core/deep_link/deep_link_handler.dart';
 import '../core/deep_link/deep_link_parser.dart';
 import '../core/deep_link/deep_link_service.dart';
 import '../core/devtools/remote_debug/remote_dev_server.dart';
+import '../core/floating_window/floating_window.dart';
 import '../core/jsbridge/js_api_dispatcher.dart';
 import '../core/logging/app_logger.dart';
 import '../core/notifications/local_notification_service.dart';
@@ -92,8 +93,9 @@ Future<void> bootstrap() async {
       navigatorProvider: () => rootNavigatorKey.currentState,
       uploadService: fileUploadService,
     );
+    final floatingWindowManager = FloatingWindowManager();
     final appTaskManager = platformFacade.kind == PlatformKind.android
-        ? AndroidAppTaskManager()
+        ? AndroidAppTaskManager(floatingWindowManager: floatingWindowManager)
         : StubAppTaskManager(
             navigatorProvider: () => rootNavigatorKey.currentState,
           );
@@ -134,10 +136,12 @@ Future<void> bootstrap() async {
           workbenchRepositoryProvider.overrideWithValue(workbenchRepository),
           deepLinkServiceProvider.overrideWith((ref) => deepLinkService),
           remoteDevServerProvider.overrideWithValue(remoteDevServer),
+          floatingWindowManagerProvider.overrideWithValue(floatingWindowManager),
         ],
         child: const GotoImApp(),
       ),
     );
+
   } catch (error, stackTrace) {
     AppLogger.instance.fatal(
       'Application bootstrap error',

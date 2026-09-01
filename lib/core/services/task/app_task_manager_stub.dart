@@ -52,4 +52,10 @@ class StubAppTaskManager implements AppTaskManager {
       navigator.pop();
     }
   }
+
+  @override
+  Future<void> closeTaskByAppId(String appId) async {
+    debugPrint('[AppTask] stub closeTaskByAppId appId=$appId');
+  }
 }
+

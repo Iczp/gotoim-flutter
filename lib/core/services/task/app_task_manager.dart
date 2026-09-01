@@ -25,7 +25,12 @@ abstract interface class AppTaskManager {
   ///
   /// On non-Android platforms this pops the MiniApp page.
   Future<void> closeCurrentTask();
+
+  /// Closes a background task by its [appId].
+  Future<void> closeTaskByAppId(String appId);
 }
+
+
 
 /// Callback interface implemented by the MiniApp Dart side to receive
 /// new launch payloads when an already-running task is re-activated

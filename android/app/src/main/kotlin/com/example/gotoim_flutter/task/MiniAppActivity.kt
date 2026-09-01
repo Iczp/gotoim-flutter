@@ -41,6 +41,8 @@ class MiniAppActivity : FlutterActivity() {
     companion object {
         private const val TAG = "MiniAppActivity"
         private const val CHANNEL_NAME = "com.gotoim.mini_app"
+        const val ACTION_MINI_APP_MINIMIZED = "com.gotoim.MINI_APP_MINIMIZED"
+        const val ACTION_MINI_APP_CLOSED = "com.gotoim.MINI_APP_CLOSED"
         private const val EXTRA_APP_ID = "appId"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_URL = "url"
@@ -91,7 +93,25 @@ class MiniAppActivity : FlutterActivity() {
                 }
                 "closeTask" -> {
                     Log.d(TAG, "[AppTask] close appId=$appId")
+                    val broadcastIntent = Intent(ACTION_MINI_APP_CLOSED).apply {
+                        setPackage(packageName)
+                        putExtra("appId", appId)
+                    }
+                    sendBroadcast(broadcastIntent)
                     finishAndRemoveTask()
+                    result.success(null)
+                }
+                "minimizeTask" -> {
+                    Log.d(TAG, "[AppTask] minimize appId=$appId")
+                    val broadcastIntent = Intent(ACTION_MINI_APP_MINIMIZED).apply {
+                        setPackage(packageName)
+                        putExtra("appId", appId)
+                        putExtra("title", miniAppTitle)
+                        putExtra("url", miniAppUrl)
+                        putExtra("iconUrl", miniAppIconUrl)
+                    }
+                    sendBroadcast(broadcastIntent)
+                    moveTaskToBack(true)
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -114,10 +134,16 @@ class MiniAppActivity : FlutterActivity() {
 
     override fun onDestroy() {
         Log.d(TAG, "[AppTask] onDestroy appId=$appId")
+        val broadcastIntent = Intent(ACTION_MINI_APP_CLOSED).apply {
+            setPackage(packageName)
+            putExtra("appId", appId)
+        }
+        sendBroadcast(broadcastIntent)
         channel?.setMethodCallHandler(null)
         channel = null
         super.onDestroy()
     }
+
 
     private fun extractIntentExtras(intent: Intent?) {
         intent?.let {
