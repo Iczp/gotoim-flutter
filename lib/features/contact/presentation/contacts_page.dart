@@ -12,6 +12,8 @@ import '../../session/presentation/chat_object_avatar.dart';
 import '../../user/presentation/profile_page.dart';
 import '../application/contacts_controller.dart';
 import '../data/models/contact_group.dart';
+import 'widgets/contact_row.dart';
+import 'widgets/contacts_page_chrome.dart';
 
 class ContactsPage extends ConsumerStatefulWidget {
   const ContactsPage({super.key});
@@ -22,12 +24,12 @@ class ContactsPage extends ConsumerStatefulWidget {
 
 class _ContactsPageState extends ConsumerState<ContactsPage> {
   // 联系人行高与分组标题高度集中配置，修改时会同步影响滚动定位。
-  static const _rowExtent = 56.0;
-  static const _groupHeaderExtent = 36.0;
-  static const _titleBarExtent = 56.0;
+  static const _rowExtent = ContactsPageMetrics.rowExtent;
+  static const _groupHeaderExtent = ContactsPageMetrics.groupHeaderExtent;
+  static const _titleBarExtent = ContactsPageMetrics.titleBarExtent;
   // 右侧字母索引拖动时，暂时关闭吸顶标题毛玻璃；松手后自动恢复。
   static const _disablePinnedHeaderBlurWhileIndexDragging = true;
-  static const _quickActionsExtent = _rowExtent * 4;
+  static const _quickActionsExtent = ContactsPageMetrics.quickActionsExtent;
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<String?> _draggingIndex = ValueNotifier<String?>(null);
   final ValueNotifier<String> _activeSurnameInitial = ValueNotifier<String>('');
@@ -94,7 +96,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
           bottom: false,
           child: Column(
             children: <Widget>[
-              const _ContactsTitleBar(),
+              const ContactsTitleBar(),
               Expanded(
                 child: Stack(
                   children: <Widget>[
@@ -104,10 +106,12 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: <Widget>[
-                          const SliverToBoxAdapter(child: _QuickActions()),
+                          const SliverToBoxAdapter(
+                            child: ContactsQuickActions(),
+                          ),
                           if (contacts.error != null)
                             SliverToBoxAdapter(
-                              child: _ContactsError(
+                              child: ContactsErrorBanner(
                                 error: contacts.error!,
                                 hasContacts: groups.isNotEmpty,
                                 onRetry:
@@ -120,12 +124,12 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                             ),
                           if (isInitialLoading)
                             const SliverToBoxAdapter(
-                              child: _ContactsLoadingSkeleton(),
+                              child: ContactsLoadingSkeleton(),
                             )
                           else if (groups.isEmpty)
                             const SliverFillRemaining(
                               hasScrollBody: false,
-                              child: _NoContacts(),
+                              child: NoContacts(),
                             )
                           else
                             ..._buildGroupSlivers(context, groups, ownerId),
@@ -273,7 +277,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
             itemExtent: _rowExtent,
             delegate: SliverChildBuilderDelegate((context, index) {
               final contact = group.contacts[index];
-              return _ContactRow(
+              return ContactRow(
                 contact: contact,
                 showDivider: index + 1 < group.contacts.length,
                 onTap: () => _openContactProfile(context, contact, ownerId),

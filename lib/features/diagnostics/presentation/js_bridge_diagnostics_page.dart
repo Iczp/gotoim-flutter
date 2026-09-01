@@ -487,31 +487,34 @@ class _JsBridgeDiagnosticsPageState
             ),
           ),
           const SizedBox(width: 8),
-          isSubscribed
-              ? OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red,
-                  side: const BorderSide(color: Colors.red),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
+          SizedBox(
+            width: 80,
+            child: isSubscribed
+                ? OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: _working ? null : onToggle,
+                    child: const Text('取消订阅'),
+                  )
+                : FilledButton.tonal(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: _working ? null : onToggle,
+                    child: const Text('订阅 (on)'),
                   ),
-                  visualDensity: VisualDensity.compact,
-                ),
-                onPressed: _working ? null : onToggle,
-                child: const Text('取消订阅'),
-              )
-              : FilledButton.tonal(
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  visualDensity: VisualDensity.compact,
-                ),
-                onPressed: _working ? null : onToggle,
-                child: const Text('订阅 (on)'),
-              ),
+          ),
         ],
       ),
     );

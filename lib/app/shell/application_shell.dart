@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../features/home/presentation/home_sections.dart';
 import '../../features/session/application/session_list_controller.dart';
-import '../../features/session/presentation/session_list_page.dart';
+import '../../features/session/presentation/chat_owner_drawer.dart';
 import '../layout/app_breakpoints.dart';
 
 /// Responsive host for the IM's top-level sections.
@@ -114,25 +114,27 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
               drawer: ChatOwnerDrawer(
                 controller: ref.watch(sessionListControllerProvider),
               ),
-              body: isCompact
-                  ? content
-                  : Row(
-                      children: [
-                        _HomeNavigationRail(
-                          selected: _section,
-                          extended: layout == WindowLayout.desktop,
-                          onSelected: _select,
-                        ),
-                        const VerticalDivider(width: 1),
-                        Expanded(child: content),
-                      ],
-                    ),
-              bottomNavigationBar: isCompact
-                  ? _HomeNavigationBar(
-                      selected: _section,
-                      onSelected: _select,
-                    )
-                  : null,
+              body:
+                  isCompact
+                      ? content
+                      : Row(
+                        children: [
+                          _HomeNavigationRail(
+                            selected: _section,
+                            extended: layout == WindowLayout.desktop,
+                            onSelected: _select,
+                          ),
+                          const VerticalDivider(width: 1),
+                          Expanded(child: content),
+                        ],
+                      ),
+              bottomNavigationBar:
+                  isCompact
+                      ? _HomeNavigationBar(
+                        selected: _section,
+                        onSelected: _select,
+                      )
+                      : null,
             );
           },
         ),
@@ -161,8 +163,9 @@ class _LazyHomeSectionStack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sections =
-        HomeSection.values.where(visited.contains).toList(growable: false);
+    final sections = HomeSection.values
+        .where(visited.contains)
+        .toList(growable: false);
     return Stack(
       fit: StackFit.expand,
       children: sections
@@ -205,17 +208,18 @@ class _HomeNavigationBar extends StatelessWidget {
           backgroundColor: Colors.transparent,
           elevation: 0,
           selectedIndex: HomeSection.values.indexOf(selected),
-          onDestinationSelected: (index) =>
-              onSelected(HomeSection.values[index]),
-          destinations: HomeSection.values
-              .map(
-                (section) => NavigationDestination(
-                  icon: Icon(section.icon),
-                  selectedIcon: Icon(section.selectedIcon),
-                  label: section.label,
-                ),
-              )
-              .toList(),
+          onDestinationSelected:
+              (index) => onSelected(HomeSection.values[index]),
+          destinations:
+              HomeSection.values
+                  .map(
+                    (section) => NavigationDestination(
+                      icon: Icon(section.icon),
+                      selectedIcon: Icon(section.selectedIcon),
+                      label: section.label,
+                    ),
+                  )
+                  .toList(),
         ),
       ),
     );
@@ -245,15 +249,16 @@ class _HomeNavigationRail extends StatelessWidget {
         selectedIndex: HomeSection.values.indexOf(selected),
         onDestinationSelected: (index) => onSelected(HomeSection.values[index]),
         labelType: extended ? null : NavigationRailLabelType.all,
-        destinations: HomeSection.values
-            .map(
-              (section) => NavigationRailDestination(
-                icon: Icon(section.icon),
-                selectedIcon: Icon(section.selectedIcon),
-                label: Text(section.label),
-              ),
-            )
-            .toList(),
+        destinations:
+            HomeSection.values
+                .map(
+                  (section) => NavigationRailDestination(
+                    icon: Icon(section.icon),
+                    selectedIcon: Icon(section.selectedIcon),
+                    label: Text(section.label),
+                  ),
+                )
+                .toList(),
       ),
     );
   }

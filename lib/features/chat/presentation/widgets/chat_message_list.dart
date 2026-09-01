@@ -43,6 +43,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
   double _viewportHeight = 0;
   double _bottomSpacerHeight = 0;
   bool _measurementScheduled = false;
+  bool _initialContentPositioned = false;
 
   GlobalKey _contentKeyFor(String id) =>
       _contentKeys.putIfAbsent(id, GlobalKey.new);
@@ -81,8 +82,15 @@ class _ChatMessageListState extends State<ChatMessageList> {
   }
 
   void _setBottomSpacerHeight(double value) {
-    if ((value - _bottomSpacerHeight).abs() < 0.5) return;
-    setState(() => _bottomSpacerHeight = value);
+    final changed = (value - _bottomSpacerHeight).abs() >= 0.5;
+    if (!changed && _initialContentPositioned) return;
+    setState(() {
+      _bottomSpacerHeight = value;
+      // The first measurement happens before the list is painted visibly.
+      // This prevents a short-message chat from appearing at the bottom and
+      // then jumping to the top on the next frame.
+      _initialContentPositioned = true;
+    });
   }
 
   @override
@@ -115,50 +123,53 @@ class _ChatMessageListState extends State<ChatMessageList> {
                     error: widget.error,
                     onRetry: widget.onLoadMore,
                   )
-                  : ListView.builder(
-                    controller: widget.scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    reverse: true,
-                    findChildIndexCallback: (key) {
-                      if (key is! ValueKey<String>) return null;
-                      final index = widget.messages.indexWhere(
-                        (message) => message.localId == key.value,
-                      );
-                      return index < 0 ? null : index + 1;
-                    },
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 16,
-                    ),
-                    itemCount: widget.messages.length + 2,
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return SizedBox(height: _bottomSpacerHeight);
-                      }
-                      if (index == widget.messages.length + 1) {
+                  : Opacity(
+                    opacity: _initialContentPositioned ? 1 : 0,
+                    child: ListView.builder(
+                      controller: widget.scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      reverse: true,
+                      findChildIndexCallback: (key) {
+                        if (key is! ValueKey<String>) return null;
+                        final index = widget.messages.indexWhere(
+                          (message) => message.localId == key.value,
+                        );
+                        return index < 0 ? null : index + 1;
+                      },
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 16,
+                      ),
+                      itemCount: widget.messages.length + 2,
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return SizedBox(height: _bottomSpacerHeight);
+                        }
+                        if (index == widget.messages.length + 1) {
+                          return KeyedSubtree(
+                            key: _contentKeyFor('_history_footer'),
+                            child: _ChatHistoryFooter(
+                              isLoading: widget.isLoading,
+                              hasMore: widget.hasMore,
+                              error: widget.error,
+                              onLoadMore: widget.onLoadMore,
+                            ),
+                          );
+                        }
+                        final messageIndex = index - 1;
+                        final message = widget.messages[messageIndex];
                         return KeyedSubtree(
-                          key: _contentKeyFor('_history_footer'),
-                          child: _ChatHistoryFooter(
-                            isLoading: widget.isLoading,
-                            hasMore: widget.hasMore,
-                            error: widget.error,
-                            onLoadMore: widget.onLoadMore,
+                          key: _contentKeyFor(message.localId),
+                          child: widget.itemBuilder(
+                            context,
+                            message,
+                            messageIndex,
                           ),
                         );
-                      }
-                      final messageIndex = index - 1;
-                      final message = widget.messages[messageIndex];
-                      return KeyedSubtree(
-                        key: _contentKeyFor(message.localId),
-                        child: widget.itemBuilder(
-                          context,
-                          message,
-                          messageIndex,
-                        ),
-                      );
-                    },
+                      },
+                    ),
                   ),
         );
       },
