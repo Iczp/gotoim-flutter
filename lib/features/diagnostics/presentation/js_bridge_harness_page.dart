@@ -148,11 +148,20 @@ class _JsBridgeHarnessPageState extends ConsumerState<JsBridgeHarnessPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                FilledButton(onPressed: _load, child: const Text('加载')),
+                SizedBox(
+                  width: 64,
+                  child: FilledButton(
+                    onPressed: _load,
+                    child: const Text('加载'),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: supported ? _sendHostPing : null,
-                  child: const Text('Flutter → H5 Ping'),
+                SizedBox(
+                  width: 140,
+                  child: OutlinedButton(
+                    onPressed: supported ? _sendHostPing : null,
+                    child: const Text('Flutter → H5 Ping'),
+                  ),
                 ),
               ],
             ),
