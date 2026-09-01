@@ -23,6 +23,44 @@ MethodAddressStatusTypeDurationSizeTimestampSOCKET10.0.5.20:8044Closedtcp4 s58.1
 
 friend detai   中没有lastMessage,  因此，要先读取本地的friend  lastMessage, 再合并。   
 
+showToast 选项增加是否振动，是否发出声音，全已局位置配置， 
+
+
+
+### Modal
+
+```
+lib\features\diagnostics\presentation\modal_diagnostics_page.dart
+ The overflowing RenderFlex has an orientation of Axis.horizontal.
+The edge of the RenderFlex that is overflowing has been marked in the rendering with a yellow and
+black striped pattern. This is usually caused by the contents being too big for the RenderFlex.
+Consider applying a flex factor (e.g. using an Expanded widget) to force the children of the
+RenderFlex to fit within the available space instead of being sized to their natural size.
+This is considered an error condition because it indicates that there is content that cannot be
+seen. If the content is legitimately bigger than the available space, consider clipping it with a
+ClipRect widget before putting it in the flex, or using a scrollable container rather than a Flex,
+like a ListView.
+The specific RenderFlex in question is: RenderFlex#c9a6e relayoutBoundary=up14 OVERFLOWING:
+  creator: Row ← Padding ← Column ← Semantics ← DefaultTextStyle ← AnimatedDefaultTextStyle ←
+    _InkFeatures-[GlobalKey#b649a ink renderer] ← NotificationListener<LayoutChangedNotification> ←
+    CustomPaint ← _ShapeBorderPaint ← PhysicalShape ← _MaterialInterior ← ⋯
+  parentData: offset=Offset(16.0, 8.0) (can use size)
+  constraints: BoxConstraints(0.0<=w<=296.0, 0.0<=h<=Infinity)
+  size: Size(296.0, 24.0)
+  direction: horizontal
+  mainAxisAlignment: start
+  mainAxisSize: max
+  crossAxisAlignment: center
+  textDirection: ltr
+  verticalDirection: down
+  spacing: 0.0
+◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+I/flutter (26013): Flutter error: A RenderFlex overflowed by 20 pixels on the right.
+I/flutter (26013): null
+```
+
 
 
 

@@ -9,7 +9,7 @@ typedef ChatMessageItemBuilder =
 ///
 /// The caller supplies item rendering and behavior callbacks so the list stays
 /// presentational and does not depend on the chat controller.
-class ChatMessageList extends StatefulWidget {
+class ChatMessageList extends StatelessWidget {
   const ChatMessageList({
     required this.messages,
     required this.scrollController,
@@ -34,148 +34,74 @@ class ChatMessageList extends StatefulWidget {
   final ChatMessageItemBuilder itemBuilder;
 
   @override
-  State<ChatMessageList> createState() => _ChatMessageListState();
-}
-
-class _ChatMessageListState extends State<ChatMessageList> {
-  static const _listVerticalPadding = 32.0;
-  final Map<String, GlobalKey> _contentKeys = <String, GlobalKey>{};
-  double _viewportHeight = 0;
-  double _bottomSpacerHeight = 0;
-  bool _measurementScheduled = false;
-  bool _initialContentPositioned = false;
-
-  GlobalKey _contentKeyFor(String id) =>
-      _contentKeys.putIfAbsent(id, GlobalKey.new);
-
-  void _scheduleBottomSpacerMeasurement() {
-    if (_measurementScheduled) return;
-    _measurementScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _measurementScheduled = false;
-      if (!mounted || _viewportHeight <= 0) return;
-
-      final keys = <GlobalKey>[
-        _contentKeyFor('_history_footer'),
-        ...widget.messages.map((message) => _contentKeyFor(message.localId)),
-      ];
-      final renderBoxes = keys
-          .map((key) => key.currentContext?.findRenderObject() as RenderBox?)
-          .toList(growable: false);
-      // If any item is not built, the list exceeds the viewport. Do not add a
-      // spacer so the normal lazy ListView behavior remains unchanged.
-      if (renderBoxes.any((renderBox) => renderBox == null)) {
-        _setBottomSpacerHeight(0);
-        return;
-      }
-      final contentHeight = renderBoxes.fold<double>(
-        0,
-        (total, renderBox) => total + renderBox!.size.height,
-      );
-      _setBottomSpacerHeight(
-        (_viewportHeight - _listVerticalPadding - contentHeight).clamp(
-          0,
-          double.infinity,
-        ),
-      );
-    });
-  }
-
-  void _setBottomSpacerHeight(double value) {
-    final changed = (value - _bottomSpacerHeight).abs() >= 0.5;
-    if (!changed && _initialContentPositioned) return;
-    setState(() {
-      _bottomSpacerHeight = value;
-      // The first measurement happens before the list is painted visibly.
-      // This prevents a short-message chat from appearing at the bottom and
-      // then jumping to the top on the next frame.
-      _initialContentPositioned = true;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) => Listener(
     behavior: HitTestBehavior.translucent,
     // A listener observes pointer input without joining Flutter's gesture
     // arena. This keeps the surrounding chat region from competing with the
     // ListView's vertical-drag recognizer.
-    onPointerDown: (_) => widget.onTapOutside(),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        _viewportHeight = constraints.maxHeight;
-        _scheduleBottomSpacerMeasurement();
-        return NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            widget.onViewingLatestChanged(notification.metrics.pixels <= 32);
-            final isUserPaging =
-                (notification is ScrollUpdateNotification &&
-                    notification.dragDetails != null) ||
-                notification is OverscrollNotification;
-            if (isUserPaging && notification.metrics.extentAfter < 180) {
-              widget.onLoadMore();
-            }
-            return false;
-          },
-          child:
-              widget.messages.isEmpty
-                  ? _EmptyMessagesState(
-                    isLoading: widget.isLoading,
-                    error: widget.error,
-                    onRetry: widget.onLoadMore,
-                  )
-                  : Opacity(
-                    opacity: _initialContentPositioned ? 1 : 0,
-                    child: ListView.builder(
-                      controller: widget.scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      reverse: true,
-                      findChildIndexCallback: (key) {
-                        if (key is! ValueKey<String>) return null;
-                        final index = widget.messages.indexWhere(
-                          (message) => message.localId == key.value,
-                        );
-                        return index < 0 ? null : index + 1;
-                      },
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 16,
-                      ),
-                      itemCount: widget.messages.length + 2,
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          return SizedBox(height: _bottomSpacerHeight);
-                        }
-                        if (index == widget.messages.length + 1) {
-                          return KeyedSubtree(
-                            key: _contentKeyFor('_history_footer'),
-                            child: _ChatHistoryFooter(
-                              isLoading: widget.isLoading,
-                              hasMore: widget.hasMore,
-                              error: widget.error,
-                              onLoadMore: widget.onLoadMore,
-                            ),
-                          );
-                        }
-                        final messageIndex = index - 1;
-                        final message = widget.messages[messageIndex];
-                        return KeyedSubtree(
-                          key: _contentKeyFor(message.localId),
-                          child: widget.itemBuilder(
-                            context,
-                            message,
-                            messageIndex,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-        );
+    onPointerDown: (_) => onTapOutside(),
+    child: NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        onViewingLatestChanged(notification.metrics.pixels <= 32);
+        final isUserPaging =
+            (notification is ScrollUpdateNotification &&
+                notification.dragDetails != null) ||
+            notification is OverscrollNotification;
+        if (isUserPaging && notification.metrics.extentAfter < 180) {
+          onLoadMore();
+        }
+        return false;
       },
+      child:
+          messages.isEmpty
+              ? _EmptyMessagesState(
+                isLoading: isLoading,
+                error: error,
+                onRetry: onLoadMore,
+              )
+              : Align(
+                alignment: Alignment.topCenter,
+                child: ListView.builder(
+                  controller: scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  reverse: true,
+                  shrinkWrap: true,
+                  findChildIndexCallback: (key) {
+                    if (key is! ValueKey<String>) return null;
+                    final index = messages.indexWhere(
+                      (message) => message.localId == key.value,
+                    );
+                    return index < 0 ? null : index;
+                  },
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 16,
+                  ),
+                  itemCount: messages.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == messages.length) {
+                      return _ChatHistoryFooter(
+                        isLoading: isLoading,
+                        hasMore: hasMore,
+                        error: error,
+                        onLoadMore: onLoadMore,
+                      );
+                    }
+                    final message = messages[index];
+                    return itemBuilder(
+                      context,
+                      message,
+                      index,
+                    );
+                  },
+                ),
+              ),
     ),
   );
 }
+
 
 class _EmptyMessagesState extends StatelessWidget {
   const _EmptyMessagesState({
