@@ -42,8 +42,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
   void _onScrollPositionChanged() {
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
-    debugPrint(
-      '[SessionScrollTrace] 📍 ScrollPosition | '
+    sessionScrollTrace(
+      '📍 ScrollPosition | '
       'pixels=${pos.pixels.toStringAsFixed(1)} '
       'range=[${pos.minScrollExtent.toStringAsFixed(1)}, ${pos.maxScrollExtent.toStringAsFixed(1)}] '
       'extentAfter=${pos.extentAfter.toStringAsFixed(1)} '
@@ -61,8 +61,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
           _scrollController.hasClients
               ? _scrollController.offset.toStringAsFixed(1)
               : 'unattached';
-      debugPrint(
-        '[SessionScrollTrace] 📐 didChangeMetrics | windowSize=$size '
+      sessionScrollTrace(
+        '📐 didChangeMetrics | windowSize=$size '
         'insetsBottom=${viewInsets.bottom} scrollOffset=$offset',
       );
     }
@@ -91,8 +91,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
         _scrollController.hasClients
             ? _scrollController.position.maxScrollExtent.toStringAsFixed(1)
             : 'unattached';
-    debugPrint(
-      '[SessionScrollTrace] 🎨 build | sessions=${controller.sessions.length} '
+    sessionScrollTrace(
+      '🎨 build | sessions=${controller.sessions.length} '
       'listItems=${listItems.length} focusReq=${controller.focusUnreadRequest} '
       'scrollOffset=$offsetStr maxScrollExtent=$maxStr',
     );
@@ -138,8 +138,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                               : (notification is UserScrollNotification
                                   ? 'dir=${notification.direction}'
                                   : ''));
-                  debugPrint(
-                    '[SessionScrollTrace] 🔔 ${notification.runtimeType} | '
+                  sessionScrollTrace(
+                    '🔔 ${notification.runtimeType} | '
                     'pixels=${notification.metrics.pixels.toStringAsFixed(1)} '
                     'extentAfter=${notification.metrics.extentAfter.toStringAsFixed(1)} '
                     'maxExtent=${notification.metrics.maxScrollExtent.toStringAsFixed(1)} '
@@ -149,8 +149,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                       notification.metrics.extentAfter < 240 &&
                       controller.hasMore &&
                       !controller.isLoading) {
-                    debugPrint(
-                      '[SessionScrollTrace] ⚡ Triggering loadNextPage from user scroll',
+                    sessionScrollTrace(
+                      '⚡ Triggering loadNextPage from user scroll',
                     );
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) {
@@ -265,8 +265,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
         _scrollController.hasClients
             ? _scrollController.position.maxScrollExtent.toStringAsFixed(1)
             : 'none';
-    debugPrint(
-      '[SessionScrollTrace] 🚀 _openChat START | session=${session.id} '
+    sessionScrollTrace(
+      '🚀 _openChat START | session=${session.id} '
       'title=${session.title} offset=$initialOffset maxExtent=$initialMax',
     );
     await context.push(
@@ -282,8 +282,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
         _scrollController.hasClients
             ? _scrollController.position.maxScrollExtent.toStringAsFixed(1)
             : 'none';
-    debugPrint(
-      '[SessionScrollTrace] 🔙 _openChat RETURNED | session=${session.id} '
+    sessionScrollTrace(
+      '🔙 _openChat RETURNED | session=${session.id} '
       'offset=$returnOffset maxExtent=$returnMax',
     );
     if (!mounted) return;
@@ -296,16 +296,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
         _scrollController.hasClients
             ? _scrollController.position.maxScrollExtent.toStringAsFixed(1)
             : 'none';
-    debugPrint(
-      '[SessionScrollTrace] 🏁 _openChat AFTER reloadVisibleLocal | '
+    sessionScrollTrace(
+      '🏁 _openChat AFTER reloadVisibleLocal | '
       'offset=$afterReloadOffset maxExtent=$afterReloadMax',
     );
     if (mounted &&
         _scrollController.hasClients &&
         _scrollController.position.pixels >
             _scrollController.position.maxScrollExtent) {
-      debugPrint(
-        '[SessionScrollTrace] ⚠️ Offset out of bounds! Clamping from '
+      sessionScrollTrace(
+        '⚠️ Offset out of bounds! Clamping from '
         '${_scrollController.position.pixels} to ${_scrollController.position.maxScrollExtent}',
       );
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -330,8 +330,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
           listItems[index].kind == SessionListItemKind.session ? 68.0 : 32.0;
     }
     final position = _scrollController.position;
-    debugPrint(
-      '[SessionScrollTrace] 🎯 _scrollToFirstUnread | targetIndex=$targetIndex '
+    sessionScrollTrace(
+      '🎯 _scrollToFirstUnread | targetIndex=$targetIndex '
       'estimatedOffset=$estimatedOffset currentOffset=${position.pixels}',
     );
     await _scrollController.animateTo(

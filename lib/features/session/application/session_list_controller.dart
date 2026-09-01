@@ -16,6 +16,16 @@ import '../data/models/logged_in_device.dart';
 import '../data/repositories/session_repository.dart';
 import '../data/session_change_bus.dart';
 
+/// Flag to control printing of [SessionScrollTrace] logs. Defaults to false.
+bool enableSessionScrollTrace = false;
+
+/// Prints [SessionScrollTrace] logs when [enableSessionScrollTrace] is true.
+void sessionScrollTrace(String message) {
+  if (enableSessionScrollTrace) {
+    debugPrint('[SessionScrollTrace] $message');
+  }
+}
+
 final sessionRepositoryProvider = Provider<SessionRepository>(
   (ref) => SessionRepository(
     api: SessionUnitApi(ref.watch(apiClientProvider)),
@@ -243,8 +253,8 @@ class SessionListController extends ChangeNotifier {
         limit: targetLimit,
       );
       final changed = !listEquals(_sessions, local);
-      debugPrint(
-        '[SessionScrollTrace] 🔄 _scheduleLocalReload | changed=$changed '
+      sessionScrollTrace(
+        '🔄 _scheduleLocalReload | changed=$changed '
         'previousCount=${_sessions.length} newCount=${local.length}',
       );
       if (changed) {
@@ -338,8 +348,8 @@ class SessionListController extends ChangeNotifier {
     try {
       final changedItems = await _repository.loadChanges(ownerId: owner.id);
       if (changedItems.isNotEmpty) {
-        debugPrint(
-          '[SessionScrollTrace] 🔄 refreshChanges | receivedChanges=${changedItems.length} '
+        sessionScrollTrace(
+          '🔄 refreshChanges | receivedChanges=${changedItems.length} '
           'currentSessions=${_sessions.length}',
         );
         _mergeLocalSessions(changedItems);
@@ -363,8 +373,8 @@ class SessionListController extends ChangeNotifier {
       limit: targetLimit,
     );
     final changed = !listEquals(_sessions, local);
-    debugPrint(
-      '[SessionScrollTrace] 🔄 reloadVisibleLocal | changed=$changed '
+    sessionScrollTrace(
+      '🔄 reloadVisibleLocal | changed=$changed '
       'previousCount=${_sessions.length} newCount=${local.length}',
     );
     if (changed) {
