@@ -39,11 +39,13 @@ class _AvatarApiClient implements ApiClient {
   Future<T> postMultipart<T>(
     String requestPath, {
     Map<String, Object?>? query,
+    Map<String, Object?>? extraFields,
     required MultipartUploadFile file,
     String fieldName = 'file',
     void Function(int sent, int total)? onProgress,
     bool retryOnUnauthorized = true,
   }) async {
+
     path = requestPath;
     this.fieldName = fieldName;
     this.file = file;

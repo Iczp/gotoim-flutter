@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../core/config/app_environment.dart';
 import '../core/platform/platform_facade.dart';
 import '../features/workbench/data/workbench_models.dart';
@@ -62,11 +64,14 @@ Future<void> miniAppBootstrap() async {
   final platformFacade = createPlatformFacade();
 
   runApp(
-    MiniAppApp(
-      environment: environment,
-      platformFacade: platformFacade,
-      initialRequest: initialRequest,
-      channel: channel,
+    ProviderScope(
+      child: MiniAppApp(
+        environment: environment,
+        platformFacade: platformFacade,
+        initialRequest: initialRequest,
+        channel: channel,
+      ),
     ),
   );
 }
+

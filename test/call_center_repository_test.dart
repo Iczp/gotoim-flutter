@@ -92,11 +92,13 @@ class _CallCenterApiClient implements ApiClient {
   Future<T> postMultipart<T>(
     String path, {
     Map<String, Object?>? query,
+    Map<String, Object?>? extraFields,
     required MultipartUploadFile file,
     String fieldName = 'file',
     void Function(int sent, int total)? onProgress,
     bool retryOnUnauthorized = true,
   }) => throw UnimplementedError();
+
 
   @override
   Future<void> cancelByTag(Object tag) async {}

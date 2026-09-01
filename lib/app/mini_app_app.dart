@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_environment.dart';
+import '../core/floating_window/floating_window.dart';
 import '../core/platform/platform_contract.dart';
 import '../features/workbench/data/workbench_models.dart';
 import '../features/workbench/presentation/mini_app_host_page.dart';
@@ -10,7 +12,7 @@ import '../features/workbench/presentation/mini_app_host_page.dart';
 ///
 /// This does not use GoRouter or the full application shell. It directly
 /// displays [MiniAppHostPage] with the launch payload received from native.
-class MiniAppApp extends StatefulWidget {
+class MiniAppApp extends ConsumerStatefulWidget {
   const MiniAppApp({
     required this.environment,
     required this.platformFacade,
@@ -25,10 +27,10 @@ class MiniAppApp extends StatefulWidget {
   final MethodChannel channel;
 
   @override
-  State<MiniAppApp> createState() => _MiniAppAppState();
+  ConsumerState<MiniAppApp> createState() => _MiniAppAppState();
 }
 
-class _MiniAppAppState extends State<MiniAppApp> {
+class _MiniAppAppState extends ConsumerState<MiniAppApp> {
   late MiniAppLaunchRequest? _currentRequest;
 
   @override
@@ -70,8 +72,11 @@ class _MiniAppAppState extends State<MiniAppApp> {
 
   @override
   Widget build(BuildContext context) {
+    final manager = ref.read(floatingWindowManagerProvider);
+
     return MaterialApp(
       title: _currentRequest?.title ?? 'MiniApp',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: Colors.blue,
         useMaterial3: true,
@@ -82,6 +87,17 @@ class _MiniAppAppState extends State<MiniAppApp> {
         useMaterial3: true,
         brightness: Brightness.dark,
       ),
+      builder: (context, child) {
+        return FloatingWindowScope(
+          manager: manager,
+          child: Stack(
+            children: [
+              child ?? const SizedBox.shrink(),
+              FloatingWindowLayer(manager: manager),
+            ],
+          ),
+        );
+      },
       home:
           _currentRequest != null
               ? MiniAppHostPage(
@@ -94,3 +110,4 @@ class _MiniAppAppState extends State<MiniAppApp> {
     );
   }
 }
+

@@ -97,18 +97,34 @@ class _MiniAppHostPageState extends ConsumerState<MiniAppHostPage> {
     }
   }
 
+  Future<bool> _safeCanGoBack() async {
+    if (_webController == null) return false;
+    try {
+      return await _webController!.canGoBack();
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _handleBack() async {
     // Priority: WebView can go back → go back. Otherwise close task.
     if (_canGoBack && _webController != null) {
-      await _webController!.goBack();
-      return;
+      final canBack = await _safeCanGoBack();
+      if (canBack) {
+        try {
+          await _webController!.goBack();
+          return;
+        } catch (_) {}
+      }
     }
     // At root of MiniApp → close the task.
     await _closeTask();
   }
 
   Future<void> _closeTask() async {
-    ref.read(floatingWindowManagerProvider).close(_floatingWindowId);
+    try {
+      ref.read(floatingWindowManagerProvider).close(_floatingWindowId);
+    } catch (_) {}
     try {
       await widget.channel.invokeMethod<void>('closeTask');
     } catch (e) {
@@ -122,30 +138,37 @@ class _MiniAppHostPageState extends ConsumerState<MiniAppHostPage> {
   String get _floatingWindowId => 'webview-session:${_session.id}';
 
   void _minimize() {
-    ref
-        .read(floatingWindowManagerProvider)
-        .show(
-          id: _floatingWindowId,
-          options: const FloatingWindowOptions(
-            initialSize: Size(232, 92),
-            snapToEdge: true,
-            resizable: false,
-          ),
-          child: _MiniAppRestoreWindow(
-            title: _title.isEmpty ? widget.request.appId : _title,
-            onRestore: _restore,
-            onClose: _closeTask,
-          ),
-        );
-    _session.minimize();
-    setState(() => _isMinimized = true);
+    try {
+      ref
+          .read(floatingWindowManagerProvider)
+          .show(
+            id: _floatingWindowId,
+            options: const FloatingWindowOptions(
+              initialSize: Size(232, 92),
+              snapToEdge: true,
+              resizable: false,
+            ),
+            child: _MiniAppRestoreWindow(
+              title: _title.isEmpty ? widget.request.appId : _title,
+              onRestore: _restore,
+              onClose: _closeTask,
+            ),
+          );
+      _session.minimize();
+      if (mounted) setState(() => _isMinimized = true);
+    } catch (e) {
+      debugPrint('[MiniApp] minimize error: $e');
+    }
   }
 
   void _restore() {
-    ref.read(floatingWindowManagerProvider).close(_floatingWindowId);
+    try {
+      ref.read(floatingWindowManagerProvider).close(_floatingWindowId);
+    } catch (_) {}
     _session.restore();
     if (mounted) setState(() => _isMinimized = false);
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -244,7 +267,7 @@ class _MiniAppHostPageState extends ConsumerState<MiniAppHostPage> {
                   onLoadStop: (controller, url) async {
                     await _session.didStop(controller, url);
                     if (!mounted) return;
-                    final canGoBack = await controller.canGoBack();
+                    final canGoBack = await _safeCanGoBack();
                     setState(() {
                       _isLoading = false;
                       _progress = 1.0;
@@ -271,9 +294,10 @@ class _MiniAppHostPageState extends ConsumerState<MiniAppHostPage> {
                   onUpdateVisitedHistory: (controller, url, isReload) async {
                     await _session.didVisit(controller, url);
                     if (!mounted) return;
-                    final canGoBack = await controller.canGoBack();
+                    final canGoBack = await _safeCanGoBack();
                     setState(() => _canGoBack = canGoBack);
                   },
+
                 ),
               ),
 

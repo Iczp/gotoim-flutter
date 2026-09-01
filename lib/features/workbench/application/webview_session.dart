@@ -133,9 +133,18 @@ class WebViewSession extends ChangeNotifier {
   }
 
   Future<void> _refreshNavigation(InAppWebViewController controller) async {
-    _canGoBack = await controller.canGoBack();
-    _canGoForward = await controller.canGoForward();
+    try {
+      _canGoBack = await controller.canGoBack();
+    } catch (_) {
+      _canGoBack = false;
+    }
+    try {
+      _canGoForward = await controller.canGoForward();
+    } catch (_) {
+      _canGoForward = false;
+    }
   }
+
 
   void _recordVisit(Uri url) {
     _currentUrl = url;
