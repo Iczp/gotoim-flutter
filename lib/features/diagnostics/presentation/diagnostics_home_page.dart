@@ -112,6 +112,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/half-page-sheet'),
           ),
           _Item(
+            icon: Icons.notifications_active_outlined,
+            title: 'Toast 提示与反馈',
+            subtitle: '顶部/居中/底部悬浮位置、振动反馈、声音提示与全局配置',
+            onTap: () => context.push('/diagnostics/toast'),
+          ),
+          _Item(
             icon: Icons.bubble_chart_outlined,
             title: '聊天气泡参数',
             subtitle: '实时调节反角 S 曲线尾巴并生成 JSON 参数',
