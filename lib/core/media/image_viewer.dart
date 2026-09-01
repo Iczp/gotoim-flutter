@@ -11,6 +11,10 @@ class ImageViewer extends StatefulWidget {
     required this.source,
     this.bytes,
     this.onScaleChanged,
+    this.scaleSensitivity = 1.0,
+    this.rotationSensitivity = 1.0,
+    this.minScale = 1.0,
+    this.maxScale = 5.0,
     super.key,
   });
 
@@ -18,6 +22,18 @@ class ImageViewer extends StatefulWidget {
   final String source;
   final Uint8List? bytes;
   final ValueChanged<double>? onScaleChanged;
+
+  /// Sensitivity factor for two-finger distance zoom (default 1.0).
+  final double scaleSensitivity;
+
+  /// Sensitivity factor for two-finger twist rotation (default 1.0).
+  final double rotationSensitivity;
+
+  /// Minimum stable scale after release (default 1.0).
+  final double minScale;
+
+  /// Maximum stable scale after release (default 5.0).
+  final double maxScale;
 
   @override
   State<ImageViewer> createState() => _ImageViewerState();
@@ -73,12 +89,19 @@ class _ImageViewerState extends State<ImageViewer>
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    if (details.pointerCount >= 2 ||
-        details.rotation.abs() > 0.001 ||
-        (details.scale - 1.0).abs() > 0.001) {
-      // Two-finger pinch and twist rotation (like iOS Photos / WeChat Album)
-      _scale = (_baseScale * details.scale).clamp(0.7, 6.0);
-      _rotation = _baseRotation + details.rotation;
+    final hasScaleChange = (details.scale - 1.0).abs() > 0.001;
+    final hasRotationChange = details.rotation.abs() > 0.001;
+    final isMultiTouch = details.pointerCount >= 2 || hasScaleChange || hasRotationChange;
+
+    if (isMultiTouch) {
+      // Two-finger pinch distance zoom & twist rotation with configurable sensitivity
+      final effectiveScaleDelta = (details.scale - 1.0) * widget.scaleSensitivity;
+      final rawScale = _baseScale * (1.0 + effectiveScaleDelta);
+      _scale = rawScale.clamp(0.5, 7.0);
+
+      final effectiveRotation = details.rotation * widget.rotationSensitivity;
+      _rotation = _baseRotation + effectiveRotation;
+
       _translation = _baseTranslation + details.focalPointDelta;
       widget.onScaleChanged?.call(_scale);
       setState(() {});
@@ -92,8 +115,8 @@ class _ImageViewerState extends State<ImageViewer>
   void _onScaleEnd(ScaleEndDetails details) {
     final size = context.size ?? const Size(400, 600);
 
-    // Target scale clamping
-    final targetScale = _scale.clamp(1.0, 5.0);
+    // Target scale clamping to configured min/max
+    final targetScale = _scale.clamp(widget.minScale, widget.maxScale);
 
     // Snap rotation to nearest 90-degree quadrant (pi/2)
     const quarterTurn = math.pi / 2;
