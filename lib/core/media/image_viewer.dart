@@ -1,14 +1,16 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
-/// Professional image viewer with smart animated zoom, rotation, and gesture arbitration.
+/// Professional image viewer with two-finger scale & twist rotation (with automatic
+/// 90-degree quadrant magnetic snapping, like system photo albums), focal double-tap
+/// zoom, and gesture conflict prevention.
 class ImageViewer extends StatefulWidget {
   const ImageViewer({
     required this.heroTag,
     required this.source,
     this.bytes,
     this.onScaleChanged,
-    this.quarterTurns = 0,
     super.key,
   });
 
@@ -16,7 +18,6 @@ class ImageViewer extends StatefulWidget {
   final String source;
   final Uint8List? bytes;
   final ValueChanged<double>? onScaleChanged;
-  final int quarterTurns;
 
   @override
   State<ImageViewer> createState() => _ImageViewerState();
@@ -24,37 +25,106 @@ class ImageViewer extends StatefulWidget {
 
 class _ImageViewerState extends State<ImageViewer>
     with SingleTickerProviderStateMixin {
-  final TransformationController _transformController =
-      TransformationController();
-  late final AnimationController _animController;
-  Animation<Matrix4>? _matrixAnimation;
+  double _scale = 1.0;
+  double _baseScale = 1.0;
+
+  double _rotation = 0.0; // In radians
+  double _baseRotation = 0.0;
+
+  Offset _translation = Offset.zero;
+  Offset _baseTranslation = Offset.zero;
+
   Offset _doubleTapPosition = Offset.zero;
+
+  late final AnimationController _animController;
+  Animation<double>? _scaleAnimation;
+  Animation<double>? _rotationAnimation;
+  Animation<Offset>? _translationAnimation;
 
   @override
   void initState() {
     super.initState();
-    _transformController.addListener(_onTransformChanged);
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 240),
     )..addListener(() {
-        if (_matrixAnimation != null) {
-          _transformController.value = _matrixAnimation!.value;
-        }
+        setState(() {
+          if (_scaleAnimation != null) _scale = _scaleAnimation!.value;
+          if (_rotationAnimation != null) _rotation = _rotationAnimation!.value;
+          if (_translationAnimation != null) {
+            _translation = _translationAnimation!.value;
+          }
+        });
+        widget.onScaleChanged?.call(_scale);
       });
   }
 
   @override
   void dispose() {
     _animController.dispose();
-    _transformController.removeListener(_onTransformChanged);
-    _transformController.dispose();
     super.dispose();
   }
 
-  void _onTransformChanged() {
-    final scale = _transformController.value.getMaxScaleOnAxis();
-    widget.onScaleChanged?.call(scale);
+  void _onScaleStart(ScaleStartDetails details) {
+    _animController.stop();
+    _baseScale = _scale;
+    _baseRotation = _rotation;
+    _baseTranslation = _translation;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (details.pointerCount == 2) {
+      // Two-finger pinch and twist rotation (like iOS Photos / WeChat Album)
+      _scale = (_baseScale * details.scale).clamp(0.7, 6.0);
+      _rotation = _baseRotation + details.rotation;
+      _translation = _baseTranslation + details.focalPointDelta;
+      widget.onScaleChanged?.call(_scale);
+      setState(() {});
+    } else if (details.pointerCount == 1 && _scale > 1.05) {
+      // Single finger panning when zoomed in
+      _translation += details.focalPointDelta;
+      setState(() {});
+    }
+  }
+
+  void _onScaleEnd(ScaleEndDetails details) {
+    final size = context.size ?? const Size(400, 600);
+
+    // Target scale clamping
+    final targetScale = _scale.clamp(1.0, 5.0);
+
+    // Snap rotation to nearest 90-degree quadrant (pi/2)
+    const quarterTurn = math.pi / 2;
+    final targetQuarter = (_rotation / quarterTurn).round();
+    final targetRotation = targetQuarter * quarterTurn;
+
+    // Translation clamping to viewport boundaries
+    final maxDx = (size.width * (targetScale - 1.0)) / 2.0;
+    final maxDy = (size.height * (targetScale - 1.0)) / 2.0;
+    final targetTranslation = targetScale <= 1.0
+        ? Offset.zero
+        : Offset(
+            _translation.dx.clamp(-maxDx, maxDx),
+            _translation.dy.clamp(-maxDy, maxDy),
+          );
+
+    _scaleAnimation = Tween<double>(begin: _scale, end: targetScale).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+    _rotationAnimation = Tween<double>(
+      begin: _rotation,
+      end: targetRotation,
+    ).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+    _translationAnimation = Tween<Offset>(
+      begin: _translation,
+      end: targetTranslation,
+    ).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+
+    _animController.forward(from: 0.0);
   }
 
   void _onDoubleTapDown(TapDownDetails details) {
@@ -63,42 +133,49 @@ class _ImageViewerState extends State<ImageViewer>
 
   void _onDoubleTap() {
     if (_animController.isAnimating) return;
-    final currentScale = _transformController.value.getMaxScaleOnAxis();
-    final Size size = context.size ?? const Size(400, 600);
+    final size = context.size ?? const Size(400, 600);
 
     final double targetScale;
-    if (currentScale < 1.8) {
+    if (_scale < 1.8) {
       targetScale = 2.5;
-    } else if (currentScale < 3.2) {
+    } else if (_scale < 3.2) {
       targetScale = 4.0;
     } else {
       targetScale = 1.0;
     }
 
-    final Matrix4 targetMatrix;
-    if (targetScale <= 1.0) {
-      targetMatrix = Matrix4.identity();
-    } else {
-      final double x = -_doubleTapPosition.dx * (targetScale - 1.0);
-      final double y = -_doubleTapPosition.dy * (targetScale - 1.0);
-      final double clampedX =
-          x.clamp(size.width * (1.0 - targetScale), 0.0);
-      final double clampedY =
-          y.clamp(size.height * (1.0 - targetScale), 0.0);
+    // Keep the current snapped quadrant
+    const quarterTurn = math.pi / 2;
+    final targetRotation = (_rotation / quarterTurn).round() * quarterTurn;
 
-      targetMatrix = Matrix4.identity()
-        ..translate(clampedX, clampedY)
-        ..scale(targetScale);
+    final Offset targetTranslation;
+    if (targetScale <= 1.0) {
+      targetTranslation = Offset.zero;
+    } else {
+      final center = Offset(size.width / 2, size.height / 2);
+      final delta = center - _doubleTapPosition;
+      final maxDx = (size.width * (targetScale - 1.0)) / 2.0;
+      final maxDy = (size.height * (targetScale - 1.0)) / 2.0;
+      targetTranslation = Offset(
+        (delta.dx * (targetScale - 1.0)).clamp(-maxDx, maxDx),
+        (delta.dy * (targetScale - 1.0)).clamp(-maxDy, maxDy),
+      );
     }
 
-    _matrixAnimation = Matrix4Tween(
-      begin: _transformController.value,
-      end: targetMatrix,
+    _scaleAnimation = Tween<double>(begin: _scale, end: targetScale).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeInOutCubic),
+    );
+    _rotationAnimation = Tween<double>(
+      begin: _rotation,
+      end: targetRotation,
     ).animate(
-      CurvedAnimation(
-        parent: _animController,
-        curve: Curves.easeInOutCubic,
-      ),
+      CurvedAnimation(parent: _animController, curve: Curves.easeInOutCubic),
+    );
+    _translationAnimation = Tween<Offset>(
+      begin: _translation,
+      end: targetTranslation,
+    ).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeInOutCubic),
     );
 
     _animController.forward(from: 0.0);
@@ -130,32 +207,32 @@ class _ImageViewerState extends State<ImageViewer>
                   ),
             );
 
-    final currentScale = _transformController.value.getMaxScaleOnAxis();
-
-    final content = RotatedBox(
-      quarterTurns: widget.quarterTurns,
-      child: Center(child: imageWidget),
-    );
-
     return Hero(
       tag: widget.heroTag,
       child: Material(
         type: MaterialType.transparency,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
+          onScaleStart: _onScaleStart,
+          onScaleUpdate: _onScaleUpdate,
+          onScaleEnd: _onScaleEnd,
           onDoubleTapDown: _onDoubleTapDown,
           onDoubleTap: _onDoubleTap,
-          child: InteractiveViewer(
-            transformationController: _transformController,
-            minScale: 1.0,
-            maxScale: 5.0,
-            scaleEnabled: true,
-            panEnabled: currentScale > 1.02,
-            onInteractionEnd: (_) => _onTransformChanged(),
-            child: content,
+          child: Center(
+            child: Transform.translate(
+              offset: _translation,
+              child: Transform.rotate(
+                angle: _rotation,
+                child: Transform.scale(
+                  scale: _scale,
+                  child: imageWidget,
+                ),
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 }
+

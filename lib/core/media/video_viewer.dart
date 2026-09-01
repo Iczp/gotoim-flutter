@@ -232,6 +232,9 @@ class _VideoViewerState extends State<VideoViewer> {
                             ? Icons.pause_circle_filled
                             : Icons.play_circle_fill,
                     color: Colors.white.withValues(alpha: 0.9),
+                    shadows: const [
+                      Shadow(blurRadius: 8, color: Colors.black54),
+                    ],
                   ),
                 ),
               ),

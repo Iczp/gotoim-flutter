@@ -81,7 +81,6 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
     initialPage: widget.initialIndex,
   );
   late int _index = widget.initialIndex;
-  final Map<int, int> _rotations = <int, int>{};
   bool _chrome = true;
   Offset _dragOffset = Offset.zero;
   bool _isDragging = false;
@@ -209,7 +208,6 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                               heroTag: item.heroTag,
                               source: item.source,
                               bytes: item.bytes,
-                              quarterTurns: _rotations[index] ?? 0,
                               onScaleChanged: (scale) {
                                 _currentScale = scale;
                               },
@@ -226,7 +224,7 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                       ),
                     ),
                   ),
-                  if (_chrome && chromeOpacity > 0.0) ...[
+                  if (_chrome && chromeOpacity > 0.0)
                     Positioned(
                       top: 4,
                       left: 4,
@@ -239,28 +237,6 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                         ),
                       ),
                     ),
-                    if (widget.items[_index].type == MediaPreviewType.image)
-                      Positioned(
-                        top: 4,
-                        right: 4,
-                        child: Opacity(
-                          opacity: chromeOpacity,
-                          child: IconButton(
-                            tooltip: '旋转图片',
-                            onPressed: () {
-                              setState(() {
-                                _rotations[_index] =
-                                    ((_rotations[_index] ?? 0) + 1) % 4;
-                              });
-                            },
-                            icon: const Icon(
-                              Icons.rotate_right,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
                   if (_chrome &&
                       widget.items.length > 1 &&
                       chromeOpacity > 0.0)
