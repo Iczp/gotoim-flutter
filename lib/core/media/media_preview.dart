@@ -160,25 +160,32 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
 
   @override
   Widget build(BuildContext context) {
-    final bgOpacity = _backgroundOpacity;
-    final chromeOpacity = (1.0 - _dragProgress * 3.0).clamp(0.0, 1.0);
+    final routeAnimation = ModalRoute.of(context)?.animation;
+    return AnimatedBuilder(
+      animation: routeAnimation ?? const AlwaysStoppedAnimation<double>(1.0),
+      builder: (context, _) {
+        final routeProgress = routeAnimation?.value ?? 1.0;
+        final bgOpacity =
+            (_backgroundOpacity * routeProgress).clamp(0.0, 1.0);
+        final chromeOpacity =
+            ((1.0 - _dragProgress * 3.0) * routeProgress).clamp(0.0, 1.0);
 
-    return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: bgOpacity),
-      body: SafeArea(
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () {
-            if (_dragOffset == Offset.zero) {
-              setState(() => _chrome = !_chrome);
-            }
-          },
-          onVerticalDragStart: _onVerticalDragStart,
-          onVerticalDragUpdate: _onVerticalDragUpdate,
-          onVerticalDragEnd: _onVerticalDragEnd,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
+        return Scaffold(
+          backgroundColor: Colors.black.withValues(alpha: bgOpacity),
+          body: SafeArea(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                if (_dragOffset == Offset.zero) {
+                  setState(() => _chrome = !_chrome);
+                }
+              },
+              onVerticalDragStart: _onVerticalDragStart,
+              onVerticalDragUpdate: _onVerticalDragUpdate,
+              onVerticalDragEnd: _onVerticalDragEnd,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
               Transform.translate(
                 offset: _dragOffset,
                 child: Transform.scale(
@@ -246,6 +253,8 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
           ),
         ),
       ),
+    );
+      },
     );
   }
 }
