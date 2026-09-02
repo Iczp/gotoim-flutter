@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_toast.dart';
 import '../../application/chat_controller.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_presentation.dart';
@@ -58,6 +59,9 @@ class VoiceMessageContent extends ConsumerWidget {
                   );
                   if (playback.isMessagePlaying(message.localId)) {
                     await onOpened();
+                    if (playback.isEarpiece && context.mounted) {
+                      showToast('当前为听筒播放，请用耳朵靠近听筒位置');
+                    }
                   }
                 } catch (error) {
                   if (context.mounted) {
@@ -111,6 +115,17 @@ class VoiceMessageContent extends ConsumerWidget {
                                   strokeWidth: 1.8,
                                 ),
                               ),
+                            if (playback.isEarpiece) ...[
+                              Tooltip(
+                                message: '听筒播放模式（请用耳朵靠近听筒位置）',
+                                child: Icon(
+                                  Icons.phone_in_talk_outlined,
+                                  size: 13,
+                                  color: colorScheme.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
                             Expanded(
                               child: Text(
                                 durationLabel,
@@ -136,6 +151,17 @@ class VoiceMessageContent extends ConsumerWidget {
                                 : _VoicePlaybackIcon(playing: playing),
                             const SizedBox(width: 8),
                             Expanded(child: Text(durationLabel)),
+                            if (playback.isEarpiece) ...[
+                              const SizedBox(width: 4),
+                              Tooltip(
+                                message: '听筒播放模式（请用耳朵靠近听筒位置）',
+                                child: Icon(
+                                  Icons.phone_in_talk_outlined,
+                                  size: 13,
+                                  color: colorScheme.primary,
+                                ),
+                              ),
+                            ],
                             if (message.state == 'sending')
                               const SizedBox.square(
                                 dimension: 14,

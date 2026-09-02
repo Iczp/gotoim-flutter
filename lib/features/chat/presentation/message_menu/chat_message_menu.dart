@@ -39,6 +39,7 @@ class ChatMessageMenuContext {
     this.canDelete = true,
     this.canRetry = false,
     this.canSelect = true,
+    this.isEarpiece = false,
     this.onAction,
   });
 
@@ -47,6 +48,7 @@ class ChatMessageMenuContext {
   final bool canDelete;
   final bool canRetry;
   final bool canSelect;
+  final bool isEarpiece;
   final FutureOr<void> Function(String id, ChatMessage message)? onAction;
 }
 
@@ -108,9 +110,20 @@ class ChatMessageMenuBuilder {
 
     // 正常状态消息
     final items = <ChatMessageMenuItem>[
-      _item('reply', '回复', Icons.reply_outlined, context),
-      if (message.messageType == 0 && message.text.isNotEmpty)
+      _item('quote', '引用', Icons.format_quote_outlined, context),
+      if (message.messageType == 0 && message.text.isNotEmpty) ...[
         _item('copy', '复制', Icons.copy_outlined, context),
+        _item('selectText', '选择', Icons.highlight_outlined, context),
+      ],
+      if (message.messageType == 3) ...[
+        if (context.isEarpiece)
+          _item('speaker', '扬声器播放', Icons.volume_up_outlined, context)
+        else
+          _item('earpiece', '听筒播放', Icons.phone_in_talk_outlined, context),
+      ],
+      if (message.messageType == 4) ...[
+        _item('playVideo', '播放', Icons.play_circle_outline, context),
+      ],
       _item('forward', '转发', Icons.forward_outlined, context),
       if (context.canSelect)
         _item('select', '多选', Icons.checklist_outlined, context),

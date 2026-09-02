@@ -10,6 +10,8 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
     required this.showTransfer,
     required this.onTransfer,
     required this.onOpenSettings,
+    this.selectionMode = false,
+    this.onCancelSelection,
     super.key,
   });
 
@@ -17,25 +19,35 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showTransfer;
   final VoidCallback onTransfer;
   final VoidCallback onOpenSettings;
+  final bool selectionMode;
+  final VoidCallback? onCancelSelection;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
   @override
   Widget build(BuildContext context) => AppBar(
+    leading: selectionMode
+        ? IconButton(
+            tooltip: '取消',
+            icon: const Icon(Icons.close),
+            onPressed: onCancelSelection ?? () => Navigator.maybePop(context),
+          )
+        : null,
     title: Text(title, overflow: TextOverflow.ellipsis),
     actions: <Widget>[
-      if (showTransfer)
+      if (showTransfer && !selectionMode)
         IconButton(
           tooltip: '转接',
           onPressed: onTransfer,
           icon: const Icon(Icons.electrical_services_outlined),
         ),
-      IconButton(
-        tooltip: '聊天设置',
-        onPressed: onOpenSettings,
-        icon: const Icon(Icons.more_horiz),
-      ),
+      if (!selectionMode)
+        IconButton(
+          tooltip: '聊天设置',
+          onPressed: onOpenSettings,
+          icon: const Icon(Icons.more_horiz),
+        ),
     ],
   );
 }

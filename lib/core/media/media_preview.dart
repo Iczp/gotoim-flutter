@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'image_viewer.dart';
 import 'video_viewer.dart';
 
+export 'video_viewer.dart' show formatMediaDuration, openFloatingVideoWindow;
+
 enum MediaPreviewType { image, video }
 
 @immutable

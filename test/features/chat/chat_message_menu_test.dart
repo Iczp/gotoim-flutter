@@ -4,6 +4,7 @@ import 'package:gotoim_flutter/core/widgets/floating_popover.dart';
 import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
 import 'package:gotoim_flutter/features/chat/presentation/message_menu/chat_avatar_menu.dart';
 import 'package:gotoim_flutter/features/chat/presentation/message_menu/chat_message_menu.dart';
+import 'package:gotoim_flutter/features/chat/presentation/widgets/chat_text_selection_sheet.dart';
 
 ChatMessage _message({
   int type = 0,
@@ -33,21 +34,73 @@ void main() {
   const builder = ChatMessageMenuBuilder();
 
   group('ChatMessageMenuBuilder Tests', () {
-    test('sent self text offers reply, copy, forward, select, recall, and delete', () {
+    test('sent self text offers quote, copy, selectText, forward, select, recall, and delete', () {
       final items = builder.build(
         ChatMessageMenuContext(message: _message(), canRecall: true),
       );
       expect(
         items.map((item) => item.id),
         containsAll(<String>[
-          'reply',
+          'quote',
           'copy',
+          'selectText',
           'forward',
           'select',
           'recall',
           'delete',
         ]),
       );
+      expect(items.firstWhere((e) => e.id == 'quote').label, '引用');
+      expect(items.firstWhere((e) => e.id == 'selectText').label, '选择');
+    });
+
+    test('non-text message does not offer copy or selectText', () {
+      final items = builder.build(
+        ChatMessageMenuContext(message: _message(type: 1), canRecall: false),
+      );
+      expect(items.map((item) => item.id), isNot(contains('copy')));
+      expect(items.map((item) => item.id), isNot(contains('selectText')));
+    });
+
+    test('voice message offers earpiece playback when not currently earpiece', () {
+      final items = builder.build(
+        ChatMessageMenuContext(
+          message: _message(type: 3),
+          isEarpiece: false,
+        ),
+      );
+      expect(items.map((item) => item.id), contains('earpiece'));
+      expect(items.firstWhere((item) => item.id == 'earpiece').label, '听筒播放');
+    });
+
+    test('voice message offers speaker playback when currently earpiece', () {
+      final items = builder.build(
+        ChatMessageMenuContext(
+          message: _message(type: 3),
+          isEarpiece: true,
+        ),
+      );
+      expect(items.map((item) => item.id), contains('speaker'));
+      expect(items.firstWhere((item) => item.id == 'speaker').label, '扬声器播放');
+    });
+
+    test('video message offers playVideo playback action', () {
+      final items = builder.build(
+        ChatMessageMenuContext(
+          message: _message(type: 4),
+        ),
+      );
+      expect(items.map((item) => item.id), contains('playVideo'));
+      expect(items.firstWhere((item) => item.id == 'playVideo').label, '播放');
+    });
+
+    test('non-video message does not offer playVideo', () {
+      final items = builder.build(
+        ChatMessageMenuContext(
+          message: _message(type: 0),
+        ),
+      );
+      expect(items.map((item) => item.id), isNot(contains('playVideo')));
     });
 
     test('failed message only offers retry when the controller can retry it', () {
@@ -351,6 +404,71 @@ void main() {
       expect(rightMenuRect.right, lessThanOrEqualTo(748.0));
       // Does not overflow screen left
       expect(rightMenuRect.left, greaterThanOrEqualTo(0.0));
+    });
+
+    testWidgets('FloatingPopover automatically closes when enclosing list scrolls', (tester) async {
+      final controller = FloatingPopoverController();
+      final scrollController = ScrollController();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListView.builder(
+              controller: scrollController,
+              itemCount: 50,
+              itemBuilder: (context, index) {
+                if (index == 5) {
+                  return FloatingPopover(
+                    controller: controller,
+                    placement: FloatingPlacement.auto,
+                    contentBuilder: (_) => const Text('ScrollDismissMenu'),
+                    child: const SizedBox(height: 50, child: Text('TargetItem')),
+                  );
+                }
+                return const SizedBox(height: 50, child: Text('OtherItem'));
+              },
+            ),
+          ),
+        ),
+      );
+
+      // Open popover
+      controller.show();
+      await tester.pumpAndSettle();
+      expect(find.text('ScrollDismissMenu'), findsOneWidget);
+
+      // Scroll the list
+      scrollController.jumpTo(100);
+      await tester.pumpAndSettle();
+
+      // Menu should be dismissed
+      expect(find.text('ScrollDismissMenu'), findsNothing);
+    });
+
+    testWidgets('showChatTextSelectionSheet renders SelectableText and 复制全文 button', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showChatTextSelectionSheet(context, text: 'Hello select text test!'),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('选择文本'), findsOneWidget);
+      expect(find.text('复制全文'), findsOneWidget);
+      expect(find.text('Hello select text test!'), findsOneWidget);
+
+      await tester.tap(find.text('复制全文'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择文本'), findsNothing); // closed sheet
     });
   });
 }

@@ -24,10 +24,15 @@ class AudioPlaybackService extends ChangeNotifier {
     _completionSubscription = _player.onPlayerComplete.listen((_) {
       _playing = false;
       _activeMessageId = null;
+      if (!_manualEarpiece) {
+        unawaited(setEarpiece(false));
+      }
       notifyListeners();
     });
     _proximitySubscription = nativeSensor.onProximityChange.listen((event) {
-      if (_playing) unawaited(_setEarpiece(event.isNear));
+      if (_playing && !_manualEarpiece) {
+        unawaited(setEarpiece(event.isNear));
+      }
     });
     _positionSubscription = _player.onPositionChanged.listen((value) {
       _position = value;
@@ -56,6 +61,7 @@ class AudioPlaybackService extends ChangeNotifier {
   String? _downloadingMessageId;
   double _downloadProgress = 0;
   bool _earpiece = false;
+  bool _manualEarpiece = false;
   int _operation = 0;
 
   String? get activeMessageId => _activeMessageId;
@@ -66,6 +72,7 @@ class AudioPlaybackService extends ChangeNotifier {
   String? get downloadingMessageId => _downloadingMessageId;
   double get downloadProgress => _downloadProgress;
   bool get isEarpiece => _earpiece;
+  bool get isManualEarpiece => _manualEarpiece;
 
   bool isMessagePlaying(String messageId) =>
       _activeMessageId == messageId && _playing;
@@ -101,6 +108,9 @@ class AudioPlaybackService extends ChangeNotifier {
         mimeType: mimeType,
       );
       if (operation != _operation) return;
+      if (_manualEarpiece) {
+        await setEarpiece(true);
+      }
       _activeMessageId = messageId;
       notifyListeners();
       await _player.play(source);
@@ -128,7 +138,9 @@ class AudioPlaybackService extends ChangeNotifier {
     _activeMessageId = null;
     _position = Duration.zero;
     _duration = Duration.zero;
-    await _setEarpiece(false);
+    if (!_manualEarpiece) {
+      await setEarpiece(false);
+    }
     notifyListeners();
   }
 
@@ -230,7 +242,10 @@ class AudioPlaybackService extends ChangeNotifier {
     return UrlSource(resolved, mimeType: mimeType);
   }
 
-  Future<void> _setEarpiece(bool value) async {
+  Future<void> setEarpiece(bool value, {bool manual = false}) async {
+    if (manual) {
+      _manualEarpiece = value;
+    }
     if (_earpiece == value) return;
     _earpiece = value;
     await _player.setAudioContext(

@@ -1,10 +1,24 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../floating_window/floating_window.dart';
 import 'media_preview.dart';
 import 'video_playback_session.dart';
+
+/// 格式化媒体时长（例如 00:15 或 01:23:45）。
+String formatMediaDuration(Duration duration) {
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60);
+  final seconds = duration.inSeconds.remainder(60);
+  if (hours > 0) {
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+}
+
+String _formatDuration(Duration duration) => formatMediaDuration(duration);
 
 /// Professional video viewer with complete playback controls, timeline scrubbing,
 /// time indicators, volume toggle, and PiP floating window support.
@@ -114,7 +128,7 @@ class _VideoViewerState extends State<VideoViewer> {
         type: FloatingWindowType.video,
         options: FloatingWindowOptions.video(),
         onRestore: restoreToFullscreen,
-        child: _FloatingVideoContent(
+        child: FloatingVideoContent(
           session: _session,
           onClose: () {
             VideoPlaybackSessionRegistry.release(id, _session);
@@ -138,16 +152,6 @@ class _VideoViewerState extends State<VideoViewer> {
   }
 
   String get _sessionId => 'video:${widget.item.messageId}:${widget.item.id}';
-
-  String _formatDuration(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -337,26 +341,71 @@ class _VideoViewerState extends State<VideoViewer> {
   }
 }
 
-class _FloatingVideoContent extends StatefulWidget {
-  const _FloatingVideoContent({
+/// 打开视频小窗口播放（悬浮画中画模式）。
+void openFloatingVideoWindow(
+  BuildContext context, {
+  required MediaPreviewItem item,
+  List<MediaPreviewItem>? items,
+  int initialIndex = 0,
+}) {
+  final manager = FloatingWindowScope.of(context);
+  final id = 'video:${item.messageId}:${item.id}';
+
+  // 若小窗口已经存在，直接激活并置顶
+  if (manager.restore(id)) return;
+
+  final session = VideoPlaybackSessionRegistry.obtain(id, item.source)..initialize();
+
+  void restoreToFullscreen() {
+    manager.close(id);
+    if (items != null && items.isNotEmpty) {
+      MediaPreview.open(context, items: items, initialIndex: initialIndex);
+    }
+  }
+
+  manager.show(
+    id: id,
+    type: FloatingWindowType.video,
+    options: FloatingWindowOptions.video(),
+    onRestore: restoreToFullscreen,
+    child: FloatingVideoContent(
+      session: session,
+      autoPlay: true,
+      onClose: () {
+        VideoPlaybackSessionRegistry.release(id, session);
+        manager.close(id);
+      },
+      onRestore: restoreToFullscreen,
+    ),
+  );
+}
+
+class FloatingVideoContent extends StatefulWidget {
+  const FloatingVideoContent({
     required this.session,
     required this.onClose,
     required this.onRestore,
+    this.autoPlay = false,
+    super.key,
   });
 
   final VideoPlaybackSession session;
   final VoidCallback onClose;
   final VoidCallback onRestore;
+  final bool autoPlay;
 
   @override
-  State<_FloatingVideoContent> createState() => _FloatingVideoContentState();
+  State<FloatingVideoContent> createState() => _FloatingVideoContentState();
 }
 
-class _FloatingVideoContentState extends State<_FloatingVideoContent> {
+class _FloatingVideoContentState extends State<FloatingVideoContent> {
   @override
   void initState() {
     super.initState();
     widget.session.addListener(_refresh);
+    if (widget.autoPlay && widget.session.isReady) {
+      widget.session.controller?.play();
+    }
   }
 
   @override
@@ -366,7 +415,14 @@ class _FloatingVideoContentState extends State<_FloatingVideoContent> {
   }
 
   void _refresh() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      if (widget.autoPlay &&
+          widget.session.isReady &&
+          widget.session.controller?.value.isPlaying == false) {
+        widget.session.controller?.play();
+      }
+      setState(() {});
+    }
   }
 
   @override
@@ -425,6 +481,76 @@ class _FloatingVideoContentState extends State<_FloatingVideoContent> {
               tooltip: '关闭视频',
               onPressed: widget.onClose,
               icon: const Icon(Icons.close, color: Colors.white),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (controller.value.position > Duration.zero)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            formatMediaDuration(controller.value.position),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        )
+                      else
+                        const SizedBox.shrink(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          formatMediaDuration(controller.value.duration),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                LinearProgressIndicator(
+                  value:
+                      controller.value.duration.inMilliseconds > 0
+                          ? (controller.value.position.inMilliseconds /
+                                  controller.value.duration.inMilliseconds)
+                              .clamp(0.0, 1.0)
+                          : 0.0,
+                  minHeight: 2,
+                  backgroundColor: Colors.white24,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ],
             ),
           ),
         ],

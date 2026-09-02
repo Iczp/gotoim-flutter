@@ -12,6 +12,7 @@ import '../../../core/config/app_environment.dart';
 import '../../../core/media/media_preview.dart';
 import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/half_page_sheet.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/floating_popover.dart';
 import '../../../core/widgets/target_picker/target_picker.dart';
 import '../application/chat_controller.dart';
@@ -32,6 +33,7 @@ import 'widgets/chat_input_area.dart';
 import 'widgets/chat_message_list.dart';
 import 'widgets/chat_message_row.dart';
 import 'widgets/chat_selection_bar.dart';
+import 'widgets/chat_text_selection_sheet.dart';
 import 'widgets/chat_title_bar.dart';
 import 'widgets/chat_transfer_sheet.dart';
 
@@ -156,70 +158,80 @@ class _ChatPageState extends ConsumerState<ChatPage>
     animation: controller,
     builder: (context, _) {
       final mediaItems = _mediaItemsFor(controller.messages);
-      return Scaffold(
-        floatingActionButton:
-            controller.newMessageCount > 0
-                ? FloatingActionButton.extended(
-                  onPressed: () async {
-                    if (_scrollController.hasClients) {
-                      await _scrollController.animateTo(
-                        0,
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOut,
-                      );
-                    }
-                    controller.clearNewMessageCount();
-                  },
-                  icon: const Icon(Icons.arrow_downward),
-                  label: Text('${controller.newMessageCount} 条新消息'),
-                )
-                // Keep the Scaffold FAB slot stable while the count changes.
-                // Replacing a FAB with null during a pointer packet can leave
-                // Flutter's built-in FAB transition without a laid-out child.
-                : const SizedBox.shrink(),
-        appBar: ChatTitleBar(
-          title: controller.title,
-          showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
-          onTransfer: _openTransferSheet,
-          onOpenSettings: _openChatSettings,
-        ),
-        body: Column(
-          children: <Widget>[
-            Expanded(
-              child: ChatMessageList(
-                messages: controller.messages,
-                scrollController: _scrollController,
-                isLoading: controller.isLoading,
-                hasMore: controller.hasMore,
-                error: controller.error,
-                onViewingLatestChanged: controller.setViewingLatest,
-                onLoadMore: controller.loadMore,
-                onTapOutside: _closeInputArea,
-                itemBuilder:
-                    (context, message, index) =>
-                        _buildMessageItem(context, message, index, mediaItems),
-              ),
-            ),
-            ChatInputArea(
-              selectionMode: controller.selectionMode,
-              selectionActions: ChatSelectionBar(
-                count: controller.selectedLocalIds.length,
-                onCancel: controller.cancelSelection,
-                onDelete: _deleteSelectedMessages,
-                onMergeForward: _showMergeForwardTargets,
-              ),
-              composer: SafeArea(
-                top: false,
-                child: ChatComposer(
-                  key: _composerKey,
-                  controller: controller,
-                  input: input,
-                  quoteContentBuilder:
-                      (quote) => _buildQuotedContent(quote, _mediaItems),
+      return PopScope(
+        canPop: !controller.selectionMode,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && controller.selectionMode) {
+            controller.cancelSelection();
+          }
+        },
+        child: Scaffold(
+          floatingActionButton:
+              controller.newMessageCount > 0
+                  ? FloatingActionButton.extended(
+                    onPressed: () async {
+                      if (_scrollController.hasClients) {
+                        await _scrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut,
+                        );
+                      }
+                      controller.clearNewMessageCount();
+                    },
+                    icon: const Icon(Icons.arrow_downward),
+                    label: Text('${controller.newMessageCount} 条新消息'),
+                  )
+                  // Keep the Scaffold FAB slot stable while the count changes.
+                  // Replacing a FAB with null during a pointer packet can leave
+                  // Flutter's built-in FAB transition without a laid-out child.
+                  : const SizedBox.shrink(),
+          appBar: ChatTitleBar(
+            title: controller.title,
+            showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
+            selectionMode: controller.selectionMode,
+            onCancelSelection: controller.cancelSelection,
+            onTransfer: _openTransferSheet,
+            onOpenSettings: _openChatSettings,
+          ),
+          body: Column(
+            children: <Widget>[
+              Expanded(
+                child: ChatMessageList(
+                  messages: controller.messages,
+                  scrollController: _scrollController,
+                  isLoading: controller.isLoading,
+                  hasMore: controller.hasMore,
+                  error: controller.error,
+                  onViewingLatestChanged: controller.setViewingLatest,
+                  onLoadMore: controller.loadMore,
+                  onTapOutside: _closeInputArea,
+                  itemBuilder:
+                      (context, message, index) =>
+                          _buildMessageItem(context, message, index, mediaItems),
                 ),
               ),
-            ),
-          ],
+              ChatInputArea(
+                selectionMode: controller.selectionMode,
+                selectionActions: ChatSelectionBar(
+                  count: controller.selectedLocalIds.length,
+                  onCancel: controller.cancelSelection,
+                  onDelete: _deleteSelectedMessages,
+                  onMergeForward: _showMergeForwardTargets,
+                ),
+                composer: SafeArea(
+                  top: false,
+                  child: ChatComposer(
+                    key: _composerKey,
+                    controller: controller,
+                    input: input,
+                    quoteContentBuilder:
+                        (quote) => _buildQuotedContent(quote, _mediaItems),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     },
@@ -263,6 +275,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         canRecall:
             message.isMine && message.serverId != null && !message.isRollbacked,
         canRetry: controller.canRetryMessage(message),
+        isEarpiece: _audioPlayback.isEarpiece,
         onAction:
             (action, target) =>
                 _handleMessageMenuAction(menuController, action, target),
@@ -609,6 +622,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ).showSnackBar(const SnackBar(content: Text('已复制消息')));
         }
         return;
+      case 'quote':
       case 'reply':
         if (message.serverId == null) return;
         controller.quoteMessage(message);
@@ -640,7 +654,59 @@ class _ChatPageState extends ConsumerState<ChatPage>
       case 'select':
         controller.beginSelection(message);
         return;
+      case 'selectText':
+        if (message.text.isNotEmpty) {
+          showChatTextSelectionSheet(context, text: message.text);
+        }
+        return;
+      case 'earpiece':
+        await _audioPlayback.setEarpiece(true, manual: true);
+        if (mounted) {
+          showToast('已切换为听筒播放，请用耳朵靠近听筒位置');
+        }
+        return;
+      case 'speaker':
+        await _audioPlayback.setEarpiece(false, manual: true);
+        if (mounted) {
+          showToast('已切换为扬声器播放');
+        }
+        return;
+      case 'playVideo':
+      case 'play':
+        _playVideoInFloatingWindow(message);
+        return;
     }
+  }
+
+  /// 在画中画悬浮小窗口中播放视频消息
+  void _playVideoInFloatingWindow(ChatMessage message) {
+    final mediaItems = _mediaItemsFor(controller.messages);
+    final targetIndex = mediaItems.indexWhere((it) => it.id == message.localId);
+    final baseUrl = ref.read(appEnvironmentProvider).apiBaseUrl;
+    final source = resolveApiUrl(
+      message.mediaUrl ?? message.localFilePath ?? '',
+      baseUrl,
+    );
+    if (source.isEmpty) return;
+    final item =
+        targetIndex >= 0
+            ? mediaItems[targetIndex]
+            : MediaPreviewItem(
+              id: message.localId,
+              messageId: message.localId,
+              type: MediaPreviewType.video,
+              source: source,
+              heroTag: buildMediaHeroTag(
+                messageId: message.localId,
+                mediaId: message.localId,
+              ),
+            );
+    openFloatingVideoWindow(
+      context,
+      item: item,
+      items: mediaItems,
+      initialIndex: targetIndex < 0 ? 0 : targetIndex,
+    );
   }
 
   bool _showTime(ChatMessage current, ChatMessage? older) {

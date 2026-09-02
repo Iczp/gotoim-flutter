@@ -69,6 +69,7 @@ class FloatingPopover extends StatefulWidget {
     this.offset = const Offset(0, 8),
     this.dismissOnTapOutside = true,
     this.dismissOnEscape = true,
+    this.dismissOnScroll = true,
     this.useCard = false,
     this.vibrate = true,
     this.vibrateCount = 1,
@@ -85,6 +86,10 @@ class FloatingPopover extends StatefulWidget {
   final Offset offset;
   final bool dismissOnTapOutside;
   final bool dismissOnEscape;
+
+  /// 当所属可滚动列表发生滚动时是否自动关闭（默认 true）
+  final bool dismissOnScroll;
+
   final bool useCard;
   final bool vibrate;
 
@@ -98,12 +103,21 @@ class FloatingPopover extends StatefulWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onSecondaryTap;
 
+  /// 关闭所有当前处于打开状态的浮层菜单
+  static void hideAll() {
+    for (final state in _FloatingPopoverState._activePopovers.toList()) {
+      state._hide();
+    }
+  }
+
   @override
   State<FloatingPopover> createState() => _FloatingPopoverState();
 }
 
 class _FloatingPopoverState extends State<FloatingPopover> {
+  static final Set<_FloatingPopoverState> _activePopovers = <_FloatingPopoverState>{};
   OverlayEntry? _entry;
+  ScrollPosition? _scrollPosition;
 
   @override
   void initState() {
@@ -112,13 +126,39 @@ class _FloatingPopoverState extends State<FloatingPopover> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _subscribeScroll();
+  }
+
+  void _subscribeScroll() {
+    final scrollable = Scrollable.maybeOf(context);
+    final position = scrollable?.position;
+    if (position != _scrollPosition) {
+      _scrollPosition?.removeListener(_onScroll);
+      _scrollPosition = position;
+      _scrollPosition?.addListener(_onScroll);
+    }
+  }
+
+  void _onScroll() {
+    if (widget.dismissOnScroll && _entry != null) {
+      _hide();
+    }
+  }
+
+  @override
   void didUpdateWidget(FloatingPopover oldWidget) {
     super.didUpdateWidget(oldWidget);
     widget.controller?._bind(_show, _hide);
+    _subscribeScroll();
   }
 
   @override
   void dispose() {
+    _activePopovers.remove(this);
+    _scrollPosition?.removeListener(_onScroll);
+    _scrollPosition = null;
     _hide();
     super.dispose();
   }
@@ -134,6 +174,7 @@ class _FloatingPopoverState extends State<FloatingPopover> {
 
   void _show() {
     if (_entry != null || !mounted) return;
+    _activePopovers.add(this);
     if (widget.vibrate && widget.vibrateCount > 0) {
       _triggerVibration();
     }
@@ -197,6 +238,7 @@ class _FloatingPopoverState extends State<FloatingPopover> {
   }
 
   void _hide() {
+    _activePopovers.remove(this);
     _entry?.remove();
     _entry = null;
     widget.controller?._setVisible(false);

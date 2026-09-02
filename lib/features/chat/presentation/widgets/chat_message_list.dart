@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/floating_popover.dart';
 import '../../data/models/chat_message.dart';
 
 typedef ChatMessageItemBuilder =
@@ -39,9 +40,17 @@ class ChatMessageList extends StatelessWidget {
     // A listener observes pointer input without joining Flutter's gesture
     // arena. This keeps the surrounding chat region from competing with the
     // ListView's vertical-drag recognizer.
-    onPointerDown: (_) => onTapOutside(),
+    onPointerDown: (_) {
+      FloatingPopover.hideAll();
+      onTapOutside();
+    },
     child: NotificationListener<ScrollNotification>(
       onNotification: (notification) {
+        if (notification is ScrollUpdateNotification ||
+            notification is UserScrollNotification ||
+            notification is OverscrollNotification) {
+          FloatingPopover.hideAll();
+        }
         onViewingLatestChanged(notification.metrics.pixels <= 32);
         final isUserPaging =
             (notification is ScrollUpdateNotification &&
