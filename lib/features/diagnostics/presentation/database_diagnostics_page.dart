@@ -22,12 +22,27 @@ class _DatabaseDiagnosticsPageState
   String? _lastRecordId;
   bool _working = false;
 
+  // 消息查询输入
+  final _sessionUnitIdCtrl = TextEditingController(
+    text: 'b51b5df6-33f4-e1ec-94ff-3a0aab12edf9',
+  );
+  final _ownerIdCtrl = TextEditingController(text: '');
+  final _limitCtrl = TextEditingController(text: '10');
+
   UnifiedDatabase get _database => ref.read(unifiedDatabaseProvider);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _inspect());
+  }
+
+  @override
+  void dispose() {
+    _sessionUnitIdCtrl.dispose();
+    _ownerIdCtrl.dispose();
+    _limitCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _run(Future<Object?> Function() action) async {
@@ -145,6 +160,62 @@ class _DatabaseDiagnosticsPageState
     };
   });
 
+  // ── 消息查询 ──────────────────────────────────────────────────────────────
+
+  Future<void> _queryMessageStats() => _run(() async {
+    final sessionUnitId = _sessionUnitIdCtrl.text.trim();
+    if (sessionUnitId.isEmpty) throw ArgumentError('请填写 SessionUnit ID');
+    final stats = await _database.queryMessageStatsBySession(sessionUnitId);
+    final loadedAll = await _database.readFriendMessagesLoadedAll(sessionUnitId);
+    return <String, Object?>{
+      'operation': 'message_stats',
+      'sessionUnitId': sessionUnitId,
+      'loadedAll': loadedAll,
+      'groups': stats,
+    };
+  });
+
+  Future<void> _queryMessageList() => _run(() async {
+    final sessionUnitId = _sessionUnitIdCtrl.text.trim();
+    final limit = int.tryParse(_limitCtrl.text.trim()) ?? 10;
+    if (sessionUnitId.isEmpty) throw ArgumentError('请填写 SessionUnit ID');
+
+    final ownerIdText = _ownerIdCtrl.text.trim();
+    if (ownerIdText.isNotEmpty) {
+      final ownerId = int.parse(ownerIdText);
+      final rows = await _database.readMessageRows(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        limit: limit,
+      );
+      return <String, Object?>{
+        'operation': 'SELECT messages (with ownerId)',
+        'sessionUnitId': sessionUnitId,
+        'ownerId': ownerId,
+        'limit': limit,
+        'returned': rows.length,
+        'rows': rows.map((r) => <String, Object?>{
+          ...r,
+          'raw': r['raw']?.toString().substring(
+            0, (r['raw']!.toString().length).clamp(0, 300),
+          ),
+        }).toList(),
+      };
+    }
+
+    final rows = await _database.queryMessagesBySession(
+      sessionUnitId,
+      limit: limit,
+    );
+    return <String, Object?>{
+      'operation': 'SELECT messages (no ownerId filter)',
+      'sessionUnitId': sessionUnitId,
+      'limit': limit,
+      'returned': rows.length,
+      'rows': rows,
+    };
+  });
+
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) {
@@ -190,6 +261,48 @@ class _DatabaseDiagnosticsPageState
               _button('DELETE FROM diagnostic_records（清表）', _clear),
             ],
           ),
+
+          // ── 消息本地查询 ─────────────────────────────────────────────────
+          _Section(
+            title: '📨 消息本地查询',
+            description:
+                '验证本地 SQLite 是否有指定会话的消息。ownerId 可留空（扫描所有 ownerId）。\n'
+                '结果中 loadedAll=true 表示已拉取过全部历史；groups 按 ownerId 分组显示行数。',
+            children: [
+              const SizedBox(height: 4),
+              TextField(
+                controller: _sessionUnitIdCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'SessionUnit ID *',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _ownerIdCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Owner ID（可留空，留空则不过滤）',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _limitCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '消息列表最大条数 (1–100)',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              _button('统计 + loadedAll 状态', _queryMessageStats),
+              _button('查询消息列表（SELECT）', _queryMessageList),
+            ],
+          ),
+
           const SizedBox(height: 16),
           Text('调用结果', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),

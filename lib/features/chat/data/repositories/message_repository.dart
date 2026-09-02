@@ -183,6 +183,16 @@ class MessageRepository {
       sessionUnitId: sessionUnitId,
       limit: limit,
     );
+    // 本地无消息时，忽略 loadedAll flag，始终允许向远端拉取。
+    // loadedAll=true 可能是残留状态（数据库清空、账号切换后未重置），
+    // 不能用来阻断首次远端加载。
+    if (local.isEmpty) {
+      debugPrint(
+        '[loadMessages][initial-local] session=$sessionUnitId '
+        'requested=$limit added=0 → hasMore=true (ignoring loadedAll flag)',
+      );
+      return MessagePage(const <ChatMessage>[], true);
+    }
     final loadedAll = await _dao.isLoadedAll(sessionUnitId);
     debugPrint(
       '[loadMessages][initial-local] session=$sessionUnitId '
@@ -244,6 +254,10 @@ class MessageRepository {
         ..sort((a, b) => b.score.compareTo(a.score));
       return MessagePage(all, hasMore);
     } catch (error) {
+      debugPrint(
+        '[loadHistory][ERROR] session=$sessionUnitId '
+        'maxMessageId=$maxMessageId error=$error',
+      );
       if (local.isNotEmpty) return MessagePage(local, true);
       rethrow;
     }

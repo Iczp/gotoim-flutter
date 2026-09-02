@@ -153,8 +153,8 @@ class _ProfileSettingsPage extends ConsumerWidget {
       children: [
         // User Account Card
         GlassCard(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(20),
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
           child: Row(
             children: [
               InkResponse(
@@ -201,8 +201,8 @@ class _ProfileSettingsPage extends ConsumerWidget {
         // Appearance & Theme Settings Group
         _SectionHeader(title: '外观与主题'),
         GlassCard(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -301,7 +301,10 @@ class _ProfileSettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.folder_shared_outlined),
                 title: const Text('局域网文件管理'),
-                subtitle: const Text('HTTP 文件收发与 Web 终端'),
+                subtitle: const Text(
+                  'HTTP 文件收发与 Web 终端',
+                  style: const TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
+                ),
                 trailing: const Icon(Icons.chevron_right, size: 18),
                 onTap: () => context.push('/local-file-server'),
               ),
@@ -309,7 +312,10 @@ class _ProfileSettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.devices_rounded),
                 title: const Text('登录设备管理'),
-                subtitle: Text('已登录 ${sessionController.devices.length} 台设备'),
+                subtitle: Text(
+                  '已登录 ${sessionController.devices.length} 台设备',
+                  style: const TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
+                ),
                 trailing: const Icon(Icons.chevron_right, size: 18),
                 onTap: () => context.push('/devices'),
               ),
@@ -317,7 +323,10 @@ class _ProfileSettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.qr_code_scanner_rounded),
                 title: const Text('扫码登录终端'),
-                subtitle: const Text('识别二维码并授权登录'),
+                subtitle: const Text(
+                  '识别二维码并授权登录',
+                  style: const TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
+                ),
                 trailing: const Icon(Icons.chevron_right, size: 18),
                 onTap: () => context.push('/scan-login/scan'),
               ),
@@ -326,7 +335,12 @@ class _ProfileSettingsPage extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.developer_mode_rounded),
                   title: const Text('开发诊断中心'),
-                  subtitle: const Text('全套架构、Realtime、Native 及主题诊断'),
+                  subtitle: const Text(
+                    '全套架构、Realtime、Native 及主题诊断',
+                    style: const TextStyle(
+                      color: Color.fromARGB(77, 53, 53, 53),
+                    ),
+                  ),
                   trailing: const Icon(Icons.chevron_right, size: 18),
                   onTap: () => context.push('/diagnostics'),
                 ),

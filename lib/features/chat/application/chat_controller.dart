@@ -296,8 +296,11 @@ class ChatController extends ChangeNotifier {
         'newItems=${page.items.length} | '
         'total=${_messages.length}',
       );
-    } catch (exception) {
+    } catch (exception, stackTrace) {
       error = exception;
+      debugPrint(
+        '[loadMore][ERROR] session=$sessionUnitId error=$exception\n$stackTrace',
+      );
     } finally {
       isLoading = false;
       notifyListeners();

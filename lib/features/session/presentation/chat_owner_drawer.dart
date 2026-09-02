@@ -66,7 +66,7 @@ class ChatOwnerDrawer extends ConsumerWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       child: ListTile(
-                        contentPadding: EdgeInsets.zero,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 8),
                         minVerticalPadding: 0,
                         leading: ChatObjectAvatar(
                           name: owner.name,
@@ -131,6 +131,8 @@ class ChatOwnerDrawer extends ConsumerWidget {
                     ),
                   const Divider(height: 16),
                   ListTile(
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                    minVerticalPadding: 0,
                     leading: const Icon(Icons.qr_code_scanner_rounded),
                     title: const Text('扫一扫'),
                     trailing: const Icon(Icons.chevron_right, size: 18),
@@ -140,12 +142,16 @@ class ChatOwnerDrawer extends ConsumerWidget {
                     },
                   ),
                   const ListTile(
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                    minVerticalPadding: 0,
                     leading: Icon(Icons.person_add_alt_1_outlined),
                     title: Text('添加朋友'),
                     trailing: Icon(Icons.chevron_right, size: 18),
                     enabled: false,
                   ),
                   const ListTile(
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                    minVerticalPadding: 0,
                     leading: Icon(Icons.group_add_outlined),
                     title: Text('新建群聊'),
                     trailing: Icon(Icons.chevron_right, size: 18),
@@ -156,6 +162,8 @@ class ChatOwnerDrawer extends ConsumerWidget {
             ),
             const Divider(height: 1),
             ListTile(
+              contentPadding: EdgeInsets.symmetric(horizontal: 8),
+              minVerticalPadding: 0,
               leading: const Icon(Icons.settings_outlined),
               title: const Text('账号与设置'),
               trailing: const Icon(Icons.chevron_right, size: 18),

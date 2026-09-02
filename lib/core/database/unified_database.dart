@@ -617,6 +617,40 @@ class UnifiedDatabase {
     );
   }
 
+  // ── 诊断专用：消息查询（不强制 ownerId）────────────────────────────────────
+
+  /// 按 [sessionUnitId] 统计本地消息，按 ownerId 分组。
+  /// 诊断用途：不需要提前知道 ownerId。
+  Future<List<Map<String, Object?>>> queryMessageStatsBySession(
+    String sessionUnitId,
+  ) async {
+    await initialize();
+    return _connection.runSelect(
+      'SELECT ownerId, COUNT(*) AS count, '
+      'MAX(serverId) AS maxServerId, MAX(score) AS maxScore, '
+      'MIN(score) AS minScore '
+      'FROM Messages WHERE sessionUnitId = ? GROUP BY ownerId',
+      <Object?>[sessionUnitId],
+    );
+  }
+
+  /// 按 [sessionUnitId] 返回最新 [limit] 条消息（不过滤 ownerId），raw 字段截断至 300 字符。
+  /// 诊断用途：不需要提前知道 ownerId。
+  Future<List<Map<String, Object?>>> queryMessagesBySession(
+    String sessionUnitId, {
+    int limit = 10,
+  }) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT id, ownerId, sessionUnitId, serverId, score, '
+      'substr(raw, 1, 300) AS raw_preview '
+      'FROM Messages WHERE sessionUnitId = ? '
+      'ORDER BY score DESC LIMIT ?',
+      <Object?>[sessionUnitId, limit.clamp(1, 100)],
+    );
+    return rows;
+  }
+
   Future<void> close() => _connection.close();
 
   Future<int> _rowCount(String table) async {
