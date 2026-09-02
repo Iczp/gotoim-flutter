@@ -140,8 +140,8 @@ class TargetPickerOptions {
 
   /// 是否显示确定按钮。
   ///
-  /// - 多选时默认为 `true`；
-  /// - 单选时默认为 `false`（点击列表项直接确定返回）；如果显式设为 `true`，则单选需点击确定按钮。
+  /// - 默认为 `true`（单选与多选均默认显示确定按钮）；
+  /// - 若显式设为 `false`，则单选模式下不显示确定按钮，点击列表项直接确定并返回。
   final bool? showConfirmButton;
 
   /// 确定按钮文案。
@@ -175,9 +175,8 @@ class TargetPickerOptions {
   final String emptyText;
 
   /// 计算实际是否应展示确定按钮。
-  bool get effectiveShowConfirmButton =>
-      showConfirmButton ?? (multiple ? true : false);
+  bool get effectiveShowConfirmButton => showConfirmButton ?? true;
 
   /// 计算实际最小选择数。
-  int get effectiveMinCount => minCount ?? (multiple ? 1 : 0);
+  int get effectiveMinCount => minCount ?? (effectiveShowConfirmButton ? 1 : 0);
 }

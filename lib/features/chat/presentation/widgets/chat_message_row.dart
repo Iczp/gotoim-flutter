@@ -210,7 +210,6 @@ class ChatMessageRow extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 onTap: onUserTap,
                 onLongPress: onUserLongPress ?? () {
-                  HapticFeedback.mediumImpact();
                   avatarMenuController?.show();
                 },
                 child: avatarWidget,
@@ -221,6 +220,7 @@ class ChatMessageRow extends StatelessWidget {
                   contentBuilder: avatarMenuBuilder!,
                   placement: FloatingPlacement.avatar,
                   offset: avatarMenuOffset,
+                  vibrateCount: 2,
                   child: avatarWidget,
                 );
               }

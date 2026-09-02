@@ -71,6 +71,8 @@ class FloatingPopover extends StatefulWidget {
     this.dismissOnEscape = true,
     this.useCard = false,
     this.vibrate = true,
+    this.vibrateCount = 1,
+    this.vibrateInterval = const Duration(milliseconds: 110),
     this.screenMargin = 8.0,
     this.onLongPress,
     this.onSecondaryTap,
@@ -85,6 +87,13 @@ class FloatingPopover extends StatefulWidget {
   final bool dismissOnEscape;
   final bool useCard;
   final bool vibrate;
+
+  /// 振动反馈次数（默认为 1 次，按住头像等场景可设置为 2 次）
+  final int vibrateCount;
+
+  /// 多次振动之间的间隔时间
+  final Duration vibrateInterval;
+
   final double screenMargin;
   final VoidCallback? onLongPress;
   final VoidCallback? onSecondaryTap;
@@ -114,10 +123,19 @@ class _FloatingPopoverState extends State<FloatingPopover> {
     super.dispose();
   }
 
+  Future<void> _triggerVibration() async {
+    for (var i = 0; i < widget.vibrateCount; i++) {
+      if (i > 0) {
+        await Future.delayed(widget.vibrateInterval);
+      }
+      await HapticFeedback.mediumImpact();
+    }
+  }
+
   void _show() {
     if (_entry != null || !mounted) return;
-    if (widget.vibrate) {
-      HapticFeedback.mediumImpact();
+    if (widget.vibrate && widget.vibrateCount > 0) {
+      _triggerVibration();
     }
     final render = context.findRenderObject() as RenderBox?;
     if (render == null || !render.hasSize) return;

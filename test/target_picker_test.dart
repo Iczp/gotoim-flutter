@@ -77,20 +77,19 @@ void main() {
 
     test('options compute effectiveShowConfirmButton and minCount correctly', () {
       const defaultSingle = TargetPickerOptions(multiple: false);
-      expect(defaultSingle.effectiveShowConfirmButton, isFalse);
-      expect(defaultSingle.effectiveMinCount, 0);
+      expect(defaultSingle.effectiveShowConfirmButton, isTrue);
+      expect(defaultSingle.effectiveMinCount, 1);
 
       const defaultMulti = TargetPickerOptions(multiple: true);
       expect(defaultMulti.effectiveShowConfirmButton, isTrue);
       expect(defaultMulti.effectiveMinCount, 1);
 
-      const explicitSingle = TargetPickerOptions(
+      const explicitHideConfirm = TargetPickerOptions(
         multiple: false,
-        showConfirmButton: true,
-        minCount: 1,
+        showConfirmButton: false,
       );
-      expect(explicitSingle.effectiveShowConfirmButton, isTrue);
-      expect(explicitSingle.effectiveMinCount, 1);
+      expect(explicitHideConfirm.effectiveShowConfirmButton, isFalse);
+      expect(explicitHideConfirm.effectiveMinCount, 0);
     });
   });
 
@@ -242,9 +241,10 @@ void main() {
       await tester.tap(find.text('Alice'));
       await tester.pumpAndSettle();
 
-      // Placeholder '请选择' is gone, now shows selected chip (Alice tooltip & delete icon)
+      // Placeholder '请选择' is gone, now shows selected chip (Alice name below avatar & delete icon)
       expect(find.text('请选择'), findsNothing);
       expect(find.byIcon(Icons.close), findsWidgets); // chip remove badge
+      expect(find.text('Alice'), findsNWidgets(2)); // one in list, one below avatar in preview bar
 
       // Remove Alice by tapping chip
       await tester.tap(find.byTooltip('Alice'));
@@ -274,6 +274,40 @@ void main() {
 
       // Alice is selected initially -> check mark visible
       expect(find.byIcon(Icons.check), findsOneWidget);
+    });
+
+    testWidgets('Single-select mode with default options shows confirm button, selects item on tap, and confirms on button click',
+        (tester) async {
+      List<TargetPickerItem<String>>? result;
+
+      await tester.pumpWidget(
+        buildTestHost(
+          TargetPickerView<String>(
+            items: mockItems,
+            options: const TargetPickerOptions(
+              multiple: false, // Default options
+            ),
+            onConfirm: (selected) => result = selected,
+          ),
+        ),
+      );
+
+      // Confirm button is present by default
+      expect(find.text('确定'), findsOneWidget);
+
+      // Tap Bob -> Bob is selected (check mark appears), but callback is NOT called yet
+      await tester.tap(find.text('Bob'));
+      await tester.pumpAndSettle();
+      expect(result, isNull);
+      expect(find.byIcon(Icons.check), findsOneWidget);
+
+      // Tap Confirm button -> callback is called
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+
+      expect(result, isNotNull);
+      expect(result!.length, 1);
+      expect(result!.first.id, 'item-2');
     });
   });
 }

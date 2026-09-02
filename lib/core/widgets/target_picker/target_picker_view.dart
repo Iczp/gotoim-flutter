@@ -290,7 +290,7 @@ class _TargetPickerViewState<T> extends State<TargetPickerView<T>> {
     List<TargetPickerItem<T>> selected,
   ) {
     return Container(
-      height: 58,
+      height: 74,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -327,48 +327,66 @@ class _TargetPickerViewState<T> extends State<TargetPickerView<T>> {
               scrollDirection: Axis.horizontal,
               itemCount: selected.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final item = selected[index];
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Tooltip(
-                message: item.title,
-                child: GestureDetector(
-                  onTap: () => _removeSelected(item.id),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 4, right: 4),
-                    child: AppAvatar(
-                      name: item.title,
-                      imageUrl: item.avatarUrl,
-                      size: 40,
+              itemBuilder: (context, index) {
+                final item = selected[index];
+                return Tooltip(
+                  message: item.title,
+                  child: SizedBox(
+                    width: 50,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _removeSelected(item.id),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2, right: 2),
+                                child: AppAvatar(
+                                  name: item.title,
+                                  imageUrl: item.avatarUrl,
+                                  size: 38,
+                                ),
+                              ),
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.error,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  padding: const EdgeInsets.all(2),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 10,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                right: 0,
-                child: GestureDetector(
-                  onTap: () => _removeSelected(item.id),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.error,
-                      shape: BoxShape.circle,
-                    ),
-                    padding: const EdgeInsets.all(2),
-                    child: const Icon(
-                      Icons.close,
-                      size: 10,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+                );
+              },
+            ),
     );
   }
 
