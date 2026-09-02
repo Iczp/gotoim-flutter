@@ -50,7 +50,6 @@ class ChatFunctionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final pageCount = (items.length / 8).ceil();
     return Container(
-      height: 238,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerLowest,
         border: Border(

@@ -118,6 +118,12 @@ class DiagnosticsHomePage extends StatelessWidget {
             onTap: () => context.push('/diagnostics/toast'),
           ),
           _Item(
+            icon: Icons.checklist_rtl_outlined,
+            title: '通用目标选择器 (TargetPicker)',
+            subtitle: '单选/多选、最大/最小限制、禁用项与原因、默认选中、搜索过滤与头像预览',
+            onTap: () => context.push('/diagnostics/target-picker'),
+          ),
+          _Item(
             icon: Icons.chat_outlined,
             title: 'Modal 对话框全功能',
             subtitle: 'Alert 告警、Confirm 确认、Prompt 输入、ActionSheet 菜单与异步拦截',

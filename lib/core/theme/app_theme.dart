@@ -203,7 +203,7 @@ abstract final class AppTheme {
       // Button Themes
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(46),
+          minimumSize: const Size(64, 46),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -215,7 +215,7 @@ abstract final class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          minimumSize: const Size.fromHeight(46),
+          minimumSize: const Size(64, 46),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),

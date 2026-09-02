@@ -13,6 +13,7 @@ import '../../../core/media/media_preview.dart';
 import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/half_page_sheet.dart';
 import '../../../core/widgets/floating_popover.dart';
+import '../../../core/widgets/target_picker/target_picker.dart';
 import '../application/chat_controller.dart';
 import '../data/models/chat_message.dart';
 import '../../chat_settings/data/models/chat_member.dart';
@@ -592,52 +593,29 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _showForwardTargets(ChatMessage message) async {
     final targets = await controller.loadForwardTargets();
     if (!mounted) return;
-    await showHalfPageSheet<void>(
+    if (targets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('没有可转发的会话')),
+      );
+      return;
+    }
+    final selectedSessions = await TargetPicker.pickSessionUnits(
       context: context,
-      options: const HalfPageSheetOptions(heightFactor: .62),
-      builder:
-          (sheetContext) => SafeArea(
-            child: Column(
-              children: <Widget>[
-                const ListTile(title: Text('选择转发会话'), subtitle: Text('逐条转发')),
-                Expanded(
-                  child:
-                      targets.isEmpty
-                          ? const Center(child: Text('没有可转发的会话'))
-                          : ListView.builder(
-                            itemCount: targets.length,
-                            itemBuilder: (_, index) {
-                              final target = targets[index];
-                              return ListTile(
-                                leading: ChatObjectAvatar(
-                                  name: target.title,
-                                  imageUrl: null,
-                                  radius: 18,
-                                ),
-                                title: Text(target.title),
-                                subtitle: Text(
-                                  target.preview,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                onTap: () async {
-                                  Navigator.pop(sheetContext);
-                                  await _runMessageAction(
-                                    () => controller.forwardMessage(
-                                      message,
-                                      target.id,
-                                    ),
-                                    success: '消息已转发',
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                ),
-              ],
-            ),
-          ),
+      sessions: targets,
+      title: '选择转发目标',
+      subtitle: '逐条转发（支持多选，最多 9 个）',
+      multiple: true,
+      maxCount: 9,
+      minCount: 1,
     );
+    if (selectedSessions == null || selectedSessions.isEmpty) return;
+
+    for (final target in selectedSessions) {
+      await _runMessageAction(
+        () => controller.forwardMessage(message, target.id),
+        success: '已转发至 ${target.title}',
+      );
+    }
   }
 
   Future<void> _showMergeForwardTargets() async {
@@ -645,48 +623,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (count == 0) return;
     final targets = await controller.loadForwardTargets();
     if (!mounted) return;
-    await showHalfPageSheet<void>(
+    if (targets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('没有可转发的会话')),
+      );
+      return;
+    }
+    final selectedSessions = await TargetPicker.pickSessionUnits(
       context: context,
-      options: const HalfPageSheetOptions(heightFactor: .62),
-      builder:
-          (sheetContext) => SafeArea(
-            child: Column(
-              children: <Widget>[
-                ListTile(
-                  title: const Text('合并转发'),
-                  subtitle: Text('将 $count 条消息作为一张聊天记录发送'),
-                ),
-                Expanded(
-                  child:
-                      targets.isEmpty
-                          ? const Center(child: Text('没有可转发的会话'))
-                          : ListView.builder(
-                            itemCount: targets.length,
-                            itemBuilder: (_, index) {
-                              final target = targets[index];
-                              return ListTile(
-                                leading: ChatObjectAvatar(
-                                  name: target.title,
-                                  imageUrl: null,
-                                  radius: 18,
-                                ),
-                                title: Text(target.title),
-                                onTap: () async {
-                                  Navigator.pop(sheetContext);
-                                  await _runMessageAction(
-                                    () => controller.forwardSelectedAsHistory(
-                                      target.id,
-                                    ),
-                                    success: '已合并转发 $count 条消息',
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                ),
-              ],
-            ),
-          ),
+      sessions: targets,
+      title: '合并转发',
+      subtitle: '将 $count 条消息作为一张聊天记录发送',
+      multiple: false,
+      showConfirmButton: false,
+    );
+    if (selectedSessions == null || selectedSessions.isEmpty) return;
+
+    final target = selectedSessions.first;
+    await _runMessageAction(
+      () => controller.forwardSelectedAsHistory(target.id),
+      success: '已合并转发 $count 条消息至 ${target.title}',
     );
   }
 

@@ -102,8 +102,10 @@ class ChatComposerState extends State<ChatComposer>
     if (!mounted) return;
     final view = View.of(context);
     final height = view.viewInsets.bottom / view.devicePixelRatio;
-    if (height <= 0 || (height - _keyboardTrayHeight).abs() < 1) return;
-    setState(() => _keyboardTrayHeight = height);
+    if (height < 180) return;
+    final clampedHeight = height.clamp(200.0, 420.0);
+    if ((clampedHeight - _keyboardTrayHeight).abs() < 1) return;
+    setState(() => _keyboardTrayHeight = clampedHeight);
   }
 
   @override
@@ -501,14 +503,16 @@ class ChatComposerState extends State<ChatComposer>
                 onSelected: _selectFunction,
               ),
             ),
-            builder:
-                (context, heightFactor, child) => ClipRect(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    heightFactor: heightFactor,
-                    child: child,
-                  ),
+            builder: (context, heightFactor, child) {
+              if (heightFactor <= 0) return const SizedBox.shrink();
+              return ClipRect(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: heightFactor,
+                  child: child,
                 ),
+              );
+            },
           ),
         ],
       ),
