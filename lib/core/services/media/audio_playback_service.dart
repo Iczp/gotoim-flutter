@@ -24,9 +24,8 @@ class AudioPlaybackService extends ChangeNotifier {
     _completionSubscription = _player.onPlayerComplete.listen((_) {
       _playing = false;
       _activeMessageId = null;
-      if (!_manualEarpiece) {
-        unawaited(setEarpiece(false));
-      }
+      _manualEarpiece = false;
+      unawaited(setEarpiece(false));
       notifyListeners();
     });
     _proximitySubscription = nativeSensor.onProximityChange.listen((event) {
@@ -118,6 +117,8 @@ class AudioPlaybackService extends ChangeNotifier {
       _error = error;
       _playing = false;
       _activeMessageId = null;
+      _manualEarpiece = false;
+      unawaited(setEarpiece(false));
       notifyListeners();
       rethrow;
     }
@@ -138,9 +139,8 @@ class AudioPlaybackService extends ChangeNotifier {
     _activeMessageId = null;
     _position = Duration.zero;
     _duration = Duration.zero;
-    if (!_manualEarpiece) {
-      await setEarpiece(false);
-    }
+    _manualEarpiece = false;
+    await setEarpiece(false);
     notifyListeners();
   }
 
