@@ -6,7 +6,7 @@ import '../../../app/app_navigation.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../user/presentation/profile_page.dart';
 import '../application/session_list_controller.dart';
-import 'chat_object_avatar.dart';
+import '../../../core/widgets/app_avatar.dart';
 
 /// The home shell owns this drawer so every top-level tab can open it.
 class ChatOwnerDrawer extends ConsumerWidget {
@@ -68,7 +68,7 @@ class ChatOwnerDrawer extends ConsumerWidget {
                       child: ListTile(
                         contentPadding: EdgeInsets.symmetric(horizontal: 8),
                         minVerticalPadding: 0,
-                        leading: ChatObjectAvatar(
+                        leading: AppAvatar(
                           name: owner.name,
                           imageUrl: owner.imageUrl,
                           radius: 20,
@@ -162,10 +162,30 @@ class ChatOwnerDrawer extends ConsumerWidget {
             ),
             const Divider(height: 1),
             ListTile(
-              contentPadding: EdgeInsets.symmetric(horizontal: 8),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
               minVerticalPadding: 0,
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('账号与设置'),
+              leading: controller.currentOwner != null
+                  ? AppAvatar(
+                      name: controller.currentOwner!.name,
+                      imageUrl: controller.currentOwner!.imageUrl,
+                      radius: 16,
+                    )
+                  : const Icon(Icons.settings_outlined),
+              title: Text(
+                controller.currentOwner?.typeDescription.isNotEmpty == true
+                    ? controller.currentOwner!.typeDescription
+                    : controller.currentOwner?.name ?? '当前账号',
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              subtitle: controller.currentOwner?.typeDescription.isNotEmpty == true
+                  ? Text(
+                      controller.currentOwner!.name,
+                      style: const TextStyle(
+                        color: Color.fromARGB(153, 53, 53, 53),
+                        fontSize: 12,
+                      ),
+                    )
+                  : null,
               trailing: const Icon(Icons.chevron_right, size: 18),
               onTap: () {
                 Navigator.pop(context);

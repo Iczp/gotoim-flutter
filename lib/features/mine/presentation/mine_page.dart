@@ -1,0 +1,337 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../core/theme/theme_mode_controller.dart';
+import '../../../core/theme/overscroll_style_controller.dart';
+import '../../../core/widgets/glass_container.dart';
+import '../../auth/application/auth_controller.dart';
+import '../../../core/widgets/app_avatar.dart';
+import '../../session/application/session_list_controller.dart';
+
+/// 「我的」页面（独立组件，由 HomeSectionPage 调用）。
+class MinePage extends ConsumerWidget {
+  const MinePage({
+    required this.isCompact,
+    required this.onOpenOwnerDrawer,
+    super.key,
+  });
+
+  final bool isCompact;
+  final VoidCallback onOpenOwnerDrawer;
+
+  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('退出登录'),
+        content: const Text('确定要退出当前账号登录吗？\n退出后 Token 将立即在服务器失效。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('退出'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await ref.read(authControllerProvider).logout();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final themeMode = ref.watch(themeModeProvider);
+    final overscrollStyle = ref.watch(overscrollStyleProvider);
+    final sessionController = ref.watch(sessionListControllerProvider);
+    final currentOwner = sessionController.currentOwner;
+
+    return ListView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 16 : 32,
+        vertical: 16,
+      ),
+      children: [
+        // ── 用户信息卡 ──────────────────────────────────────────────
+        GlassCard(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              InkResponse(
+                onTap: onOpenOwnerDrawer,
+                radius: 34,
+                child: AppAvatar(
+                  name: currentOwner?.name ?? 'Goto User',
+                  imageUrl: currentOwner?.imageUrl,
+                  radius: 30,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      currentOwner?.name ?? '当前用户',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      currentOwner?.typeDescription.isNotEmpty == true
+                          ? currentOwner!.typeDescription
+                          : 'IM 客户端登录用户',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: '凭据与认证诊断',
+                icon: const Icon(Icons.qr_code_2_rounded),
+                onPressed: () => context.push('/diagnostics/auth'),
+              ),
+            ],
+          ),
+        ),
+
+        // ── 我的内容 ──────────────────────────────────────────────
+        _SectionHeader(title: '我的内容'),
+        GlassCard(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.bookmark_outline_rounded),
+                title: const Text('我收藏的'),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                enabled: false,
+                onTap: () {},
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.favorite_outline_rounded),
+                title: const Text('我关注的'),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                enabled: false,
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+
+        // ── 外观与主题 ──────────────────────────────────────────────
+        _SectionHeader(title: '外观与主题'),
+        GlassCard(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    themeMode == ThemeMode.dark
+                        ? Icons.dark_mode_rounded
+                        : themeMode == ThemeMode.light
+                        ? Icons.light_mode_rounded
+                        : Icons.brightness_auto_rounded,
+                    size: 20,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '主题模式',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SegmentedButton<ThemeMode>(
+                segments: const [
+                  ButtonSegment<ThemeMode>(
+                    value: ThemeMode.system,
+                    icon: Icon(Icons.brightness_auto_outlined),
+                    label: Text('跟随系统'),
+                  ),
+                  ButtonSegment<ThemeMode>(
+                    value: ThemeMode.light,
+                    icon: Icon(Icons.light_mode_outlined),
+                    label: Text('浅色模式'),
+                  ),
+                  ButtonSegment<ThemeMode>(
+                    value: ThemeMode.dark,
+                    icon: Icon(Icons.dark_mode_outlined),
+                    label: Text('深色模式'),
+                  ),
+                ],
+                selected: {themeMode},
+                onSelectionChanged: (selected) {
+                  if (selected.isNotEmpty) {
+                    ref
+                        .read(themeModeControllerProvider.notifier)
+                        .setThemeMode(selected.first);
+                  }
+                },
+              ),
+              const SizedBox(height: 18),
+              Text(
+                '列表过界效果',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '可选择 iOS 式回弹或 Android 式拉伸效果。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              SegmentedButton<OverscrollStyle>(
+                segments: OverscrollStyle.values
+                    .map(
+                      (style) => ButtonSegment<OverscrollStyle>(
+                        value: style,
+                        label: Text(style.label),
+                      ),
+                    )
+                    .toList(growable: false),
+                selected: {overscrollStyle},
+                onSelectionChanged: (selected) {
+                  if (selected.isNotEmpty) {
+                    ref
+                        .read(overscrollStyleControllerProvider.notifier)
+                        .setStyle(selected.first);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // ── 设置 ──────────────────────────────────────────────────
+        _SectionHeader(title: '设置'),
+        GlassCard(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.manage_accounts_outlined),
+                title: const Text('账号管理'),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () => context.push('/mine/account'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.devices_rounded),
+                title: const Text('设备信息'),
+                subtitle: Text(
+                  '已登录 ${sessionController.devices.length} 台设备',
+                  style: const TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () => context.push('/devices'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.folder_shared_outlined),
+                title: const Text('局域网文件管理'),
+                subtitle: const Text(
+                  'HTTP 文件收发与 Web 终端',
+                  style: TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () => context.push('/local-file-server'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.qr_code_scanner_rounded),
+                title: const Text('扫码登录终端'),
+                subtitle: const Text(
+                  '识别二维码并授权登录',
+                  style: TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () => context.push('/scan-login/scan'),
+              ),
+              if (kDebugMode) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.developer_mode_rounded),
+                  title: const Text('开发诊断中心'),
+                  subtitle: const Text(
+                    '全套架构、Realtime、Native 及主题诊断',
+                    style: TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, size: 18),
+                  onTap: () => context.push('/diagnostics'),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // ── 账号操作 ──────────────────────────────────────────────
+        _SectionHeader(title: '账号操作'),
+        GlassCard(
+          margin: const EdgeInsets.only(bottom: 24),
+          padding: EdgeInsets.zero,
+          child: ListTile(
+            leading: Icon(Icons.logout_rounded, color: colorScheme.error),
+            title: Text(
+              '退出登录',
+              style: TextStyle(
+                color: colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            trailing: const Icon(Icons.chevron_right, size: 18),
+            onTap: () => _confirmLogout(context, ref),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title});
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      child: Text(
+        title,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: colorScheme.primary,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}

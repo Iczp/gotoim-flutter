@@ -167,13 +167,24 @@ _ProfileSettingsPage  独立出页，  mine
 
 - 设置 
 
-  - 账号管理
+  - 账号管理（单独页面）
 
   - 设备信息
 
 
 
 退出需要二次确认（统一使用 showModal），调用Auth的退出，让Token在服务器立即失效
+
+### 抽屉页
+
+lib\features\session\presentation\chat_owner_drawer.dart
+
+账长号设置 改为 当前账号 具的账号 ,如：
+
+```
+55721736@qq.com
+zhongpei
+```
 
 
 

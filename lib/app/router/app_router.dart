@@ -19,6 +19,7 @@ import '../../features/diagnostics/presentation/media_preview_diagnostics_page.d
 import '../../features/diagnostics/presentation/floating_window_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/webview_session_diagnostics_page.dart';
 import '../../features/user/presentation/avatar_settings_page.dart';
+import '../../features/mine/presentation/account_management_page.dart';
 import '../../features/diagnostics/presentation/js_bridge_harness_page.dart';
 import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/session_list_diagnostics_page.dart';
@@ -92,6 +93,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/avatar',
         builder: (context, state) => const AvatarSettingsPage(),
+      ),
+      GoRoute(
+        path: '/mine/account',
+        builder: (context, state) => const AccountManagementPage(),
       ),
       GoRoute(
         path: '/scan-login',
