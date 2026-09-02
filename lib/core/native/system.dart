@@ -135,6 +135,32 @@ class NativeSystem with WidgetsBindingObserver {
     }
   }
 
+  /// Exits the app process completely.
+  Future<bool> exitApp() async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>('exitApp');
+      if (result == true) return true;
+    } catch (_) {}
+    try {
+      await SystemNavigator.pop();
+      return true;
+    } catch (e) {
+      debugPrint('[NativeSystem] exitApp fallback: $e');
+      return false;
+    }
+  }
+
+  /// Restarts the application.
+  Future<bool> restartApp() async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>('restartApp');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('[NativeSystem] restartApp fallback: $e');
+      return false;
+    }
+  }
+
   /// Sets the macOS Dock badge. A null or non-positive [count] clears it.
   /// Other platforms return false and leave their app icon unchanged.
   Future<bool> setDesktopBadge(int? count) async {

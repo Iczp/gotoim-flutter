@@ -307,6 +307,37 @@ class NativeDevicePlugin(
                 }
             }
 
+            "exitApp" -> {
+                try {
+                    result.success(true)
+                    activity?.finishAffinity()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                } catch (e: Exception) {
+                    Log.e(TAG, "exitApp error", e)
+                    result.success(false)
+                }
+            }
+
+            "restartApp" -> {
+                try {
+                    val ctx = activity ?: context
+                    val pm = ctx.packageManager
+                    val intent = pm.getLaunchIntentForPackage(ctx.packageName)
+                    if (intent != null) {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                        result.success(true)
+                        ctx.startActivity(intent)
+                        activity?.finish()
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                    } else {
+                        result.success(false)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "restartApp error", e)
+                    result.success(false)
+                }
+            }
+
             else -> result.notImplemented()
         }
     }

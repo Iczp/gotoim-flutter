@@ -61,6 +61,16 @@ class Native {
     return system.minimizeApp();
   }
 
+  /// Exits the application.
+  static Future<bool> exitApp() {
+    return system.exitApp();
+  }
+
+  /// Restarts the application.
+  static Future<bool> restartApp() {
+    return system.restartApp();
+  }
+
   // --- Device Capabilities ---
 
   /// Triggers device vibration / haptic feedback.

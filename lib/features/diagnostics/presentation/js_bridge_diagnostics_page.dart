@@ -650,6 +650,18 @@ class _JsBridgeDiagnosticsPageState
               child: const Text('拨打电话'),
             ),
             OutlinedButton(
+              onPressed: () => _preset('minimize', 'minimizeApp'),
+              child: const Text('切换到后台'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('exit', 'exitApp'),
+              child: const Text('退出应用'),
+            ),
+            OutlinedButton(
+              onPressed: () => _preset('restart', 'restartApp'),
+              child: const Text('重启应用'),
+            ),
+            OutlinedButton(
               onPressed:
                   () => _preset('file-single', 'chooseFile', <String, Object?>{
                     'allowMultiple': false,

@@ -324,6 +324,41 @@ void main() {
     expect(badge['data']['count'], 7);
   });
 
+  test('dispatches app lifecycle actions (minimizeApp, exitApp, restartApp)', () async {
+    final minimize =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"life-1","action":"minimizeApp","data":{}}',
+              ),
+            )
+            as Map<String, dynamic>;
+    expect(minimize['id'], 'life-1');
+    expect(minimize['success'], isTrue);
+    expect(minimize['data']['ok'], isA<bool>());
+
+    final restart =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"life-2","action":"app.restart","data":{}}',
+              ),
+            )
+            as Map<String, dynamic>;
+    expect(restart['id'], 'life-2');
+    expect(restart['success'], isTrue);
+    expect(restart['data']['ok'], isA<bool>());
+
+    final exit =
+        jsonDecode(
+              await dispatcher.handleRaw(
+                '{"id":"life-3","action":"system.exitApp","data":{}}',
+              ),
+            )
+            as Map<String, dynamic>;
+    expect(exit['id'], 'life-3');
+    expect(exit['success'], isTrue);
+    expect(exit['data']['ok'], isA<bool>());
+  });
+
   test(
     'manages Native sensor & system event subscriptions and unsubscriptions via JSAPI',
     () async {

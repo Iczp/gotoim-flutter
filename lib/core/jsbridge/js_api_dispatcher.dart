@@ -157,6 +157,21 @@ class JsApiDispatcher {
       case 'openAppSettings':
       case 'system.openAppSettings':
         return (await _capabilities.openAppSettings()).toJson();
+      case 'minimizeApp':
+      case 'app.minimize':
+      case 'system.minimizeApp':
+        final minimized = await Native.minimizeApp();
+        return <String, Object?>{'ok': minimized};
+      case 'exitApp':
+      case 'app.exit':
+      case 'system.exitApp':
+        final exited = await Native.exitApp();
+        return <String, Object?>{'ok': exited};
+      case 'restartApp':
+      case 'app.restart':
+      case 'system.restartApp':
+        final restarted = await Native.restartApp();
+        return <String, Object?>{'ok': restarted};
       case 'onNetworkStatusChange':
       case 'network.onStatusChange':
         return _subscribeNetworkStatus(request.data);

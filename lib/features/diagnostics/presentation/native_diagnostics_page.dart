@@ -301,12 +301,108 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
         children: [
           _buildPlatformCard(),
           const SizedBox(height: 16),
+          _buildAppLifecycleCard(),
+          const SizedBox(height: 16),
           _buildSystemCard(),
           const SizedBox(height: 16),
           _buildDeviceCard(),
           const SizedBox(height: 16),
           _buildSensorsCard(),
         ],
+      ),
+    );
+  }
+
+  String _lifecycleStatus = '就绪';
+
+  Widget _buildAppLifecycleCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.power_settings_new,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '应用生命周期控制 (App Lifecycle Control)',
+                    style: Theme.of(context).textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '支持将应用移至后台保活、完全退出进程或热/冷重新启动：',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.tonalIcon(
+                  icon: const Icon(Icons.hide_source, size: 18),
+                  label: const Text('切换到后台 (minimizeApp)'),
+                  onPressed: () async {
+                    final watch = Stopwatch()..start();
+                    final ok = await Native.minimizeApp();
+                    watch.stop();
+                    if (!mounted) return;
+                    setState(() {
+                      _lifecycleStatus = ok
+                          ? '已成功移至后台 (耗时 ${watch.elapsedMilliseconds} ms)'
+                          : '后台最小化失败 (当前平台不支持)';
+                    });
+                  },
+                ),
+                FilledButton.tonalIcon(
+                  icon: const Icon(Icons.restart_alt, size: 18),
+                  label: const Text('重启应用 (restartApp)'),
+                  onPressed: () async {
+                    final watch = Stopwatch()..start();
+                    final ok = await Native.restartApp();
+                    watch.stop();
+                    if (!mounted) return;
+                    setState(() {
+                      _lifecycleStatus = ok
+                          ? '重启指令已下发 (耗时 ${watch.elapsedMilliseconds} ms)'
+                          : '重启失败 (当前平台不支持)';
+                    });
+                  },
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.exit_to_app, size: 18, color: Colors.red),
+                  label: const Text('退出应用 (exitApp)', style: TextStyle(color: Colors.red)),
+                  onPressed: () async {
+                    final watch = Stopwatch()..start();
+                    final ok = await Native.exitApp();
+                    watch.stop();
+                    if (!mounted) return;
+                    setState(() {
+                      _lifecycleStatus = ok
+                          ? '已发起退出应用 (耗时 ${watch.elapsedMilliseconds} ms)'
+                          : '退出失败';
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '执行状态: $_lifecycleStatus',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
       ),
     );
   }
