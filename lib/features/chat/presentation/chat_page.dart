@@ -25,6 +25,7 @@ import '../../session/presentation/chat_object_avatar.dart';
 import '../../call_center/application/call_center_controller.dart';
 import 'message_content/chat_message_content_renderer.dart';
 import 'message_content/chat_message_presentation.dart';
+import 'message_menu/chat_avatar_menu.dart';
 import 'message_menu/chat_message_menu.dart';
 import 'widgets/chat_composer.dart';
 import 'widgets/chat_input_area.dart';
@@ -89,6 +90,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<int, ChatMessage> _quotedMessageCache = <int, ChatMessage>{};
   final Set<int> _quotedMessageLookups = <int>{};
   final Map<String, bool> _timeVisibility = <String, bool>{};
+  final Set<String> _specialFollowedSenders = <String>{};
   List<MediaPreviewItem> _mediaItems = const <MediaPreviewItem>[];
   String _mediaItemsFingerprint = '';
   int _timeVisibilityResetMarker = 0;
@@ -267,6 +269,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
     );
 
+    final avatarMenuController = FloatingPopoverController();
+    final avatarMenuItems = _buildAvatarMenuItems(message, avatarMenuController);
+
     final quote = _restoreQuoteMessage(message);
     final row = ChatMessageRow(
       key: _messageKeyFor(message.localId),
@@ -317,17 +322,146 @@ class _ChatPageState extends ConsumerState<ChatPage>
           message.isMine &&
           message.serverId != null &&
           controller.friend?.peerReadMessageId == message.serverId,
+      contentMenuController: menuController,
+      contentMenuBuilder:
+          menuItems.isEmpty
+              ? null
+              : (_) => ChatMessageMenu(
+                    items: menuItems,
+                    layoutMode: ChatMessageMenuLayoutMode.doubleRow,
+                  ),
+      avatarMenuController: avatarMenuController,
+      avatarMenuBuilder:
+          avatarMenuItems.isEmpty
+              ? null
+              : (_) => ChatAvatarMenu(items: avatarMenuItems),
     );
     return KeyedSubtree(
       key: ValueKey<String>(message.localId),
-      child:
-          menuItems.isEmpty
-              ? row
-              : FloatingPopover(
-                controller: menuController,
-                contentBuilder: (_) => ChatMessageMenu(items: menuItems),
-                child: row,
+      child: row,
+    );
+  }
+
+  List<ChatAvatarMenuItem> _buildAvatarMenuItems(
+    ChatMessage message,
+    FloatingPopoverController popoverController,
+  ) {
+    final senderUnitId = message.senderSessionUnitId ?? message.senderName;
+    final isFollowing = _specialFollowedSenders.contains(senderUnitId);
+
+    return [
+      ChatAvatarMenuItem(
+        id: 'mention',
+        label: '@TA',
+        icon: Icons.alternate_email,
+        onTap: () {
+          popoverController.hide();
+          _composerKey.currentState?.insertMention(message.senderName);
+        },
+      ),
+      if (isFollowing)
+        ChatAvatarMenuItem(
+          id: 'unfollow',
+          label: '取消关注',
+          icon: Icons.star,
+          onTap: () {
+            popoverController.hide();
+            setState(() => _specialFollowedSenders.remove(senderUnitId));
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已取消对「${message.senderName}」的特别关注')),
+              );
+            }
+          },
+        )
+      else
+        ChatAvatarMenuItem(
+          id: 'follow',
+          label: '特别关注',
+          icon: Icons.star_border,
+          onTap: () {
+            popoverController.hide();
+            setState(() => _specialFollowedSenders.add(senderUnitId));
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已将「${message.senderName}」设为特别关注')),
+              );
+            }
+          },
+        ),
+      ChatAvatarMenuItem(
+        id: 'mute',
+        label: '禁言',
+        icon: Icons.volume_off_outlined,
+        onTap: () {
+          popoverController.hide();
+          _showMuteMemberDialog(message);
+        },
+      ),
+      ChatAvatarMenuItem(
+        id: 'profile',
+        label: '查看资料',
+        icon: Icons.account_circle_outlined,
+        onTap: () {
+          popoverController.hide();
+          _showSenderProfile(message);
+        },
+      ),
+    ];
+  }
+
+  void _showMuteMemberDialog(ChatMessage message) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (bottomSheetContext) {
+        final options = <String>['10 分钟', '1 小时', '1 天', '7 天', '永久禁言'];
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  '对「${message.senderName}」设置禁言',
+                  style: Theme.of(bottomSheetContext)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
               ),
+              const Divider(height: 1),
+              for (final opt in options)
+                ListTile(
+                  title: Text(opt, textAlign: TextAlign.center),
+                  onTap: () {
+                    Navigator.of(bottomSheetContext).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('已对「${message.senderName}」禁言 $opt'),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              const Divider(height: 1),
+              ListTile(
+                title: const Text(
+                  '取消',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+                onTap: () => Navigator.of(bottomSheetContext).pop(),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -502,6 +636,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
         return;
       case 'forward':
         await _showForwardTargets(message);
+        return;
+      case 'select':
+        controller.beginSelection(message);
         return;
     }
   }

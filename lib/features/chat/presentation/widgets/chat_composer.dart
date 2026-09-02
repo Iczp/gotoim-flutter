@@ -170,6 +170,34 @@ class ChatComposerState extends State<ChatComposer>
     _focusNode.requestFocus();
   }
 
+  void insertMention(String name) {
+    focusText();
+    final currentText = widget.input.text;
+    final selection = widget.input.selection;
+    final mentionText = '@$name ';
+    if (selection.isValid && selection.start >= 0) {
+      final newText = currentText.replaceRange(
+        selection.start,
+        selection.end,
+        mentionText,
+      );
+      widget.input.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(
+          offset: selection.start + mentionText.length,
+        ),
+      );
+    } else {
+      final newText = '$currentText$mentionText';
+      widget.input.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(
+          offset: newText.length,
+        ),
+      );
+    }
+  }
+
   void cancelActiveRecording() {
     if (!_recording && !_startingRecording) return;
     _pointerReleased = true;

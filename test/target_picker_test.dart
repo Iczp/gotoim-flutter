@@ -220,5 +220,60 @@ void main() {
       expect(find.text('Bob'), findsNothing);
       expect(find.text('Flutter Team'), findsOneWidget);
     });
+
+    testWidgets('Multi-select preview bar is always present, shows "请选择" when 0, and chip when selected',
+        (tester) async {
+      await tester.pumpWidget(
+        buildTestHost(
+          TargetPickerView<String>(
+            items: mockItems,
+            options: const TargetPickerOptions(
+              multiple: true,
+              showSelectedPreviewBar: true,
+            ),
+          ),
+        ),
+      );
+
+      // Initially 0 selected -> shows placeholder '请选择'
+      expect(find.text('请选择'), findsOneWidget);
+
+      // Tap Alice
+      await tester.tap(find.text('Alice'));
+      await tester.pumpAndSettle();
+
+      // Placeholder '请选择' is gone, now shows selected chip (Alice tooltip & delete icon)
+      expect(find.text('请选择'), findsNothing);
+      expect(find.byIcon(Icons.close), findsWidgets); // chip remove badge
+
+      // Remove Alice by tapping chip
+      await tester.tap(find.byTooltip('Alice'));
+      await tester.pumpAndSettle();
+
+      // Placeholder '请选择' is visible again
+      expect(find.text('请选择'), findsOneWidget);
+    });
+
+    testWidgets('Single-select mode does not show preview bar but list items have selection boxes',
+        (tester) async {
+      await tester.pumpWidget(
+        buildTestHost(
+          TargetPickerView<String>(
+            items: mockItems,
+            options: const TargetPickerOptions(
+              multiple: false,
+              showConfirmButton: true,
+              initialSelectedIds: {'item-1'},
+            ),
+          ),
+        ),
+      );
+
+      // Single select should not show preview bar or '请选择'
+      expect(find.text('请选择'), findsNothing);
+
+      // Alice is selected initially -> check mark visible
+      expect(find.byIcon(Icons.check), findsOneWidget);
+    });
   });
 }

@@ -179,10 +179,8 @@ class _TargetPickerViewState<T> extends State<TargetPickerView<T>> {
           // 1. Header Bar
           _buildHeader(context, colorScheme, canConfirm, selected.length),
 
-          // 2. Selected Chips Preview Bar (Multi-select)
-          if (widget.options.multiple &&
-              widget.options.showSelectedPreviewBar &&
-              selected.isNotEmpty)
+          // 2. Selected Chips Preview Bar (Multi-select: always present to prevent layout jitter)
+          if (widget.options.multiple && widget.options.showSelectedPreviewBar)
             _buildSelectedChipsBar(theme, colorScheme, selected),
 
           // 3. Search Bar
@@ -293,7 +291,7 @@ class _TargetPickerViewState<T> extends State<TargetPickerView<T>> {
   ) {
     return Container(
       height: 58,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
         border: Border(
@@ -303,11 +301,32 @@ class _TargetPickerViewState<T> extends State<TargetPickerView<T>> {
           ),
         ),
       ),
-      child: ListView.separated(
-        controller: _chipScrollController,
-        scrollDirection: Axis.horizontal,
-        itemCount: selected.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+      child: selected.isEmpty
+          ? Align(
+              alignment: Alignment.centerLeft,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.touch_app_outlined,
+                    size: 18,
+                    color: theme.hintColor.withValues(alpha: 0.8),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '请选择',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: theme.hintColor,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ListView.separated(
+              controller: _chipScrollController,
+              scrollDirection: Axis.horizontal,
+              itemCount: selected.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final item = selected[index];
           return Stack(
@@ -440,37 +459,27 @@ class _TargetPickerViewState<T> extends State<TargetPickerView<T>> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Selection indicator
-            if (widget.options.multiple)
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSelected ? colorScheme.primary : Colors.transparent,
-                    border: Border.all(
-                      color: isSelected
-                          ? colorScheme.primary
-                          : (isDisabled ? theme.disabledColor : theme.dividerColor),
-                      width: 1.5,
-                    ),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? colorScheme.primary : Colors.transparent,
+                  border: Border.all(
+                    color: isSelected
+                        ? colorScheme.primary
+                        : (isDisabled ? theme.disabledColor : theme.dividerColor),
+                    width: 1.5,
                   ),
-                  child: isSelected
-                      ? const Icon(Icons.check, size: 14, color: Colors.white)
-                      : null,
                 ),
-              )
-            else if (widget.options.effectiveShowConfirmButton)
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Radio<String>(
-                  value: item.id,
-                  groupValue: _selectedIds.firstOrNull,
-                  onChanged: isDisabled ? null : (_) => _onItemTap(item),
-                ),
+                child: isSelected
+                    ? const Icon(Icons.check, size: 14, color: Colors.white)
+                    : null,
               ),
+            ),
 
             // Avatar
             AppAvatar(

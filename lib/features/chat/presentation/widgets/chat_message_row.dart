@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/media/media_preview.dart';
 import '../../../../core/services/file/attachment_transfer_service.dart';
 import '../../../../core/widgets/chat_bubble.dart';
+import '../../../../core/widgets/floating_popover.dart';
 import '../../../session/presentation/chat_object_avatar.dart';
 import '../../data/models/chat_message.dart';
 import '../message_content/chat_message_content_renderer.dart';
@@ -12,19 +13,12 @@ import 'chat_message_delivery_state.dart';
 import 'chat_quote_preview.dart';
 
 /// 单条消息气泡行组件（ChatMessageRow）
-///
-/// 核心职责：
-/// 1. 负责单条聊天记录的布局呈现（左侧好友消息 / 右侧我方发送消息）；
-/// 2. 展示发送者头像、昵称、以及时间分割线（大于 5 分钟自动展示）；
-/// 3. 集成气泡容器 [ChatBubble] 与富媒体消息渲染器 [ChatMessageContentRenderer]；
-/// 4. 展示消息送达/发送中/失败重试状态 [ChatMessageDeliveryState] 与对方已读标记；
-/// 5. 展示被引用的消息预览模块 [ChatQuotePreview]；
-/// 6. 多选模式下提供选择勾选框，并保证勾选槽位预留防止文本气泡产生抖动重排。
 class ChatMessageRow extends StatelessWidget {
   const ChatMessageRow({
     required this.message,
     required this.showTime,
     required this.onUserTap,
+    this.onUserLongPress,
     required this.onVoiceOpened,
     required this.onLinkTap,
     required this.mediaItems,
@@ -44,6 +38,12 @@ class ChatMessageRow extends StatelessWidget {
     this.quoteContent,
     required this.showUnreadDivider,
     required this.showPeerRead,
+    this.contentMenuBuilder,
+    this.contentMenuController,
+    this.contentMenuOffset = const Offset(0, 6),
+    this.avatarMenuBuilder,
+    this.avatarMenuController,
+    this.avatarMenuOffset = const Offset(8, 0),
     this.onTap,
     super.key,
   });
@@ -56,6 +56,27 @@ class ChatMessageRow extends StatelessWidget {
 
   /// 点击发送人头像/昵称回调（打开成员资料卡）
   final VoidCallback onUserTap;
+
+  /// 长按发送人头像回调（打开头像菜单）
+  final VoidCallback? onUserLongPress;
+
+  /// 消息气泡内容菜单构建器（长按仅在消息气泡内容上生效）
+  final WidgetBuilder? contentMenuBuilder;
+
+  /// 消息气泡内容菜单控制器
+  final FloatingPopoverController? contentMenuController;
+
+  /// 消息气泡内容菜单偏移量
+  final Offset contentMenuOffset;
+
+  /// 头像上下文菜单构建器
+  final WidgetBuilder? avatarMenuBuilder;
+
+  /// 头像上下文菜单控制器
+  final FloatingPopoverController? avatarMenuController;
+
+  /// 头像上下文菜单偏移量
+  final Offset avatarMenuOffset;
 
   /// 点击播放语音消息回调（标记已听）
   final Future<void> Function() onVoiceOpened;
@@ -180,15 +201,81 @@ class ChatMessageRow extends StatelessWidget {
                       avatarSlotWidth)
                   .clamp(0.0, double.infinity);
               final bubbleWidth = contentMaxWidth * 0.68;
-              final avatar = GestureDetector(
+              Widget avatarWidget = ChatObjectAvatar(
+                name: message.senderName,
+                imageUrl: message.senderAvatarUrl,
+                radius: 18,
+              );
+              avatarWidget = GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: onUserTap,
-                child: ChatObjectAvatar(
-                  name: message.senderName,
-                  imageUrl: message.senderAvatarUrl,
-                  radius: 18,
+                onLongPress: onUserLongPress ?? () {
+                  HapticFeedback.mediumImpact();
+                  avatarMenuController?.show();
+                },
+                child: avatarWidget,
+              );
+              if (avatarMenuBuilder != null) {
+                avatarWidget = FloatingPopover(
+                  controller: avatarMenuController,
+                  contentBuilder: avatarMenuBuilder!,
+                  placement: FloatingPlacement.avatar,
+                  offset: avatarMenuOffset,
+                  child: avatarWidget,
+                );
+              }
+
+              Widget bubbleWidget = ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: bubbleWidth),
+                child: ChatBubble(
+                  style: ChatBubbleStyle.content(
+                    side:
+                        message.isMine
+                            ? ChatBubbleSide.right
+                            : ChatBubbleSide.left,
+                    backgroundColor:
+                        message.isMine
+                            ? Theme.of(
+                              context,
+                            ).colorScheme.primaryContainer
+                            : Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      ChatMessageContentRenderer(
+                        message: message,
+                        attachmentState: attachmentState,
+                        onVoiceOpened: onVoiceOpened,
+                        onAttachmentDownload: onAttachmentDownload,
+                        onAttachmentCancel: onAttachmentCancel,
+                        onAttachmentOpen: onAttachmentOpen,
+                        onAttachmentSaveAs: onAttachmentSaveAs,
+                        imageBytes: imageBytes,
+                        uploadProgress: uploadProgress,
+                        apiBaseUrl: apiBaseUrl,
+                        mediaItems: mediaItems,
+                        mediaInitialIndex: mediaInitialIndex,
+                        onLinkTap: onLinkTap,
+                      ),
+                    ],
+                  ),
                 ),
               );
+
+              if (contentMenuBuilder != null) {
+                bubbleWidget = FloatingPopover(
+                  controller: contentMenuController,
+                  contentBuilder: contentMenuBuilder!,
+                  placement: FloatingPlacement.auto,
+                  offset: contentMenuOffset,
+                  child: bubbleWidget,
+                );
+              }
+
               final content = Expanded(
                 child: Column(
                   crossAxisAlignment:
@@ -217,46 +304,7 @@ class ChatMessageRow extends StatelessWidget {
                     ),
                     Stack(
                       children: <Widget>[
-                        ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: bubbleWidth),
-                          child: ChatBubble(
-                            style: ChatBubbleStyle.content(
-                              side:
-                                  message.isMine
-                                      ? ChatBubbleSide.right
-                                      : ChatBubbleSide.left,
-                              backgroundColor:
-                                  message.isMine
-                                      ? Theme.of(
-                                        context,
-                                      ).colorScheme.primaryContainer
-                                      : Theme.of(
-                                        context,
-                                      ).colorScheme.surfaceContainerHighest,
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                ChatMessageContentRenderer(
-                                  message: message,
-                                  attachmentState: attachmentState,
-                                  onVoiceOpened: onVoiceOpened,
-                                  onAttachmentDownload: onAttachmentDownload,
-                                  onAttachmentCancel: onAttachmentCancel,
-                                  onAttachmentOpen: onAttachmentOpen,
-                                  onAttachmentSaveAs: onAttachmentSaveAs,
-                                  imageBytes: imageBytes,
-                                  uploadProgress: uploadProgress,
-                                  apiBaseUrl: apiBaseUrl,
-                                  mediaItems: mediaItems,
-                                  mediaInitialIndex: mediaInitialIndex,
-                                  onLinkTap: onLinkTap,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        bubbleWidget,
                         ChatMessageDeliveryState(
                           isMine: message.isMine,
                           state: message.state,
@@ -296,8 +344,8 @@ class ChatMessageRow extends StatelessWidget {
                       ),
                     ),
                   ...(message.isMine
-                      ? <Widget>[content, const SizedBox(width: 12), avatar]
-                      : <Widget>[avatar, const SizedBox(width: 12), content]),
+                      ? <Widget>[content, const SizedBox(width: 12), avatarWidget]
+                      : <Widget>[avatarWidget, const SizedBox(width: 12), content]),
                 ],
               );
             },
