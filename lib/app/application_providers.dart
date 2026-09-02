@@ -25,6 +25,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
         baseUrl: environment.apiBaseUrl,
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 20),
+        contentType: Headers.jsonContentType,
       ),
     ),
     tokenStorage: ref.watch(tokenStorageProvider),

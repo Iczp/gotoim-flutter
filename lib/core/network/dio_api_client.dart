@@ -148,6 +148,7 @@ class DioApiClient implements ApiClient {
         options: Options(
           method: method,
           responseType: responseType,
+          contentType: dataFactory != null ? null : Headers.jsonContentType,
           headers: <String, String>{
             ..._deviceContext.requestHeaders,
             ...?headers,
