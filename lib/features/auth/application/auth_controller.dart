@@ -38,6 +38,8 @@ class AuthController extends ChangeNotifier {
     try {
       await _repository.login(username: username, password: password);
       _status = AuthStatus.authenticated;
+      // 新账号登录成功：先重置账号级 Provider，再连接实时通道。
+      _onAccountChanged?.call();
       _connectRealtime();
     } catch (error) {
       _status = AuthStatus.unauthenticated;
@@ -53,6 +55,8 @@ class AuthController extends ChangeNotifier {
     try {
       await _repository.loginWithScanToken(scanToken);
       _status = AuthStatus.authenticated;
+      // 新账号登录成功：先重置账号级 Provider，再连接实时通道。
+      _onAccountChanged?.call();
       _connectRealtime();
     } catch (error) {
       _status = AuthStatus.unauthenticated;
@@ -66,6 +70,7 @@ class AuthController extends ChangeNotifier {
     await _repository.logout();
     _status = AuthStatus.unauthenticated;
     _errorMessage = null;
+    _onAccountChanged?.call();
     notifyListeners();
   }
 
@@ -73,8 +78,12 @@ class AuthController extends ChangeNotifier {
     await _signalRGateway.disconnect();
     _status = AuthStatus.unauthenticated;
     _errorMessage = '登录已过期，请重新登录。';
+    _onAccountChanged?.call();
     notifyListeners();
   }
+
+  /// 账号切换回调：退出、会话失效、新账号登录成功时触发，由 Provider 层注入。
+  VoidCallback? _onAccountChanged;
 
   Future<void> _restore() async {
     try {
@@ -135,9 +144,35 @@ final signalRGatewayProvider = Provider<SignalRGateway>((ref) {
   return gateway;
 });
 
+/// 账号切换时需要 invalidate 的回调列表。
+///
+/// 各账号级 Provider 文件在顶层调用 [registerAccountChangedCallback] 注册自己
+/// 的 invalidate 操作，避免 [authControllerProvider] 直接依赖 Session 等上层
+/// Provider（否则循环依赖）。
+final _accountChangedCallbacks = <void Function(Ref)>[];
+
+/// 注册"账号切换时需要执行的清理操作"。
+///
+/// 调用时机：在 ProviderScope 初始化前，通常在 bootstrap 或 Provider 文件顶层
+/// 的 `_registerOnce` 模式中调用一次即可。
+void registerAccountChangedCallback(void Function(Ref) callback) {
+  if (!_accountChangedCallbacks.contains(callback)) {
+    _accountChangedCallbacks.add(callback);
+  }
+}
+
+void _runAccountChangedCallbacks(Ref ref) {
+  for (final cb in _accountChangedCallbacks) {
+    cb(ref);
+  }
+}
+
 final authControllerProvider = ChangeNotifierProvider<AuthController>((ref) {
-  return AuthController(
+  final controller = AuthController(
     ref.watch(authRepositoryProvider),
     ref.watch(signalRGatewayProvider),
   );
+  // 账号切换时 invalidate 所有已注册的账号级 Provider，确保新账号获得干净状态。
+  controller._onAccountChanged = () => _runAccountChangedCallbacks(ref);
+  return controller;
 });

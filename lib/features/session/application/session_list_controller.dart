@@ -44,6 +44,20 @@ final sessionListControllerProvider =
       ),
     );
 
+// 账号切换时重置 session 层 Provider，确保新账号加载干净数据。
+// 调用 [ensureSessionInvalidatorRegistered] 一次即可完成注册（通常在 bootstrap 中调用）。
+bool _sessionInvalidatorRegistered = false;
+
+void ensureSessionInvalidatorRegistered() {
+  if (_sessionInvalidatorRegistered) return;
+  _sessionInvalidatorRegistered = true;
+  registerAccountChangedCallback((ref) {
+    ref.invalidate(sessionListControllerProvider);
+    ref.invalidate(sessionRepositoryProvider);
+  });
+}
+
+
 class SessionListController extends ChangeNotifier {
   SessionListController(
     this._repository,

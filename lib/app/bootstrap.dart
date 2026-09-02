@@ -24,13 +24,18 @@ import '../core/services/scan/scan_code_service.dart';
 import '../core/services/task/app_task_manager.dart';
 import '../core/services/task/app_task_manager_android.dart';
 import '../core/services/task/app_task_manager_stub.dart';
+import '../features/session/application/session_list_controller.dart';
 import '../features/workbench/data/workbench_repository.dart';
 import 'app.dart';
 import 'app_navigation.dart';
 import 'application_providers.dart';
 import 'bootstrap_error_app.dart';
 
+
 Future<void> bootstrap() async {
+  // 注册账号切换时需要 invalidate 的 Provider 清理回调。
+  ensureSessionInvalidatorRegistered();
+
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
