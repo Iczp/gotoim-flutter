@@ -56,6 +56,11 @@ class Native {
     return system.makePhoneCall(phoneNumber);
   }
 
+  /// Minimizes the app to the background without exiting the process.
+  static Future<bool> minimizeApp() {
+    return system.minimizeApp();
+  }
+
   // --- Device Capabilities ---
 
   /// Triggers device vibration / haptic feedback.

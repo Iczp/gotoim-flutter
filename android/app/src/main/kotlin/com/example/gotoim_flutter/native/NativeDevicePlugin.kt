@@ -297,6 +297,16 @@ class NativeDevicePlugin(
                 }
             }
 
+            "minimizeApp" -> {
+                try {
+                    val moved = activity?.moveTaskToBack(true) ?: false
+                    result.success(moved)
+                } catch (e: Exception) {
+                    Log.e(TAG, "minimizeApp error", e)
+                    result.success(false)
+                }
+            }
+
             else -> result.notImplemented()
         }
     }

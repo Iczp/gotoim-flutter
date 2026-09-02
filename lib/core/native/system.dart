@@ -124,6 +124,17 @@ class NativeSystem with WidgetsBindingObserver {
     }
   }
 
+  /// Minimizes the app to the background without exiting the process (e.g. Android moveTaskToBack).
+  Future<bool> minimizeApp() async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>('minimizeApp');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('[NativeSystem] minimizeApp fallback: $e');
+      return false;
+    }
+  }
+
   /// Sets the macOS Dock badge. A null or non-positive [count] clears it.
   /// Other platforms return false and leave their app icon unchanged.
   Future<bool> setDesktopBadge(int? count) async {

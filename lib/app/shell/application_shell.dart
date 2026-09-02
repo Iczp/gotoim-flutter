@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/native/native.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../features/home/presentation/home_sections.dart';
 import '../../features/session/application/session_list_controller.dart';
@@ -23,7 +24,6 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   // not recreate lists, restart requests, or reset their scroll positions.
   final Set<HomeSection> _visitedSections = <HomeSection>{HomeSection.messages};
   DateTime? _lastMessagesTabTap;
-  DateTime? _lastBackPressTime;
 
   void _select(HomeSection section) {
     final now = DateTime.now();
@@ -61,25 +61,11 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       return;
     }
 
-    // 3. Double-tap back within 2 seconds to exit the app.
-    final now = DateTime.now();
-    if (_lastBackPressTime == null ||
-        now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
-      _lastBackPressTime = now;
-      if (mounted) {
-        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('再按一次退出应用'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      return;
+    // 3. Minimize the app to background instead of exiting.
+    final minimized = await Native.minimizeApp();
+    if (!minimized) {
+      await SystemNavigator.pop();
     }
-
-    await SystemNavigator.pop();
   }
 
   @override

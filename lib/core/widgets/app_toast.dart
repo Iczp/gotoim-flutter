@@ -24,14 +24,14 @@ enum ToastPosition {
 ///
 /// 可以在应用初始化或设置页修改全局默认位置、偏移量、透明度、是否振动、是否发声等。
 abstract final class AppToastConfig {
-  /// 全局默认提示位置，默认 [ToastPosition.bottom]。
-  static ToastPosition defaultPosition = ToastPosition.bottom;
+  /// 全局默认提示位置，默认 [ToastPosition.top]。
+  static ToastPosition defaultPosition = ToastPosition.top;
 
   /// 全局默认额外偏移量，默认 null。
   static Offset? defaultOffset;
 
   /// 全局默认背景透明度 (0.0 ~ 1.0)，默认 0.95。
-  static double defaultOpacity = 0.95;
+  static double defaultOpacity = 0.75;
 
   /// 全局默认是否振动反馈，默认 `false`。
   static bool defaultVibrate = false;
@@ -149,21 +149,66 @@ class _ToastOverlayHandle {
 /// 展示全局短提示，不需要页面 [BuildContext]。
 ///
 /// 采用独立 [OverlayEntry] 渲染，支持安全边界约束、防溢出保护、顶部/居中/底部
-/// 任意位置浮动与平滑进出场动画。
-bool showToast(String message, {ToastOptions options = const ToastOptions()}) {
+/// 任意位置浮动与平滑进出场动画。默认位置在屏幕顶部。
+bool showToast(
+  String message, {
+  ToastPosition? position,
+  ToastType? type,
+  Duration? duration,
+  IconData? icon,
+  Offset? offset,
+  double? opacity,
+  bool? vibrate,
+  bool? playSound,
+  int? maxLines,
+  String? actionLabel,
+  VoidCallback? onAction,
+  bool closePrevious = true,
+  ToastOptions options = const ToastOptions(),
+}) {
   final navigatorState = rootNavigatorKey.currentState;
   final overlay = navigatorState?.overlay;
   if (overlay == null || message.trim().isEmpty) {
     return false;
   }
 
-  final effectiveVibrate = options.vibrate ?? AppToastConfig.defaultVibrate;
+  final effectiveType = type ?? options.type;
+  final effectivePosition =
+      position ?? options.position ?? AppToastConfig.defaultPosition;
+  final effectiveOffset =
+      offset ?? options.offset ?? AppToastConfig.defaultOffset;
+  final effectiveOpacity =
+      opacity ?? options.opacity ?? AppToastConfig.defaultOpacity;
+  final effectiveVibrate =
+      vibrate ?? options.vibrate ?? AppToastConfig.defaultVibrate;
   final effectivePlaySound =
-      options.playSound ?? AppToastConfig.defaultPlaySound;
+      playSound ?? options.playSound ?? AppToastConfig.defaultPlaySound;
+  final effectiveDuration =
+      duration ?? options.duration ?? AppToastConfig.defaultDuration;
+  final effectiveMaxLines = maxLines ?? options.maxLines;
+  final effectiveActionLabel = actionLabel ?? options.actionLabel;
+  final effectiveOnAction = onAction ?? options.onAction;
+  final effectiveIcon = icon ?? options.icon;
+  final effectiveClosePrevious = closePrevious && options.closePrevious;
+
+  final effectiveOptions = ToastOptions(
+    type: effectiveType,
+    position: effectivePosition,
+    offset: effectiveOffset,
+    opacity: effectiveOpacity,
+    vibrate: effectiveVibrate,
+    playSound: effectivePlaySound,
+    duration: effectiveDuration,
+    maxLines: effectiveMaxLines,
+    actionLabel: effectiveActionLabel,
+    onAction: effectiveOnAction,
+    icon: effectiveIcon,
+    closePrevious: effectiveClosePrevious,
+  );
 
   // 1. 触觉振动反馈
   if (effectiveVibrate) {
-    switch (options.type) {
+    switch (effectiveType) {
       case ToastType.error:
         HapticFeedback.heavyImpact();
       case ToastType.warning:
@@ -176,7 +221,7 @@ bool showToast(String message, {ToastOptions options = const ToastOptions()}) {
 
   // 2. 声音反馈
   if (effectivePlaySound) {
-    switch (options.type) {
+    switch (effectiveType) {
       case ToastType.error:
       case ToastType.warning:
         SystemSound.play(SystemSoundType.alert);
@@ -187,7 +232,7 @@ bool showToast(String message, {ToastOptions options = const ToastOptions()}) {
   }
 
   // 3. 关闭前一条 Toast
-  if (options.closePrevious && _activeToast != null) {
+  if (effectiveClosePrevious && _activeToast != null) {
     _activeToast!.dismiss();
     _activeToast = null;
   }
@@ -203,11 +248,12 @@ bool showToast(String message, {ToastOptions options = const ToastOptions()}) {
   }
 
   entry = OverlayEntry(
-    builder: (context) => _ToastOverlayHost(
-      message: message,
-      options: options,
-      onDismiss: removeEntry,
-    ),
+    builder:
+        (context) => _ToastOverlayHost(
+          message: message,
+          options: effectiveOptions,
+          onDismiss: removeEntry,
+        ),
   );
 
   _activeToast = _ToastOverlayHandle(entry, removeEntry);
@@ -218,89 +264,129 @@ bool showToast(String message, {ToastOptions options = const ToastOptions()}) {
 /// 快捷成功提示。
 bool showSuccessToast(
   String message, {
+  ToastPosition? position,
+  Duration? duration,
+  IconData? icon,
+  Offset? offset,
+  double? opacity,
+  bool? vibrate,
+  bool? playSound,
+  int? maxLines,
+  String? actionLabel,
+  VoidCallback? onAction,
+  bool closePrevious = true,
   ToastOptions options = const ToastOptions(),
 }) => showToast(
   message,
-  options: ToastOptions(
-    type: ToastType.success,
-    position: options.position,
-    offset: options.offset,
-    opacity: options.opacity,
-    vibrate: options.vibrate,
-    playSound: options.playSound,
-    duration: options.duration,
-    maxLines: options.maxLines,
-    actionLabel: options.actionLabel,
-    onAction: options.onAction,
-    icon: options.icon,
-    closePrevious: options.closePrevious,
-  ),
+  type: ToastType.success,
+  position: position ?? options.position,
+  duration: duration ?? options.duration,
+  icon: icon ?? options.icon,
+  offset: offset ?? options.offset,
+  opacity: opacity ?? options.opacity,
+  vibrate: vibrate ?? options.vibrate,
+  playSound: playSound ?? options.playSound,
+  maxLines: maxLines ?? options.maxLines,
+  actionLabel: actionLabel ?? options.actionLabel,
+  onAction: onAction ?? options.onAction,
+  closePrevious: closePrevious && options.closePrevious,
+  options: options,
 );
 
 /// 快捷失败提示。
 bool showErrorToast(
   String message, {
+  ToastPosition? position,
+  Duration? duration,
+  IconData? icon,
+  Offset? offset,
+  double? opacity,
+  bool? vibrate,
+  bool? playSound,
+  int? maxLines,
+  String? actionLabel,
+  VoidCallback? onAction,
+  bool closePrevious = true,
   ToastOptions options = const ToastOptions(),
 }) => showToast(
   message,
-  options: ToastOptions(
-    type: ToastType.error,
-    position: options.position,
-    offset: options.offset,
-    opacity: options.opacity,
-    vibrate: options.vibrate,
-    playSound: options.playSound,
-    duration: options.duration,
-    maxLines: options.maxLines,
-    actionLabel: options.actionLabel,
-    onAction: options.onAction,
-    icon: options.icon,
-    closePrevious: options.closePrevious,
-  ),
+  type: ToastType.error,
+  position: position ?? options.position,
+  duration: duration ?? options.duration,
+  icon: icon ?? options.icon,
+  offset: offset ?? options.offset,
+  opacity: opacity ?? options.opacity,
+  vibrate: vibrate ?? options.vibrate,
+  playSound: playSound ?? options.playSound,
+  maxLines: maxLines ?? options.maxLines,
+  actionLabel: actionLabel ?? options.actionLabel,
+  onAction: onAction ?? options.onAction,
+  closePrevious: closePrevious && options.closePrevious,
+  options: options,
 );
 
 /// 快捷警告提示。
 bool showWarningToast(
   String message, {
+  ToastPosition? position,
+  Duration? duration,
+  IconData? icon,
+  Offset? offset,
+  double? opacity,
+  bool? vibrate,
+  bool? playSound,
+  int? maxLines,
+  String? actionLabel,
+  VoidCallback? onAction,
+  bool closePrevious = true,
   ToastOptions options = const ToastOptions(),
 }) => showToast(
   message,
-  options: ToastOptions(
-    type: ToastType.warning,
-    position: options.position,
-    offset: options.offset,
-    opacity: options.opacity,
-    vibrate: options.vibrate,
-    playSound: options.playSound,
-    duration: options.duration,
-    maxLines: options.maxLines,
-    actionLabel: options.actionLabel,
-    onAction: options.onAction,
-    icon: options.icon,
-    closePrevious: options.closePrevious,
-  ),
+  type: ToastType.warning,
+  position: position ?? options.position,
+  duration: duration ?? options.duration,
+  icon: icon ?? options.icon,
+  offset: offset ?? options.offset,
+  opacity: opacity ?? options.opacity,
+  vibrate: vibrate ?? options.vibrate,
+  playSound: playSound ?? options.playSound,
+  maxLines: maxLines ?? options.maxLines,
+  actionLabel: actionLabel ?? options.actionLabel,
+  onAction: onAction ?? options.onAction,
+  closePrevious: closePrevious && options.closePrevious,
+  options: options,
 );
 
 /// 快捷普通信息提示。
 bool showInfoToast(
   String message, {
+  ToastPosition? position,
+  Duration? duration,
+  IconData? icon,
+  Offset? offset,
+  double? opacity,
+  bool? vibrate,
+  bool? playSound,
+  int? maxLines,
+  String? actionLabel,
+  VoidCallback? onAction,
+  bool closePrevious = true,
   ToastOptions options = const ToastOptions(),
 }) => showToast(
   message,
-  options: ToastOptions(
-    type: ToastType.info,
-    position: options.position,
-    offset: options.offset,
-    opacity: options.opacity,
-    vibrate: options.vibrate,
-    playSound: options.playSound,
-    duration: options.duration,
-    maxLines: options.maxLines,
-    actionLabel: options.actionLabel,
-    onAction: options.onAction,
-    icon: options.icon,
-    closePrevious: options.closePrevious,
-  ),
+  type: ToastType.info,
+  position: position ?? options.position,
+  duration: duration ?? options.duration,
+  icon: icon ?? options.icon,
+  offset: offset ?? options.offset,
+  opacity: opacity ?? options.opacity,
+  vibrate: vibrate ?? options.vibrate,
+  playSound: playSound ?? options.playSound,
+  maxLines: maxLines ?? options.maxLines,
+  actionLabel: actionLabel ?? options.actionLabel,
+  onAction: onAction ?? options.onAction,
+  closePrevious: closePrevious && options.closePrevious,
+  options: options,
 );
 
 // ── Overlay 宿主组件与动画 ───────────────────────────────────────────────────
@@ -330,10 +416,8 @@ class _ToastOverlayHostState extends State<_ToastOverlayHost>
   @override
   void initState() {
     super.initState();
-    final position =
-        widget.options.position ?? AppToastConfig.defaultPosition;
-    final duration =
-        widget.options.duration ?? AppToastConfig.defaultDuration;
+    final position = widget.options.position ?? AppToastConfig.defaultPosition;
+    final duration = widget.options.duration ?? AppToastConfig.defaultDuration;
 
     _controller = AnimationController(
       vsync: this,
@@ -389,10 +473,10 @@ class _ToastOverlayHostState extends State<_ToastOverlayHost>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final style = _ToastStyle.from(widget.options.type, scheme);
-    final position =
-        widget.options.position ?? AppToastConfig.defaultPosition;
-    final effectiveOpacity =
-        (widget.options.opacity ?? AppToastConfig.defaultOpacity).clamp(0.0, 1.0);
+    final position = widget.options.position ?? AppToastConfig.defaultPosition;
+    final effectiveOpacity = (widget.options.opacity ??
+            AppToastConfig.defaultOpacity)
+        .clamp(0.0, 1.0);
     final effectiveOffset =
         widget.options.offset ?? AppToastConfig.defaultOffset ?? Offset.zero;
 
@@ -416,26 +500,38 @@ class _ToastOverlayHostState extends State<_ToastOverlayHost>
       case ToastPosition.top:
         alignment = Alignment.topCenter;
         // 顶部限制在 (状态栏 + 4) 到 (屏幕底 - 80) 之间
-        final computedTop = topPadding + AppToastConfig.topOffset + effectiveOffset.dy;
+        final computedTop =
+            topPadding + AppToastConfig.topOffset + effectiveOffset.dy;
         safeTop = computedTop.clamp(topPadding + 4.0, screenHeight - 120.0);
         safeBottom = 0.0;
       case ToastPosition.center:
         alignment = Alignment.center;
         // 居中偏移限制在上下可视区内
-        final maxCenterDy = (screenHeight / 2 - topPadding - 80.0).clamp(0.0, double.infinity);
-        final clampedCenterDy = effectiveOffset.dy.clamp(-maxCenterDy, maxCenterDy);
+        final maxCenterDy = (screenHeight / 2 - topPadding - 80.0).clamp(
+          0.0,
+          double.infinity,
+        );
+        final clampedCenterDy = effectiveOffset.dy.clamp(
+          -maxCenterDy,
+          maxCenterDy,
+        );
         safeTop = clampedCenterDy > 0 ? clampedCenterDy : 0.0;
         safeBottom = clampedCenterDy < 0 ? -clampedCenterDy : 0.0;
       case ToastPosition.bottom:
         alignment = Alignment.bottomCenter;
         // 底部限制在 (手势条 + 4) 到 (屏幕顶 + 80) 之间
-        final computedBottom = bottomPadding + AppToastConfig.bottomOffset - effectiveOffset.dy;
-        safeBottom = computedBottom.clamp(bottomPadding + 4.0, screenHeight - 120.0);
+        final computedBottom =
+            bottomPadding + AppToastConfig.bottomOffset - effectiveOffset.dy;
+        safeBottom = computedBottom.clamp(
+          bottomPadding + 4.0,
+          screenHeight - 120.0,
+        );
         safeTop = 0.0;
     }
 
-    final backgroundColor =
-        style.backgroundColor.withValues(alpha: effectiveOpacity);
+    final backgroundColor = style.backgroundColor.withValues(
+      alpha: effectiveOpacity,
+    );
 
     return Positioned.fill(
       child: IgnorePointer(
@@ -497,9 +593,10 @@ class _ToastOverlayHostState extends State<_ToastOverlayHost>
                                   widget.message,
                                   softWrap: true,
                                   maxLines: widget.options.maxLines,
-                                  overflow: widget.options.maxLines != null
-                                      ? TextOverflow.ellipsis
-                                      : TextOverflow.clip,
+                                  overflow:
+                                      widget.options.maxLines != null
+                                          ? TextOverflow.ellipsis
+                                          : TextOverflow.clip,
                                   style: TextStyle(
                                     color: style.foregroundColor,
                                     fontWeight: FontWeight.w500,
