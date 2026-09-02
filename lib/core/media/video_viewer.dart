@@ -214,30 +214,36 @@ class _VideoViewerState extends State<VideoViewer> {
               Positioned(
                 top: 8,
                 right: 8,
-                child: IconButton(
-                  tooltip: '缩小为浮窗',
-                  onPressed: _minimize,
-                  icon: const Icon(
-                    Icons.picture_in_picture_alt,
-                    color: Colors.white,
+                child: Opacity(
+                  opacity: 0.8,
+                  child: IconButton(
+                    tooltip: '缩小为浮窗',
+                    onPressed: _minimize,
+                    icon: const Icon(
+                      Icons.picture_in_picture_alt,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
             if (_showControls || !value.isPlaying || isCompleted)
               Center(
-                child: IconButton(
-                  iconSize: 64,
-                  onPressed: _togglePlayPause,
-                  icon: Icon(
-                    isCompleted
-                        ? Icons.replay_circle_filled
-                        : value.isPlaying
-                            ? Icons.pause_circle_filled
-                            : Icons.play_circle_fill,
-                    color: Colors.white.withValues(alpha: 0.9),
-                    shadows: const [
-                      Shadow(blurRadius: 8, color: Colors.black54),
-                    ],
+                child: Opacity(
+                  opacity: 0.8,
+                  child: IconButton(
+                    iconSize: 64,
+                    onPressed: _togglePlayPause,
+                    icon: Icon(
+                      isCompleted
+                          ? Icons.replay_circle_filled
+                          : value.isPlaying
+                              ? Icons.pause_circle_filled
+                              : Icons.play_circle_fill,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      shadows: const [
+                        Shadow(blurRadius: 8, color: Colors.black54),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -246,90 +252,93 @@ class _VideoViewerState extends State<VideoViewer> {
                 left: 0,
                 right: 0,
                 bottom: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.7),
-                        Colors.transparent,
+                child: Opacity(
+                  opacity: 0.8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.7),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          iconSize: 28,
+                          color: Colors.white,
+                          onPressed: _togglePlayPause,
+                          icon: Icon(
+                            value.isPlaying ? Icons.pause : Icons.play_arrow,
+                          ),
+                        ),
+                        Text(
+                          _formatDuration(position),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6,
+                              ),
+                              overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 14,
+                              ),
+                              activeTrackColor: Theme.of(context).colorScheme.primary,
+                              inactiveTrackColor: Colors.white24,
+                              thumbColor: Colors.white,
+                            ),
+                            child: Slider(
+                              value: _isDraggingSlider ? _sliderValue : progress,
+                              onChangeStart: (val) {
+                                _isDraggingSlider = true;
+                                _sliderValue = val;
+                                _hideTimer?.cancel();
+                              },
+                              onChanged: (val) {
+                                setState(() {
+                                  _sliderValue = val;
+                                });
+                              },
+                              onChangeEnd: (val) async {
+                                _isDraggingSlider = false;
+                                final targetMs = (val * duration.inMilliseconds).toInt();
+                                await controller.seekTo(Duration(milliseconds: targetMs));
+                                _startHideTimer();
+                              },
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _formatDuration(duration),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          iconSize: 22,
+                          color: Colors.white,
+                          tooltip: _isMuted ? '取消静音' : '静音',
+                          onPressed: _toggleMute,
+                          icon: Icon(
+                            _isMuted ? Icons.volume_off : Icons.volume_up,
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        iconSize: 28,
-                        color: Colors.white,
-                        onPressed: _togglePlayPause,
-                        icon: Icon(
-                          value.isPlaying ? Icons.pause : Icons.play_arrow,
-                        ),
-                      ),
-                      Text(
-                        _formatDuration(position),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                      Expanded(
-                        child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 3,
-                            thumbShape: const RoundSliderThumbShape(
-                              enabledThumbRadius: 6,
-                            ),
-                            overlayShape: const RoundSliderOverlayShape(
-                              overlayRadius: 14,
-                            ),
-                            activeTrackColor: Theme.of(context).colorScheme.primary,
-                            inactiveTrackColor: Colors.white24,
-                            thumbColor: Colors.white,
-                          ),
-                          child: Slider(
-                            value: _isDraggingSlider ? _sliderValue : progress,
-                            onChangeStart: (val) {
-                              _isDraggingSlider = true;
-                              _sliderValue = val;
-                              _hideTimer?.cancel();
-                            },
-                            onChanged: (val) {
-                              setState(() {
-                                _sliderValue = val;
-                              });
-                            },
-                            onChangeEnd: (val) async {
-                              _isDraggingSlider = false;
-                              final targetMs = (val * duration.inMilliseconds).toInt();
-                              await controller.seekTo(Duration(milliseconds: targetMs));
-                              _startHideTimer();
-                            },
-                          ),
-                        ),
-                      ),
-                      Text(
-                        _formatDuration(duration),
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        iconSize: 22,
-                        color: Colors.white,
-                        tooltip: _isMuted ? '取消静音' : '静音',
-                        onPressed: _toggleMute,
-                        icon: Icon(
-                          _isMuted ? Icons.volume_off : Icons.volume_up,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),
@@ -468,19 +477,25 @@ class _FloatingVideoContentState extends State<FloatingVideoContent> {
           Positioned(
             left: 2,
             top: 2,
-            child: IconButton(
-              tooltip: '恢复全屏播放',
-              onPressed: widget.onRestore,
-              icon: const Icon(Icons.fullscreen, color: Colors.white),
+            child: Opacity(
+              opacity: 0.8,
+              child: IconButton(
+                tooltip: '恢复全屏播放',
+                onPressed: widget.onRestore,
+                icon: const Icon(Icons.fullscreen, color: Colors.white),
+              ),
             ),
           ),
           Positioned(
             top: 2,
             right: 2,
-            child: IconButton(
-              tooltip: '关闭视频',
-              onPressed: widget.onClose,
-              icon: const Icon(Icons.close, color: Colors.white),
+            child: Opacity(
+              opacity: 0.8,
+              child: IconButton(
+                tooltip: '关闭视频',
+                onPressed: widget.onClose,
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
             ),
           ),
           Positioned(

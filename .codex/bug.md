@@ -154,7 +154,9 @@ I/InputTransport(10385): Fun_filterMotionEvent reportMoveEvent!
 
 账号管理
 
-### 我的
+### 我的  
+
+lib\features\home\presentation\home_sections.dart
 
 
 _ProfileSettingsPage  独立出页，  mine
@@ -176,6 +178,8 @@ _ProfileSettingsPage  独立出页，  mine
 
 
 ### 聊天设置
+
+lib\features\chat_settings\presentation\chat_settings_page.dart
 
 - 设置聊天背景
 - 清空消息要二次确认（统一使用 showModal）

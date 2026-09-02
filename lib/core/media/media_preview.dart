@@ -18,6 +18,7 @@ class MediaPreviewItem {
     required this.heroTag,
     this.bytes,
     this.thumbnail,
+    this.fileName,
   });
   final String id;
   final String messageId;
@@ -26,6 +27,8 @@ class MediaPreviewItem {
   final Object heroTag;
   final Uint8List? bytes;
   final String? thumbnail;
+  /// 下载时使用的文件名（可选）。
+  final String? fileName;
 }
 
 String buildMediaHeroTag({
@@ -167,6 +170,28 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
     }
   }
 
+  /// 下载当前媒体（stub — 业务层可替换）。
+  void _downloadCurrent() {
+    final item = widget.items[_index];
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('下载：${item.fileName ?? item.source.split('/').last}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// 分享当前媒体（stub — 业务层可替换）。
+  void _shareCurrent() {
+    final item = widget.items[_index];
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('分享：${item.fileName ?? item.source.split('/').last}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final routeAnimation = ModalRoute.of(context)?.animation;
@@ -264,50 +289,108 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                         ),
                       ),
                     ),
+                    // ── 关闭按钮（左上）──────────────────────────────
                     if (_chrome && chromeOpacity > 0.0)
                       Positioned(
                         top: 4,
                         left: 4,
-                      child: Opacity(
-                        opacity: chromeOpacity,
-                        child: IconButton(
-                          tooltip: '关闭',
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  if (_chrome &&
-                      widget.items.length > 1 &&
-                      chromeOpacity > 0.0)
-                    Positioned(
-                      bottom: 18,
-                      left: 0,
-                      right: 0,
-                      child: IgnorePointer(
                         child: Opacity(
                           opacity: chromeOpacity,
-                          child: Text(
-                            '${_index + 1} / ${widget.items.length}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              shadows: [
-                                Shadow(blurRadius: 4, color: Colors.black54),
-                              ],
+                          child: IconButton(
+                            tooltip: '关闭',
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    // ── 页码指示器（底部中央）────────────────────────
+                    if (_chrome &&
+                        widget.items.length > 1 &&
+                        chromeOpacity > 0.0)
+                      Positioned(
+                        bottom: 18,
+                        left: 0,
+                        right: 0,
+                        child: IgnorePointer(
+                          child: Opacity(
+                            opacity: chromeOpacity,
+                            child: Text(
+                              '${_index + 1} / ${widget.items.length}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                shadows: [
+                                  Shadow(blurRadius: 4, color: Colors.black54),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                    // ── 下载 / 分享（右下角）─────────────────────────
+                    if (_chrome && chromeOpacity > 0.0)
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Opacity(
+                          opacity: chromeOpacity,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _ChromeButton(
+                                tooltip: '下载',
+                                icon: Icons.download_rounded,
+                                onPressed: _downloadCurrent,
+                              ),
+                              const SizedBox(width: 4),
+                              _ChromeButton(
+                                tooltip: '分享',
+                                icon: Icons.share_rounded,
+                                onPressed: _shareCurrent,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
       },
     );
   }
 }
 
+/// 半透明圆形背景按钮，用于预览页 chrome 区域。
+class _ChromeButton extends StatelessWidget {
+  const _ChromeButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.45),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+        ),
+      ),
+    );
+  }
+}
