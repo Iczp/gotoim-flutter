@@ -220,20 +220,11 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   }
 
   Future<void> _editGroupName() async {
-    final result = await showPromptModal(
-      context: context,
-      title: '修改群名称',
-      initialValue: controller.title,
-      placeholderText: '请输入新的群名称',
-      confirmText: '保存',
+    final updated = await context.push<bool>(
+      '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/group-name?ownerId=${controller.ownerId}&title=${Uri.encodeQueryComponent(controller.title)}',
     );
-    if (result != null && result.trim().isNotEmpty && mounted) {
-      try {
-        await controller.setGroupName(result.trim());
-        showToast('群名称已更新', type: ToastType.success);
-      } catch (e) {
-        showToast('更新群名称失败：$e', type: ToastType.error);
-      }
+    if (updated == true && mounted) {
+      await controller.initialize();
     }
   }
 

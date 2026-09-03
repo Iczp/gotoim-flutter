@@ -26,10 +26,14 @@ class AuthController extends ChangeNotifier {
   AuthStatus _status = AuthStatus.checking;
   String? _errorMessage;
   String? _accountName;
+  Map<String, dynamic>? _userInfo;
+  DateTime? _lastTokenRefreshedAt;
 
   AuthStatus get status => _status;
   String? get errorMessage => _errorMessage;
   String? get accountName => _accountName;
+  Map<String, dynamic>? get userInfo => _userInfo;
+  DateTime? get lastTokenRefreshedAt => _lastTokenRefreshedAt;
   bool get isBusy => _status == AuthStatus.checking;
 
   Future<void> login({
@@ -76,6 +80,8 @@ class AuthController extends ChangeNotifier {
     _status = AuthStatus.unauthenticated;
     _errorMessage = null;
     _accountName = null;
+    _userInfo = null;
+    _lastTokenRefreshedAt = null;
     _onAccountChanged?.call();
     notifyListeners();
   }
@@ -85,6 +91,8 @@ class AuthController extends ChangeNotifier {
     _status = AuthStatus.unauthenticated;
     _errorMessage = '登录已过期，请重新登录。';
     _accountName = null;
+    _userInfo = null;
+    _lastTokenRefreshedAt = null;
     _onAccountChanged?.call();
     notifyListeners();
   }
@@ -112,17 +120,29 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> _loadUserInfoSafely() async {
+    await fetchUserInfo();
+  }
+
+  Future<void> fetchUserInfo({bool force = false}) async {
     try {
       final info = await _repository.getUserInfo();
+      _userInfo = info;
       final name = info['email']?.toString() ??
           info['unique_name']?.toString() ??
           info['preferred_username']?.toString() ??
           info['name']?.toString();
       if (name != null && name.isNotEmpty) {
         _accountName = name;
-        notifyListeners();
       }
+      notifyListeners();
     } catch (_) {}
+  }
+
+  Future<void> tryRefreshToken() async {
+    await _repository.refreshSession();
+    _lastTokenRefreshedAt = DateTime.now();
+    await fetchUserInfo(force: true);
+    notifyListeners();
   }
 
   String _displayError(Object error) =>

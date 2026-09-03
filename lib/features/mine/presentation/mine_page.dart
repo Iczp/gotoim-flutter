@@ -70,25 +70,42 @@ class MinePage extends ConsumerWidget {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      currentOwner?.name ?? '当前用户',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                child: InkWell(
+                  onTap: () => context.push('/account/profile'),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              currentOwner?.name ?? '当前用户',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.chevron_right,
+                            size: 20,
+                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      currentOwner?.typeDescription.isNotEmpty == true
-                          ? currentOwner!.typeDescription
-                          : 'IM 客户端登录用户',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                      const SizedBox(height: 4),
+                      Text(
+                        currentOwner?.typeDescription.isNotEmpty == true
+                            ? currentOwner!.typeDescription
+                            : 'IM 客户端登录用户',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               IconButton(
@@ -107,6 +124,13 @@ class MinePage extends ConsumerWidget {
           padding: EdgeInsets.zero,
           child: Column(
             children: [
+              ListTile(
+                leading: const Icon(Icons.manage_accounts_outlined),
+                title: const Text('账号设置'),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () => context.push('/account/profile'),
+              ),
+              const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.qr_code_scanner_rounded),
                 title: const Text('扫一扫'),

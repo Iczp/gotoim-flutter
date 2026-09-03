@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../app/app_navigation.dart';
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../auth/application/auth_controller.dart';
-import '../../user/presentation/profile_page.dart';
 import '../application/session_list_controller.dart';
 import '../../../core/widgets/app_avatar.dart';
 
@@ -194,21 +192,7 @@ class ChatOwnerDrawer extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right, size: 18),
               onTap: () {
                 Navigator.pop(context);
-                final owner = controller.currentOwner;
-                if (owner != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    final targetContext =
-                        rootNavigatorKey.currentContext ?? context;
-                    if (targetContext.mounted) {
-                      openProfilePage(
-                        targetContext,
-                        subject: ProfileSubject.owner(owner),
-                      );
-                    }
-                  });
-                } else {
-                  context.push('/settings/avatar');
-                }
+                context.push('/account/profile');
               },
             ),
             Padding(

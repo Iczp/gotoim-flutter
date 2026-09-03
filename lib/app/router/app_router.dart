@@ -43,8 +43,10 @@ import '../../features/workbench/presentation/workbench_page.dart';
 import '../../features/session/presentation/login_devices_page.dart';
 import '../../features/chat/presentation/chat_page.dart';
 import '../../features/chat_settings/presentation/chat_settings_page.dart';
+import '../../features/chat_settings/presentation/group_name_page.dart';
 import '../../features/chat_settings/presentation/member_list_page.dart';
 import '../../features/group_management/presentation/group_management_page.dart';
+import '../../features/account/presentation/account_profile_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
@@ -236,6 +238,30 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/devices',
         builder: (context, state) => const LoginDevicesPage(),
+      ),
+      GoRoute(
+        path: '/account/profile',
+        builder: (context, state) => const AccountProfilePage(),
+      ),
+      GoRoute(
+        path: '/group-name/:sessionUnitId',
+        builder:
+            (context, state) => GroupNamePage(
+              ownerId:
+                  int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
+              sessionUnitId: state.pathParameters['sessionUnitId']!,
+              initialTitle: state.uri.queryParameters['title'],
+            ),
+      ),
+      GoRoute(
+        path: '/chat/:sessionUnitId/group-name',
+        builder:
+            (context, state) => GroupNamePage(
+              ownerId:
+                  int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
+              sessionUnitId: state.pathParameters['sessionUnitId']!,
+              initialTitle: state.uri.queryParameters['title'],
+            ),
       ),
       GoRoute(
         path: '/chat/:sessionUnitId/settings',
