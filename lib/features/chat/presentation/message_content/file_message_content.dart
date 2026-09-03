@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/services/file/attachment_transfer_service.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_presentation.dart';
+import 'message_bubble.dart';
 
 /// Dedicated attachment bubble with a real, cancellable transfer lifecycle.
 class FileMessageContent extends StatelessWidget {
@@ -76,8 +77,10 @@ class FileMessageContent extends StatelessWidget {
         ),
       );
     }
-    return SizedBox(
-      width: 240,
+    return MessageBubble(
+      message: message,
+      child: SizedBox(
+        width: 240,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -164,7 +167,8 @@ class FileMessageContent extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   String _downloadLabel() {

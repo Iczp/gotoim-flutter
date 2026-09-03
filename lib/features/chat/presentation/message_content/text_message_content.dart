@@ -7,6 +7,7 @@ import '../../../../core/widgets/app_modal.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_presentation.dart';
+import 'message_bubble.dart';
 
 /// Renders text messages, including the Markdown dialect supported by chat,
 /// clickable auto-linked URLs, clickable phone numbers, and @mention highlights.
@@ -95,7 +96,7 @@ class TextMessageContent extends StatelessWidget {
     }
 
     final theme = Theme.of(context);
-    return MarkdownBody(
+    final content = MarkdownBody(
       data: _formatRichText(message.text),
       selectable: false,
       shrinkWrap: true,
@@ -106,6 +107,11 @@ class TextMessageContent extends StatelessWidget {
           decoration: TextDecoration.underline,
         ),
       ),
+    );
+
+    return MessageBubble(
+      message: message,
+      child: content,
     );
   }
 }

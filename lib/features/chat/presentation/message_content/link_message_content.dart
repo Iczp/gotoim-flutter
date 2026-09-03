@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/utils/api_url_resolver.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_presentation.dart';
+import 'message_bubble.dart';
 
 class LinkMessageContent extends StatelessWidget {
   const LinkMessageContent({
@@ -22,7 +23,7 @@ class LinkMessageContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = presentation == ChatMessagePresentation.quote;
     final imageUrl = resolveApiUrl(message.linkImageUrl, apiBaseUrl);
-    return InkWell(
+    final content = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: SizedBox(
@@ -78,6 +79,15 @@ class LinkMessageContent extends StatelessWidget {
           ],
         ),
       ),
+    );
+
+    if (compact) {
+      return content;
+    }
+
+    return MessageBubble(
+      message: message,
+      child: content,
     );
   }
 

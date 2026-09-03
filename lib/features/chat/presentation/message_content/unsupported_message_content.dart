@@ -17,5 +17,6 @@ class UnsupportedMessageContent extends StatelessWidget {
     title: '暂不支持的消息（类型 ${message.messageType}）',
     subtitle: message.text.isEmpty ? '请在支持该消息类型的客户端查看' : message.text,
     presentation: presentation,
+    message: message,
   );
 }

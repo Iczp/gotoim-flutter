@@ -18,5 +18,6 @@ class LocationMessageContent extends StatelessWidget {
     subtitle:
         '${message.content['address'] ?? message.content['description'] ?? ''}',
     presentation: presentation,
+    message: message,
   );
 }

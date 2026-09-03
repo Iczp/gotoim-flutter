@@ -9,6 +9,7 @@ class ChatObjectAvatar extends AppAvatar {
     required super.name,
     required super.imageUrl,
     super.radius,
+    super.size,
     super.key,
   });
 }

@@ -21,5 +21,6 @@ class ContactCardMessageContent extends StatelessWidget {
     subtitle:
         '${message.content['description'] ?? message.content['nickName'] ?? ''}',
     presentation: presentation,
+    message: message,
   );
 }

@@ -17,5 +17,6 @@ class HtmlMessageContent extends StatelessWidget {
     title: message.content['title']?.toString() ?? 'HTML 内容',
     subtitle: '${message.content['content'] ?? message.content['text'] ?? ''}',
     presentation: presentation,
+    message: message,
   );
 }

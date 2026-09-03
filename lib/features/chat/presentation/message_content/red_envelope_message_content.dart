@@ -18,5 +18,6 @@ class RedEnvelopeMessageContent extends StatelessWidget {
     subtitle:
         '${message.content['description'] ?? message.content['text'] ?? ''}',
     presentation: presentation,
+    message: message,
   );
 }

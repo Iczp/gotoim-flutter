@@ -5,6 +5,7 @@ import '../../../../core/widgets/app_toast.dart';
 import '../../application/chat_controller.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_presentation.dart';
+import 'message_bubble.dart';
 
 /// Displays a voice message, including download and playback state.
 class VoiceMessageContent extends ConsumerWidget {
@@ -45,7 +46,7 @@ class VoiceMessageContent extends ConsumerWidget {
             ? colorScheme.primary.withValues(alpha: .22)
             : colorScheme.primaryContainer.withValues(alpha: .78);
     final compact = presentation == ChatMessagePresentation.quote;
-    return InkWell(
+    final content = InkWell(
       onTap:
           message.state == 'sending'
               ? null
@@ -189,6 +190,15 @@ class VoiceMessageContent extends ConsumerWidget {
           ],
         ),
       ),
+    );
+
+    if (compact) {
+      return content;
+    }
+
+    return MessageBubble(
+      message: message,
+      child: content,
     );
   }
 }

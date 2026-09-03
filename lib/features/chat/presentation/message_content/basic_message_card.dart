@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../data/models/chat_message.dart';
 import 'chat_message_presentation.dart';
+import 'message_bubble.dart';
 
 class BasicMessageCard extends StatelessWidget {
   const BasicMessageCard({
@@ -8,6 +10,7 @@ class BasicMessageCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.presentation,
+    this.message,
     super.key,
   });
 
@@ -15,11 +18,12 @@ class BasicMessageCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final ChatMessagePresentation presentation;
+  final ChatMessage? message;
 
   @override
   Widget build(BuildContext context) {
     final compact = presentation == ChatMessagePresentation.quote;
-    return SizedBox(
+    final card = SizedBox(
       width: compact ? null : 240,
       child: Row(
         children: <Widget>[
@@ -55,6 +59,15 @@ class BasicMessageCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    if (compact || message == null) {
+      return card;
+    }
+
+    return MessageBubble(
+      message: message!,
+      child: card,
     );
   }
 }

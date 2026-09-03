@@ -18,5 +18,6 @@ class ArticleMessageContent extends StatelessWidget {
     subtitle:
         '${message.content['description'] ?? message.content['summary'] ?? ''}',
     presentation: presentation,
+    message: message,
   );
 }

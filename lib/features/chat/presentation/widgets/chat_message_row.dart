@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/media/media_preview.dart';
 import '../../../../core/services/file/attachment_transfer_service.dart';
-import '../../../../core/widgets/chat_bubble.dart';
 import '../../../../core/widgets/floating_popover.dart';
 import '../../../session/presentation/chat_object_avatar.dart';
 import '../../data/models/chat_message.dart';
@@ -195,7 +194,7 @@ class ChatMessageRow extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               const selectionSlotWidth = 36.0;
-              const avatarSlotWidth = 48.0;
+              const avatarSlotWidth = 44.0;
               final contentMaxWidth = (constraints.maxWidth -
                       selectionSlotWidth -
                       avatarSlotWidth)
@@ -204,7 +203,8 @@ class ChatMessageRow extends StatelessWidget {
               Widget avatarWidget = ChatObjectAvatar(
                 name: message.senderName,
                 imageUrl: message.senderAvatarUrl,
-                radius: 18,
+                size: 44,
+                radius: 22,
               );
               avatarWidget = GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -225,54 +225,36 @@ class ChatMessageRow extends StatelessWidget {
                 );
               }
 
-              Widget bubbleWidget = ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: bubbleWidth),
-                child: ChatBubble(
-                  style: ChatBubbleStyle.content(
-                    side:
-                        message.isMine
-                            ? ChatBubbleSide.right
-                            : ChatBubbleSide.left,
-                    backgroundColor:
-                        message.isMine
-                            ? Theme.of(
-                              context,
-                            ).colorScheme.primaryContainer
-                            : Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      ChatMessageContentRenderer(
-                        message: message,
-                        attachmentState: attachmentState,
-                        onVoiceOpened: onVoiceOpened,
-                        onAttachmentDownload: onAttachmentDownload,
-                        onAttachmentCancel: onAttachmentCancel,
-                        onAttachmentOpen: onAttachmentOpen,
-                        onAttachmentSaveAs: onAttachmentSaveAs,
-                        imageBytes: imageBytes,
-                        uploadProgress: uploadProgress,
-                        apiBaseUrl: apiBaseUrl,
-                        mediaItems: mediaItems,
-                        mediaInitialIndex: mediaInitialIndex,
-                        onLinkTap: onLinkTap,
-                      ),
-                    ],
-                  ),
+              Widget messageContentWidget = ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: 22,
+                  minHeight: 44,
+                  maxWidth: bubbleWidth,
+                ),
+                child: ChatMessageContentRenderer(
+                  message: message,
+                  attachmentState: attachmentState,
+                  onVoiceOpened: onVoiceOpened,
+                  onAttachmentDownload: onAttachmentDownload,
+                  onAttachmentCancel: onAttachmentCancel,
+                  onAttachmentOpen: onAttachmentOpen,
+                  onAttachmentSaveAs: onAttachmentSaveAs,
+                  imageBytes: imageBytes,
+                  uploadProgress: uploadProgress,
+                  apiBaseUrl: apiBaseUrl,
+                  mediaItems: mediaItems,
+                  mediaInitialIndex: mediaInitialIndex,
+                  onLinkTap: onLinkTap,
                 ),
               );
 
               if (contentMenuBuilder != null) {
-                bubbleWidget = FloatingPopover(
+                messageContentWidget = FloatingPopover(
                   controller: contentMenuController,
                   contentBuilder: contentMenuBuilder!,
                   placement: FloatingPlacement.auto,
                   offset: contentMenuOffset,
-                  child: bubbleWidget,
+                  child: messageContentWidget,
                 );
               }
 
@@ -304,7 +286,7 @@ class ChatMessageRow extends StatelessWidget {
                     ),
                     Stack(
                       children: <Widget>[
-                        bubbleWidget,
+                        messageContentWidget,
                         ChatMessageDeliveryState(
                           isMine: message.isMine,
                           state: message.state,
