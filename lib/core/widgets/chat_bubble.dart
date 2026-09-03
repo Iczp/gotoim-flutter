@@ -8,20 +8,22 @@ enum ChatBubbleTailAlignment { top, center, bottom }
 class ChatBubbleTail {
   const ChatBubbleTail({
     this.enabled = true,
-    this.width = 10,
-    this.radius = 14,
-    this.alignment = ChatBubbleTailAlignment.bottom,
-    this.offset = -4,
+    this.width = 8,
+    this.radius = 8,
+    this.targetY = 22,
+    this.alignment = ChatBubbleTailAlignment.top,
+    this.offset = 0,
     this.edgeInset = 2,
     this.cutRadius,
-    this.cutOutsideOffset = 1,
-    this.cutYOffset = -7,
+    this.cutOutsideOffset = 0,
+    this.cutYOffset = 0,
   });
   const ChatBubbleTail.none()
     : enabled = false,
       width = 0,
       radius = 0,
-      alignment = ChatBubbleTailAlignment.bottom,
+      targetY = 22,
+      alignment = ChatBubbleTailAlignment.top,
       offset = 0,
       edgeInset = 0,
       cutRadius = null,
@@ -30,6 +32,7 @@ class ChatBubbleTail {
   final bool enabled;
   final double width;
   final double radius;
+  final double targetY;
   final ChatBubbleTailAlignment alignment;
   final double offset;
   final double edgeInset;
@@ -80,7 +83,7 @@ class ChatBubbleStyle {
   factory ChatBubbleStyle.media({
     required ChatBubbleSide side,
     required Color backgroundColor,
-    ChatBubbleTail tail = const ChatBubbleTail(offset: -6),
+    ChatBubbleTail tail = const ChatBubbleTail(offset: 0),
     Color? borderColor,
     double borderWidth = 0,
     double elevation = 0,
@@ -196,36 +199,58 @@ class ChatBubbleClipper extends CustomClipper<Path> {
             ? Rect.fromLTWH(width, 0, size.width - width, size.height)
             : Rect.fromLTWH(0, 0, size.width - width, size.height);
     var path = Path()..addRRect(style.borderRadius.toRRect(body));
-    final radius = tail.radius.clamp(1, size.height / 2).toDouble();
+
     final base = switch (tail.alignment) {
-      ChatBubbleTailAlignment.top => tail.edgeInset + radius,
+      ChatBubbleTailAlignment.top =>
+        size.height >= (tail.targetY * 2) ? tail.targetY : (size.height / 2),
       ChatBubbleTailAlignment.center => size.height / 2,
-      ChatBubbleTailAlignment.bottom => size.height - tail.edgeInset - radius,
+      ChatBubbleTailAlignment.bottom =>
+        size.height - tail.edgeInset - tail.radius,
     };
-    final cy =
-        (base + tail.offset).clamp(radius, size.height - radius).toDouble();
-    final outer = Offset(
-      style.side == ChatBubbleSide.left ? radius : size.width - radius,
-      cy,
-    );
-    path = Path.combine(
-      PathOperation.union,
-      path,
-      Path()..addOval(Rect.fromCircle(center: outer, radius: radius)),
-    );
-    final cut = Offset(
-      style.side == ChatBubbleSide.left
-          ? -tail.cutOutsideOffset
-          : size.width + tail.cutOutsideOffset,
-      cy + tail.cutYOffset,
-    );
-    return Path.combine(
-      PathOperation.difference,
-      path,
-      Path()..addOval(
-        Rect.fromCircle(center: cut, radius: tail.cutRadius ?? radius + 1),
-      ),
-    );
+    final cy = (base + tail.offset)
+        .clamp(14.0, (size.height - 14.0).clamp(14.0, double.infinity))
+        .toDouble();
+    final h = (cy - 14.0).clamp(4.0, 8.0);
+    final yTop = cy - h;
+    final w = width.clamp(2.0, 16.0);
+    final rCut = tail.cutRadius ?? ((w * w + h * h) / (2 * w));
+    final rOuter = rCut;
+
+    if (style.side == ChatBubbleSide.right) {
+      final xEdge = size.width - width;
+      final outer = Offset(size.width - rOuter, cy);
+      path = Path.combine(
+        PathOperation.union,
+        path,
+        Path()..addOval(Rect.fromCircle(center: outer, radius: rOuter)),
+      );
+      final cut = Offset(
+        xEdge + rCut + tail.cutOutsideOffset,
+        yTop + tail.cutYOffset,
+      );
+      return Path.combine(
+        PathOperation.difference,
+        path,
+        Path()..addOval(Rect.fromCircle(center: cut, radius: rCut)),
+      );
+    } else {
+      final xEdge = width;
+      final outer = Offset(rOuter, cy);
+      path = Path.combine(
+        PathOperation.union,
+        path,
+        Path()..addOval(Rect.fromCircle(center: outer, radius: rOuter)),
+      );
+      final cut = Offset(
+        xEdge - rCut - tail.cutOutsideOffset,
+        yTop + tail.cutYOffset,
+      );
+      return Path.combine(
+        PathOperation.difference,
+        path,
+        Path()..addOval(Rect.fromCircle(center: cut, radius: rCut)),
+      );
+    }
   }
 
   @override
