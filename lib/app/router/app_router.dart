@@ -47,6 +47,8 @@ import '../../features/chat_settings/presentation/group_name_page.dart';
 import '../../features/chat_settings/presentation/member_list_page.dart';
 import '../../features/group_management/presentation/group_management_page.dart';
 import '../../features/account/presentation/account_profile_page.dart';
+import '../../features/settings/presentation/settings_page.dart';
+import '../../features/settings/presentation/theme_settings_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
@@ -92,6 +94,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: '/settings/theme',
+        builder: (context, state) => const ThemeSettingsPage(),
+      ),
       GoRoute(
         path: '/settings/avatar',
         builder: (context, state) => const AvatarSettingsPage(),

@@ -4,18 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
-import '../../../core/theme/tab_glass_controller.dart';
-import '../../../core/theme/theme_mode_controller.dart';
-import '../../../core/theme/overscroll_style_controller.dart';
+import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../auth/application/auth_controller.dart';
-import '../../../core/widgets/app_avatar.dart';
 import '../../session/application/session_list_controller.dart';
 
-/// 「我的」页面（独立组件，由 HomeSectionPage 调用）。
+/// 「我的」页面（由 HomeSectionPage 调用）。
 class MinePage extends ConsumerWidget {
   const MinePage({
     required this.isCompact,
@@ -43,8 +40,6 @@ class MinePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final themeMode = ref.watch(themeModeProvider);
-    final overscrollStyle = ref.watch(overscrollStyleProvider);
     final sessionController = ref.watch(sessionListControllerProvider);
     final currentOwner = sessionController.currentOwner;
 
@@ -93,7 +88,7 @@ class MinePage extends ConsumerWidget {
                             Icons.chevron_right,
                             size: 20,
                             color: colorScheme.onSurfaceVariant.withValues(
-                              alpha: 0.6,
+                              alpha: 0.5,
                             ),
                           ),
                         ],
@@ -104,7 +99,9 @@ class MinePage extends ConsumerWidget {
                             ? currentOwner!.typeDescription
                             : 'IM 客户端登录用户',
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
                       ),
                     ],
@@ -159,124 +156,20 @@ class MinePage extends ConsumerWidget {
           ],
         ),
 
-        // ── 外观与主题 ──────────────────────────────────────────────
+        // ── 设置与系统服务 ──────────────────────────────────────────
         CellGroup(
-          title: '外观与主题',
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    themeMode == ThemeMode.dark
-                        ? Icons.dark_mode_rounded
-                        : themeMode == ThemeMode.light
-                        ? Icons.light_mode_rounded
-                        : Icons.brightness_auto_rounded,
-                    size: 20,
-                    color: colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '主题模式',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              SegmentedButton<ThemeMode>(
-                segments: const [
-                  ButtonSegment<ThemeMode>(
-                    value: ThemeMode.system,
-                    icon: Icon(Icons.brightness_auto_outlined),
-                    label: Text('跟随系统'),
-                  ),
-                  ButtonSegment<ThemeMode>(
-                    value: ThemeMode.light,
-                    icon: Icon(Icons.light_mode_outlined),
-                    label: Text('浅色模式'),
-                  ),
-                  ButtonSegment<ThemeMode>(
-                    value: ThemeMode.dark,
-                    icon: Icon(Icons.dark_mode_outlined),
-                    label: Text('深色模式'),
-                  ),
-                ],
-                selected: {themeMode},
-                onSelectionChanged: (selected) {
-                  if (selected.isNotEmpty) {
-                    ref
-                        .read(themeModeControllerProvider.notifier)
-                        .setThemeMode(selected.first);
-                  }
-                },
-              ),
-              const SizedBox(height: 18),
-              Text(
-                '列表过界效果',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '可选择 iOS 式回弹或 Android 式拉伸效果。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              SegmentedButton<OverscrollStyle>(
-                segments: OverscrollStyle.values
-                    .map(
-                      (style) => ButtonSegment<OverscrollStyle>(
-                        value: style,
-                        label: Text(style.label),
-                      ),
-                    )
-                    .toList(growable: false),
-                selected: {overscrollStyle},
-                onSelectionChanged: (selected) {
-                  if (selected.isNotEmpty) {
-                    ref
-                        .read(overscrollStyleControllerProvider.notifier)
-                        .setStyle(selected.first);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              const Divider(height: 1),
-              Cell(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                icon: const Icon(Icons.blur_on_rounded),
-                title: '底部导航毛玻璃效果',
-                subtitle: '开启后导航栏具有高斯模糊与半透明质感',
-                switchValue: ref.watch(tabGlassProvider),
-                onSwitchChanged: (val) {
-                  ref.read(tabGlassProvider.notifier).setEnabled(val);
-                },
-              ),
-            ],
-          ),
-        ),
-
-        // ── 设置 ──────────────────────────────────────────────────
-        CellGroup(
-          title: '设置',
+          title: '设置与服务',
           children: [
             Cell(
-              icon: const Icon(Icons.manage_accounts_outlined),
-              title: '账号管理',
+              icon: const Icon(Icons.settings_outlined),
+              title: '设置',
+              subtitle: '外观主题、字体大小、账号与通用设置',
               showArrow: true,
-              onTap: () => context.push('/mine/account'),
+              onTap: () => context.push('/settings'),
             ),
             Cell(
               icon: const Icon(Icons.devices_rounded),
-              title: '设备信息',
+              title: '登录设备',
               subtitle: '已登录 ${sessionController.devices.length} 台设备',
               showArrow: true,
               onTap: () => context.push('/devices'),
@@ -299,7 +192,7 @@ class MinePage extends ConsumerWidget {
               Cell(
                 icon: const Icon(Icons.developer_mode_rounded),
                 title: '开发诊断中心',
-                subtitle: '全套架构、Realtime、Native 及主题诊断',
+                subtitle: '全套架构、Realtime、Native 及诊断',
                 showArrow: true,
                 onTap: () => context.push('/diagnostics'),
               ),
@@ -315,6 +208,7 @@ class MinePage extends ConsumerWidget {
               icon: Icon(Icons.logout_rounded, color: colorScheme.error),
               title: '退出登录',
               titleColor: colorScheme.error,
+              isCentered: true,
               showArrow: true,
               onTap: () => _confirmLogout(context, ref),
             ),

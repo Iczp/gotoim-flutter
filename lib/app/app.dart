@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/theme/font_scale_controller.dart';
 import '../core/theme/overscroll_style_controller.dart';
 import '../core/theme/theme_mode_controller.dart';
 import '../core/floating_window/floating_window.dart';
@@ -36,6 +37,7 @@ class _GotoImAppState extends ConsumerState<GotoImApp> {
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final overscrollStyle = ref.watch(overscrollStyleProvider);
+    final fontScale = ref.watch(fontScaleProvider);
 
     return MaterialApp.router(
       title: 'Goto IM',
@@ -48,13 +50,22 @@ class _GotoImAppState extends ConsumerState<GotoImApp> {
       routerConfig: ref.watch(appRouterProvider),
       builder: (context, child) {
         final manager = ref.read(floatingWindowManagerProvider);
-        return FloatingWindowScope(
-          manager: manager,
-          child: Stack(
-            children: [
-              child ?? const SizedBox.shrink(),
-              FloatingWindowLayer(manager: manager),
-            ],
+        final mediaQuery = MediaQuery.maybeOf(context) ??
+            MediaQueryData.fromView(View.of(context));
+        final scaledMediaQuery = mediaQuery.copyWith(
+          textScaler: TextScaler.linear(fontScale),
+        );
+
+        return MediaQuery(
+          data: scaledMediaQuery,
+          child: FloatingWindowScope(
+            manager: manager,
+            child: Stack(
+              children: [
+                child ?? const SizedBox.shrink(),
+                FloatingWindowLayer(manager: manager),
+              ],
+            ),
           ),
         );
       },
