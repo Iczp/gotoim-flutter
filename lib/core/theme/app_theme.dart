@@ -151,7 +151,7 @@ abstract final class AppTheme {
           fontWeight: FontWeight.w500,
         ),
         subtitleTextStyle: textTheme.bodyMedium?.copyWith(
-          color: colorScheme.onSurfaceVariant,
+          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
         ),
       ),
 

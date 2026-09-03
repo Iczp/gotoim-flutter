@@ -56,6 +56,8 @@ ListView
 | `backgroundColor`| `Color?` | `null` | 覆盖卡片背景色 |
 | `borderColor` | `Color?` | `null` | 覆盖卡片边框颜色 |
 | `dividerIndent` | `double` | `16.0` | 自动插入分隔线的左侧缩进距离 |
+| `subTitleColor` / `subtitleColor` | `Color?` | `null` | 分组级别副标题颜色（向下级所有 Cell 统一透传） |
+| `arrowColor` | `Color?` | `null` | 分组级别箭头颜色（向下级所有 Cell 统一透传） |
 
 ### 2. `Cell` 参数列表
 
@@ -72,6 +74,8 @@ ListView
 | `canCopy` | `bool` | `false` | 点击时是否将值复制到系统剪贴板并弹出 Toast 提示 |
 | `copyValue` | `String?` | `null` | 复制的内容（缺省时自动使用 `value` 或 `title`） |
 | `onTap` | `VoidCallback?` | `null` | 点击回调事件（优先级高于 `canCopy`） |
+| `switchValue` | `bool?` | `null` | 开关状态值（若提供，右侧自动渲染 Switch 并与整行点击联动） |
+| `onSwitchChanged`| `ValueChanged<bool>?`| `null` | 开关状态变化回调事件 |
 | `titleColor` | `Color?` | `null` | 主标题颜色（可用于“退出登录”等危险操作标红） |
 | `subTitleColor` / `subtitleColor` | `Color?` | `onSurfaceVariant(0.5)` | 副标题文本颜色（默认透明度 0.5） |
 | `arrowColor` | `Color?` | `onSurfaceVariant(0.5)` | 右侧箭头指示器颜色（默认透明度 0.5） |
@@ -227,6 +231,29 @@ CellGroup(
       ),
     ],
   ),
+)
+```
+
+---
+
+### 示例 6：开关配置项 (`switchValue` 模式)
+
+支持直接将单元格变为开关项，点击整行或开关均可自动触发切换，副标题自动应用统一的 0.5 透明度：
+
+```dart
+CellGroup(
+  title: '功能开关',
+  children: [
+    Cell(
+      icon: const Icon(Icons.blur_on_rounded),
+      title: '底部导航毛玻璃效果',
+      subtitle: '开启后导航栏具有高斯模糊与半透明质感',
+      switchValue: ref.watch(tabGlassProvider),
+      onSwitchChanged: (val) {
+        ref.read(tabGlassProvider.notifier).setEnabled(val);
+      },
+    ),
+  ],
 )
 ```
 

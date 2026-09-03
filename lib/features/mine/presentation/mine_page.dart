@@ -249,15 +249,14 @@ class MinePage extends ConsumerWidget {
                 },
               ),
               const SizedBox(height: 12),
-              const Divider(height: 0.25),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.blur_on_rounded),
-                title: const Text('底部导航毛玻璃效果'),
-                subtitle: const Text('开启后导航栏具有高斯模糊与半透明质感'),
-                value: ref.watch(tabGlassProvider),
-                onChanged: (val) {
+              const Divider(height: 1),
+              Cell(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                icon: const Icon(Icons.blur_on_rounded),
+                title: '底部导航毛玻璃效果',
+                subtitle: '开启后导航栏具有高斯模糊与半透明质感',
+                switchValue: ref.watch(tabGlassProvider),
+                onSwitchChanged: (val) {
                   ref.read(tabGlassProvider.notifier).setEnabled(val);
                 },
               ),

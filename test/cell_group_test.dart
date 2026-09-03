@@ -163,4 +163,93 @@ void main() {
     final iconWidget = tester.widget<Icon>(find.byIcon(Icons.chevron_right));
     expect(iconWidget.color?.a, closeTo(0.5, 0.01));
   });
+
+  testWidgets('Cell inherits subtitleColor from CellGroup or theme', (
+    tester,
+  ) async {
+    const customGroupColor = Colors.deepPurple;
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: CellGroup(
+            subtitleColor: customGroupColor,
+            children: [
+              Cell(
+                title: '分组统一副标题',
+                subtitle: '统一紫色',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final textWidget = tester.widget<Text>(find.text('统一紫色'));
+    expect(textWidget.style?.color, customGroupColor);
+  });
+
+  testWidgets('Cell supports switch and toggles on tap with 0.5 subtitle opacity', (
+    tester,
+  ) async {
+    var switchState = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              return CellGroup(
+                children: [
+                  Cell(
+                    title: '夜间模式',
+                    subtitle: '自动切换暗黑模式',
+                    switchValue: switchState,
+                    onSwitchChanged: (val) {
+                      setState(() {
+                        switchState = val;
+                      });
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Switch), findsOneWidget);
+    final subtitleText = tester.widget<Text>(find.text('自动切换暗黑模式'));
+    expect(subtitleText.style?.color?.a, closeTo(0.5, 0.01));
+
+    // Tap the cell to toggle switch
+    await tester.tap(find.text('夜间模式'));
+    await tester.pumpAndSettle();
+    expect(switchState, isTrue);
+  });
+
+  testWidgets('SwitchListTile inside CellGroup inherits 0.5 opacity subtitle from ListTileTheme', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CellGroup(
+            child: SwitchListTile(
+              title: const Text('原生开关项'),
+              subtitle: const Text('继承自主题的副标题'),
+              value: true,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final element = tester.element(find.text('继承自主题的副标题'));
+    final defaultTextStyle = DefaultTextStyle.of(element).style;
+    expect(defaultTextStyle.color?.a, closeTo(0.5, 0.01));
+  });
 }

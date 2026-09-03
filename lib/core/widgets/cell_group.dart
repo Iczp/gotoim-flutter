@@ -21,6 +21,9 @@ class CellGroup extends StatelessWidget {
     this.backgroundColor,
     this.borderColor,
     this.dividerIndent = 16.0,
+    this.subtitleColor,
+    this.subTitleColor,
+    this.arrowColor,
   }) : assert(
          children != null || child != null,
          'Either children or child must be provided to CellGroup.',
@@ -58,6 +61,15 @@ class CellGroup extends StatelessWidget {
 
   /// 分隔线缩进，默认 16.0
   final double dividerIndent;
+
+  /// 分组内副标题文字颜色（默认继承全局主题透明度 0.5）
+  final Color? subtitleColor;
+
+  /// 分组内副标题文字颜色别名
+  final Color? subTitleColor;
+
+  /// 分组内箭头颜色（默认继承全局主题透明度 0.5）
+  final Color? arrowColor;
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +116,25 @@ class CellGroup extends StatelessWidget {
       );
     }
 
+    final effectiveGroupSubtitleColor = subTitleColor ??
+        subtitleColor ??
+        theme.listTileTheme.subtitleTextStyle?.color ??
+        colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
+
+    final themedContent = ListTileTheme(
+      data: theme.listTileTheme.copyWith(
+        subtitleTextStyle: (theme.listTileTheme.subtitleTextStyle ??
+                theme.textTheme.bodyMedium ??
+                const TextStyle())
+            .copyWith(color: effectiveGroupSubtitleColor),
+      ),
+      child: _CellGroupScope(
+        subtitleColor: effectiveGroupSubtitleColor,
+        arrowColor: arrowColor,
+        child: content,
+      ),
+    );
+
     final Widget card = useGlass
         ? GlassCard(
             margin: EdgeInsets.zero,
@@ -111,7 +142,7 @@ class CellGroup extends StatelessWidget {
             borderRadius: effectiveRadius,
             backgroundColor: backgroundColor,
             borderColor: borderColor,
-            child: content,
+            child: themedContent,
           )
         : Material(
             color: backgroundColor ?? theme.colorScheme.surface,
@@ -124,7 +155,7 @@ class CellGroup extends StatelessWidget {
             ),
             child: Padding(
               padding: padding,
-              child: content,
+              child: themedContent,
             ),
           );
 
@@ -139,6 +170,28 @@ class CellGroup extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// 内部 InheritedWidget，用于向下传递 CellGroup 的全局样式（如副标题颜色与箭头颜色）
+class _CellGroupScope extends InheritedWidget {
+  const _CellGroupScope({
+    required super.child,
+    this.subtitleColor,
+    this.arrowColor,
+  });
+
+  final Color? subtitleColor;
+  final Color? arrowColor;
+
+  static _CellGroupScope? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<_CellGroupScope>();
+  }
+
+  @override
+  bool updateShouldNotify(_CellGroupScope oldWidget) {
+    return subtitleColor != oldWidget.subtitleColor ||
+        arrowColor != oldWidget.arrowColor;
   }
 }
 
@@ -163,6 +216,8 @@ class Cell extends StatelessWidget {
     this.subtitleColor,
     this.subTitleColor,
     this.arrowColor,
+    this.switchValue,
+    this.onSwitchChanged,
     this.isCentered = false,
     this.disabled = false,
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -201,6 +256,12 @@ class Cell extends StatelessWidget {
   /// 点击回调
   final VoidCallback? onTap;
 
+  /// 开关值（若提供，则尾部自动渲染 Switch 开关控件）
+  final bool? switchValue;
+
+  /// 开关状态变化回调
+  final ValueChanged<bool>? onSwitchChanged;
+
   /// 标题颜色（可用于危险/退出操作标红）
   final Color? titleColor;
 
@@ -225,20 +286,36 @@ class Cell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final groupScope = _CellGroupScope.maybeOf(context);
+
     final effectiveSubtitleColor = subTitleColor ??
         subtitleColor ??
-        theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
-    final effectiveArrowColor = arrowColor ??
+        groupScope?.subtitleColor ??
+        theme.listTileTheme.subtitleTextStyle?.color ??
         theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
 
-    final effectiveOnTap = onTap ??
-        (canCopy && (value != null || copyValue != null)
-            ? () {
-                final text = copyValue ?? value!;
-                Clipboard.setData(ClipboardData(text: text));
-                showToast('已复制 $title', type: ToastType.info);
-              }
+    final effectiveArrowColor = arrowColor ??
+        groupScope?.arrowColor ??
+        theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
+
+    final effectiveTrailing = trailing ??
+        (switchValue != null
+            ? Switch.adaptive(
+                value: switchValue!,
+                onChanged: disabled ? null : onSwitchChanged,
+              )
             : null);
+
+    final effectiveOnTap = onTap ??
+        (switchValue != null && onSwitchChanged != null
+            ? () => onSwitchChanged!(!switchValue!)
+            : (canCopy && (value != null || copyValue != null)
+                ? () {
+                    final text = copyValue ?? value!;
+                    Clipboard.setData(ClipboardData(text: text));
+                    showToast('已复制 $title', type: ToastType.info);
+                  }
+                : null));
 
     Widget content;
     if (isCentered) {
@@ -255,7 +332,7 @@ class Cell extends StatelessWidget {
     } else {
       final hasValue =
           valueWidget != null || (value != null && value!.isNotEmpty);
-      final hasRightContent = trailing != null || hasValue || showArrow;
+      final hasRightContent = effectiveTrailing != null || hasValue || showArrow;
 
       final Widget leftTitleColumn = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,12 +382,12 @@ class Cell extends StatelessWidget {
 
       if (!hasRightContent) {
         content = leftContent;
-      } else if (trailing != null) {
+      } else if (effectiveTrailing != null) {
         content = Row(
           children: [
             Expanded(child: leftContent),
             const SizedBox(width: 12),
-            trailing!,
+            effectiveTrailing,
           ],
         );
       } else if (!hasValue && showArrow) {
