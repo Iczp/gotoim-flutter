@@ -148,6 +148,28 @@ class ChatMessage {
     return value.isEmpty ? null : value;
   }
 
+  String? get thumbnailUrl {
+    final value = firstNonEmpty(<Object?>[
+      content['thumbnailUrl'],
+      content['snapshotThumbnailUrl'],
+      content['snapshotUrl'],
+      content['thumbnail'],
+      content['coverUrl'],
+    ]);
+    return value.isEmpty ? null : value;
+  }
+
+  String? get videoCoverUrl {
+    final value = firstNonEmpty(<Object?>[
+      content['snapshotThumbnailUrl'],
+      content['snapshotUrl'],
+      content['coverUrl'],
+      content['thumbnailUrl'],
+      content['thumbnail'],
+    ]);
+    return value.isEmpty ? null : value;
+  }
+
   /// Original media dimensions supplied by the message contract. Both image
   /// and video messages have used the generic and image-prefixed forms.
   double? get mediaAspectRatio {

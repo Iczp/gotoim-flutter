@@ -2,12 +2,14 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
+import 'image_provider_factory.dart';
+
 /// Professional image viewer with two-finger scale & twist rotation (with automatic
 /// 90-degree quadrant magnetic snapping, like system photo albums), focal double-tap
 /// zoom, single-finger dismiss drag delegation, and comprehensive gesture trace logging.
 class ImageViewer extends StatefulWidget {
   const ImageViewer({
-    required this.heroTag,
+    this.heroTag,
     required this.source,
     this.bytes,
     this.onScaleChanged,
@@ -21,7 +23,7 @@ class ImageViewer extends StatefulWidget {
     super.key,
   });
 
-  final Object heroTag;
+  final Object? heroTag;
   final String source;
   final Uint8List? bytes;
   final ValueChanged<double>? onScaleChanged;
@@ -263,57 +265,62 @@ class _ImageViewerState extends State<ImageViewer>
     final imageWidget =
         widget.bytes != null
             ? Image.memory(widget.bytes!, fit: BoxFit.contain)
-            : Image.network(
-              widget.source,
-              fit: BoxFit.contain,
-              errorBuilder:
-                  (_, _, _) => const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.broken_image_outlined,
-                        color: Colors.white70,
-                        size: 48,
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        '图片加载失败',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
-                    ],
-                  ),
-            );
+            : Image(
+                image: createImageProvider(widget.source),
+                fit: BoxFit.contain,
+                errorBuilder:
+                    (_, _, _) => const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.broken_image_outlined,
+                          color: Colors.white70,
+                          size: 48,
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          '图片加载失败',
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ],
+                    ),
+              );
 
-    return Hero(
-      tag: widget.heroTag,
-      child: Material(
-        type: MaterialType.transparency,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onScaleStart: _onScaleStart,
-          onScaleUpdate: _onScaleUpdate,
-          onScaleEnd: _onScaleEnd,
-          onDoubleTapDown: _onDoubleTapDown,
-          onDoubleTap: _onDoubleTap,
-          child: Container(
-            color: Colors.transparent,
-            width: double.infinity,
-            height: double.infinity,
-            alignment: Alignment.center,
-            child: Transform.translate(
-              offset: _translation,
-              child: Transform.rotate(
-                angle: _rotation,
-                child: Transform.scale(
-                  scale: _scale,
-                  child: imageWidget,
-                ),
+    Widget content = Material(
+      type: MaterialType.transparency,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onScaleStart: _onScaleStart,
+        onScaleUpdate: _onScaleUpdate,
+        onScaleEnd: _onScaleEnd,
+        onDoubleTapDown: _onDoubleTapDown,
+        onDoubleTap: _onDoubleTap,
+        child: Container(
+          color: Colors.transparent,
+          width: double.infinity,
+          height: double.infinity,
+          alignment: Alignment.center,
+          child: Transform.translate(
+            offset: _translation,
+            child: Transform.rotate(
+              angle: _rotation,
+              child: Transform.scale(
+                scale: _scale,
+                child: imageWidget,
               ),
             ),
           ),
         ),
       ),
     );
+
+    if (widget.heroTag != null) {
+      content = Hero(
+        tag: widget.heroTag!,
+        child: content,
+      );
+    }
+    return content;
   }
 }
 

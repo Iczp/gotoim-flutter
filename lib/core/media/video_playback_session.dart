@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
+import 'video_controller_factory.dart';
+
 /// Owns a single video controller so a full-screen view and a floating view
 /// can hand off playback without restarting the media.
 class VideoPlaybackSession extends ChangeNotifier {
+  VideoPlaybackSession(this.source);
   VideoPlaybackSession.network(this.source);
 
   final String source;
@@ -20,7 +23,7 @@ class VideoPlaybackSession extends ChangeNotifier {
     if (_disposed || _initializing || _controller != null) return;
     _initializing = true;
     try {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(source));
+      final controller = createVideoController(source);
       await controller.initialize();
       if (_disposed) {
         await controller.dispose();
@@ -78,7 +81,7 @@ abstract final class VideoPlaybackSessionRegistry {
       <String, VideoPlaybackSession>{};
 
   static VideoPlaybackSession obtain(String id, String source) =>
-      _sessions.putIfAbsent(id, () => VideoPlaybackSession.network(source));
+      _sessions.putIfAbsent(id, () => VideoPlaybackSession(source));
 
   static void release(String id, VideoPlaybackSession session) {
     if (!identical(_sessions[id], session)) return;

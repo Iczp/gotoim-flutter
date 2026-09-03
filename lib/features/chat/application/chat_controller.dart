@@ -954,10 +954,13 @@ class ChatController extends ChangeNotifier {
       message.state == 'failed' &&
       (message.messageType == 0 || _pendingFiles.containsKey(message.localId));
 
+  String _attachmentSource(ChatMessage message) =>
+      message.mediaUrl ?? message.audioUrl ?? message.linkUrl;
+
   Future<void> downloadAttachment(ChatMessage message) =>
       _attachmentTransferService.download(
         id: message.localId,
-        source: message.mediaUrl ?? '',
+        source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
       );
 
@@ -967,14 +970,14 @@ class ChatController extends ChangeNotifier {
   Future<void> openAttachment(ChatMessage message) =>
       _attachmentTransferService.open(
         id: message.localId,
-        source: message.mediaUrl ?? '',
+        source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
       );
 
   Future<void> saveAttachmentAs(ChatMessage message) =>
       _attachmentTransferService.saveAs(
         id: message.localId,
-        source: message.mediaUrl ?? '',
+        source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
         mimeType: message.content['contentType']?.toString(),
       );

@@ -50,11 +50,17 @@ class ImageMessageContent extends StatelessWidget {
                       const Icon(Icons.broken_image_outlined, size: 42),
             )
             : const Center(child: Icon(Icons.image_outlined, size: 42));
+    final thumbRaw = message.thumbnailUrl;
     final item = MediaPreviewItem(
       id: message.localId,
       messageId: message.localId,
       type: MediaPreviewType.image,
       source: _url,
+      thumbnail: thumbRaw != null ? resolveApiUrl(thumbRaw, apiBaseUrl) : _url,
+      fileName: message.fileName.isNotEmpty
+          ? message.fileName
+          : '${message.localId}${message.fileSuffix.isNotEmpty ? message.fileSuffix : '.jpg'}',
+      localPath: message.localFilePath,
       bytes: bytes,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,

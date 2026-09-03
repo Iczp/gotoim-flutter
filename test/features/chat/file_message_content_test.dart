@@ -26,22 +26,29 @@ ChatMessage _message() => ChatMessage(
 );
 
 void main() {
-  Widget build(AttachmentTransferState state) => MaterialApp(
+  Widget build(
+    AttachmentTransferState state, {
+    VoidCallback? onCancel,
+    VoidCallback? onOpen,
+    VoidCallback? onSaveAs,
+    VoidCallback? onDownload,
+  }) => MaterialApp(
     home: Scaffold(
       body: FileMessageContent(
         message: _message(),
         transfer: state,
-        onDownload: () async {},
-        onCancel: () async {},
-        onOpen: () async {},
-        onSaveAs: () async {},
+        onDownload: () async => onDownload?.call(),
+        onCancel: () async => onCancel?.call(),
+        onOpen: () async => onOpen?.call(),
+        onSaveAs: () async => onSaveAs?.call(),
       ),
     ),
   );
 
-  testWidgets('file bubble renders percentage and cancel while downloading', (
+  testWidgets('file bubble renders floating percentage and triggers cancel on tap', (
     tester,
   ) async {
+    var cancelled = false;
     await tester.pumpWidget(
       build(
         const AttachmentTransferState(
@@ -49,25 +56,40 @@ void main() {
           receivedBytes: 45,
           totalBytes: 100,
         ),
+        onCancel: () => cancelled = true,
       ),
     );
 
-    expect(find.text('下载 45%'), findsOneWidget);
-    expect(find.text('取消'), findsOneWidget);
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    // Floating percentage on icon
+    expect(find.text('45%'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // PDF tag
+    expect(find.text('PDF'), findsOneWidget);
+
+    // Tapping the card while downloading cancels it
+    await tester.tap(find.byType(FileMessageContent));
+    expect(cancelled, isTrue);
   });
 
-  testWidgets('downloaded file offers open and save as', (tester) async {
+  testWidgets('downloaded file renders completed state and triggers open on tap', (
+    tester,
+  ) async {
+    var opened = false;
     await tester.pumpWidget(
       build(
         const AttachmentTransferState(
           status: AttachmentTransferStatus.completed,
           localPath: 'C:/cache/report.pdf',
         ),
+        onOpen: () => opened = true,
       ),
     );
 
-    expect(find.text('打开'), findsOneWidget);
-    expect(find.text('另存为'), findsOneWidget);
+    expect(find.text('已下载'), findsOneWidget);
+    expect(find.byIcon(Icons.save_alt_rounded), findsOneWidget);
+
+    // Tapping the card opens the file
+    await tester.tap(find.text('report.pdf'));
+    expect(opened, isTrue);
   });
 }

@@ -290,6 +290,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       message: message,
       showTime: _showTime(message, older),
       onUserTap: () => _showSenderProfile(message),
+      onSessionUnitTap: _showSessionUnitProfile,
       onVoiceOpened: () => controller.markVoiceOpened(message),
       onLinkTap: () => _copyLink(message),
       mediaItems: mediaItems,
@@ -551,6 +552,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             item.localId,
             item.messageType,
             item.mediaUrl,
+            item.thumbnailUrl,
+            item.videoCoverUrl,
             item.localFilePath,
             controller.imagePreview(item.localId)?.length,
           ].join('|'),
@@ -559,13 +562,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (fingerprint == _mediaItemsFingerprint) return _mediaItems;
     _mediaItemsFingerprint = fingerprint;
     final baseUrl = ref.read(appEnvironmentProvider).apiBaseUrl;
-    _mediaItems = messages
+    // 列表是 reverse: true（最新消息在 index 0），媒体画廊需按自然时间正序排列（最旧在 index 0，最新在末尾）
+    _mediaItems = messages.reversed
         .where((item) => item.messageType == 2 || item.messageType == 4)
         .map((message) {
           final source = resolveApiUrl(
             message.mediaUrl ?? message.localFilePath ?? '',
             baseUrl,
           );
+          final thumbRaw = message.thumbnailUrl ?? message.videoCoverUrl;
+          final thumbnail =
+              thumbRaw != null ? resolveApiUrl(thumbRaw, baseUrl) : null;
+          final fileName = message.fileName.isNotEmpty
+              ? message.fileName
+              : '${message.localId}${message.fileSuffix.isNotEmpty ? message.fileSuffix : (message.messageType == 4 ? '.mp4' : '.jpg')}';
           return MediaPreviewItem(
             id: message.localId,
             messageId: message.localId,
@@ -574,6 +584,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     ? MediaPreviewType.image
                     : MediaPreviewType.video,
             source: source,
+            thumbnail: thumbnail,
+            fileName: fileName,
+            localPath: message.localFilePath,
             bytes: controller.imagePreview(message.localId),
             heroTag: buildMediaHeroTag(
               messageId: message.localId,
@@ -736,6 +749,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
       };
     }
     return showMemberProfileSheet(context, ChatMember.fromJson(sender));
+  }
+
+  Future<void> _showSessionUnitProfile(
+    String sessionUnitId,
+    String displayName,
+  ) {
+    return showMemberProfileSheet(
+      context,
+      ChatMember.fromJson(<String, dynamic>{
+        'id': sessionUnitId,
+        'displayName': displayName,
+        'owner': <String, dynamic>{
+          'displayName': displayName,
+        },
+      }),
+    );
   }
 
   Future<void> _openTransferSheet() async {

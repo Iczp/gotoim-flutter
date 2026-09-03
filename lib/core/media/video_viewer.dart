@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -28,6 +27,7 @@ class VideoViewer extends StatefulWidget {
     required this.active,
     required this.items,
     required this.initialIndex,
+    this.heroTag,
     super.key,
   });
 
@@ -35,6 +35,7 @@ class VideoViewer extends StatefulWidget {
   final bool active;
   final List<MediaPreviewItem> items;
   final int initialIndex;
+  final Object? heroTag;
 
   @override
   State<VideoViewer> createState() => _VideoViewerState();
@@ -175,9 +176,13 @@ class _VideoViewerState extends State<VideoViewer> {
 
     final controller = _session.controller;
     if (controller == null || !controller.value.isInitialized) {
-      return const Center(
+      Widget loading = const Center(
         child: CircularProgressIndicator(color: Colors.white),
       );
+      if (widget.heroTag != null) {
+        loading = Hero(tag: widget.heroTag!, child: loading);
+      }
+      return loading;
     }
 
     final value = controller.value;
@@ -189,14 +194,12 @@ class _VideoViewerState extends State<VideoViewer> {
         ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
 
-    return Hero(
-      tag: widget.item.heroTag,
-      child: Material(
-        type: MaterialType.transparency,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _toggleControls,
-          child: Stack(
+    final content = Material(
+      type: MaterialType.transparency,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggleControls,
+        child: Stack(
           alignment: Alignment.center,
           fit: StackFit.expand,
           children: [
@@ -345,8 +348,12 @@ class _VideoViewerState extends State<VideoViewer> {
           ],
         ),
       ),
-    ),
     );
+
+    if (widget.heroTag != null) {
+      return Hero(tag: widget.heroTag!, child: content);
+    }
+    return content;
   }
 }
 

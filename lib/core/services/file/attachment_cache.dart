@@ -9,6 +9,8 @@ import 'attachment_cache_stub.dart'
 abstract class AttachmentCache {
   Future<String?> write(String key, String fileName, Uint8List bytes);
 
+  Future<String?> find(String key, String fileName);
+
   Future<void> open(String path);
 }
 

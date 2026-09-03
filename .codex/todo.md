@@ -36,7 +36,19 @@ F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\account\profile.vue
 剪裁掉的上圆型，太大，凹进去，不能超过相切的位置
 
 - 消息内容
-  - 发送人名称
-  - 各种消息（文本、语音、图片、视频、文件等）
-  - 引用消息
-  - 其他内容
+  - 发送人名称(各自加padding: 12)
+  - 各种消息（文本、语音、图片、视频、文件等）- 不加padding,  气泡尾巴宽度12
+  - 引用消息(各自加padding: 12)
+  - 其他内容，可扩展(各自加padding: 12)
+
+这个间隔 12  统一设置 ，气泡背景透明 0.75
+
+附件缓存保存要分类，按消息日期保存，局域网文件管理站，要能管理到这个附件
+
+聊天窗口 lib\features\chat\presentation\chat_page.dart
+头像菜单 和 消息菜单 按住 时，在华为手机上没有 振动反馈
+
+
+
+
+

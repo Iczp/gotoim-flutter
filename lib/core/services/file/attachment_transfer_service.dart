@@ -58,12 +58,32 @@ class AttachmentTransferService extends ChangeNotifier {
   AttachmentTransferState stateFor(String id) =>
       _states[id] ?? const AttachmentTransferState();
 
+  Future<String?> findCachedPath({
+    required String id,
+    required String fileName,
+  }) async {
+    final existing = _states[id]?.localPath;
+    if (existing != null) return existing;
+    final cached = await _cache.find(id, fileName);
+    if (cached != null) {
+      _states[id] = AttachmentTransferState(
+        status: AttachmentTransferStatus.completed,
+        localPath: cached,
+      );
+      notifyListeners();
+      return cached;
+    }
+    return null;
+  }
+
   Future<void> download({
     required String id,
     required String source,
     required String fileName,
   }) async {
     if (stateFor(id).isDownloading) return;
+    final cached = await findCachedPath(id: id, fileName: fileName);
+    if (cached != null) return;
     _cancelled.remove(id);
     final resolved = _resolve(source);
     if (resolved.isEmpty) throw StateError('附件下载地址为空。');

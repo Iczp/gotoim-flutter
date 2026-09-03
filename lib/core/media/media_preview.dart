@@ -1,9 +1,12 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
+import 'image_provider_factory.dart';
 import 'image_viewer.dart';
+import 'media_downloader.dart';
 import 'video_viewer.dart';
 
+export 'media_downloader.dart';
 export 'video_viewer.dart' show formatMediaDuration, openFloatingVideoWindow;
 
 enum MediaPreviewType { image, video }
@@ -19,6 +22,7 @@ class MediaPreviewItem {
     this.bytes,
     this.thumbnail,
     this.fileName,
+    this.localPath,
   });
   final String id;
   final String messageId;
@@ -29,6 +33,31 @@ class MediaPreviewItem {
   final String? thumbnail;
   /// 下载时使用的文件名（可选）。
   final String? fileName;
+  /// 本地已下载文件缓存路径（可选）。
+  final String? localPath;
+
+  MediaPreviewItem copyWith({
+    String? id,
+    String? messageId,
+    MediaPreviewType? type,
+    String? source,
+    Object? heroTag,
+    Uint8List? bytes,
+    String? thumbnail,
+    String? fileName,
+    String? localPath,
+  }) =>
+      MediaPreviewItem(
+        id: id ?? this.id,
+        messageId: messageId ?? this.messageId,
+        type: type ?? this.type,
+        source: source ?? this.source,
+        heroTag: heroTag ?? this.heroTag,
+        bytes: bytes ?? this.bytes,
+        thumbnail: thumbnail ?? this.thumbnail,
+        fileName: fileName ?? this.fileName,
+        localPath: localPath ?? this.localPath,
+      );
 }
 
 String buildMediaHeroTag({
@@ -41,6 +70,7 @@ abstract class MediaPreview {
     BuildContext context, {
     required List<MediaPreviewItem> items,
     int initialIndex = 0,
+    MediaDownloader? downloader,
   }) {
     if (items.isEmpty) return Future.value();
     final safeInitialIndex = initialIndex.clamp(0, items.length - 1);
@@ -48,6 +78,7 @@ abstract class MediaPreview {
       Navigator.of(context),
       items: items,
       initialIndex: safeInitialIndex,
+      downloader: downloader,
     );
   }
 
@@ -55,6 +86,7 @@ abstract class MediaPreview {
     NavigatorState navigator, {
     required List<MediaPreviewItem> items,
     int initialIndex = 0,
+    MediaDownloader? downloader,
   }) {
     if (items.isEmpty) return Future.value();
     final safeInitialIndex = initialIndex.clamp(0, items.length - 1);
@@ -66,16 +98,25 @@ abstract class MediaPreview {
         reverseTransitionDuration: const Duration(milliseconds: 240),
         pageBuilder:
             (_, animation, secondaryAnimation) =>
-                _MediaPreviewPage(items: items, initialIndex: safeInitialIndex),
+                _MediaPreviewPage(
+                  items: items,
+                  initialIndex: safeInitialIndex,
+                  downloader: downloader ?? DefaultMediaDownloader.instance,
+                ),
       ),
     );
   }
 }
 
 class _MediaPreviewPage extends StatefulWidget {
-  const _MediaPreviewPage({required this.items, required this.initialIndex});
+  const _MediaPreviewPage({
+    required this.items,
+    required this.initialIndex,
+    required this.downloader,
+  });
   final List<MediaPreviewItem> items;
   final int initialIndex;
+  final MediaDownloader downloader;
   @override
   State<_MediaPreviewPage> createState() => _MediaPreviewPageState();
 }
@@ -170,15 +211,46 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
     }
   }
 
-  /// 下载当前媒体（stub — 业务层可替换）。
-  void _downloadCurrent() {
+  /// 下载当前媒体到本地缓存。
+  Future<void> _downloadCurrent() async {
     final item = widget.items[_index];
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('下载：${item.fileName ?? item.source.split('/').last}'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    try {
+      final cached = await widget.downloader.getCachedPath(item);
+      if (cached != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('已保存在本地：${item.fileName ?? cached.split(r'\').last}'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('正在下载媒体文件...'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        final path = await widget.downloader.download(item);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('下载完成：${item.fileName ?? path.split(r'\').last}'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('下载失败：$e')),
+        );
+      }
+    }
   }
 
   /// 分享当前媒体（stub — 业务层可替换）。
@@ -261,30 +333,23 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                               }),
                           itemBuilder: (context, index) {
                             final item = widget.items[index];
-                            if (item.type == MediaPreviewType.image) {
-                              return ImageViewer(
-                                heroTag: item.heroTag,
-                                source: item.source,
-                                bytes: item.bytes,
-                                onScaleChanged: (scale) {
-                                  _currentScale = scale;
-                                },
-                                onDismissProgress: (offset) {
-                                  setState(() {
-                                    _dragOffset = offset;
-                                    _isDragging = offset != Offset.zero;
-                                  });
-                                },
-                                onDismissEnd: () => Navigator.of(context).pop(),
-                              );
-                            } else {
-                              return VideoViewer(
-                                item: item,
-                                active: index == _index,
-                                items: widget.items,
-                                initialIndex: index,
-                              );
-                            }
+                            return _MediaPreviewItemView(
+                              item: item,
+                              active: index == _index,
+                              items: widget.items,
+                              index: index,
+                              downloader: widget.downloader,
+                              onScaleChanged: (scale) {
+                                _currentScale = scale;
+                              },
+                              onDismissProgress: (offset) {
+                                setState(() {
+                                  _dragOffset = offset;
+                                  _isDragging = offset != Offset.zero;
+                                });
+                              },
+                              onDismissEnd: () => Navigator.of(context).pop(),
+                            );
                           },
                         ),
                       ),
@@ -394,3 +459,262 @@ class _ChromeButton extends StatelessWidget {
     );
   }
 }
+
+class _MediaPreviewItemView extends StatefulWidget {
+  const _MediaPreviewItemView({
+    required this.item,
+    required this.active,
+    required this.items,
+    required this.index,
+    required this.downloader,
+    required this.onScaleChanged,
+    required this.onDismissProgress,
+    required this.onDismissEnd,
+  });
+
+  final MediaPreviewItem item;
+  final bool active;
+  final List<MediaPreviewItem> items;
+  final int index;
+  final MediaDownloader downloader;
+  final ValueChanged<double> onScaleChanged;
+  final ValueChanged<Offset> onDismissProgress;
+  final VoidCallback onDismissEnd;
+
+  @override
+  State<_MediaPreviewItemView> createState() => _MediaPreviewItemViewState();
+}
+
+class _MediaPreviewItemViewState extends State<_MediaPreviewItemView> {
+  String? _localPath;
+  bool _isReady = false;
+  bool _isDownloading = false;
+  double _progress = 0.0;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkStatus();
+  }
+
+  @override
+  void didUpdateWidget(_MediaPreviewItemView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.item.source != oldWidget.item.source ||
+        widget.item.id != oldWidget.item.id) {
+      _checkStatus();
+    } else if (widget.active && !_isReady && !_isDownloading && _error == null) {
+      _startDownload();
+    }
+  }
+
+  Future<void> _checkStatus() async {
+    if (widget.item.localPath != null && widget.item.localPath!.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _localPath = widget.item.localPath;
+          _isReady = true;
+        });
+      }
+      return;
+    }
+    if (widget.item.bytes != null &&
+        widget.item.type == MediaPreviewType.image) {
+      if (mounted) {
+        setState(() {
+          _isReady = true;
+        });
+      }
+      return;
+    }
+
+    final cached = await widget.downloader.getCachedPath(widget.item);
+    if (!mounted) return;
+    if (cached != null) {
+      setState(() {
+        _localPath = cached;
+        _isReady = true;
+      });
+    } else {
+      _startDownload();
+    }
+  }
+
+  void _startDownload() {
+    if (_isDownloading) return;
+    setState(() {
+      _isDownloading = true;
+      _error = null;
+      _progress = 0.0;
+    });
+
+    widget.downloader.download(
+      widget.item,
+      onProgress: (received, total) {
+        if (!mounted) return;
+        setState(() {
+          _progress = total > 0 ? (received / total).clamp(0.0, 1.0) : 0.0;
+        });
+      },
+    ).then((path) {
+      if (!mounted) return;
+      setState(() {
+        _localPath = path;
+        _isDownloading = false;
+        _isReady = true;
+      });
+    }).catchError((Object err) {
+      if (!mounted) return;
+      setState(() {
+        _isDownloading = false;
+        _error = err;
+      });
+    });
+  }
+
+  Widget _buildThumbnail() {
+    if (widget.item.bytes != null) {
+      return Image.memory(widget.item.bytes!, fit: BoxFit.contain);
+    }
+    final thumb = widget.item.thumbnail;
+    final source =
+        (thumb != null && thumb.isNotEmpty) ? thumb : widget.item.source;
+    if (source.isNotEmpty) {
+      return Image(
+        image: createImageProvider(source),
+        fit: BoxFit.contain,
+        errorBuilder:
+            (_, _, _) => const Center(
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white54,
+                size: 48,
+              ),
+            ),
+      );
+    }
+    return const Center(
+      child: Icon(Icons.image_outlined, color: Colors.white54, size: 48),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Hero(
+      tag: widget.item.heroTag,
+      child: Material(
+        type: MaterialType.transparency,
+        child:
+            _isReady
+                ? (widget.item.type == MediaPreviewType.image
+                    ? ImageViewer(
+                      heroTag: null,
+                      source: _localPath ?? widget.item.source,
+                      bytes: widget.item.bytes,
+                      onScaleChanged: widget.onScaleChanged,
+                      onDismissProgress: widget.onDismissProgress,
+                      onDismissEnd: widget.onDismissEnd,
+                    )
+                    : VideoViewer(
+                      heroTag: null,
+                      item: widget.item.copyWith(
+                        source: _localPath ?? widget.item.source,
+                      ),
+                      active: widget.active,
+                      items: widget.items,
+                      initialIndex: widget.index,
+                    ))
+                : Stack(
+                  fit: StackFit.expand,
+                  alignment: Alignment.center,
+                  children: [
+                    _buildThumbnail(),
+                    if (widget.item.type == MediaPreviewType.video &&
+                        !_isDownloading &&
+                        _error == null)
+                      const Center(
+                        child: Icon(
+                          Icons.play_circle_fill_rounded,
+                          color: Colors.white70,
+                          size: 64,
+                        ),
+                      ),
+                    if (_isDownloading || (!_isReady && _error == null))
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox.square(
+                                dimension: 40,
+                                child: CircularProgressIndicator(
+                                  value: _progress > 0 ? _progress : null,
+                                  color: Colors.white,
+                                  backgroundColor: Colors.white24,
+                                  strokeWidth: 3.2,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                '${(_progress * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (_error != null)
+                      Center(
+                        child: GestureDetector(
+                          onTap: _startDownload,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.72),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.refresh_rounded,
+                                  color: Colors.white,
+                                  size: 30,
+                                ),
+                                SizedBox(height: 6),
+                                Text(
+                                  '下载失败，点击重试',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+      ),
+    );
+  }
+}
+

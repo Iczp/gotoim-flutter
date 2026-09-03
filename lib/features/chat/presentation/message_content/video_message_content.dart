@@ -35,11 +35,15 @@ class VideoMessageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final coverUrl = message.videoCoverUrl ?? message.thumbnailUrl;
     final item = MediaPreviewItem(
       id: message.localId,
       messageId: message.localId,
       type: MediaPreviewType.video,
       source: _uri?.toString() ?? '',
+      thumbnail: coverUrl != null ? resolveApiUrl(coverUrl, apiBaseUrl) : null,
+      fileName: message.fileName.isNotEmpty ? message.fileName : '${message.localId}.mp4',
+      localPath: message.localFilePath,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,
         mediaId: message.localId,
@@ -79,18 +83,25 @@ class VideoMessageContent extends StatelessWidget {
               return SizedBox(
                 width: size.width,
                 height: size.height,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
                   child: Stack(
                     alignment: Alignment.center,
+                    fit: StackFit.expand,
                     children: <Widget>[
-                      Icon(
-                        Icons.play_circle_fill,
-                        color: Colors.white,
-                        size: compact ? 28 : 52,
+                      Container(color: Colors.black87),
+                      if (item.thumbnail != null && item.thumbnail!.isNotEmpty)
+                        Image.network(
+                          item.thumbnail!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                      Center(
+                        child: Icon(
+                          Icons.play_circle_fill,
+                          color: Colors.white.withValues(alpha: 0.9),
+                          size: compact ? 28 : 50,
+                        ),
                       ),
                       if (!compact)
                         Positioned(
@@ -101,13 +112,21 @@ class VideoMessageContent extends StatelessWidget {
                             message.fileName.isEmpty ? '视频' : message.fileName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              shadows: [
+                                Shadow(color: Colors.black54, blurRadius: 4),
+                              ],
+                            ),
                           ),
                         ),
                       if (progress != null && progress! < 1)
-                        CircularProgressIndicator(
-                          value: progress,
-                          color: Colors.white,
+                        Center(
+                          child: CircularProgressIndicator(
+                            value: progress,
+                            color: Colors.white,
+                          ),
                         ),
                     ],
                   ),

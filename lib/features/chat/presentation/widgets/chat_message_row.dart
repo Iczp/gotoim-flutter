@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,6 +18,8 @@ class ChatMessageRow extends StatelessWidget {
     required this.showTime,
     required this.onUserTap,
     this.onUserLongPress,
+    this.onSessionUnitTap,
+    this.onChatObjectTap,
     required this.onVoiceOpened,
     required this.onLinkTap,
     required this.mediaItems,
@@ -61,6 +64,12 @@ class ChatMessageRow extends StatelessWidget {
 
   /// 长按发送人头像回调（打开头像菜单）
   final VoidCallback? onUserLongPress;
+
+  /// 点击系统消息中用户链接的回调
+  final void Function(String sessionUnitId, String name)? onSessionUnitTap;
+
+  /// 点击系统消息中对象链接的回调
+  final void Function(String chatObjectId, String name)? onChatObjectTap;
 
   /// 消息气泡内容菜单构建器（长按仅在消息气泡内容上生效）
   final WidgetBuilder? contentMenuBuilder;
@@ -150,15 +159,7 @@ class ChatMessageRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final renderedQuote = quoteContent;
     if (message.messageType == 1) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Center(
-          child: Text(
-            message.text.isEmpty ? '[系统消息]' : message.text,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ),
-      );
+      return _buildSystemMessage(context);
     }
     if (message.isRollbacked) {
       return Padding(
@@ -376,6 +377,95 @@ class ChatMessageRow extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSystemMessage(BuildContext context) {
+    final rawText = message.text.isEmpty ? '[系统消息]' : message.text;
+    final theme = Theme.of(context);
+    final textStyle = theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
+          fontSize: 12,
+          height: 1.4,
+        ) ??
+        const TextStyle(fontSize: 12, color: Colors.grey);
+
+    final linkStyle = textStyle.copyWith(
+      color: theme.colorScheme.primary,
+      fontWeight: FontWeight.w600,
+    );
+
+    // Regular expression matching <a uid="...">text</a> or <a oid="...">text</a>
+    final regExp = RegExp(
+      r'<a\s+uid="([^"]+)">([^<]+)</a>|<a\s+oid="([^"]+)">([^<]+)</a>',
+      caseSensitive: false,
+    );
+
+    final spans = <InlineSpan>[];
+    var lastIndex = 0;
+
+    for (final match in regExp.allMatches(rawText)) {
+      if (match.start > lastIndex) {
+        spans.add(TextSpan(
+          text: rawText.substring(lastIndex, match.start),
+          style: textStyle,
+        ));
+      }
+
+      final uid = match.group(1);
+      final uidText = match.group(2);
+      final oid = match.group(3);
+      final oidText = match.group(4);
+
+      if (uid != null && uidText != null) {
+        spans.add(
+          TextSpan(
+            text: uidText,
+            style: linkStyle,
+            recognizer: (onSessionUnitTap != null)
+                ? (TapGestureRecognizer()
+                  ..onTap = () => onSessionUnitTap!(uid, uidText))
+                : null,
+          ),
+        );
+      } else if (oid != null && oidText != null) {
+        spans.add(
+          TextSpan(
+            text: oidText,
+            style: linkStyle,
+            recognizer: (onChatObjectTap != null)
+                ? (TapGestureRecognizer()
+                  ..onTap = () => onChatObjectTap!(oid, oidText))
+                : null,
+          ),
+        );
+      }
+
+      lastIndex = match.end;
+    }
+
+    if (lastIndex < rawText.length) {
+      spans.add(TextSpan(
+        text: rawText.substring(lastIndex),
+        style: textStyle,
+      ));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text.rich(
+            TextSpan(children: spans),
+            textAlign: TextAlign.center,
+          ),
+        ),
       ),
     );
   }

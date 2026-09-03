@@ -12,4 +12,7 @@ class _UnsupportedAttachmentCache implements AttachmentCache {
   @override
   Future<String?> write(String key, String fileName, Uint8List bytes) async =>
       null;
+
+  @override
+  Future<String?> find(String key, String fileName) async => null;
 }
