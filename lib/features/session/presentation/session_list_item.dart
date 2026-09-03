@@ -1,4 +1,11 @@
+import 'package:flutter/material.dart';
+
 import '../data/models/session_summary.dart';
+import 'session_dividers.dart';
+import 'session_unit_item.dart';
+
+export 'session_dividers.dart';
+export 'session_unit_item.dart';
 
 enum SessionListItemKind { session, pinnedDivider, timeDivider }
 
@@ -131,4 +138,44 @@ String sessionTimeGroup(int ticks, {DateTime? now}) {
   if (days < 1095) return '3年前';
   if (days < 1460) return '4年前';
   return '很久以前（5年前以上）';
+}
+
+/// A theme-adapted and overflow-protected widget for rendering any [SessionListItem].
+class SessionListItemView extends StatelessWidget {
+  const SessionListItemView({
+    required this.item,
+    this.onTap,
+    this.onLongPress,
+    this.showDivider = true,
+    super.key,
+  });
+
+  final SessionListItem item;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (item.kind) {
+      SessionListItemKind.session => SessionUnitItem(
+        key: ValueKey(item.session!.id),
+        item: item.session!,
+        onTap: onTap,
+        onLongPress: onLongPress,
+        showDivider: showDivider,
+      ),
+      SessionListItemKind.pinnedDivider => PinnedDividerItem(
+        key: const ValueKey('pinned_divider'),
+        count: item.count,
+        hasMore: item.hasMore,
+      ),
+      SessionListItemKind.timeDivider => TimeDividerItem(
+        key: ValueKey('time_divider_${item.title}'),
+        text: item.title ?? '',
+        count: item.count,
+        hasMore: item.hasMore,
+      ),
+    };
+  }
 }

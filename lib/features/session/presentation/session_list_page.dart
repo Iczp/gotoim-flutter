@@ -7,10 +7,8 @@ import '../data/models/session_summary.dart';
 import 'current_device_bar.dart';
 import 'current_owner_header.dart';
 
-import 'session_dividers.dart';
 import 'session_list_item.dart';
 import 'session_menu.dart';
-import 'session_unit_item.dart';
 import 'signalr_status_bar.dart';
 
 class SessionListPage extends ConsumerStatefulWidget {
@@ -202,40 +200,29 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                         itemCount: listItems.length,
                         itemBuilder: (context, index) {
                           final item = listItems[index];
-                          return switch (item.kind) {
-                            SessionListItemKind.session => SessionUnitItem(
-                              key: ValueKey(item.session!.id),
-                              item: item.session!,
-                              onTap:
-                                  () => _openChat(
-                                    context,
-                                    controller,
-                                    item.session!,
-                                  ),
-                              onLongPress:
-                                  () => SessionMenuSheet.show(
-                                    context: context,
-                                    controller: controller,
-                                    session: item.session!,
-                                  ),
-                              showDivider:
-                                  index + 1 < listItems.length &&
-                                  listItems[index + 1].kind ==
-                                      SessionListItemKind.session,
-                            ),
-                            SessionListItemKind.pinnedDivider =>
-                              PinnedDividerItem(
-                                key: const ValueKey('pinned_divider'),
-                                count: item.count,
-                                hasMore: item.hasMore,
-                              ),
-                            SessionListItemKind.timeDivider => TimeDividerItem(
-                              key: ValueKey('time_divider_${item.title}'),
-                              text: item.title!,
-                              count: item.count,
-                              hasMore: item.hasMore,
-                            ),
-                          };
+                          return SessionListItemView(
+                            item: item,
+                            onTap:
+                                item.session != null
+                                    ? () => _openChat(
+                                      context,
+                                      controller,
+                                      item.session!,
+                                    )
+                                    : null,
+                            onLongPress:
+                                item.session != null
+                                    ? () => SessionMenuSheet.show(
+                                      context: context,
+                                      controller: controller,
+                                      session: item.session!,
+                                    )
+                                    : null,
+                            showDivider:
+                                index + 1 < listItems.length &&
+                                listItems[index + 1].kind ==
+                                    SessionListItemKind.session,
+                          );
                         },
                       ),
                     SliverToBoxAdapter(

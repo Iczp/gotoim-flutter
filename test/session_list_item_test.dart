@@ -1,8 +1,15 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gotoim_flutter/core/config/app_environment.dart';
+import 'package:gotoim_flutter/core/theme/app_theme.dart';
+import 'package:gotoim_flutter/core/theme/app_theme_tokens.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
 import 'package:gotoim_flutter/features/session/presentation/session_list_item.dart';
 
 void main() {
+  setUpAll(() => dotenv.loadFromString(envString: 'APP_NAME=Test'));
   final now = DateTime(2026, 8, 26, 12);
 
   SessionSummary session({
@@ -135,4 +142,148 @@ void main() {
       '很久以前（5年前以上）',
     );
   });
+
+  testWidgets(
+    'SessionListItemView renders session, pinned divider and time divider without overflow',
+    (tester) async {
+      final s = session(
+        id: 'session-1',
+        ticks: now.millisecondsSinceEpoch,
+        pinned: true,
+      );
+      final pinnedItem = SessionListItem.session(s);
+      final pinnedDivider = SessionListItem.pinnedDivider(
+        count: 3,
+        hasMore: true,
+      );
+      final timeDivider = SessionListItem.timeDivider(
+        title: '今天',
+        count: 5,
+        hasMore: false,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appEnvironmentProvider.overrideWithValue(
+              AppEnvironment.fromDotEnv(AppFlavor.development),
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme(),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    SessionListItemView(item: pinnedItem),
+                    SessionListItemView(item: pinnedDivider),
+                    SessionListItemView(item: timeDivider),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SessionUnitItem), findsOneWidget);
+      expect(find.byType(PinnedDividerItem), findsOneWidget);
+      expect(find.byType(TimeDividerItem), findsOneWidget);
+      expect(find.text('以上是置顶会话 (3+)'), findsOneWidget);
+      expect(find.text('今天 (5)'), findsOneWidget);
+    },
+  );
+
+  testWidgets('SessionListItemView adapts to Dark theme', (tester) async {
+    final darkTheme = AppTheme.darkTheme();
+    final darkTokens = darkTheme.extension<AppThemeTokens>()!;
+    final s = session(
+      id: 'session-dark',
+      ticks: now.millisecondsSinceEpoch,
+      pinned: true,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appEnvironmentProvider.overrideWithValue(
+            AppEnvironment.fromDotEnv(AppFlavor.development),
+          ),
+        ],
+        child: MaterialApp(
+          theme: darkTheme,
+          home: Scaffold(
+            body: SessionListItemView(
+              item: SessionListItem.session(s),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final material = tester.widget<Material>(
+      find
+          .descendant(
+            of: find.byType(SessionUnitItem),
+            matching: find.byType(Material),
+          )
+          .first,
+    );
+    expect(material.color, darkTokens.sessionPinnedBackground);
+  });
+
+  testWidgets(
+    'SessionListItemView does not overflow in narrow container or large font',
+    (tester) async {
+      final s = SessionSummary.fromJson({
+        'id': 'overflow-test',
+        'ownerId': 1,
+        'score': 100,
+        'ticks': now.millisecondsSinceEpoch,
+        'sorting': 1,
+        'destination': {'name': '超长会话标题名称超长超长超长超长超长超长超长超长'},
+        'lastMessage': {
+          'messageType': 2,
+          'senderSessionUnit': {'displayName': '非常非常长的发送者姓名'},
+          'content':
+              '这是一条非常长非常长非常长非常长非常长非常长非常长非常长非常长非常长非常长的消息预览文本',
+        },
+        'publicBadge': 999,
+        'remindMeCount': 10,
+        'followingCount': 5,
+        'setting': {'isImmersed': true},
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appEnvironmentProvider.overrideWithValue(
+              AppEnvironment.fromDotEnv(AppFlavor.development),
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme(),
+            home: Scaffold(
+              body: MediaQuery(
+                data: const MediaQueryData(
+                  textScaler: TextScaler.linear(1.8),
+                ),
+                child: SizedBox(
+                  width: 220,
+                  child: SessionListItemView(
+                    item: SessionListItem.session(s),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

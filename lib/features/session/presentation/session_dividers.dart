@@ -55,8 +55,8 @@ class _DividerRow extends StatelessWidget {
 
     return Container(
       color: colorScheme.surfaceContainerLowest,
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      constraints: const BoxConstraints(minHeight: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
           Icon(
@@ -65,11 +65,15 @@ class _DividerRow extends StatelessWidget {
             color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
           ),
           const SizedBox(width: 8),
-          Text(
-            '$text (${hasMore ? '$count+' : count})',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-              fontWeight: FontWeight.w500,
+          Expanded(
+            child: Text(
+              '$text (${hasMore ? '$count+' : count})',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
