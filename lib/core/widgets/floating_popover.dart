@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../native/native.dart';
+
 /// 浮动菜单定位模式。
 enum FloatingPlacement {
   /// 自动探测（气泡菜单首选：优先在气泡上方，空间不足则在下方，横向自动贴靠并钳制在屏幕内）
@@ -168,7 +170,18 @@ class _FloatingPopoverState extends State<FloatingPopover> {
       if (i > 0) {
         await Future.delayed(widget.vibrateInterval);
       }
-      await HapticFeedback.mediumImpact();
+      try {
+        // 优先调用原生硬件马达通道（45ms 短促干脆反馈）
+        // 华为手机（EMUI/HarmonyOS）对默认的 mediumImpact (VIRTUAL_KEY) 存在系统级静音策略，
+        // 而硬件级 Vibrator 及 HapticFeedbackConstants.LONG_PRESS 均可直接驱动马达。
+        await Native.vibrate(HapticFeedbackType.vibrate, 45);
+      } catch (_) {
+        try {
+          await HapticFeedback.vibrate();
+        } catch (_) {
+          await HapticFeedback.mediumImpact();
+        }
+      }
     }
   }
 
@@ -357,7 +370,6 @@ class _FloatingPopoverLayoutDelegate extends SingleChildLayoutDelegate {
         break;
 
       case FloatingPlacement.auto:
-      default:
         // 消息气泡菜单：
         // 1. 垂直：优先在气泡上方，若上方空间不足则在下方
         final spaceAbove = targetRect.top - safeTop;

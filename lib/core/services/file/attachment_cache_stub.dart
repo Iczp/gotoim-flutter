@@ -10,9 +10,21 @@ class _UnsupportedAttachmentCache implements AttachmentCache {
       throw UnsupportedError('当前平台不能直接使用系统程序打开附件。');
 
   @override
-  Future<String?> write(String key, String fileName, Uint8List bytes) async =>
+  Future<String?> write(
+    String key,
+    String fileName,
+    Uint8List bytes, {
+    DateTime? messageDate,
+    String? category,
+  }) async =>
       null;
 
   @override
-  Future<String?> find(String key, String fileName) async => null;
+  Future<String?> find(
+    String key,
+    String fileName, {
+    DateTime? messageDate,
+    String? category,
+  }) async =>
+      null;
 }

@@ -61,10 +61,17 @@ class AttachmentTransferService extends ChangeNotifier {
   Future<String?> findCachedPath({
     required String id,
     required String fileName,
+    DateTime? messageDate,
+    String? category,
   }) async {
     final existing = _states[id]?.localPath;
     if (existing != null) return existing;
-    final cached = await _cache.find(id, fileName);
+    final cached = await _cache.find(
+      id,
+      fileName,
+      messageDate: messageDate,
+      category: category,
+    );
     if (cached != null) {
       _states[id] = AttachmentTransferState(
         status: AttachmentTransferStatus.completed,
@@ -80,9 +87,16 @@ class AttachmentTransferService extends ChangeNotifier {
     required String id,
     required String source,
     required String fileName,
+    DateTime? messageDate,
+    String? category,
   }) async {
     if (stateFor(id).isDownloading) return;
-    final cached = await findCachedPath(id: id, fileName: fileName);
+    final cached = await findCachedPath(
+      id: id,
+      fileName: fileName,
+      messageDate: messageDate,
+      category: category,
+    );
     if (cached != null) return;
     _cancelled.remove(id);
     final resolved = _resolve(source);
@@ -109,7 +123,13 @@ class AttachmentTransferService extends ChangeNotifier {
       );
       if (_cancelled.contains(id)) return;
       _bytes[id] = data;
-      final localPath = await _cache.write(id, fileName, data);
+      final localPath = await _cache.write(
+        id,
+        fileName,
+        data,
+        messageDate: messageDate,
+        category: category,
+      );
       _states[id] = AttachmentTransferState(
         status: AttachmentTransferStatus.completed,
         receivedBytes: data.length,
@@ -143,10 +163,18 @@ class AttachmentTransferService extends ChangeNotifier {
     required String id,
     required String source,
     required String fileName,
+    DateTime? messageDate,
+    String? category,
   }) async {
     var state = stateFor(id);
     if (!state.isReady) {
-      await download(id: id, source: source, fileName: fileName);
+      await download(
+        id: id,
+        source: source,
+        fileName: fileName,
+        messageDate: messageDate,
+        category: category,
+      );
       state = stateFor(id);
     }
     final path = state.localPath;
@@ -160,10 +188,18 @@ class AttachmentTransferService extends ChangeNotifier {
     required String id,
     required String source,
     required String fileName,
+    DateTime? messageDate,
+    String? category,
     String? mimeType,
   }) async {
     if (!_bytes.containsKey(id)) {
-      await download(id: id, source: source, fileName: fileName);
+      await download(
+        id: id,
+        source: source,
+        fileName: fileName,
+        messageDate: messageDate,
+        category: category,
+      );
     }
     final data = _bytes[id];
     if (data == null) return null;

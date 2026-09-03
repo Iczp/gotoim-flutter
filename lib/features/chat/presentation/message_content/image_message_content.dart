@@ -61,6 +61,7 @@ class ImageMessageContent extends StatelessWidget {
           ? message.fileName
           : '${message.localId}${message.fileSuffix.isNotEmpty ? message.fileSuffix : '.jpg'}',
       localPath: message.localFilePath,
+      createdAt: message.createdAt,
       bytes: bytes,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,

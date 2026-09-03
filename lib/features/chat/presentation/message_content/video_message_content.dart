@@ -44,6 +44,7 @@ class VideoMessageContent extends StatelessWidget {
       thumbnail: coverUrl != null ? resolveApiUrl(coverUrl, apiBaseUrl) : null,
       fileName: message.fileName.isNotEmpty ? message.fileName : '${message.localId}.mp4',
       localPath: message.localFilePath,
+      createdAt: message.createdAt,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,
         mediaId: message.localId,

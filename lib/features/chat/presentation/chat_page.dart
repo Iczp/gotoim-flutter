@@ -587,6 +587,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             thumbnail: thumbnail,
             fileName: fileName,
             localPath: message.localFilePath,
+            createdAt: message.createdAt,
             bytes: controller.imagePreview(message.localId),
             heroTag: buildMediaHeroTag(
               messageId: message.localId,

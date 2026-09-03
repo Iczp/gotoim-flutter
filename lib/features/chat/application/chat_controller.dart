@@ -8,6 +8,7 @@ import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/native/native.dart';
 import '../../../core/services/clipboard_service.dart';
+import '../../../core/services/file/attachment_cache.dart';
 import '../../../core/services/file/attachment_transfer_service.dart';
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
@@ -962,6 +963,12 @@ class ChatController extends ChangeNotifier {
         id: message.localId,
         source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        messageDate: message.createdAt,
+        category: resolveAttachmentCategory(
+          message.fileName,
+          fileSuffix: message.fileSuffix,
+          messageType: message.messageType,
+        ),
       );
 
   Future<void> cancelAttachmentDownload(ChatMessage message) =>
@@ -972,6 +979,12 @@ class ChatController extends ChangeNotifier {
         id: message.localId,
         source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        messageDate: message.createdAt,
+        category: resolveAttachmentCategory(
+          message.fileName,
+          fileSuffix: message.fileSuffix,
+          messageType: message.messageType,
+        ),
       );
 
   Future<void> saveAttachmentAs(ChatMessage message) =>
@@ -979,6 +992,12 @@ class ChatController extends ChangeNotifier {
         id: message.localId,
         source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        messageDate: message.createdAt,
+        category: resolveAttachmentCategory(
+          message.fileName,
+          fileSuffix: message.fileSuffix,
+          messageType: message.messageType,
+        ),
         mimeType: message.content['contentType']?.toString(),
       );
 

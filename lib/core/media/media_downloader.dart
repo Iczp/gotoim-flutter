@@ -52,7 +52,13 @@ class DefaultMediaDownloader implements MediaDownloader {
       return item.localPath;
     }
     final fileName = _resolveFileName(item);
-    return _cache.find(item.id, fileName);
+    final category = item.type == MediaPreviewType.video ? '视频' : '图片';
+    return _cache.find(
+      item.id,
+      fileName,
+      messageDate: item.createdAt,
+      category: category,
+    );
   }
 
   @override
@@ -79,7 +85,14 @@ class DefaultMediaDownloader implements MediaDownloader {
       );
 
       final bytes = Uint8List.fromList(response.data ?? <int>[]);
-      final path = await _cache.write(item.id, fileName, bytes);
+      final category = item.type == MediaPreviewType.video ? '视频' : '图片';
+      final path = await _cache.write(
+        item.id,
+        fileName,
+        bytes,
+        messageDate: item.createdAt,
+        category: category,
+      );
       return path ?? '';
     } finally {
       _cancelTokens.remove(item.id);
@@ -117,7 +130,13 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
       return item.localPath;
     }
     final fileName = _resolveFileName(item);
-    return _transferService.findCachedPath(id: item.id, fileName: fileName);
+    final category = item.type == MediaPreviewType.video ? '视频' : '图片';
+    return _transferService.findCachedPath(
+      id: item.id,
+      fileName: fileName,
+      messageDate: item.createdAt,
+      category: category,
+    );
   }
 
   @override
@@ -130,6 +149,7 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
     if (cached != null) return cached;
 
     final fileName = _resolveFileName(item);
+    final category = item.type == MediaPreviewType.video ? '视频' : '图片';
     final completer = Completer<String>();
 
     void listener() {
@@ -153,6 +173,8 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
         id: item.id,
         source: item.source,
         fileName: fileName,
+        messageDate: item.createdAt,
+        category: category,
       );
     } catch (e) {
       _transferService.removeListener(listener);

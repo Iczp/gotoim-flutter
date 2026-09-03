@@ -23,6 +23,7 @@ class MediaPreviewItem {
     this.thumbnail,
     this.fileName,
     this.localPath,
+    this.createdAt,
   });
   final String id;
   final String messageId;
@@ -35,6 +36,8 @@ class MediaPreviewItem {
   final String? fileName;
   /// 本地已下载文件缓存路径（可选）。
   final String? localPath;
+  /// 消息创建日期（用于按日期分类保存附件到 `LocalShare/聊天文件/<分类>/<yyyy-MM-dd>`）。
+  final DateTime? createdAt;
 
   MediaPreviewItem copyWith({
     String? id,
@@ -46,6 +49,7 @@ class MediaPreviewItem {
     String? thumbnail,
     String? fileName,
     String? localPath,
+    DateTime? createdAt,
   }) =>
       MediaPreviewItem(
         id: id ?? this.id,
@@ -57,6 +61,7 @@ class MediaPreviewItem {
         thumbnail: thumbnail ?? this.thumbnail,
         fileName: fileName ?? this.fileName,
         localPath: localPath ?? this.localPath,
+        createdAt: createdAt ?? this.createdAt,
       );
 }
 
