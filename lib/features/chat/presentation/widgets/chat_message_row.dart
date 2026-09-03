@@ -140,7 +140,6 @@ class ChatMessageRow extends StatelessWidget {
   /// 点击整行区域回调（多选模式下切换选中状态）
   final VoidCallback? onTap;
 
-
   String get _senderLabel {
     if (!kDebugMode) return message.senderName;
     final messageId = message.serverId?.toString() ?? message.localId;
@@ -199,8 +198,10 @@ class ChatMessageRow extends StatelessWidget {
               const selectionSlotWidth = 36.0;
               const avatarSlotWidth = 44.0;
               const contentPadding = 12.0;
-              final availableWidth = constraints.maxWidth -
-                  (selectionMode ? selectionSlotWidth : 0.0);
+              final availableWidth = constraints.maxWidth - selectionSlotWidth;
+
+              // final availableWidth = constraints.maxWidth -
+              //     (selectionMode ? selectionSlotWidth : 0.0);
               final contentMaxWidth = (availableWidth -
                       (showAvatar ? avatarSlotWidth + contentPadding : 0.0))
                   .clamp(0.0, double.infinity);
@@ -217,9 +218,11 @@ class ChatMessageRow extends StatelessWidget {
                 av = GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: onUserTap,
-                  onLongPress: onUserLongPress ?? () {
-                    avatarMenuController?.show();
-                  },
+                  onLongPress:
+                      onUserLongPress ??
+                      () {
+                        avatarMenuController?.show();
+                      },
                   child: av,
                 );
                 if (avatarMenuBuilder != null) {
@@ -334,23 +337,26 @@ class ChatMessageRow extends StatelessWidget {
                   Expanded(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: message.isMine
-                          ? <Widget>[
-                              // 消息内容（占满）
-                              messageBody,
-                              if (showAvatar && avatarWidget != null) ...<Widget>[
-                                const SizedBox(width: contentPadding),
-                                avatarWidget,
+                      children:
+                          message.isMine
+                              ? <Widget>[
+                                // 消息内容（占满）
+                                messageBody,
+                                if (showAvatar &&
+                                    avatarWidget != null) ...<Widget>[
+                                  const SizedBox(width: contentPadding),
+                                  avatarWidget,
+                                ],
+                              ]
+                              : <Widget>[
+                                if (showAvatar &&
+                                    avatarWidget != null) ...<Widget>[
+                                  avatarWidget,
+                                  const SizedBox(width: contentPadding),
+                                ],
+                                // 消息内容（占满）
+                                messageBody,
                               ],
-                            ]
-                          : <Widget>[
-                              if (showAvatar && avatarWidget != null) ...<Widget>[
-                                avatarWidget,
-                                const SizedBox(width: contentPadding),
-                              ],
-                              // 消息内容（占满）
-                              messageBody,
-                            ],
                     ),
                   ),
                 ],

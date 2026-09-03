@@ -10,7 +10,7 @@ enum ChatBubbleTailAlignment { top, center, bottom }
 class ChatBubbleTail {
   const ChatBubbleTail({
     this.enabled = true,
-    this.width = 10,
+    this.width = 7.8,
     this.radius = 8,
     this.targetY = 18,
     this.alignment = ChatBubbleTailAlignment.top,
@@ -62,8 +62,8 @@ class ChatBubbleStyle {
     required Color backgroundColor,
     ChatBubbleTail tail = const ChatBubbleTail(),
     EdgeInsetsGeometry padding = const EdgeInsets.symmetric(
-      horizontal: 13,
-      vertical: 9,
+      horizontal: 0,
+      vertical: 0,
     ),
     Color? borderColor,
     double borderWidth = 0,
