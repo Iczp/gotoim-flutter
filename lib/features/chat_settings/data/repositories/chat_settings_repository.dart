@@ -89,6 +89,18 @@ class ChatSettingsRepository {
     await _dao.clearMessages(ownerId, id);
     _sessionChangeBus?.publish(ownerId: ownerId, sessionUnitId: id);
   }
+
+  Future<void> setRename(String id, String rename) async {
+    await _api.setRename(id, rename);
+  }
+
+  Future<void> setBackgroundImage(String id, String? imageUrl) async {
+    await _api.setBackgroundImage(id, imageUrl);
+  }
+
+  Future<void> setRoomTitle(String roomId, String title) async {
+    await _api.setRoomTitle(roomId, title);
+  }
 }
 
 class MemberPage {

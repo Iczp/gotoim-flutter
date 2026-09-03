@@ -46,6 +46,8 @@ class ChatSettingsController extends ChangeNotifier {
   bool get isTopping =>
       setting['isTopping'] == true || setting['isTop'] == true;
   bool get isImmersed => setting['isImmersed'] == true;
+  String get rename => setting['rename']?.toString() ?? '';
+  String? get backgroundImage => setting['backgroundImage']?.toString();
   int get objectType =>
       asInt(asMap(friend?.raw['destination'])['objectType']) ?? -1;
   String get objectTypeLabel => switch (objectType) {
@@ -155,4 +157,15 @@ class ChatSettingsController extends ChangeNotifier {
 
   Future<void> clearMessages() =>
       _repository.clearMessages(ownerId, sessionUnitId);
+
+  Future<void> setRename(String value) =>
+      _updateSetting(() => _repository.setRename(sessionUnitId, value));
+
+  Future<void> setBackgroundImage(String? imageUrl) =>
+      _updateSetting(() => _repository.setBackgroundImage(sessionUnitId, imageUrl));
+
+  Future<void> setGroupName(String name) {
+    if (sessionId == null) return Future.value();
+    return _updateSetting(() => _repository.setRoomTitle(sessionId!, name));
+  }
 }

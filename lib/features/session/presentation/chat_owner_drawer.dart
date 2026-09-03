@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_navigation.dart';
+import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/theme/theme_mode_controller.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../user/presentation/profile_page.dart';
 import '../application/session_list_controller.dart';
 import '../../../core/widgets/app_avatar.dart';
@@ -131,14 +133,16 @@ class ChatOwnerDrawer extends ConsumerWidget {
                     ),
                   const Divider(height: 16),
                   ListTile(
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                     minVerticalPadding: 0,
                     leading: const Icon(Icons.qr_code_scanner_rounded),
                     title: const Text('扫一扫'),
                     trailing: const Icon(Icons.chevron_right, size: 18),
                     onTap: () {
                       Navigator.pop(context);
-                      context.push('/scan-login/scan');
+                      ref
+                          .read(unifiedScanDispatcherProvider)
+                          .openAndDispatch(context, ref);
                     },
                   ),
                   const ListTile(
@@ -172,20 +176,21 @@ class ChatOwnerDrawer extends ConsumerWidget {
                     )
                   : const Icon(Icons.settings_outlined),
               title: Text(
-                controller.currentOwner?.typeDescription.isNotEmpty == true
-                    ? controller.currentOwner!.typeDescription
-                    : controller.currentOwner?.name ?? '当前账号',
+                ref.watch(authControllerProvider).accountName ??
+                    controller.currentOwner?.name ??
+                    '当前账号',
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
-              subtitle: controller.currentOwner?.typeDescription.isNotEmpty == true
-                  ? Text(
-                      controller.currentOwner!.name,
-                      style: const TextStyle(
-                        color: Color.fromARGB(153, 53, 53, 53),
-                        fontSize: 12,
-                      ),
-                    )
-                  : null,
+              subtitle: Text(
+                controller.currentOwner?.name ??
+                    (controller.currentOwner?.typeDescription.isNotEmpty == true
+                        ? controller.currentOwner!.typeDescription
+                        : '当前登录身份'),
+                style: const TextStyle(
+                  color: Color.fromARGB(153, 53, 53, 53),
+                  fontSize: 12,
+                ),
+              ),
               trailing: const Icon(Icons.chevron_right, size: 18),
               onTap: () {
                 Navigator.pop(context);

@@ -19,6 +19,7 @@ import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
 import '../data/repositories/message_repository.dart';
 import '../../session/data/models/session_summary.dart';
+import '../../session/data/models/session_summary_helpers.dart';
 import '../../session/data/datasources/session_dao.dart';
 import '../../session/data/repositories/session_repository.dart';
 import '../../session/data/session_change_bus.dart';
@@ -125,6 +126,41 @@ class ChatController extends ChangeNotifier {
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   String get title => friend?.title ?? _title;
   bool get isMuted => friend?.isMuted == true;
+  int get destinationObjectType =>
+      asInt(asMap(friend?.raw['destination'])['objectType']) ?? 0;
+  bool get isOfficialAccount =>
+      destinationObjectType == 3 || destinationObjectType == 4;
+
+  List<Map<String, dynamic>> get officialAccountMenus {
+    final rawMenus = friend?.raw['menus'];
+    if (rawMenus is List && rawMenus.isNotEmpty) {
+      return rawMenus.whereType<Map<String, dynamic>>().toList();
+    }
+    if (isOfficialAccount) {
+      return const [
+        {
+          'name': '最新资讯',
+          'type': 'click',
+          'key': '最新资讯',
+        },
+        {
+          'name': '服务大厅',
+          'subButtons': [
+            {'name': '在线客服', 'type': 'click', 'key': '转人工客服'},
+            {'name': '业务办理', 'type': 'click', 'key': '业务办理'},
+            {'name': '帮助中心', 'type': 'click', 'key': '帮助中心'},
+          ],
+        },
+        {
+          'name': '个人中心',
+          'type': 'click',
+          'key': '个人中心',
+        },
+      ];
+    }
+    return const [];
+  }
+
   Uint8List? imagePreview(String localId) => _imagePreviews[localId];
 
   ChatMessage? messageByServerId(int? serverId) {

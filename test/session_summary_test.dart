@@ -60,4 +60,31 @@ void main() {
     expect(cached.single.id, summary.id);
     expect(cached.single.title, 'Flutter Team');
   });
+
+  test('session summary mergeWithLocal preserves local lastMessage when remote has none', () {
+    final local = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'unit-1',
+      'ownerId': 42,
+      'destination': <String, dynamic>{'displayName': '张三'},
+      'lastMessage': <String, dynamic>{
+        'id': 7297000,
+        'content': <String, dynamic>{'text': '本地最后一条消息'},
+        'creationTime': '2026-08-26T10:00:00Z',
+      },
+      'lastMessageTime': '2026-08-26T10:00:00Z',
+    });
+
+    final remoteWithoutLastMessage = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'unit-1',
+      'ownerId': 42,
+      'destination': <String, dynamic>{'displayName': '张三（最新昵称）'},
+      // 远端 friend detail 接口不返回 lastMessage
+    });
+
+    final merged = remoteWithoutLastMessage.mergeWithLocal(local);
+
+    expect(merged.title, '张三（最新昵称）');
+    expect(merged.preview, '本地最后一条消息');
+    expect(merged.lastMessageId, 7297000);
+  });
 }

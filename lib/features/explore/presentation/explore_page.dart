@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/presentation/chat_object_avatar.dart';
@@ -134,7 +135,16 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
               itemBuilder:
                   (context, index) => _FeatureCard(
                     feature: features[index],
-                    onTap: () => context.push(features[index].route),
+                    onTap: () {
+                      final item = features[index];
+                      if (item.route == '/scan-login/scan') {
+                        ref
+                            .read(unifiedScanDispatcherProvider)
+                            .openAndDispatch(context, ref);
+                      } else {
+                        context.push(item.route);
+                      }
+                    },
                   ),
             ),
           ),

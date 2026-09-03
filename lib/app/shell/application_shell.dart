@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/native/native.dart';
+import '../../core/theme/tab_glass_controller.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../features/home/presentation/home_sections.dart';
 import '../../features/session/application/session_list_controller.dart';
@@ -176,18 +177,22 @@ class _LazyHomeSectionStack extends StatelessWidget {
   }
 }
 
-class _HomeNavigationBar extends StatelessWidget {
+class _HomeNavigationBar extends ConsumerWidget {
   const _HomeNavigationBar({required this.selected, required this.onSelected});
 
   final HomeSection selected;
   final ValueChanged<HomeSection> onSelected;
 
   @override
-  Widget build(BuildContext context) {
-    final dividerColor = Theme.of(context).dividerColor.withValues(alpha: .55);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isGlass = ref.watch(tabGlassProvider);
+    final theme = Theme.of(context);
+    final dividerColor = theme.dividerColor.withValues(alpha: .55);
     return GlassContainer(
       borderRadius: BorderRadius.zero,
       borderWidth: 0,
+      blurSigma: isGlass ? null : 0.0,
+      backgroundColor: isGlass ? null : theme.colorScheme.surface,
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: dividerColor, width: .8)),
@@ -214,7 +219,7 @@ class _HomeNavigationBar extends StatelessWidget {
   }
 }
 
-class _HomeNavigationRail extends StatelessWidget {
+class _HomeNavigationRail extends ConsumerWidget {
   const _HomeNavigationRail({
     required this.selected,
     required this.extended,
@@ -226,10 +231,14 @@ class _HomeNavigationRail extends StatelessWidget {
   final ValueChanged<HomeSection> onSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isGlass = ref.watch(tabGlassProvider);
+    final theme = Theme.of(context);
     return GlassContainer(
       borderRadius: BorderRadius.zero,
       borderWidth: 0,
+      blurSigma: isGlass ? null : 0.0,
+      backgroundColor: isGlass ? null : theme.colorScheme.surface,
       child: NavigationRail(
         backgroundColor: Colors.transparent,
         extended: extended,

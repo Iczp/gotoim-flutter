@@ -45,6 +45,22 @@ class SessionSummary {
     );
   }
 
+  /// 合并本地已持久化的数据（例如：远端 /api/chat/session-unit-cache/friend/{id} 接口不返回 lastMessage，
+  /// 需要保留本地已有的 lastMessage 与 lastMessageTime，避免会话预览被冲掉）。
+  SessionSummary mergeWithLocal(SessionSummary? local) {
+    if (local == null) return this;
+    final remoteLastMessage = asMap(raw['lastMessage']);
+    final localLastMessage = asMap(local.raw['lastMessage']);
+    if (remoteLastMessage.isNotEmpty || localLastMessage.isEmpty) {
+      return this;
+    }
+    final mergedRaw = Map<String, dynamic>.from(raw)
+      ..['lastMessage'] = localLastMessage
+      ..['lastMessageTime'] =
+          raw['lastMessageTime'] ?? local.raw['lastMessageTime'];
+    return SessionSummary.fromJson(mergedRaw);
+  }
+
   factory SessionSummary.fromDatabaseRow(Map<String, Object?> row) {
     final raw = row['raw'];
     if (raw is! String) {

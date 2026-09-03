@@ -22,7 +22,6 @@ import '../../chat_settings/application/chat_settings_controller.dart';
 import '../../chat_settings/presentation/member_profile_sheet.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/session_change_bus.dart';
-import '../../session/presentation/chat_object_avatar.dart';
 import '../../call_center/application/call_center_controller.dart';
 import 'message_content/chat_message_content_renderer.dart';
 import 'message_content/chat_message_presentation.dart';

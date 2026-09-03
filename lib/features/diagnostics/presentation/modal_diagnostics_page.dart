@@ -55,77 +55,74 @@ class _ModalDiagnosticsPageState extends State<ModalDiagnosticsPage> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('圆角半径: ${_borderRadius.toStringAsFixed(0)}'),
-                    Expanded(
-                      child: Slider(
-                        value: _borderRadius,
-                        min: 4,
-                        max: 32,
-                        divisions: 14,
-                        label: _borderRadius.toStringAsFixed(0),
-                        onChanged: (v) => setState(() => _borderRadius = v),
-                      ),
+                    Slider(
+                      value: _borderRadius,
+                      min: 4,
+                      max: 32,
+                      divisions: 14,
+                      label: _borderRadius.toStringAsFixed(0),
+                      onChanged: (v) => setState(() => _borderRadius = v),
                     ),
                   ],
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('毛玻璃模糊度: ${_backdropBlur.toStringAsFixed(1)}'),
-                    Expanded(
-                      child: Slider(
-                        value: _backdropBlur,
-                        min: 0,
-                        max: 12,
-                        divisions: 12,
-                        label: _backdropBlur.toStringAsFixed(1),
-                        onChanged: (v) => setState(() => _backdropBlur = v),
-                      ),
+                    Slider(
+                      value: _backdropBlur,
+                      min: 0,
+                      max: 12,
+                      divisions: 12,
+                      label: _backdropBlur.toStringAsFixed(1),
+                      onChanged: (v) => setState(() => _backdropBlur = v),
                     ),
                   ],
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('进场过渡动画：'),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButton<ModalTransitionType>(
-                        value: _transitionType,
-                        isExpanded: true,
-                        isDense: true,
-                        items: const [
-                          DropdownMenuItem(
-                            value: ModalTransitionType.material3,
-                            child: Text('Material 3 (缩放渐显)'),
-                          ),
-                          DropdownMenuItem(
-                            value: ModalTransitionType.scale,
-                            child: Text('Center Scale (中心放大)'),
-                          ),
-                          DropdownMenuItem(
-                            value: ModalTransitionType.fade,
-                            child: Text('Fade (淡入淡出)'),
-                          ),
-                          DropdownMenuItem(
-                            value: ModalTransitionType.slideFromBottom,
-                            child: Text('Slide Bottom (底部滑入)'),
-                          ),
-                          DropdownMenuItem(
-                            value: ModalTransitionType.slideFromTop,
-                            child: Text('Slide Top (顶部滑入)'),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) setState(() => _transitionType = v);
-                        },
-                      ),
+                    const SizedBox(height: 4),
+                    DropdownButton<ModalTransitionType>(
+                      value: _transitionType,
+                      isExpanded: true,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: ModalTransitionType.material3,
+                          child: Text('Material 3 (缩放渐显)'),
+                        ),
+                        DropdownMenuItem(
+                          value: ModalTransitionType.scale,
+                          child: Text('Center Scale (中心放大)'),
+                        ),
+                        DropdownMenuItem(
+                          value: ModalTransitionType.fade,
+                          child: Text('Fade (淡入淡出)'),
+                        ),
+                        DropdownMenuItem(
+                          value: ModalTransitionType.slideFromBottom,
+                          child: Text('Slide Bottom (底部滑入)'),
+                        ),
+                        DropdownMenuItem(
+                          value: ModalTransitionType.slideFromTop,
+                          child: Text('Slide Top (顶部滑入)'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _transitionType = v);
+                      },
                     ),
                   ],
                 ),

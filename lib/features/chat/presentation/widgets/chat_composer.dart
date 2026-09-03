@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/half_page_sheet.dart';
 import '../../application/chat_controller.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_function_panel.dart';
 import 'chat_mention_panel.dart';
+import 'chat_public_account_menu.dart';
 import 'chat_quote_preview.dart';
 import 'chat_recording_panel.dart';
 
@@ -63,6 +65,7 @@ class ChatComposerState extends State<ChatComposer>
   int _amplitudeSampleCount = 0;
   int _page = 0;
   bool _mentionSheetOpen = false;
+  bool _menuMode = false;
 
   static const _functions = <ChatFunctionItem>[
     ChatFunctionItem('相册', Icons.photo_outlined),
@@ -87,10 +90,19 @@ class ChatComposerState extends State<ChatComposer>
   @override
   void initState() {
     super.initState();
+    _menuMode = widget.controller.isOfficialAccount;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _captureKeyboardHeight(),
     );
+  }
+
+  void _onMenuItemSelected(PublicAccountMenuItem item) {
+    if (item.url != null && item.url!.isNotEmpty) {
+      showToast('访问服务：${item.name}', type: ToastType.info);
+    } else {
+      widget.controller.send(item.key ?? item.name);
+    }
   }
 
   @override
@@ -401,23 +413,40 @@ class ChatComposerState extends State<ChatComposer>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                SizedBox(
-                  width: 44,
-                  height: 42,
-                  child: IconButton(
-                    tooltip: _voiceMode ? '切换键盘' : '语音输入',
-                    onPressed: _toggleVoiceMode,
-                    padding: EdgeInsets.zero,
-                    icon: Icon(
-                      _voiceMode ? Icons.keyboard_alt_outlined : Icons.mic_none,
+          if (_menuMode && widget.controller.officialAccountMenus.isNotEmpty)
+            ChatPublicAccountMenu(
+              menus: widget.controller.officialAccountMenus
+                  .map(PublicAccountMenuItem.fromJson)
+                  .toList(),
+              onToggleKeyboard: () => setState(() => _menuMode = false),
+              onMenuItemSelected: _onMenuItemSelected,
+            )
+          else ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  SizedBox(
+                    width: 44,
+                    height: 42,
+                    child: IconButton(
+                      tooltip: widget.controller.isOfficialAccount
+                          ? '切换公众号菜单'
+                          : (_voiceMode ? '切换键盘' : '语音输入'),
+                      onPressed: widget.controller.isOfficialAccount
+                          ? () => setState(() => _menuMode = true)
+                          : _toggleVoiceMode,
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        widget.controller.isOfficialAccount
+                            ? Icons.menu_rounded
+                            : (_voiceMode
+                                ? Icons.keyboard_alt_outlined
+                                : Icons.mic_none),
+                      ),
                     ),
                   ),
-                ),
                 Expanded(
                   child:
                       _voiceMode
@@ -543,7 +572,8 @@ class ChatComposerState extends State<ChatComposer>
             },
           ),
         ],
-      ),
+      ],
     ),
-  );
+  ),
+);
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -23,9 +25,11 @@ class AuthController extends ChangeNotifier {
   final SignalRGateway _signalRGateway;
   AuthStatus _status = AuthStatus.checking;
   String? _errorMessage;
+  String? _accountName;
 
   AuthStatus get status => _status;
   String? get errorMessage => _errorMessage;
+  String? get accountName => _accountName;
   bool get isBusy => _status == AuthStatus.checking;
 
   Future<void> login({
@@ -38,6 +42,7 @@ class AuthController extends ChangeNotifier {
     try {
       await _repository.login(username: username, password: password);
       _status = AuthStatus.authenticated;
+      _accountName = username;
       // 新账号登录成功：先重置账号级 Provider，再连接实时通道。
       _onAccountChanged?.call();
       _connectRealtime();
@@ -70,6 +75,7 @@ class AuthController extends ChangeNotifier {
     await _repository.logout();
     _status = AuthStatus.unauthenticated;
     _errorMessage = null;
+    _accountName = null;
     _onAccountChanged?.call();
     notifyListeners();
   }
@@ -78,6 +84,7 @@ class AuthController extends ChangeNotifier {
     await _signalRGateway.disconnect();
     _status = AuthStatus.unauthenticated;
     _errorMessage = '登录已过期，请重新登录。';
+    _accountName = null;
     _onAccountChanged?.call();
     notifyListeners();
   }
@@ -94,11 +101,28 @@ class AuthController extends ChangeNotifier {
       final hasSession = await _repository.restoreSession();
       _status =
           hasSession ? AuthStatus.authenticated : AuthStatus.unauthenticated;
-      if (hasSession) _connectRealtime();
+      if (hasSession) {
+        _connectRealtime();
+        unawaited(_loadUserInfoSafely());
+      }
     } catch (_) {
       _status = AuthStatus.unauthenticated;
     }
     notifyListeners();
+  }
+
+  Future<void> _loadUserInfoSafely() async {
+    try {
+      final info = await _repository.getUserInfo();
+      final name = info['email']?.toString() ??
+          info['unique_name']?.toString() ??
+          info['preferred_username']?.toString() ??
+          info['name']?.toString();
+      if (name != null && name.isNotEmpty) {
+        _accountName = name;
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   String _displayError(Object error) =>

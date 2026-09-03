@@ -190,14 +190,16 @@ class SessionRepository {
     required int ownerId,
     required String sessionUnitId,
   }) async {
-    final friend = await _api.getFriendDetail(
+    final remote = await _api.getFriendDetail(
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,
     );
-    await _dao.upsertAll(<SessionSummary>[friend]);
+    final local = await _dao.readById(sessionUnitId);
+    final merged = remote.mergeWithLocal(local);
+    await _dao.upsertAll(<SessionSummary>[merged]);
     _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
     debugPrint('[loadFriendDetail][remote] session=$sessionUnitId persisted=1');
-    return friend;
+    return merged;
   }
 
   Future<List<SessionSummary>> loadChanges({required int ownerId}) async {

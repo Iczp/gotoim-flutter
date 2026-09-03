@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/scan/unified_scan_dispatcher.dart';
+import '../../../core/theme/tab_glass_controller.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/theme/overscroll_style_controller.dart';
+import '../../../core/widgets/app_modal.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../core/widgets/app_avatar.dart';
@@ -22,27 +26,14 @@ class MinePage extends ConsumerWidget {
   final VoidCallback onOpenOwnerDrawer;
 
   Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showConfirmModal(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('退出登录'),
-        content: const Text('确定要退出当前账号登录吗？\n退出后 Token 将立即在服务器失效。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            child: const Text('退出'),
-          ),
-        ],
-      ),
+      title: '退出登录',
+      message: '确定要退出当前账号登录吗？\n退出后 Token 将立即在服务器失效。',
+      confirmText: '退出',
+      isDestructive: true,
     );
-    if (confirmed == true && context.mounted) {
+    if (confirmed && context.mounted) {
       await ref.read(authControllerProvider).logout();
     }
   }
@@ -117,19 +108,32 @@ class MinePage extends ConsumerWidget {
           child: Column(
             children: [
               ListTile(
+                leading: const Icon(Icons.qr_code_scanner_rounded),
+                title: const Text('扫一扫'),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () {
+                  ref
+                      .read(unifiedScanDispatcherProvider)
+                      .openAndDispatch(context, ref);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: const Icon(Icons.bookmark_outline_rounded),
                 title: const Text('我收藏的'),
                 trailing: const Icon(Icons.chevron_right, size: 18),
-                enabled: false,
-                onTap: () {},
+                onTap: () {
+                  showToast('收藏夹暂无内容', type: ToastType.info);
+                },
               ),
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.favorite_outline_rounded),
                 title: const Text('我关注的'),
                 trailing: const Icon(Icons.chevron_right, size: 18),
-                enabled: false,
-                onTap: () {},
+                onTap: () {
+                  showToast('关注列表暂无内容', type: ToastType.info);
+                },
               ),
             ],
           ),
@@ -222,6 +226,18 @@ class MinePage extends ConsumerWidget {
                         .read(overscrollStyleControllerProvider.notifier)
                         .setStyle(selected.first);
                   }
+                },
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.blur_on_rounded),
+                title: const Text('底部导航毛玻璃效果'),
+                subtitle: const Text('开启后导航栏具有高斯模糊与半透明质感'),
+                value: ref.watch(tabGlassProvider),
+                onChanged: (val) {
+                  ref.read(tabGlassProvider.notifier).setEnabled(val);
                 },
               ),
             ],

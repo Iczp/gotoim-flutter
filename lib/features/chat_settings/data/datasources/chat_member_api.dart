@@ -42,4 +42,24 @@ class ChatMemberApi {
       _client.post<Map<String, dynamic>>(
         '/api/chat/session-unit-setting/clear-message/$id',
       );
+
+  Future<Map<String, dynamic>> setRename(String id, String rename) =>
+      _client.post<Map<String, dynamic>>(
+        '/api/chat/session-unit-setting/set-rename/$id',
+        query: <String, Object?>{'rename': rename},
+      );
+
+  Future<Map<String, dynamic>> setBackgroundImage(
+    String id,
+    String? imageUrl,
+  ) => _client.post<Map<String, dynamic>>(
+    '/api/chat/session-unit-setting/set-background-image/$id',
+    query: <String, Object?>{if (imageUrl != null) 'backgroundImage': imageUrl},
+  );
+
+  Future<Map<String, dynamic>> setRoomTitle(String roomId, String title) =>
+      _client.post<Map<String, dynamic>>(
+        '/api/chat/room/set-title/$roomId',
+        query: <String, Object?>{'title': title},
+      );
 }

@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:image_picker/image_picker.dart';
+
+import '../../../core/widgets/app_modal.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/presentation/chat_object_avatar.dart';
@@ -108,7 +112,34 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                           const Icon(Icons.chevron_right),
                         ],
                       ),
+                      onTap: _editGroupName,
                     ),
+                  ListTile(
+                    title: Text(
+                      controller.objectType == 2 ? '我在本群的昵称' : '设置备注',
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 180),
+                          child: Text(
+                            controller.rename.isNotEmpty
+                                ? controller.rename
+                                : '未设置',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: controller.rename.isNotEmpty
+                                  ? null
+                                  : Theme.of(context).disabledColor,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                    onTap: _editRename,
+                  ),
                 ]),
                 const SizedBox(height: 10),
                 _section(<Widget>[
@@ -116,6 +147,12 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     leading: Icon(Icons.search),
                     title: Text('查找聊天记录'),
                     trailing: Icon(Icons.chevron_right),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.wallpaper_rounded),
+                    title: const Text('设置聊天背景'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _changeBackground,
                   ),
                 ]),
                 const SizedBox(height: 10),
@@ -182,34 +219,71 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     return null;
   }
 
-  Future<void> _confirmClear() async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _editGroupName() async {
+    final result = await showPromptModal(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('清空聊天记录'),
-            content: const Text('将同时清除服务器和本机保存的该会话消息，确定继续吗？'),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('清空'),
-              ),
-            ],
-          ),
+      title: '修改群名称',
+      initialValue: controller.title,
+      placeholderText: '请输入新的群名称',
+      confirmText: '保存',
     );
-    if (confirmed != true || !mounted) return;
+    if (result != null && result.trim().isNotEmpty && mounted) {
+      try {
+        await controller.setGroupName(result.trim());
+        showToast('群名称已更新', type: ToastType.success);
+      } catch (e) {
+        showToast('更新群名称失败：$e', type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _editRename() async {
+    final isGroup = controller.objectType == 2;
+    final result = await showPromptModal(
+      context: context,
+      title: isGroup ? '修改我在本群的昵称' : '设置备注',
+      initialValue: controller.rename,
+      placeholderText: isGroup ? '群内昵称' : '备注名',
+      confirmText: '保存',
+    );
+    if (result != null && mounted) {
+      try {
+        await controller.setRename(result.trim());
+        showToast('备注已更新', type: ToastType.success);
+      } catch (e) {
+        showToast('更新失败：$e', type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _changeBackground() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null && mounted) {
+      try {
+        await controller.setBackgroundImage(picked.path);
+        showToast('聊天背景已设置', type: ToastType.success);
+      } catch (e) {
+        showToast('设置背景失败：$e', type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _confirmClear() async {
+    final confirmed = await showConfirmModal(
+      context: context,
+      title: '清空聊天记录',
+      message: '将同时清除服务器和本机保存的该会话消息，确定继续吗？',
+      confirmText: '清空',
+      isDestructive: true,
+    );
+    if (!confirmed || !mounted) return;
     try {
       await controller.clearMessages();
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('清空失败：$error')));
+        showToast('清空失败：$error', type: ToastType.error);
       }
     }
   }
