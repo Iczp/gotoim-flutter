@@ -286,4 +286,43 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'SessionUnitItem divider sits on the bottom and right boundary',
+    (tester) async {
+      final s = session(
+        id: 'divider-boundary-test',
+        ticks: now.millisecondsSinceEpoch,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appEnvironmentProvider.overrideWithValue(
+              AppEnvironment.fromDotEnv(AppFlavor.development),
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme(),
+            home: Scaffold(
+              body: SessionUnitItem(
+                item: s,
+                showDivider: true,
+                dividerIndent: 74,
+                dividerEndIndent: 0,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final positionedFinder = find.byType(PositionedDirectional);
+      expect(positionedFinder, findsOneWidget);
+      final positioned = tester.widget<PositionedDirectional>(positionedFinder);
+      expect(positioned.bottom, 0.0);
+      expect(positioned.end, 0.0);
+      expect(positioned.start, 74.0);
+    },
+  );
 }

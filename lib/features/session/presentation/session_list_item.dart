@@ -147,6 +147,8 @@ class SessionListItemView extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.showDivider = true,
+    this.dividerIndent = 74.0,
+    this.dividerEndIndent = 0.0,
     super.key,
   });
 
@@ -154,6 +156,8 @@ class SessionListItemView extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final bool showDivider;
+  final double dividerIndent;
+  final double dividerEndIndent;
 
   @override
   Widget build(BuildContext context) {
@@ -164,6 +168,8 @@ class SessionListItemView extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress,
         showDivider: showDivider,
+        dividerIndent: dividerIndent,
+        dividerEndIndent: dividerEndIndent,
       ),
       SessionListItemKind.pinnedDivider => PinnedDividerItem(
         key: const ValueKey('pinned_divider'),
