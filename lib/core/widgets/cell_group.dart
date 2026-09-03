@@ -24,6 +24,7 @@ class CellGroup extends StatelessWidget {
     this.subtitleColor,
     this.subTitleColor,
     this.arrowColor,
+    this.titleFontWeight,
   }) : assert(
          children != null || child != null,
          'Either children or child must be provided to CellGroup.',
@@ -70,6 +71,9 @@ class CellGroup extends StatelessWidget {
 
   /// 分组内箭头颜色（默认继承全局主题透明度 0.5）
   final Color? arrowColor;
+
+  /// 分组内所有 Cell 主标题字重（默认继承自主题或 FontWeight.w500）
+  final FontWeight? titleFontWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -127,10 +131,15 @@ class CellGroup extends StatelessWidget {
                 theme.textTheme.bodyMedium ??
                 const TextStyle())
             .copyWith(color: effectiveGroupSubtitleColor),
+        titleTextStyle: (theme.listTileTheme.titleTextStyle ??
+                theme.textTheme.bodyLarge ??
+                const TextStyle())
+            .copyWith(fontWeight: titleFontWeight),
       ),
       child: _CellGroupScope(
         subtitleColor: effectiveGroupSubtitleColor,
         arrowColor: arrowColor,
+        titleFontWeight: titleFontWeight,
         child: content,
       ),
     );
@@ -179,10 +188,12 @@ class _CellGroupScope extends InheritedWidget {
     required super.child,
     this.subtitleColor,
     this.arrowColor,
+    this.titleFontWeight,
   });
 
   final Color? subtitleColor;
   final Color? arrowColor;
+  final FontWeight? titleFontWeight;
 
   static _CellGroupScope? maybeOf(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<_CellGroupScope>();
@@ -191,7 +202,8 @@ class _CellGroupScope extends InheritedWidget {
   @override
   bool updateShouldNotify(_CellGroupScope oldWidget) {
     return subtitleColor != oldWidget.subtitleColor ||
-        arrowColor != oldWidget.arrowColor;
+        arrowColor != oldWidget.arrowColor ||
+        titleFontWeight != oldWidget.titleFontWeight;
   }
 }
 
@@ -213,6 +225,7 @@ class Cell extends StatelessWidget {
     this.copyValue,
     this.onTap,
     this.titleColor,
+    this.titleFontWeight,
     this.subtitleColor,
     this.subTitleColor,
     this.arrowColor,
@@ -265,6 +278,9 @@ class Cell extends StatelessWidget {
   /// 标题颜色（可用于危险/退出操作标红）
   final Color? titleColor;
 
+  /// 标题字重（默认继承自主题或 CellGroup，缺省为 FontWeight.w500）
+  final FontWeight? titleFontWeight;
+
   /// 副标题文字颜色（默认透明度 0.5）
   final Color? subtitleColor;
 
@@ -287,6 +303,11 @@ class Cell extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final groupScope = _CellGroupScope.maybeOf(context);
+
+    final effectiveTitleFontWeight = titleFontWeight ??
+        groupScope?.titleFontWeight ??
+        theme.listTileTheme.titleTextStyle?.fontWeight ??
+        (isCentered ? FontWeight.w600 : FontWeight.w500);
 
     final effectiveSubtitleColor = subTitleColor ??
         subtitleColor ??
@@ -324,7 +345,7 @@ class Cell extends StatelessWidget {
           title,
           style: TextStyle(
             color: titleColor ?? theme.colorScheme.onSurface,
-            fontWeight: FontWeight.w600,
+            fontWeight: effectiveTitleFontWeight,
             fontSize: 16,
           ),
         ),
@@ -342,7 +363,7 @@ class Cell extends StatelessWidget {
             title,
             style: TextStyle(
               fontSize: 15,
-              fontWeight: FontWeight.w500,
+              fontWeight: effectiveTitleFontWeight,
               color: titleColor ??
                   (disabled
                       ? theme.disabledColor

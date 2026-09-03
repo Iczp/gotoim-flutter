@@ -252,4 +252,37 @@ void main() {
     final defaultTextStyle = DefaultTextStyle.of(element).style;
     expect(defaultTextStyle.color?.a, closeTo(0.5, 0.01));
   });
+
+  testWidgets('Cell supports titleFontWeight and inherits from CellGroup', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              CellGroup(
+                titleFontWeight: FontWeight.w700,
+                children: [
+                  Cell(title: '继承组粗体'),
+                  Cell(title: '单独自定义', titleFontWeight: FontWeight.w300),
+                ],
+              ),
+              Cell(title: '默认字重'),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final inheritedText = tester.widget<Text>(find.text('继承组粗体'));
+    expect(inheritedText.style?.fontWeight, FontWeight.w700);
+
+    final overrideText = tester.widget<Text>(find.text('单独自定义'));
+    expect(overrideText.style?.fontWeight, FontWeight.w300);
+
+    final defaultText = tester.widget<Text>(find.text('默认字重'));
+    expect(defaultText.style?.fontWeight, FontWeight.w500);
+  });
 }

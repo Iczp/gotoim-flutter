@@ -56,6 +56,7 @@ ListView
 | `backgroundColor`| `Color?` | `null` | 覆盖卡片背景色 |
 | `borderColor` | `Color?` | `null` | 覆盖卡片边框颜色 |
 | `dividerIndent` | `double` | `16.0` | 自动插入分隔线的左侧缩进距离 |
+| `titleFontWeight`| `FontWeight?` | `null` | 分组级别标题字重（向下级所有 Cell 统一透传） |
 | `subTitleColor` / `subtitleColor` | `Color?` | `null` | 分组级别副标题颜色（向下级所有 Cell 统一透传） |
 | `arrowColor` | `Color?` | `null` | 分组级别箭头颜色（向下级所有 Cell 统一透传） |
 
@@ -64,6 +65,7 @@ ListView
 | 参数 | 类型 | 默认值 | 说明 |
 | :--- | :--- | :--- | :--- |
 | `title` | `String` | **必填** | 单元格主标题文本 |
+| `titleFontWeight`| `FontWeight?` | `FontWeight.w500` | 主标题字重（默认继承主题或 CellGroup） |
 | `value` | `String?` | `null` | 右侧展示的文本内容（自动单行截断省略） |
 | `valueWidget` | `Widget?` | `null` | 右侧自定义组件（徽标、胶囊标签等） |
 | `subtitle` | `String?` | `null` | 标题下方的辅助副标题文本 |
