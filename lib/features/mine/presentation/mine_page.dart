@@ -9,6 +9,7 @@ import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/theme/overscroll_style_controller.dart';
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../core/widgets/app_avatar.dart';
@@ -118,55 +119,47 @@ class MinePage extends ConsumerWidget {
         ),
 
         // ── 我的内容 ──────────────────────────────────────────────
-        _SectionHeader(title: '我的内容'),
-        GlassCard(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.manage_accounts_outlined),
-                title: const Text('账号设置'),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () => context.push('/account/profile'),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.qr_code_scanner_rounded),
-                title: const Text('扫一扫'),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () {
-                  ref
-                      .read(unifiedScanDispatcherProvider)
-                      .openAndDispatch(context, ref);
-                },
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.bookmark_outline_rounded),
-                title: const Text('我收藏的'),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () {
-                  showToast('收藏夹暂无内容', type: ToastType.info);
-                },
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.favorite_outline_rounded),
-                title: const Text('我关注的'),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () {
-                  showToast('关注列表暂无内容', type: ToastType.info);
-                },
-              ),
-            ],
-          ),
+        CellGroup(
+          title: '我的内容',
+          children: [
+            Cell(
+              icon: const Icon(Icons.manage_accounts_outlined),
+              title: '账号设置',
+              showArrow: true,
+              onTap: () => context.push('/account/profile'),
+            ),
+            Cell(
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              title: '扫一扫',
+              showArrow: true,
+              onTap: () {
+                ref
+                    .read(unifiedScanDispatcherProvider)
+                    .openAndDispatch(context, ref);
+              },
+            ),
+            Cell(
+              icon: const Icon(Icons.bookmark_outline_rounded),
+              title: '我收藏的',
+              showArrow: true,
+              onTap: () {
+                showToast('收藏夹暂无内容', type: ToastType.info);
+              },
+            ),
+            Cell(
+              icon: const Icon(Icons.favorite_outline_rounded),
+              title: '我关注的',
+              showArrow: true,
+              onTap: () {
+                showToast('关注列表暂无内容', type: ToastType.info);
+              },
+            ),
+          ],
         ),
 
         // ── 外观与主题 ──────────────────────────────────────────────
-        _SectionHeader(title: '外观与主题'),
-        GlassCard(
-          margin: const EdgeInsets.only(bottom: 12),
+        CellGroup(
+          title: '外观与主题',
           padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,109 +262,62 @@ class MinePage extends ConsumerWidget {
         ),
 
         // ── 设置 ──────────────────────────────────────────────────
-        _SectionHeader(title: '设置'),
-        GlassCard(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.manage_accounts_outlined),
-                title: const Text('账号管理'),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () => context.push('/mine/account'),
+        CellGroup(
+          title: '设置',
+          children: [
+            Cell(
+              icon: const Icon(Icons.manage_accounts_outlined),
+              title: '账号管理',
+              showArrow: true,
+              onTap: () => context.push('/mine/account'),
+            ),
+            Cell(
+              icon: const Icon(Icons.devices_rounded),
+              title: '设备信息',
+              subtitle: '已登录 ${sessionController.devices.length} 台设备',
+              showArrow: true,
+              onTap: () => context.push('/devices'),
+            ),
+            Cell(
+              icon: const Icon(Icons.folder_shared_outlined),
+              title: '局域网文件管理',
+              subtitle: 'HTTP 文件收发与 Web 终端',
+              showArrow: true,
+              onTap: () => context.push('/local-file-server'),
+            ),
+            Cell(
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              title: '扫码登录终端',
+              subtitle: '识别二维码并授权登录',
+              showArrow: true,
+              onTap: () => context.push('/scan-login/scan'),
+            ),
+            if (kDebugMode)
+              Cell(
+                icon: const Icon(Icons.developer_mode_rounded),
+                title: '开发诊断中心',
+                subtitle: '全套架构、Realtime、Native 及主题诊断',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics'),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.devices_rounded),
-                title: const Text('设备信息'),
-                subtitle: Text(
-                  '已登录 ${sessionController.devices.length} 台设备',
-                  style: const TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
-                ),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () => context.push('/devices'),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.folder_shared_outlined),
-                title: const Text('局域网文件管理'),
-                subtitle: const Text(
-                  'HTTP 文件收发与 Web 终端',
-                  style: TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
-                ),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () => context.push('/local-file-server'),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.qr_code_scanner_rounded),
-                title: const Text('扫码登录终端'),
-                subtitle: const Text(
-                  '识别二维码并授权登录',
-                  style: TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
-                ),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () => context.push('/scan-login/scan'),
-              ),
-              if (kDebugMode) ...[
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.developer_mode_rounded),
-                  title: const Text('开发诊断中心'),
-                  subtitle: const Text(
-                    '全套架构、Realtime、Native 及主题诊断',
-                    style: TextStyle(color: Color.fromARGB(77, 53, 53, 53)),
-                  ),
-                  trailing: const Icon(Icons.chevron_right, size: 18),
-                  onTap: () => context.push('/diagnostics'),
-                ),
-              ],
-            ],
-          ),
+          ],
         ),
 
         // ── 账号操作 ──────────────────────────────────────────────
-        _SectionHeader(title: '账号操作'),
-        GlassCard(
+        CellGroup(
+          title: '账号操作',
           margin: const EdgeInsets.only(bottom: 24),
-          padding: EdgeInsets.zero,
-          child: ListTile(
-            leading: Icon(Icons.logout_rounded, color: colorScheme.error),
-            title: Text(
-              '退出登录',
-              style: TextStyle(
-                color: colorScheme.error,
-                fontWeight: FontWeight.w600,
-              ),
+          children: [
+            Cell(
+              icon: Icon(Icons.logout_rounded, color: colorScheme.error),
+              title: '退出登录',
+              titleColor: colorScheme.error,
+              showArrow: true,
+              onTap: () => _confirmLogout(context, ref),
             ),
-            trailing: const Icon(Icons.chevron_right, size: 18),
-            onTap: () => _confirmLogout(context, ref),
-          ),
+          ],
         ),
       ],
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title});
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-      child: Text(
-        title,
-        style: theme.textTheme.labelLarge?.copyWith(
-          color: colorScheme.primary,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
     );
   }
 }
