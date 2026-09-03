@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../application/chat_controller.dart';
 import '../../data/models/chat_message.dart';
+import '../widgets/chat_message_delivery_state.dart';
 import 'chat_message_presentation.dart';
 import 'message_bubble.dart';
 
@@ -13,12 +14,16 @@ class VoiceMessageContent extends ConsumerWidget {
     required this.message,
     required this.onOpened,
     this.presentation = ChatMessagePresentation.normal,
+    this.maxWidth,
+    this.onRetry,
     super.key,
   });
 
   final ChatMessage message;
   final Future<void> Function() onOpened;
   final ChatMessagePresentation presentation;
+  final double? maxWidth;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -163,28 +168,8 @@ class VoiceMessageContent extends ConsumerWidget {
                                 ),
                               ),
                             ],
-                            if (message.state == 'sending')
-                              const SizedBox.square(
-                                dimension: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.8,
-                                ),
-                              ),
                           ],
                 ),
-                if (!compact && !message.isOpened && !message.isMine)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      width: 7,
-                      height: 7,
-                      margin: const EdgeInsets.only(top: 3),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ],
@@ -196,10 +181,52 @@ class VoiceMessageContent extends ConsumerWidget {
       return content;
     }
 
-    return MessageBubble(
-      message: message,
-      child: content,
+    final bubble = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 44),
+      child: MessageBubble(
+        message: message,
+        child: content,
+      ),
     );
+
+    if (message.isMine &&
+        (message.state == 'sending' || message.state == 'failed')) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          ChatMessageDeliveryState(
+            isMine: message.isMine,
+            state: message.state,
+            onRetry: onRetry,
+          ),
+          bubble,
+        ],
+      );
+    }
+
+    if (!message.isMine && !message.isOpened) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          bubble,
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return bubble;
   }
 }
 

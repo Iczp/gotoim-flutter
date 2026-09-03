@@ -19,22 +19,22 @@ class ChatMessageDeliveryState extends StatelessWidget {
       return const SizedBox.shrink();
     }
     if (state == 'sending') {
-      return const Positioned(
-        left: -24,
-        top: 10,
+      return const Padding(
+        padding: EdgeInsets.only(right: 6),
         child: SizedBox.square(
-          dimension: 17,
+          dimension: 16,
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       );
     }
     if (state == 'failed') {
-      return Positioned(
-        left: -29,
-        top: 4,
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
         child: IconButton(
           tooltip: '发送失败，点击重试',
           visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
           onPressed: onRetry,
           icon: const Icon(Icons.error, color: Colors.red, size: 19),
         ),

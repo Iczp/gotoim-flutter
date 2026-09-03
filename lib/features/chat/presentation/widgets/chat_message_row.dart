@@ -8,7 +8,6 @@ import '../../../../core/widgets/floating_popover.dart';
 import '../../../session/presentation/chat_object_avatar.dart';
 import '../../data/models/chat_message.dart';
 import '../message_content/chat_message_content_renderer.dart';
-import 'chat_message_delivery_state.dart';
 import 'chat_quote_preview.dart';
 
 /// 单条消息气泡行组件（ChatMessageRow）
@@ -44,6 +43,7 @@ class ChatMessageRow extends StatelessWidget {
     this.avatarMenuController,
     this.avatarMenuOffset = const Offset(8, 0),
     this.onTap,
+    this.showAvatar = true,
     super.key,
   });
 
@@ -52,6 +52,9 @@ class ChatMessageRow extends StatelessWidget {
 
   /// 是否显示时间分割线
   final bool showTime;
+
+  /// 是否显示发送人头像（默认为 true）
+  final bool showAvatar;
 
   /// 点击发送人头像/昵称回调（打开成员资料卡）
   final VoidCallback onUserTap;
@@ -195,57 +198,58 @@ class ChatMessageRow extends StatelessWidget {
             builder: (context, constraints) {
               const selectionSlotWidth = 36.0;
               const avatarSlotWidth = 44.0;
-              final contentMaxWidth = (constraints.maxWidth -
-                      selectionSlotWidth -
-                      avatarSlotWidth)
+              final availableWidth = constraints.maxWidth -
+                  (selectionMode ? selectionSlotWidth : 0.0);
+              final contentMaxWidth = (availableWidth -
+                      (showAvatar ? avatarSlotWidth + 12.0 : 0.0))
                   .clamp(0.0, double.infinity);
               final bubbleWidth = contentMaxWidth * 0.68;
-              Widget avatarWidget = ChatObjectAvatar(
-                name: message.senderName,
-                imageUrl: message.senderAvatarUrl,
-                size: 44,
-                radius: 22,
-              );
-              avatarWidget = GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onUserTap,
-                onLongPress: onUserLongPress ?? () {
-                  avatarMenuController?.show();
-                },
-                child: avatarWidget,
-              );
-              if (avatarMenuBuilder != null) {
-                avatarWidget = FloatingPopover(
-                  controller: avatarMenuController,
-                  contentBuilder: avatarMenuBuilder!,
-                  placement: FloatingPlacement.avatar,
-                  offset: avatarMenuOffset,
-                  vibrateCount: 2,
-                  child: avatarWidget,
+
+              Widget? avatarWidget;
+              if (showAvatar) {
+                Widget av = ChatObjectAvatar(
+                  name: message.senderName,
+                  imageUrl: message.senderAvatarUrl,
+                  size: 44,
+                  radius: 22,
                 );
+                av = GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onUserTap,
+                  onLongPress: onUserLongPress ?? () {
+                    avatarMenuController?.show();
+                  },
+                  child: av,
+                );
+                if (avatarMenuBuilder != null) {
+                  av = FloatingPopover(
+                    controller: avatarMenuController,
+                    contentBuilder: avatarMenuBuilder!,
+                    placement: FloatingPlacement.avatar,
+                    offset: avatarMenuOffset,
+                    vibrateCount: 2,
+                    child: av,
+                  );
+                }
+                avatarWidget = av;
               }
 
-              Widget messageContentWidget = ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: 22,
-                  minHeight: 44,
-                  maxWidth: bubbleWidth,
-                ),
-                child: ChatMessageContentRenderer(
-                  message: message,
-                  attachmentState: attachmentState,
-                  onVoiceOpened: onVoiceOpened,
-                  onAttachmentDownload: onAttachmentDownload,
-                  onAttachmentCancel: onAttachmentCancel,
-                  onAttachmentOpen: onAttachmentOpen,
-                  onAttachmentSaveAs: onAttachmentSaveAs,
-                  imageBytes: imageBytes,
-                  uploadProgress: uploadProgress,
-                  apiBaseUrl: apiBaseUrl,
-                  mediaItems: mediaItems,
-                  mediaInitialIndex: mediaInitialIndex,
-                  onLinkTap: onLinkTap,
-                ),
+              Widget messageContentWidget = ChatMessageContentRenderer(
+                message: message,
+                attachmentState: attachmentState,
+                onVoiceOpened: onVoiceOpened,
+                onAttachmentDownload: onAttachmentDownload,
+                onAttachmentCancel: onAttachmentCancel,
+                onAttachmentOpen: onAttachmentOpen,
+                onAttachmentSaveAs: onAttachmentSaveAs,
+                imageBytes: imageBytes,
+                uploadProgress: uploadProgress,
+                apiBaseUrl: apiBaseUrl,
+                mediaItems: mediaItems,
+                mediaInitialIndex: mediaInitialIndex,
+                onLinkTap: onLinkTap,
+                onRetry: onRetry,
+                maxWidth: bubbleWidth,
               );
 
               if (contentMenuBuilder != null) {
@@ -258,42 +262,33 @@ class ChatMessageRow extends StatelessWidget {
                 );
               }
 
-              final content = Expanded(
+              final messageBody = Expanded(
                 child: Column(
                   crossAxisAlignment:
                       message.isMine
                           ? CrossAxisAlignment.end
                           : CrossAxisAlignment.start,
                   children: <Widget>[
-                    Align(
-                      alignment:
-                          message.isMine
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(4),
-                        onTap: onUserTap,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            _senderLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall,
+                    if (!message.isMine && _senderLabel.isNotEmpty)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: onUserTap,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              _senderLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    Stack(
-                      children: <Widget>[
-                        messageContentWidget,
-                        ChatMessageDeliveryState(
-                          isMine: message.isMine,
-                          state: message.state,
-                          onRetry: onRetry,
-                        ),
-                      ],
-                    ),
+                    // 各种消息（自个约束）
+                    messageContentWidget,
+                    // 引用消息
                     if (renderedQuote != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
@@ -309,9 +304,11 @@ class ChatMessageRow extends StatelessWidget {
                   ],
                 ),
               );
+
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
+                  // - 复选框（编辑模式下才显示）
                   if (selectionMode)
                     SizedBox(
                       width: selectionSlotWidth,
@@ -325,9 +322,29 @@ class ChatMessageRow extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ...(message.isMine
-                      ? <Widget>[content, const SizedBox(width: 12), avatarWidget]
-                      : <Widget>[avatarWidget, const SizedBox(width: 12), content]),
+                  // - 消息（占满）
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: message.isMine
+                          ? <Widget>[
+                              // 消息内容（占满）
+                              messageBody,
+                              if (showAvatar && avatarWidget != null) ...<Widget>[
+                                const SizedBox(width: 12),
+                                avatarWidget,
+                              ],
+                            ]
+                          : <Widget>[
+                              if (showAvatar && avatarWidget != null) ...<Widget>[
+                                avatarWidget,
+                                const SizedBox(width: 12),
+                              ],
+                              // 消息内容（占满）
+                              messageBody,
+                            ],
+                    ),
+                  ),
                 ],
               );
             },

@@ -6,6 +6,7 @@ import '../../../../core/native/native.dart';
 import '../../../../core/widgets/app_modal.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../data/models/chat_message.dart';
+import '../widgets/chat_message_delivery_state.dart';
 import 'chat_message_presentation.dart';
 import 'message_bubble.dart';
 
@@ -15,11 +16,15 @@ class TextMessageContent extends StatelessWidget {
   const TextMessageContent({
     required this.message,
     this.presentation = ChatMessagePresentation.normal,
+    this.maxWidth,
+    this.onRetry,
     super.key,
   });
 
   final ChatMessage message;
   final ChatMessagePresentation presentation;
+  final double? maxWidth;
+  final VoidCallback? onRetry;
 
   static final _urlRegex = RegExp(
     r'(?<!\]\()(https?:\/\/[^\s\)\>]+)',
@@ -109,9 +114,34 @@ class TextMessageContent extends StatelessWidget {
       ),
     );
 
-    return MessageBubble(
-      message: message,
-      child: content,
+    final bubble = ConstrainedBox(
+      constraints: BoxConstraints(
+        minWidth: 22,
+        minHeight: 44,
+        maxWidth: maxWidth ?? double.infinity,
+      ),
+      child: MessageBubble(
+        message: message,
+        child: content,
+      ),
     );
+
+    if (message.isMine &&
+        (message.state == 'sending' || message.state == 'failed')) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          ChatMessageDeliveryState(
+            isMine: message.isMine,
+            state: message.state,
+            onRetry: onRetry,
+          ),
+          Flexible(child: bubble),
+        ],
+      );
+    }
+
+    return bubble;
   }
 }

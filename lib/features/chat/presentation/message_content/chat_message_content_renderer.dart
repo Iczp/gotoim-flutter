@@ -36,6 +36,8 @@ class ChatMessageContentRenderer extends StatelessWidget {
     required this.mediaItems,
     required this.mediaInitialIndex,
     this.onLinkTap,
+    this.onRetry,
+    this.maxWidth,
     this.presentation = ChatMessagePresentation.normal,
     super.key,
   });
@@ -53,6 +55,8 @@ class ChatMessageContentRenderer extends StatelessWidget {
   final List<MediaPreviewItem> mediaItems;
   final int mediaInitialIndex;
   final Future<void> Function()? onLinkTap;
+  final VoidCallback? onRetry;
+  final double? maxWidth;
   final ChatMessagePresentation presentation;
 
   @override
@@ -88,6 +92,8 @@ class ChatMessageContentRenderer extends StatelessWidget {
       message: message,
       onOpened: onVoiceOpened,
       presentation: presentation,
+      maxWidth: maxWidth,
+      onRetry: onRetry,
     ),
     2 => ImageMessageContent(
       message: message,
@@ -106,7 +112,12 @@ class ChatMessageContentRenderer extends StatelessWidget {
       initialIndex: mediaInitialIndex,
       presentation: presentation,
     ),
-    0 => TextMessageContent(message: message, presentation: presentation),
+    0 => TextMessageContent(
+      message: message,
+      presentation: presentation,
+      maxWidth: maxWidth,
+      onRetry: onRetry,
+    ),
     _ => UnsupportedMessageContent(
       message: message,
       presentation: presentation,
