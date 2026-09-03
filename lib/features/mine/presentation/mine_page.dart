@@ -92,7 +92,9 @@ class MinePage extends ConsumerWidget {
                           Icon(
                             Icons.chevron_right,
                             size: 20,
-                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                            color: colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ],
                       ),
@@ -226,7 +228,8 @@ class MinePage extends ConsumerWidget {
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
+
               SegmentedButton<OverscrollStyle>(
                 segments: OverscrollStyle.values
                     .map(
@@ -246,7 +249,8 @@ class MinePage extends ConsumerWidget {
                 },
               ),
               const SizedBox(height: 12),
-              const Divider(height: 1),
+              const Divider(height: 0.25),
+              const SizedBox(height: 12),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.blur_on_rounded),
