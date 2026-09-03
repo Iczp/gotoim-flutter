@@ -500,7 +500,15 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView> {
   @override
   void initState() {
     super.initState();
-    _checkStatus();
+    if (widget.item.localPath != null && widget.item.localPath!.isNotEmpty) {
+      _localPath = widget.item.localPath;
+      _isReady = true;
+    } else if (widget.item.bytes != null &&
+        widget.item.type == MediaPreviewType.image) {
+      _isReady = true;
+    } else {
+      _checkStatus();
+    }
   }
 
   @override
@@ -645,7 +653,7 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView> {
                           size: 64,
                         ),
                       ),
-                    if (_isDownloading || (!_isReady && _error == null))
+                    if (_isDownloading && !_isReady)
                       Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(

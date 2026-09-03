@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/media/media_preview.dart';
 import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
@@ -115,6 +116,36 @@ void main() {
       expect(updated.id, equals('img1'));
       expect(updated.thumbnail, equals('https://example.com/thumb.jpg'));
       expect(updated.localPath, equals('/data/user/0/cache/attachments/img1.jpg'));
+    });
+  });
+
+  group('Cached Media Preview Does Not Display 0%', () {
+    testWidgets('already cached image opens directly without 0%', (tester) async {
+      final item = MediaPreviewItem(
+        id: 'cached-img',
+        messageId: 'msg-1',
+        type: MediaPreviewType.image,
+        source: 'https://example.com/cached.jpg',
+        localPath: 'C:/fake/path/cached.jpg',
+        heroTag: 'hero-cached',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => MediaPreview.open(context, items: [item]),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+
+      // Must NEVER display 0%
+      expect(find.text('0%'), findsNothing);
     });
   });
 }

@@ -43,7 +43,11 @@ class VideoMessageContent extends StatelessWidget {
       source: _uri?.toString() ?? '',
       thumbnail: coverUrl != null ? resolveApiUrl(coverUrl, apiBaseUrl) : null,
       fileName: message.fileName.isNotEmpty ? message.fileName : '${message.localId}.mp4',
-      localPath: message.localFilePath,
+      localPath: mediaItems
+              .where((it) => it.id == message.localId)
+              .firstOrNull
+              ?.localPath ??
+          message.localFilePath,
       createdAt: message.createdAt,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,
@@ -104,24 +108,58 @@ class VideoMessageContent extends StatelessWidget {
                           size: compact ? 28 : 50,
                         ),
                       ),
-                      if (!compact)
+                      if (!compact) ...[
                         Positioned(
-                          left: 8,
-                          right: 8,
-                          bottom: 7,
-                          child: Text(
-                            message.fileName.isEmpty ? '视频' : message.fileName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              shadows: [
-                                Shadow(color: Colors.black54, blurRadius: 4),
-                              ],
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          height: 28,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.black.withValues(alpha: 0.65),
+                                ],
+                              ),
                             ),
                           ),
                         ),
+                        Positioned(
+                          left: 8,
+                          right: 8,
+                          bottom: 5,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _formatFileSize(message.fileSize),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  shadows: [
+                                    Shadow(color: Colors.black87, blurRadius: 4),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                _formatDuration(message.videoDuration),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  shadows: [
+                                    Shadow(color: Colors.black87, blurRadius: 4),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       if (progress != null && progress! < 1)
                         Center(
                           child: CircularProgressIndicator(
@@ -138,6 +176,27 @@ class VideoMessageContent extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatDuration(Duration? duration) {
+    if (duration == null || duration.inSeconds <= 0) return '';
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:$minutes:$seconds';
+    }
+    return '$minutes:$seconds';
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes <= 0) return '';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
   }
 
   void _openOrRestore(

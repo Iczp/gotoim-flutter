@@ -194,6 +194,22 @@ class ChatMessage {
             asInt(content['durationMs']) ??
             0,
       );
+  Duration? get videoDuration {
+    final raw = asInt(content['duration']) ??
+        asInt(content['durationSeconds']) ??
+        asInt(content['time']);
+    if (raw != null && raw > 0) {
+      if (raw > 10000) {
+        return Duration(milliseconds: raw);
+      }
+      return Duration(seconds: raw);
+    }
+    final rawMs = asInt(content['durationMs']);
+    if (rawMs != null && rawMs > 0) {
+      return Duration(milliseconds: rawMs);
+    }
+    return null;
+  }
   String? get audioUrl {
     final value = firstNonEmpty(<Object?>[content['url'], content['audioUrl']]);
     return value.isEmpty ? null : value;
