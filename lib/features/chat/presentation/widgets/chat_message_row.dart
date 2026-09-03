@@ -198,10 +198,11 @@ class ChatMessageRow extends StatelessWidget {
             builder: (context, constraints) {
               const selectionSlotWidth = 36.0;
               const avatarSlotWidth = 44.0;
+              const contentPadding = 12.0;
               final availableWidth = constraints.maxWidth -
                   (selectionMode ? selectionSlotWidth : 0.0);
               final contentMaxWidth = (availableWidth -
-                      (showAvatar ? avatarSlotWidth + 12.0 : 0.0))
+                      (showAvatar ? avatarSlotWidth + contentPadding : 0.0))
                   .clamp(0.0, double.infinity);
               final bubbleWidth = contentMaxWidth * 0.68;
 
@@ -269,14 +270,17 @@ class ChatMessageRow extends StatelessWidget {
                           ? CrossAxisAlignment.end
                           : CrossAxisAlignment.start,
                   children: <Widget>[
+                    // 发送人名称 (各自加 padding: 12)
                     if (!message.isMine && _senderLabel.isNotEmpty)
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(4),
-                          onTap: onUserTap,
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: contentPadding,
+                          ).copyWith(bottom: 4),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(4),
+                            onTap: onUserTap,
                             child: Text(
                               _senderLabel,
                               maxLines: 1,
@@ -286,12 +290,16 @@ class ChatMessageRow extends StatelessWidget {
                           ),
                         ),
                       ),
-                    // 各种消息（自个约束）
+                    // 各种消息（自个约束，不加 padding，气泡尾巴宽度 12）
                     messageContentWidget,
-                    // 引用消息
+                    // 引用消息 (各自加 padding: 12)
                     if (renderedQuote != null)
                       Padding(
-                        padding: const EdgeInsets.only(top: 6),
+                        padding: const EdgeInsets.only(
+                          left: contentPadding,
+                          right: contentPadding,
+                          top: 6,
+                        ),
                         child: ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: bubbleWidth),
                           child: ChatQuotePreview(
@@ -331,14 +339,14 @@ class ChatMessageRow extends StatelessWidget {
                               // 消息内容（占满）
                               messageBody,
                               if (showAvatar && avatarWidget != null) ...<Widget>[
-                                const SizedBox(width: 12),
+                                const SizedBox(width: contentPadding),
                                 avatarWidget,
                               ],
                             ]
                           : <Widget>[
                               if (showAvatar && avatarWidget != null) ...<Widget>[
                                 avatarWidget,
-                                const SizedBox(width: 12),
+                                const SizedBox(width: contentPadding),
                               ],
                               // 消息内容（占满）
                               messageBody,

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/chat_bubble.dart';
 import '../../data/models/chat_message.dart';
@@ -39,9 +39,10 @@ class MessageBubble extends StatelessWidget {
         ChatBubbleStyle.content(
           side: message.isMine ? ChatBubbleSide.right : ChatBubbleSide.left,
           backgroundColor:
-              message.isMine
-                  ? theme.colorScheme.primaryContainer
-                  : theme.colorScheme.surfaceContainerHighest,
+              (message.isMine
+                      ? theme.colorScheme.primaryContainer
+                      : theme.colorScheme.surfaceContainerHighest)
+                  .withValues(alpha: 0.75),
           tail: tail,
           padding: padding,
         );

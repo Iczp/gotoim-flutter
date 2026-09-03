@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 enum ChatBubbleSide { none, left, right }
@@ -8,9 +10,9 @@ enum ChatBubbleTailAlignment { top, center, bottom }
 class ChatBubbleTail {
   const ChatBubbleTail({
     this.enabled = true,
-    this.width = 8,
+    this.width = 10,
     this.radius = 8,
-    this.targetY = 22,
+    this.targetY = 18,
     this.alignment = ChatBubbleTailAlignment.top,
     this.offset = 0,
     this.edgeInset = 2,
@@ -207,13 +209,14 @@ class ChatBubbleClipper extends CustomClipper<Path> {
       ChatBubbleTailAlignment.bottom =>
         size.height - tail.edgeInset - tail.radius,
     };
-    final cy = (base + tail.offset)
-        .clamp(14.0, (size.height - 14.0).clamp(14.0, double.infinity))
-        .toDouble();
-    final h = (cy - 14.0).clamp(4.0, 8.0);
-    final yTop = cy - h;
+    final cy =
+        (base + tail.offset)
+            .clamp(14.0, (size.height - 14.0).clamp(14.0, double.infinity))
+            .toDouble();
     final w = width.clamp(2.0, 16.0);
-    final rCut = tail.cutRadius ?? ((w * w + h * h) / (2 * w));
+    final h = math.min(w, cy - 2);
+    final yTop = cy - h;
+    final rCut = tail.cutRadius ?? w;
     final rOuter = rCut;
 
     if (style.side == ChatBubbleSide.right) {
