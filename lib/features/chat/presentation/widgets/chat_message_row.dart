@@ -232,7 +232,7 @@ class ChatMessageRow extends StatelessWidget {
                     contentBuilder: avatarMenuBuilder!,
                     placement: FloatingPlacement.avatar,
                     offset: avatarMenuOffset,
-                    vibrateCount: 2,
+                    vibrateCount: 1,
                     child: av,
                   );
                 }
