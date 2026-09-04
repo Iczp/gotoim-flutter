@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../search/data/search_repository.dart';
+import '../../search/domain/search_models.dart';
 import '../../session/application/session_list_controller.dart';
 
 class SearchAndGroupDiagnosticsPage extends ConsumerStatefulWidget {
@@ -20,6 +21,8 @@ class _SearchAndGroupDiagnosticsPageState
   final _keywordController = TextEditingController(text: 'Goto');
   final _codeController = TextEditingController(text: '1234');
   final _groupNameController = TextEditingController(text: '测试诊断群');
+  final _previewLimitController = TextEditingController(text: '3');
+  SearchCategory _selectedCategory = SearchCategory.all;
 
   String _status = '未执行';
   String _output = '';
@@ -31,6 +34,8 @@ class _SearchAndGroupDiagnosticsPageState
       _keywordController.text = 'Goto';
       _codeController.text = '1234';
       _groupNameController.text = '测试诊断群';
+      _previewLimitController.text = '3';
+      _selectedCategory = SearchCategory.all;
       _status = '未执行';
       _output = '';
       _elapsedMs = 0;
@@ -189,6 +194,96 @@ class _SearchAndGroupDiagnosticsPageState
     }
   }
 
+  Future<void> _testSearchCategorization() async {
+    setState(() {
+      _isRunning = true;
+      _status = '执行中...';
+      _output = '';
+    });
+    final sw = Stopwatch()..start();
+
+    try {
+      final repo = ref.read(searchRepositoryProvider);
+      final sessionController = ref.read(sessionListControllerProvider);
+      final ownerId = sessionController.currentOwner?.id ?? 0;
+      final keyword = _keywordController.text.trim();
+      final previewLimit = int.tryParse(_previewLimitController.text.trim()) ?? 3;
+
+      final contacts = await repo.searchLocalContacts(
+        ownerId: ownerId,
+        keyword: keyword,
+      );
+      final messages = await repo.searchLocalMessages(
+        ownerId: ownerId,
+        keyword: keyword,
+      );
+      final remotes = await repo.searchRemoteContacts(
+        ownerId: ownerId,
+        keyword: keyword,
+      );
+
+      final isAll = _selectedCategory == SearchCategory.all;
+      final previewContacts = isAll && contacts.length > previewLimit
+          ? contacts.take(previewLimit).toList()
+          : contacts;
+      final previewMessages = isAll && messages.length > previewLimit
+          ? messages.take(previewLimit).toList()
+          : messages;
+      final previewRemotes = isAll && remotes.length > previewLimit
+          ? remotes.take(previewLimit).toList()
+          : remotes;
+
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _output = const JsonEncoder.withIndent('  ').convert({
+          'test': '分类搜索与每类截断逻辑',
+          'keyword': keyword,
+          'sectionPreviewLimit': previewLimit,
+          'currentCategory': _selectedCategory.name,
+          'currentCategoryLabel': _selectedCategory.label,
+          'contactsSection': {
+            'totalCount': contacts.length,
+            'previewCount': previewContacts.length,
+            'hasMoreThanLimit': isAll && contacts.length > previewLimit,
+            'viewMorePrompt': isAll && contacts.length > previewLimit
+                ? '查看更多联系人 (共${contacts.length}条)'
+                : null,
+            'previewItems': previewContacts.map((c) => c.title).toList(),
+          },
+          'messagesSection': {
+            'totalCount': messages.length,
+            'previewCount': previewMessages.length,
+            'hasMoreThanLimit': isAll && messages.length > previewLimit,
+            'viewMorePrompt': isAll && messages.length > previewLimit
+                ? '查看更多聊天记录 (共${messages.length}条)'
+                : null,
+            'previewItems': previewMessages.map((m) => m.contentSnippet).toList(),
+          },
+          'remoteSection': {
+            'totalCount': remotes.length,
+            'previewCount': previewRemotes.length,
+            'hasMoreThanLimit': isAll && remotes.length > previewLimit,
+            'viewMorePrompt': isAll && remotes.length > previewLimit
+                ? '查看更多网络搜索 (共${remotes.length}条)'
+                : null,
+            'previewItems': previewRemotes.map((r) => r.name).toList(),
+          },
+        });
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _output = '异常: $e\n$st';
+      });
+    } finally {
+      setState(() => _isRunning = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -229,7 +324,7 @@ class _SearchAndGroupDiagnosticsPageState
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    '验证搜索历史 SQLite 持久化、本地联系人/聊天记录秒级检索、面对面建群/好友建群接口组装。',
+                    '验证搜索历史 SQLite 持久化、本地联系人/聊天记录秒级检索、每分类截断与查看更多分类搜索、面对面建群/好友建群接口组装。',
                     style: TextStyle(fontSize: 12),
                   ),
                   const SizedBox(height: 8),
@@ -263,16 +358,34 @@ class _SearchAndGroupDiagnosticsPageState
             ),
           ),
           const SizedBox(height: 10),
-          TextField(
-            controller: _codeController,
-            keyboardType: TextInputType.number,
-            maxLength: 4,
-            decoration: const InputDecoration(
-              labelText: '进群码 (4位数字)',
-              counterText: '',
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _previewLimitController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: '每分类展示上限 (默认3)',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _codeController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
+                  decoration: const InputDecoration(
+                    labelText: '进群码 (4位数字)',
+                    counterText: '',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           TextField(
@@ -282,6 +395,25 @@ class _SearchAndGroupDiagnosticsPageState
               border: OutlineInputBorder(),
               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
+          ),
+          const SizedBox(height: 10),
+          Text('模拟分类搜索模式:', style: theme.textTheme.labelMedium),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            children: SearchCategory.values.map((cat) {
+              final isSelected = _selectedCategory == cat;
+              return ChoiceChip(
+                label: Text(cat.label),
+                selected: isSelected,
+                onSelected: (val) {
+                  if (val) {
+                    setState(() => _selectedCategory = cat);
+                  }
+                },
+                visualDensity: VisualDensity.compact,
+              );
+            }).toList(),
           ),
 
           const SizedBox(height: 16),
@@ -298,6 +430,10 @@ class _SearchAndGroupDiagnosticsPageState
               FilledButton.tonal(
                 onPressed: _isRunning ? null : _testLocalSearch,
                 child: const Text('测试本地检索'),
+              ),
+              FilledButton.tonal(
+                onPressed: _isRunning ? null : _testSearchCategorization,
+                child: const Text('测试分类截断与查看更多'),
               ),
               FilledButton.tonal(
                 onPressed: _isRunning ? null : _testCreateGroupPayload,

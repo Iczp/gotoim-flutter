@@ -46,6 +46,18 @@ class GlobalSearchController extends ChangeNotifier {
     } catch (_) {}
   }
 
+  void setCategory(SearchCategory category) {
+    if (_state.selectedCategory == category) return;
+    _state = _state.copyWith(selectedCategory: category);
+    notifyListeners();
+  }
+
+  void setSectionPreviewLimit(int limit) {
+    if (limit <= 0 || _state.sectionPreviewLimit == limit) return;
+    _state = _state.copyWith(sectionPreviewLimit: limit);
+    notifyListeners();
+  }
+
   void onQueryChanged(String text) {
     final query = text.trim();
     _remoteDebounceTimer?.cancel();
@@ -55,6 +67,7 @@ class GlobalSearchController extends ChangeNotifier {
         keyword: '',
         isLocalLoading: false,
         isRemoteLoading: false,
+        selectedCategory: SearchCategory.all,
         localContacts: const <SearchContactItem>[],
         localMessages: const <SearchMessageItem>[],
         remoteContacts: const <SearchRemoteContactItem>[],

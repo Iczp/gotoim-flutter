@@ -72,6 +72,17 @@ class SearchRemoteContactItem {
   final String? code;
 }
 
+/// 搜索分类
+enum SearchCategory {
+  all('全部'),
+  contacts('联系人'),
+  messages('聊天记录'),
+  remote('网络搜索');
+
+  const SearchCategory(this.label);
+  final String label;
+}
+
 /// 全局搜索聚合状态
 @immutable
 class SearchResultState {
@@ -83,6 +94,8 @@ class SearchResultState {
     this.localMessages = const <SearchMessageItem>[],
     this.remoteContacts = const <SearchRemoteContactItem>[],
     this.history = const <String>[],
+    this.selectedCategory = SearchCategory.all,
+    this.sectionPreviewLimit = 3,
     this.error,
   });
 
@@ -93,6 +106,8 @@ class SearchResultState {
   final List<SearchMessageItem> localMessages;
   final List<SearchRemoteContactItem> remoteContacts;
   final List<String> history;
+  final SearchCategory selectedCategory;
+  final int sectionPreviewLimit;
   final String? error;
 
   bool get isEmptyQuery => keyword.trim().isEmpty;
@@ -109,6 +124,8 @@ class SearchResultState {
     List<SearchMessageItem>? localMessages,
     List<SearchRemoteContactItem>? remoteContacts,
     List<String>? history,
+    SearchCategory? selectedCategory,
+    int? sectionPreviewLimit,
     String? error,
   }) {
     return SearchResultState(
@@ -119,6 +136,8 @@ class SearchResultState {
       localMessages: localMessages ?? this.localMessages,
       remoteContacts: remoteContacts ?? this.remoteContacts,
       history: history ?? this.history,
+      selectedCategory: selectedCategory ?? this.selectedCategory,
+      sectionPreviewLimit: sectionPreviewLimit ?? this.sectionPreviewLimit,
       error: error,
     );
   }

@@ -103,6 +103,30 @@ void main() {
       expect(finalState.remoteContacts.length, 1);
       expect(finalState.remoteContacts.first.name, '张三(线上)');
     });
+
+    test('setCategory and setSectionPreviewLimit update state correctly', () {
+      final controller = container.read(globalSearchControllerProvider);
+      expect(controller.state.selectedCategory, SearchCategory.all);
+      expect(controller.state.sectionPreviewLimit, 3);
+
+      controller.setCategory(SearchCategory.contacts);
+      expect(controller.state.selectedCategory, SearchCategory.contacts);
+
+      controller.setSectionPreviewLimit(5);
+      expect(controller.state.sectionPreviewLimit, 5);
+
+      // 负数或0不应更新
+      controller.setSectionPreviewLimit(0);
+      expect(controller.state.sectionPreviewLimit, 5);
+
+      // query 清空时应重置分类为 all
+      controller.onQueryChanged('test');
+      controller.setCategory(SearchCategory.messages);
+      expect(controller.state.selectedCategory, SearchCategory.messages);
+
+      controller.onQueryChanged('');
+      expect(controller.state.selectedCategory, SearchCategory.all);
+    });
   });
 }
 
