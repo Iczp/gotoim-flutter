@@ -261,12 +261,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
-        // 1. 本地联系人 / 群聊
-        if (state.localContacts.isNotEmpty) ...[
+        // 1. 本地 Friend 表联系人（排第一位，点击直接进入聊天）
+        if (state.localContacts.isNotEmpty || state.isLocalLoading) ...[
           _buildSectionHeader(
             context,
-            title: '联系人与群聊',
+            title: '联系人',
             count: state.localContacts.length,
+            isLoading: state.isLocalLoading,
           ),
           for (final contact in state.localContacts)
             ListTile(
@@ -282,13 +283,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 isTitle: true,
               ),
               subtitle: contact.subtitle != null
-                  ? Text(
-                      contact.subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                  ? _buildHighlightedText(
+                      text: contact.subtitle!,
+                      keyword: keyword,
+                      context: context,
+                      isTitle: false,
                     )
                   : null,
               trailing: contact.isRoom
@@ -308,8 +307,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   : null,
               onTap: () {
                 controller.recordKeyword(keyword);
+                final ownerId = contact.ownerId ?? 0;
                 context.push(
-                  '/chat?sessionUnitId=${contact.id}&title=${Uri.encodeComponent(contact.title)}',
+                  '/chat/${Uri.encodeComponent(contact.id)}'
+                  '?ownerId=$ownerId'
+                  '&title=${Uri.encodeQueryComponent(contact.title)}',
                 );
               },
             ),
@@ -353,7 +355,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               onTap: () {
                 controller.recordKeyword(keyword);
                 context.push(
-                  '/chat?sessionUnitId=${msg.sessionUnitId}&title=${Uri.encodeComponent(msg.sessionTitle ?? '')}',
+                  '/chat/${Uri.encodeComponent(msg.sessionUnitId)}'
+                  '?title=${Uri.encodeQueryComponent(msg.sessionTitle ?? '')}',
                 );
               },
             ),
@@ -419,7 +422,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       onPressed: () {
                         controller.recordKeyword(keyword);
                         context.push(
-                          '/chat?sessionUnitId=${remote.id}&title=${Uri.encodeComponent(remote.name)}',
+                          '/chat/${Uri.encodeComponent(remote.id)}'
+                          '?title=${Uri.encodeQueryComponent(remote.name)}',
                         );
                       },
                       child: const Text('发消息'),

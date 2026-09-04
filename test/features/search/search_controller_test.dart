@@ -19,7 +19,7 @@ void main() {
           searchRepositoryProvider.overrideWithValue(fakeRepo),
         ],
       );
-      container.listen(globalSearchControllerProvider, (_, __) {});
+      container.listen(globalSearchControllerProvider, (_, _) {});
     });
 
     tearDown(() {

@@ -51,6 +51,7 @@ class SearchRepository {
     for (final row in rows) {
       final id = row['id']?.toString() ?? '';
       if (id.isEmpty) continue;
+      final rowOwnerId = (row['ownerId'] as num?)?.toInt() ?? ownerId;
 
       String title = id;
       String? subtitle;
@@ -64,37 +65,59 @@ class SearchRepository {
           final json = jsonDecode(rawStr);
           if (json is Map) {
             final dest = json['destination'];
+            final setting = json['setting'];
             if (dest is Map) {
-              title = (dest['name'] ?? dest['displayName'] ?? json['displayName'] ?? id).toString();
-              avatarUrl = dest['portraitUrl']?.toString() ?? dest['avatar']?.toString();
+              final remark = setting is Map ? setting['rename']?.toString() : null;
+              title = (remark != null && remark.isNotEmpty
+                      ? remark
+                      : (dest['displayName'] ??
+                          dest['name'] ??
+                          dest['nickName'] ??
+                          json['displayName'] ??
+                          id))
+                  .toString();
+              avatarUrl = dest['portraitUrl']?.toString() ??
+                  dest['thumbnail']?.toString() ??
+                  dest['avatar']?.toString() ??
+                  dest['avatarUrl']?.toString();
               objectType = (dest['objectType'] as num?)?.toInt();
-              isRoom = objectType == 2;
+              isRoom = objectType == 2 || json['session']?['type'] == 2;
+
+              final account = (dest['account'] ?? dest['userName'] ?? dest['code'])?.toString();
+              final phone = (dest['phoneNumber'] ?? dest['phone'])?.toString();
+
+              if (account != null && account.toLowerCase().contains(term) && !title.toLowerCase().contains(term)) {
+                subtitle = '账号: $account';
+              } else if (phone != null && phone.toLowerCase().contains(term) && !title.toLowerCase().contains(term)) {
+                subtitle = '手机号: $phone';
+              } else if (remark != null && remark.toLowerCase().contains(term) && remark != title) {
+                subtitle = '备注: $remark';
+              }
             } else {
               title = (json['displayName'] ?? json['name'] ?? id).toString();
-              avatarUrl = json['portraitUrl']?.toString();
+              avatarUrl = json['portraitUrl']?.toString() ?? json['avatarUrl']?.toString();
+              isRoom = json['session']?['type'] == 2;
             }
 
-            final lastMsg = json['lastMessage'];
-            if (lastMsg is Map) {
-              subtitle = lastMsg['text']?.toString();
+            if (subtitle == null) {
+              final lastMsg = json['lastMessage'];
+              if (lastMsg is Map) {
+                subtitle = lastMsg['text']?.toString() ?? lastMsg['content']?.toString();
+              }
             }
           }
         } catch (_) {}
       }
 
-      // 验证标题或副标题是否匹配关键字
-      if (title.toLowerCase().contains(term) ||
-          (subtitle != null && subtitle.toLowerCase().contains(term))) {
-        results.add(SearchContactItem(
-          id: id,
-          ownerId: ownerId,
-          title: title,
-          subtitle: subtitle,
-          avatarUrl: avatarUrl,
-          objectType: objectType,
-          isRoom: isRoom,
-        ));
-      }
+      results.add(SearchContactItem(
+        id: id,
+        ownerId: rowOwnerId,
+        title: title,
+        subtitle: subtitle,
+        avatarUrl: avatarUrl,
+        objectType: objectType,
+        isRoom: isRoom,
+      ));
     }
 
     return results;

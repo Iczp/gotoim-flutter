@@ -601,9 +601,15 @@ class UnifiedDatabase {
     await initialize();
     final term = keyword.trim();
     if (term.isEmpty) return const <Map<String, Object?>>[];
+    if (ownerId > 0) {
+      return _connection.runSelect(
+        'SELECT * FROM Friends WHERE ownerId = ? AND raw LIKE ? ORDER BY score DESC, id DESC LIMIT ?',
+        <Object?>[ownerId, '%$term%', limit],
+      );
+    }
     return _connection.runSelect(
-      'SELECT * FROM Friends WHERE ownerId = ? AND raw LIKE ? ORDER BY score DESC, id DESC LIMIT ?',
-      <Object?>[ownerId, '%$term%', limit],
+      'SELECT * FROM Friends WHERE raw LIKE ? ORDER BY score DESC, id DESC LIMIT ?',
+      <Object?>['%$term%', limit],
     );
   }
 
@@ -616,9 +622,15 @@ class UnifiedDatabase {
     await initialize();
     final term = keyword.trim();
     if (term.isEmpty) return const <Map<String, Object?>>[];
+    if (ownerId > 0) {
+      return _connection.runSelect(
+        'SELECT * FROM Messages WHERE ownerId = ? AND raw LIKE ? ORDER BY score DESC LIMIT ?',
+        <Object?>[ownerId, '%$term%', limit],
+      );
+    }
     return _connection.runSelect(
-      'SELECT * FROM Messages WHERE ownerId = ? AND raw LIKE ? ORDER BY score DESC LIMIT ?',
-      <Object?>[ownerId, '%$term%', limit],
+      'SELECT * FROM Messages WHERE raw LIKE ? ORDER BY score DESC LIMIT ?',
+      <Object?>['%$term%', limit],
     );
   }
 
