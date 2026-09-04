@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/media/media_preview.dart';
+import 'package:gotoim_flutter/core/media/video_viewer.dart';
 import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
 
 ChatMessage _createTestMsg({
@@ -146,6 +147,64 @@ void main() {
 
       // Must NEVER display 0%
       expect(find.text('0%'), findsNothing);
+    });
+
+    testWidgets('video preview presents top-level floating window button', (tester) async {
+      final videoItem = MediaPreviewItem(
+        id: 'vid-1',
+        messageId: 'msg-v1',
+        type: MediaPreviewType.video,
+        source: 'https://example.com/demo.mp4',
+        localPath: 'C:/fake/path/demo.mp4',
+        heroTag: 'hero-vid',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => MediaPreview.open(context, items: [videoItem]),
+              child: const Text('Open Video'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Video'));
+      await tester.pumpAndSettle();
+
+      // Top chrome must have close button and floating mini-window button
+      expect(find.byTooltip('关闭'), findsOneWidget);
+      expect(find.byTooltip('缩小为浮窗'), findsOneWidget);
+      expect(find.byIcon(Icons.picture_in_picture_alt), findsOneWidget);
+    });
+
+    testWidgets('video viewer hides playback controls when isDragging is true', (tester) async {
+      final videoItem = MediaPreviewItem(
+        id: 'vid-2',
+        messageId: 'msg-v2',
+        type: MediaPreviewType.video,
+        source: 'https://example.com/demo2.mp4',
+        heroTag: 'hero-vid-2',
+      );
+
+      // Render VideoViewer with isDragging: true
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: VideoViewer(
+              item: videoItem,
+              active: true,
+              items: [videoItem],
+              initialIndex: 0,
+              isDragging: true,
+            ),
+          ),
+        ),
+      );
+
+      // Playback controls slider and seekbar must NOT be rendered when dragging
+      expect(find.byType(Slider), findsNothing);
     });
   });
 }

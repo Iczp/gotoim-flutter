@@ -48,7 +48,9 @@ F:\Dev\GotoIM\gotoim-mobile\gotoim-uniapp-ts\src\pages\account\profile.vue
 聊天窗口 lib\features\chat\presentation\chat_page.dart
 头像菜单 和 消息菜单 按住 时，在华为手机上没有 振动反馈
 
+### set-background-image 404
 
+http://10.0.5.20:8044/api/chat/session-unit-setting/set-background-image/f8ff9588-4b6b-0c3e-f6c5-3a0aab0196c9?backgroundImage=%2Fdata%2Fuser%2F0%2Fcom.example.gotoim_flutter%2Fcache%2Ff17edb35-f478-4277-a38b-74639d311b3c%2FIMG_20260901_201951.jpg
 
 
 

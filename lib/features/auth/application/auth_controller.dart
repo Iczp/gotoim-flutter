@@ -4,8 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/device/client_device_context.dart';
+import '../../../core/network/abp/abp_application_configuration_dto.dart';
+import '../../../core/network/abp/abp_configuration_repository.dart';
+import '../../../core/network/abp/abp_current_user.dart';
 import '../../../core/network/secure_token_storage.dart';
 import '../../../core/network/client_credentials_token_storage.dart';
 import '../../../core/network/token_storage.dart';
@@ -17,22 +21,32 @@ import '../domain/auth_repository.dart';
 enum AuthStatus { checking, unauthenticated, authenticated }
 
 class AuthController extends ChangeNotifier {
-  AuthController(this._repository, this._signalRGateway) {
+  AuthController(
+    this._repository,
+    this._signalRGateway, {
+    AbpConfigurationRepository? abpConfigurationRepository,
+  }) : _abpConfigurationRepository = abpConfigurationRepository {
     _restore();
   }
 
   final AuthRepository _repository;
   final SignalRGateway _signalRGateway;
+  final AbpConfigurationRepository? _abpConfigurationRepository;
   AuthStatus _status = AuthStatus.checking;
   String? _errorMessage;
   String? _accountName;
   Map<String, dynamic>? _userInfo;
+  AbpCurrentUser? _currentUser;
+  AbpApplicationConfigurationDto? _applicationConfiguration;
   DateTime? _lastTokenRefreshedAt;
 
   AuthStatus get status => _status;
   String? get errorMessage => _errorMessage;
   String? get accountName => _accountName;
   Map<String, dynamic>? get userInfo => _userInfo;
+  AbpCurrentUser? get currentUser => _currentUser;
+  AbpApplicationConfigurationDto? get applicationConfiguration =>
+      _applicationConfiguration;
   DateTime? get lastTokenRefreshedAt => _lastTokenRefreshedAt;
   bool get isBusy => _status == AuthStatus.checking;
 
@@ -50,6 +64,7 @@ class AuthController extends ChangeNotifier {
       // 新账号登录成功：先重置账号级 Provider，再连接实时通道。
       _onAccountChanged?.call();
       _connectRealtime();
+      await _fetchAbpConfigurationSafely();
     } catch (error) {
       _status = AuthStatus.unauthenticated;
       _errorMessage = _displayError(error);
@@ -67,6 +82,7 @@ class AuthController extends ChangeNotifier {
       // 新账号登录成功：先重置账号级 Provider，再连接实时通道。
       _onAccountChanged?.call();
       _connectRealtime();
+      await _fetchAbpConfigurationSafely();
     } catch (error) {
       _status = AuthStatus.unauthenticated;
       _errorMessage = _displayError(error);
@@ -77,10 +93,13 @@ class AuthController extends ChangeNotifier {
   Future<void> logout() async {
     await _signalRGateway.disconnect();
     await _repository.logout();
+    await _abpConfigurationRepository?.clearCache();
     _status = AuthStatus.unauthenticated;
     _errorMessage = null;
     _accountName = null;
     _userInfo = null;
+    _currentUser = null;
+    _applicationConfiguration = null;
     _lastTokenRefreshedAt = null;
     _onAccountChanged?.call();
     notifyListeners();
@@ -88,10 +107,13 @@ class AuthController extends ChangeNotifier {
 
   Future<void> sessionInvalidated() async {
     await _signalRGateway.disconnect();
+    await _abpConfigurationRepository?.clearCache();
     _status = AuthStatus.unauthenticated;
     _errorMessage = '登录已过期，请重新登录。';
     _accountName = null;
     _userInfo = null;
+    _currentUser = null;
+    _applicationConfiguration = null;
     _lastTokenRefreshedAt = null;
     _onAccountChanged?.call();
     notifyListeners();
@@ -102,21 +124,53 @@ class AuthController extends ChangeNotifier {
 
   Future<void> _restore() async {
     try {
-      // A stored session is valid for offline use. In particular, never turn
-      // a slow or unavailable refresh endpoint into a local logout here.
-      // [restoreSession] only returns false when there is no usable local
-      // session or the authorization server definitively rejects it.
+      // 1. 离线优先：优先载入本地持久化缓存中的应用配置与当前账号
+      final cachedConfig =
+          await _abpConfigurationRepository?.loadCachedConfiguration();
+      if (cachedConfig != null) {
+        _applicationConfiguration = cachedConfig;
+        _currentUser = cachedConfig.currentUser;
+        if (_currentUser != null && _currentUser!.displayName.isNotEmpty) {
+          _accountName = _currentUser!.displayName;
+        }
+      }
+
       final hasSession = await _repository.restoreSession();
       _status =
           hasSession ? AuthStatus.authenticated : AuthStatus.unauthenticated;
       if (hasSession) {
         _connectRealtime();
+        // 2. 进应用必调用 /api/abp/application-configuration 并缓存，同步设置当前登录人
+        unawaited(_fetchAbpConfigurationSafely());
         unawaited(_loadUserInfoSafely());
       }
     } catch (_) {
       _status = AuthStatus.unauthenticated;
     }
     notifyListeners();
+  }
+
+  Future<void> _fetchAbpConfigurationSafely() async {
+    final repo = _abpConfigurationRepository;
+    if (repo == null) return;
+    try {
+      final config = await repo.fetchAndCacheConfiguration();
+      _applicationConfiguration = config;
+      _currentUser = config.currentUser;
+      if (_currentUser != null && _currentUser!.isAuthenticated) {
+        _accountName = _currentUser!.displayName;
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint(
+        '[AuthController] Failed to fetch abp application configuration: $e',
+      );
+    }
+  }
+
+  /// 外部主动刷新应用配置与当前账号
+  Future<void> fetchApplicationConfiguration({bool force = false}) async {
+    await _fetchAbpConfigurationSafely();
   }
 
   Future<void> _loadUserInfoSafely() async {
@@ -211,10 +265,12 @@ void _runAccountChangedCallbacks(Ref ref) {
   }
 }
 
-final authControllerProvider = ChangeNotifierProvider<AuthController>((ref) {
+final ChangeNotifierProvider<AuthController> authControllerProvider =
+    ChangeNotifierProvider<AuthController>((ref) {
   final controller = AuthController(
     ref.watch(authRepositoryProvider),
     ref.watch(signalRGatewayProvider),
+    abpConfigurationRepository: ref.watch(abpConfigurationRepositoryProvider),
   );
   // 账号切换时 invalidate 所有已注册的账号级 Provider，确保新账号获得干净状态。
   controller._onAccountChanged = () => _runAccountChangedCallbacks(ref);

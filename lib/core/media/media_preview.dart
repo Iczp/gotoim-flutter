@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
+import '../../app/app_navigation.dart';
 import 'image_provider_factory.dart';
 import 'image_viewer.dart';
 import 'media_downloader.dart';
@@ -79,8 +80,12 @@ abstract class MediaPreview {
   }) {
     if (items.isEmpty) return Future.value();
     final safeInitialIndex = initialIndex.clamp(0, items.length - 1);
+    final nav = Navigator.maybeOf(context, rootNavigator: true) ??
+        Navigator.maybeOf(context) ??
+        rootNavigatorKey.currentState;
+    if (nav == null) return Future.value();
     return openWithNavigator(
-      Navigator.of(context),
+      nav,
       items: items,
       initialIndex: safeInitialIndex,
       downloader: downloader,
@@ -269,6 +274,19 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
     );
   }
 
+  /// 将当前播放的视频缩小为画中画悬浮窗（与顶部关闭按钮平级）。
+  void _minimizeCurrentVideo() {
+    final item = widget.items[_index];
+    if (item.type != MediaPreviewType.video) return;
+    openFloatingVideoWindow(
+      context,
+      item: item,
+      items: widget.items,
+      initialIndex: _index,
+    );
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final routeAnimation = ModalRoute.of(context)?.animation;
@@ -344,6 +362,7 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                               items: widget.items,
                               index: index,
                               downloader: widget.downloader,
+                              isDragging: _isDragging || _dragOffset != Offset.zero,
                               onScaleChanged: (scale) {
                                 _currentScale = scale;
                               },
@@ -370,6 +389,25 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                             tooltip: '关闭',
                             onPressed: () => Navigator.of(context).pop(),
                             icon: const Icon(Icons.close, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    // ── 浮动小窗口按钮（右上，与关闭按钮平级，手指滑动时小窗口按钮不移动）──
+                    if (_chrome &&
+                        chromeOpacity > 0.0 &&
+                        widget.items[_index].type == MediaPreviewType.video)
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Opacity(
+                          opacity: chromeOpacity,
+                          child: IconButton(
+                            tooltip: '缩小为浮窗',
+                            onPressed: _minimizeCurrentVideo,
+                            icon: const Icon(
+                              Icons.picture_in_picture_alt,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
@@ -475,6 +513,7 @@ class _MediaPreviewItemView extends StatefulWidget {
     required this.onScaleChanged,
     required this.onDismissProgress,
     required this.onDismissEnd,
+    this.isDragging = false,
   });
 
   final MediaPreviewItem item;
@@ -485,12 +524,16 @@ class _MediaPreviewItemView extends StatefulWidget {
   final ValueChanged<double> onScaleChanged;
   final ValueChanged<Offset> onDismissProgress;
   final VoidCallback onDismissEnd;
+  final bool isDragging;
 
   @override
   State<_MediaPreviewItemView> createState() => _MediaPreviewItemViewState();
 }
 
-class _MediaPreviewItemViewState extends State<_MediaPreviewItemView> {
+class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   String? _localPath;
   bool _isReady = false;
   bool _isDownloading = false;
@@ -614,6 +657,7 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Hero(
       tag: widget.item.heroTag,
       child: Material(
@@ -637,6 +681,7 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView> {
                       active: widget.active,
                       items: widget.items,
                       initialIndex: widget.index,
+                      isDragging: widget.isDragging,
                     ))
                 : Stack(
                   fit: StackFit.expand,

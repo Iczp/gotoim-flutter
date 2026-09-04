@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
+import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../session/application/session_list_controller.dart';
-import '../../session/presentation/chat_object_avatar.dart';
 
 class ExplorePage extends ConsumerStatefulWidget {
   const ExplorePage({required this.isCompact, super.key});
@@ -28,7 +28,7 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = ref.watch(sessionListControllerProvider);
+    ref.watch(sessionListControllerProvider);
     final features = _features
         .where((item) {
           final categoryMatches =
@@ -41,15 +41,12 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
                   item.keywords.any((value) => value.contains(keyword)));
         })
         .toList(growable: false);
-    final horizontal = widget.isCompact ? 16.0 : 32.0;
+    final horizontal = widget.isCompact ? 8.0 : 16.0;
 
     return CustomScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: <Widget>[
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(horizontal, 18, horizontal, 12),
-          sliver: SliverToBoxAdapter(child: _hero(context)),
-        ),
+        SliverToBoxAdapter(child: _hero(context)),
         SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: horizontal),
           sliver: SliverToBoxAdapter(
@@ -72,43 +69,35 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
             ),
           ),
         ),
-        if (query.isEmpty && sessions.sessions.isNotEmpty) ...<Widget>[
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(horizontal, 22, horizontal, 10),
-            sliver: const SliverToBoxAdapter(
-              child: _ExploreHeading(title: '继续聊天', subtitle: '最近活跃的会话'),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 112,
-              child: ListView.separated(
-                padding: EdgeInsets.symmetric(horizontal: horizontal),
-                scrollDirection: Axis.horizontal,
-                itemCount: sessions.sessions.take(8).length,
-                separatorBuilder: (_, _) => const SizedBox(width: 10),
-                itemBuilder: (context, index) {
-                  final item = sessions.sessions[index];
-                  return _RecentSessionCard(
-                    title: item.title,
-                    subtitle: item.preview,
-                    onTap:
-                        () => context.push(
-                          '/chat/${Uri.encodeComponent(item.id)}'
-                          '?ownerId=${item.ownerId ?? sessions.currentOwner?.id ?? 0}'
-                          '&title=${Uri.encodeQueryComponent(item.title)}',
-                        ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
+
+        // ── 我的内容 ──────────────────────────────────────────────
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(horizontal, 24, horizontal, 10),
+          padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 0),
+          sliver: SliverToBoxAdapter(
+            child: CellGroup(
+              // title: '我的内容',
+              children: [
+                Cell(
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  title: '扫一扫',
+                  showArrow: true,
+                  onTap: () {
+                    ref
+                        .read(unifiedScanDispatcherProvider)
+                        .openAndDispatch(context, ref);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 6),
           sliver: SliverToBoxAdapter(
             child: _ExploreHeading(
               title: query.isEmpty ? '发现功能' : '搜索结果',
+
               subtitle:
                   query.isEmpty
                       ? 'GotoIM 中已经可以使用的能力'
@@ -155,7 +144,7 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
   Widget _hero(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return GlassCard(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(0),
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -167,7 +156,7 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -241,58 +230,6 @@ class _ExploreHeading extends StatelessWidget {
   );
 }
 
-class _RecentSessionCard extends StatelessWidget {
-  const _RecentSessionCard({
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 220,
-    child: GlassCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(13),
-          child: Row(
-            children: <Widget>[
-              ChatObjectAvatar(name: title, imageUrl: null, radius: 23),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      subtitle.isEmpty ? '开始聊天' : subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
 class _FeatureCard extends StatelessWidget {
   const _FeatureCard({required this.feature, required this.onTap});
   final _ExploreFeature feature;
@@ -304,10 +241,10 @@ class _FeatureCard extends StatelessWidget {
     return GlassCard(
       padding: EdgeInsets.zero,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(17),
+          padding: const EdgeInsets.all(12),
           child: Row(
             children: <Widget>[
               Container(
@@ -315,7 +252,7 @@ class _FeatureCard extends StatelessWidget {
                 height: 54,
                 decoration: BoxDecoration(
                   color: feature.color(colors).withValues(alpha: .14),
-                  borderRadius: BorderRadius.circular(17),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   feature.icon,
@@ -416,46 +353,6 @@ class _ExploreFeature {
 }
 
 const _features = <_ExploreFeature>[
-  _ExploreFeature(
-    title: '扫码连接',
-    description: '扫描二维码登录其他终端或识别连接信息',
-    icon: Icons.qr_code_scanner_rounded,
-    route: '/scan-login/scan',
-    category: _ExploreCategory.connect,
-    keywords: <String>['扫码', '登录', '二维码'],
-  ),
-  _ExploreFeature(
-    title: '登录设备',
-    description: '查看当前账号已经登录的手机、平板和桌面设备',
-    icon: Icons.devices_rounded,
-    route: '/devices',
-    category: _ExploreCategory.connect,
-    keywords: <String>['终端', '设备', '在线'],
-  ),
-  _ExploreFeature(
-    title: '局域网文件站',
-    description: '在附近设备间浏览、上传与下载文件',
-    icon: Icons.folder_shared_rounded,
-    route: '/local-file-server',
-    category: _ExploreCategory.files,
-    keywords: <String>['局域网', '传输', '共享'],
-  ),
-  _ExploreFeature(
-    title: '工作台',
-    description: '打开已接入的应用与效率工具',
-    icon: Icons.grid_view_rounded,
-    route: '/workbench',
-    category: _ExploreCategory.tools,
-    keywords: <String>['应用', '效率', '小程序'],
-  ),
-  _ExploreFeature(
-    title: '媒体能力',
-    description: '验证图片、视频、录音与文件选择能力',
-    icon: Icons.perm_media_rounded,
-    route: '/diagnostics/media',
-    category: _ExploreCategory.tools,
-    keywords: <String>['图片', '视频', '语音'],
-  ),
   _ExploreFeature(
     title: '开发诊断中心',
     description: '检查网络、数据库、SignalR 和原生能力',

@@ -12,11 +12,15 @@ import '../core/network/dio_api_client.dart';
 import '../core/devtools/remote_debug/remote_dev_server.dart';
 import '../core/notifications/local_notification_service.dart';
 import '../features/auth/application/auth_controller.dart';
+import '../core/network/abp/abp_application_configuration_dto.dart';
+import '../core/network/abp/abp_configuration_api.dart';
+import '../core/network/abp/abp_configuration_repository.dart';
+import '../core/network/abp/abp_current_user.dart';
 import '../features/auth/data/openid_connect_auth_repository.dart';
 
 /// Composition-root providers. Feature pages depend on repositories/use cases,
 /// not on this transport provider or Dio directly.
-final apiClientProvider = Provider<ApiClient>((ref) {
+final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((ref) {
   final environment = ref.watch(appEnvironmentProvider);
   final authRepository = ref.watch(authRepositoryProvider);
   return DioApiClient(
@@ -81,3 +85,31 @@ final unifiedDatabaseProvider = Provider<UnifiedDatabase>(
 final remoteDevServerProvider = Provider<RemoteDevServer>(
   (ref) => RemoteDevServer(),
 );
+
+/// ABP Application Configuration API.
+final Provider<AbpConfigurationApi> abpConfigurationApiProvider =
+    Provider<AbpConfigurationApi>((ref) {
+  return AbpConfigurationApi(ref.watch(apiClientProvider));
+});
+
+/// ABP Application Configuration Repository with SQLite caching.
+final Provider<AbpConfigurationRepository> abpConfigurationRepositoryProvider =
+    Provider<AbpConfigurationRepository>((ref) {
+  return AbpConfigurationRepository(
+    api: ref.watch(abpConfigurationApiProvider),
+    database: ref.watch(unifiedDatabaseProvider),
+  );
+});
+
+/// Current logged-in user from ABP `/api/abp/application-configuration`.
+final Provider<AbpCurrentUser?> currentUserProvider =
+    Provider<AbpCurrentUser?>((ref) {
+  return ref.watch(authControllerProvider).currentUser;
+});
+
+/// Latest application configuration from ABP `/api/abp/application-configuration`.
+final Provider<AbpApplicationConfigurationDto?> abpConfigurationProvider =
+    Provider<AbpApplicationConfigurationDto?>((ref) {
+  return ref.watch(authControllerProvider).applicationConfiguration;
+});
+

@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/application_providers.dart';
+import '../../../core/network/abp/abp_current_user.dart';
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/theme/theme_mode_controller.dart';
+import '../../../core/widgets/app_avatar.dart';
 import '../../auth/application/auth_controller.dart';
 import '../application/session_list_controller.dart';
-import '../../../core/widgets/app_avatar.dart';
 
 /// The home shell owns this drawer so every top-level tab can open it.
 class ChatOwnerDrawer extends ConsumerWidget {
@@ -163,50 +165,108 @@ class ChatOwnerDrawer extends ConsumerWidget {
               ),
             ),
             const Divider(height: 1),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-              minVerticalPadding: 0,
-              leading: controller.currentOwner != null
-                  ? AppAvatar(
-                      name: controller.currentOwner!.name,
-                      imageUrl: controller.currentOwner!.imageUrl,
-                      radius: 16,
-                    )
-                  : const Icon(Icons.settings_outlined),
-              title: Text(
-                ref.watch(authControllerProvider).accountName ??
-                    controller.currentOwner?.name ??
-                    '当前账号',
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                controller.currentOwner?.name ??
-                    (controller.currentOwner?.typeDescription.isNotEmpty == true
-                        ? controller.currentOwner!.typeDescription
-                        : '当前登录身份'),
-                style: const TextStyle(
-                  color: Color.fromARGB(153, 53, 53, 53),
-                  fontSize: 12,
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right, size: 18),
-              onTap: () {
-                Navigator.pop(context);
-                context.push('/account/profile');
-              },
-            ),
+            CurrentUserAccountTile(controller: controller),
             Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
                 'Goto IM Cross-Platform',
                 style: theme.textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
                 ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Formats current user account text, combining [name] and [userName].
+/// Example: `IM  admin` or `admin`.
+String formatCurrentUserAccountText(
+  AbpCurrentUser? currentUser, {
+  String? fallback,
+}) {
+  final name = currentUser?.name?.trim() ?? '';
+  final userName = currentUser?.userName?.trim() ?? '';
+  final parts = <String>[
+    if (name.isNotEmpty) name,
+    if (userName.isNotEmpty && userName != name) userName,
+  ];
+  if (parts.isNotEmpty) {
+    return parts.join('  ');
+  }
+  if (fallback != null && fallback.trim().isNotEmpty) {
+    return fallback.trim();
+  }
+  return '';
+}
+
+/// Dedicated tile at the bottom of [ChatOwnerDrawer] that encapsulates
+/// watching [currentUserProvider] and displays the current account info.
+class CurrentUserAccountTile extends ConsumerWidget {
+  const CurrentUserAccountTile({required this.controller, super.key});
+
+  final SessionListController controller;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentUser = ref.watch(currentUserProvider);
+    final authState = ref.watch(authControllerProvider);
+    final accountText = formatCurrentUserAccountText(
+      currentUser,
+      fallback: authState.accountName,
+    );
+
+    final displayTitle = accountText.isNotEmpty ? '当前账号：$accountText' : '当前账号';
+
+    final currentOwner = controller.currentOwner;
+    final displaySubtitle =
+        currentOwner != null
+            ? '当前身份：${currentOwner.name}'
+            : (currentOwner?.typeDescription.isNotEmpty == true
+                ? currentOwner!.typeDescription
+                : '当前登录身份');
+
+    final avatarName =
+        currentUser?.name?.trim().isNotEmpty == true
+            ? currentUser!.name!.trim()
+            : (currentUser?.userName?.trim().isNotEmpty == true
+                ? currentUser!.userName!.trim()
+                : (currentOwner?.name ?? '我'));
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      minVerticalPadding: 0,
+      leading:
+          currentOwner != null
+              ? AppAvatar(
+                name: currentOwner.name,
+                imageUrl: currentOwner.imageUrl,
+                radius: 16,
+              )
+              : AppAvatar(name: avatarName, imageUrl: null, radius: 16),
+      title: Text(
+        displayTitle,
+        style: const TextStyle(fontWeight: FontWeight.w500),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        displaySubtitle,
+        style: const TextStyle(
+          color: Color.fromARGB(153, 53, 53, 53),
+          fontSize: 12,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: const Icon(Icons.chevron_right, size: 18),
+      onTap: () {
+        Navigator.pop(context);
+        context.push('/account/profile');
+      },
     );
   }
 }

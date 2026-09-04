@@ -53,6 +53,13 @@ class DiagnosticsHomePage extends StatelessWidget {
                 onTap: () => context.push('/diagnostics/api'),
               ),
               Cell(
+                icon: const Icon(Icons.account_circle_outlined),
+                title: 'ABP 配置与当前账号',
+                subtitle: '应用配置(/api/abp/application-configuration)、当前登录人与缓存',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/abp-configuration'),
+              ),
+              Cell(
                 icon: const Icon(Icons.hub_outlined),
                 title: 'SignalR 测试',
                 subtitle: 'Chat Hub、连接详情、事件与 payload',

@@ -7,6 +7,7 @@ import '../../features/auth/presentation/login_page.dart';
 import '../../features/scan_login/presentation/scan_login_confirmation_page.dart';
 import '../../features/scan_login/presentation/scan_login_scan_page.dart';
 import '../../features/diagnostics/presentation/connection_test_page.dart';
+import '../../features/diagnostics/presentation/abp_configuration_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/auth_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/diagnostics_home_page.dart';
 import '../../features/diagnostics/presentation/local_notification_diagnostics_page.dart';
@@ -140,6 +141,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/api',
         builder: (context, state) => const ConnectionTestPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/abp-configuration',
+        builder: (context, state) => const AbpConfigurationDiagnosticsPage(),
       ),
       GoRoute(
         path: '/diagnostics/signalr',

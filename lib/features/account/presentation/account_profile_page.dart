@@ -30,7 +30,10 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
   }
 
   Future<void> _onRefresh() async {
-    await ref.read(authControllerProvider).fetchUserInfo(force: true);
+    await Future.wait([
+      ref.read(authControllerProvider).fetchUserInfo(force: true),
+      ref.read(authControllerProvider).fetchApplicationConfiguration(force: true),
+    ]);
   }
 
   Future<void> _handleRefreshToken() async {
@@ -96,24 +99,34 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = ref.watch(authControllerProvider);
+    final currentUser = authState.currentUser;
     final deviceContext = ref.watch(clientDeviceContextProvider);
 
     final userInfo = authState.userInfo;
     final account =
+        currentUser?.userName ??
         userInfo?['preferred_username']?.toString() ??
         userInfo?['unique_name']?.toString() ??
         authState.accountName ??
         '未设置';
 
     final name =
+        currentUser?.displayName ??
         userInfo?['name']?.toString() ??
         '${userInfo?['family_name'] ?? ''} ${userInfo?['given_name'] ?? ''}'
             .trim();
     final displayName = name.isNotEmpty ? name : account;
 
-    final email = userInfo?['email']?.toString() ?? '未设置';
-    final phoneNumber = userInfo?['phone_number']?.toString() ?? '未设置';
-    final roles = _extractRoles(userInfo);
+    final email =
+        currentUser?.email ?? userInfo?['email']?.toString() ?? '未设置';
+    final phoneNumber =
+        currentUser?.phoneNumber ??
+        userInfo?['phone_number']?.toString() ??
+        '未设置';
+    final roles =
+        currentUser != null && currentUser.roles.isNotEmpty
+            ? currentUser.roles
+            : _extractRoles(userInfo);
 
     final lastRefreshed = authState.lastTokenRefreshedAt;
     final lastRefreshedText =
@@ -132,6 +145,8 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
             // ── 1. 基本信息 ──────────────────────────────────────────────
             CellGroup(
               children: [
+                if (currentUser?.id != null && currentUser!.id!.isNotEmpty)
+                  Cell(title: '用户ID', value: currentUser.id!, canCopy: true),
                 Cell(title: '账号', value: account, canCopy: true),
                 Cell(title: '名称', value: displayName, canCopy: true),
                 Cell(

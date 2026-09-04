@@ -1,15 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/widgets/app_avatar.dart';
-import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
-import '../../auth/application/auth_controller.dart';
 import '../../session/application/session_list_controller.dart';
 
 /// 「我的」页面（由 HomeSectionPage 调用）。
@@ -22,19 +19,6 @@ class MinePage extends ConsumerWidget {
 
   final bool isCompact;
   final VoidCallback onOpenOwnerDrawer;
-
-  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showConfirmModal(
-      context: context,
-      title: '退出登录',
-      message: '确定要退出当前账号登录吗？\n退出后 Token 将立即在服务器失效。',
-      confirmText: '退出',
-      isDestructive: true,
-    );
-    if (confirmed && context.mounted) {
-      await ref.read(authControllerProvider).logout();
-    }
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -152,65 +136,6 @@ class MinePage extends ConsumerWidget {
               onTap: () {
                 showToast('关注列表暂无内容', type: ToastType.info);
               },
-            ),
-          ],
-        ),
-
-        // ── 设置与系统服务 ──────────────────────────────────────────
-        CellGroup(
-          title: '设置与服务',
-          children: [
-            Cell(
-              icon: const Icon(Icons.settings_outlined),
-              title: '设置',
-              subtitle: '外观主题、字体大小、账号与通用设置',
-              showArrow: true,
-              onTap: () => context.push('/settings'),
-            ),
-            Cell(
-              icon: const Icon(Icons.devices_rounded),
-              title: '登录设备',
-              subtitle: '已登录 ${sessionController.devices.length} 台设备',
-              showArrow: true,
-              onTap: () => context.push('/devices'),
-            ),
-            Cell(
-              icon: const Icon(Icons.folder_shared_outlined),
-              title: '局域网文件管理',
-              subtitle: 'HTTP 文件收发与 Web 终端',
-              showArrow: true,
-              onTap: () => context.push('/local-file-server'),
-            ),
-            Cell(
-              icon: const Icon(Icons.qr_code_scanner_rounded),
-              title: '扫码登录终端',
-              subtitle: '识别二维码并授权登录',
-              showArrow: true,
-              onTap: () => context.push('/scan-login/scan'),
-            ),
-            if (kDebugMode)
-              Cell(
-                icon: const Icon(Icons.developer_mode_rounded),
-                title: '开发诊断中心',
-                subtitle: '全套架构、Realtime、Native 及诊断',
-                showArrow: true,
-                onTap: () => context.push('/diagnostics'),
-              ),
-          ],
-        ),
-
-        // ── 账号操作 ──────────────────────────────────────────────
-        CellGroup(
-          title: '账号操作',
-          margin: const EdgeInsets.only(bottom: 24),
-          children: [
-            Cell(
-              icon: Icon(Icons.logout_rounded, color: colorScheme.error),
-              title: '退出登录',
-              titleColor: colorScheme.error,
-              isCentered: true,
-              showArrow: true,
-              onTap: () => _confirmLogout(context, ref),
             ),
           ],
         ),

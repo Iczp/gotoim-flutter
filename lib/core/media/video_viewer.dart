@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../app/app_navigation.dart';
 import '../floating_window/floating_window.dart';
+import 'image_provider_factory.dart';
 import 'media_preview.dart';
 import 'video_playback_session.dart';
 
@@ -28,6 +30,7 @@ class VideoViewer extends StatefulWidget {
     required this.items,
     required this.initialIndex,
     this.heroTag,
+    this.isDragging = false,
     super.key,
   });
 
@@ -36,15 +39,17 @@ class VideoViewer extends StatefulWidget {
   final List<MediaPreviewItem> items;
   final int initialIndex;
   final Object? heroTag;
+  final bool isDragging;
 
   @override
   State<VideoViewer> createState() => _VideoViewerState();
 }
 
-class _VideoViewerState extends State<VideoViewer> {
+class _VideoViewerState extends State<VideoViewer>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   late final VideoPlaybackSession _session;
-  bool _handedOff = false;
-  bool _handoffPending = false;
   bool _showControls = true;
   Timer? _hideTimer;
   bool _isDraggingSlider = false;
@@ -106,49 +111,11 @@ class _VideoViewerState extends State<VideoViewer> {
     });
   }
 
-  void _minimize() {
-    if (_handoffPending || _handedOff) return;
-    final manager = FloatingWindowScope.of(context);
-    final id = _sessionId;
-    final navigator = Navigator.of(context);
-    setState(() => _handoffPending = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _handedOff = true;
-      void restoreToFullscreen() {
-        manager.close(id);
-        MediaPreview.openWithNavigator(
-          navigator,
-          items: widget.items,
-          initialIndex: widget.initialIndex,
-        );
-      }
-
-      manager.show(
-        id: id,
-        type: FloatingWindowType.video,
-        options: FloatingWindowOptions.video(),
-        onRestore: restoreToFullscreen,
-        child: FloatingVideoContent(
-          session: _session,
-          onClose: () {
-            VideoPlaybackSessionRegistry.release(id, _session);
-            manager.close(id);
-          },
-          onRestore: restoreToFullscreen,
-        ),
-      );
-      navigator.pop();
-    });
-  }
-
   @override
   void dispose() {
     _hideTimer?.cancel();
     _session.removeListener(_onSessionChanged);
-    if (!_handedOff) {
-      VideoPlaybackSessionRegistry.release(_sessionId, _session);
-    }
+    VideoPlaybackSessionRegistry.release(_sessionId, _session);
     super.dispose();
   }
 
@@ -156,7 +123,18 @@ class _VideoViewerState extends State<VideoViewer> {
 
   @override
   Widget build(BuildContext context) {
-    if (_handoffPending) return const SizedBox.shrink();
+    super.build(context);
+
+    Widget buildCover() {
+      final thumb = widget.item.thumbnail ?? widget.item.source;
+      if (thumb.isEmpty) return const SizedBox.shrink();
+      return Image(
+        image: createImageProvider(thumb),
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      );
+    }
+
     if (_session.error != null) {
       return Center(
         child: Column(
@@ -176,13 +154,27 @@ class _VideoViewerState extends State<VideoViewer> {
 
     final controller = _session.controller;
     if (controller == null || !controller.value.isInitialized) {
-      Widget loading = const Center(
-        child: CircularProgressIndicator(color: Colors.white),
+      Widget loading = Stack(
+        fit: StackFit.expand,
+        alignment: Alignment.center,
+        children: [
+          buildCover(),
+          const Center(
+            child: Icon(
+              Icons.play_circle_fill_rounded,
+              color: Colors.white70,
+              size: 64,
+            ),
+          ),
+        ],
       );
       if (widget.heroTag != null) {
         loading = Hero(tag: widget.heroTag!, child: loading);
       }
-      return loading;
+      return Material(
+        type: MaterialType.transparency,
+        child: loading,
+      );
     }
 
     final value = controller.value;
@@ -206,30 +198,21 @@ class _VideoViewerState extends State<VideoViewer> {
             Center(
               child: AspectRatio(
                 aspectRatio: value.aspectRatio,
-                child: VideoPlayer(controller),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    buildCover(),
+                    VideoPlayer(controller),
+                  ],
+                ),
               ),
             ),
             if (value.isBuffering)
               const Center(
                 child: CircularProgressIndicator(color: Colors.white),
               ),
-            if (_showControls || !value.isPlaying || isCompleted)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Opacity(
-                  opacity: 0.8,
-                  child: IconButton(
-                    tooltip: '缩小为浮窗',
-                    onPressed: _minimize,
-                    icon: const Icon(
-                      Icons.picture_in_picture_alt,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            if (_showControls || !value.isPlaying || isCompleted)
+            if ((_showControls || !value.isPlaying || isCompleted) &&
+                !widget.isDragging)
               Center(
                 child: Opacity(
                   opacity: 0.8,
@@ -250,11 +233,11 @@ class _VideoViewerState extends State<VideoViewer> {
                   ),
                 ),
               ),
-            if (_showControls)
+            if (_showControls && !widget.isDragging)
               Positioned(
                 left: 0,
                 right: 0,
-                bottom: 8,
+                bottom: 56,
                 child: Opacity(
                   opacity: 0.8,
                   child: Container(
@@ -375,7 +358,16 @@ void openFloatingVideoWindow(
   void restoreToFullscreen() {
     manager.close(id);
     if (items != null && items.isNotEmpty) {
-      MediaPreview.open(context, items: items, initialIndex: initialIndex);
+      final nav = rootNavigatorKey.currentState ??
+          Navigator.maybeOf(context, rootNavigator: true) ??
+          Navigator.maybeOf(context);
+      if (nav != null) {
+        MediaPreview.openWithNavigator(
+          nav,
+          items: items,
+          initialIndex: initialIndex,
+        );
+      }
     }
   }
 
