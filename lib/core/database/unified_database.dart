@@ -592,6 +592,86 @@ class UnifiedDatabase {
     }
   }
 
+  /// Searches local friends / sessions matching [keyword] for the given [ownerId].
+  Future<List<Map<String, Object?>>> searchFriendRows({
+    required int ownerId,
+    required String keyword,
+    int limit = 30,
+  }) async {
+    await initialize();
+    final term = keyword.trim();
+    if (term.isEmpty) return const <Map<String, Object?>>[];
+    return _connection.runSelect(
+      'SELECT * FROM Friends WHERE ownerId = ? AND raw LIKE ? ORDER BY score DESC, id DESC LIMIT ?',
+      <Object?>[ownerId, '%$term%', limit],
+    );
+  }
+
+  /// Searches local messages containing [keyword] for the given [ownerId].
+  Future<List<Map<String, Object?>>> searchMessageRows({
+    required int ownerId,
+    required String keyword,
+    int limit = 50,
+  }) async {
+    await initialize();
+    final term = keyword.trim();
+    if (term.isEmpty) return const <Map<String, Object?>>[];
+    return _connection.runSelect(
+      'SELECT * FROM Messages WHERE ownerId = ? AND raw LIKE ? ORDER BY score DESC LIMIT ?',
+      <Object?>[ownerId, '%$term%', limit],
+    );
+  }
+
+  /// Reads persistent search keyword history from the Settings table.
+  Future<List<String>> readSearchHistory() async {
+    final raw = await readSettingValue('search_history_keywords');
+    if (raw == null || raw.trim().isEmpty) return const <String>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+      }
+    } catch (_) {}
+    return const <String>[];
+  }
+
+  /// Adds a keyword to persistent search history, prepending and deduplicating.
+  Future<List<String>> addSearchKeyword(String keyword, {int maxCount = 20}) async {
+    final term = keyword.trim();
+    if (term.isEmpty) return readSearchHistory();
+    final current = await readSearchHistory();
+    final updated = <String>[term, ...current.where((e) => e != term)];
+    final truncated = updated.take(maxCount).toList(growable: false);
+    await writeSettingValue(
+      id: 'search_history_keywords',
+      group: 'search',
+      value: jsonEncode(truncated),
+    );
+    return truncated;
+  }
+
+  /// Deletes a specific keyword from persistent search history.
+  Future<List<String>> deleteSearchKeyword(String keyword) async {
+    final term = keyword.trim();
+    final current = await readSearchHistory();
+    final updated = current.where((e) => e != term).toList(growable: false);
+    await writeSettingValue(
+      id: 'search_history_keywords',
+      group: 'search',
+      value: jsonEncode(updated),
+    );
+    return updated;
+  }
+
+  /// Clears all search history keywords.
+  Future<void> clearSearchHistory() async {
+    await writeSettingValue(
+      id: 'search_history_keywords',
+      group: 'search',
+      value: '[]',
+    );
+  }
+
   /// Empties a known schema table. Arbitrary SQL/table names are intentionally
   /// not accepted by this application-level API.
   Future<int> clearTable(String table) async {

@@ -50,6 +50,10 @@ import '../../features/group_management/presentation/group_management_page.dart'
 import '../../features/account/presentation/account_profile_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../../features/settings/presentation/theme_settings_page.dart';
+import '../../features/search/presentation/search_page.dart';
+import '../../features/group/presentation/create_group_page.dart';
+import '../../features/contact/presentation/add_friend_page.dart';
+import '../../features/diagnostics/presentation/search_and_group_diagnostics_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
@@ -95,6 +99,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/search',
+        builder: (context, state) => const SearchPage(),
+      ),
+      GoRoute(
+        path: '/create-group',
+        builder: (context, state) => const CreateGroupPage(),
+      ),
+      GoRoute(
+        path: '/add-friend',
+        builder: (context, state) => AddFriendPage(
+          initialKeyword: state.uri.queryParameters['keyword'],
+        ),
+      ),
+      GoRoute(
+        path: '/diagnostics/search-and-group',
+        builder: (context, state) => const SearchAndGroupDiagnosticsPage(),
+      ),
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsPage(),

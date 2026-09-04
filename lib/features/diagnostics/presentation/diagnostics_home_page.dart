@@ -108,6 +108,13 @@ class DiagnosticsHomePage extends StatelessWidget {
                 showArrow: true,
                 onTap: () => context.push('/diagnostics/notifications'),
               ),
+              Cell(
+                icon: const Icon(Icons.search_rounded),
+                title: '全局搜索与群聊创建',
+                subtitle: '搜索历史管理、本地离线检索、面对面建群与好友建群',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/search-and-group'),
+              ),
             ],
           ),
 
