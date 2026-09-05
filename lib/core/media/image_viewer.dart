@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
+import '../widgets/app_toast.dart';
 import 'image_provider_factory.dart';
 
 /// Professional image viewer with two-finger scale & twist rotation (with automatic
@@ -62,6 +63,7 @@ class _ImageViewerState extends State<ImageViewer>
 
   Offset _doubleTapPosition = Offset.zero;
   bool _isDismissDragging = false;
+  bool _hasShownErrorToast = false;
 
   late final AnimationController _animController;
   Animation<double>? _scaleAnimation;
@@ -268,22 +270,29 @@ class _ImageViewerState extends State<ImageViewer>
             : Image(
                 image: createImageProvider(widget.source),
                 fit: BoxFit.contain,
-                errorBuilder:
-                    (_, _, _) => const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.broken_image_outlined,
-                          color: Colors.white70,
-                          size: 48,
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          '图片加载失败',
-                          style: TextStyle(color: Colors.white70, fontSize: 13),
-                        ),
-                      ],
-                    ),
+                errorBuilder: (_, error, _) {
+                  if (!_hasShownErrorToast) {
+                    _hasShownErrorToast = true;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      showToast('图片加载失败', type: ToastType.error);
+                    });
+                  }
+                  return const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white70,
+                        size: 48,
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        '图片加载失败',
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ],
+                  );
+                },
               );
 
     Widget content = Material(

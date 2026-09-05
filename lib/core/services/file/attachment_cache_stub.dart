@@ -14,6 +14,8 @@ class _UnsupportedAttachmentCache implements AttachmentCache {
     String key,
     String fileName,
     Uint8List bytes, {
+    String? userId,
+    String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async =>
@@ -23,6 +25,8 @@ class _UnsupportedAttachmentCache implements AttachmentCache {
   Future<String?> find(
     String key,
     String fileName, {
+    String? userId,
+    String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async =>

@@ -49,6 +49,8 @@ class VideoMessageContent extends StatelessWidget {
               ?.localPath ??
           message.localFilePath,
       createdAt: message.createdAt,
+      userId: message.ownerId.toString(),
+      chatTarget: message.sessionUnitId,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,
         mediaId: message.localId,

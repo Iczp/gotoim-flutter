@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../app/app_navigation.dart';
 import '../floating_window/floating_window.dart';
+import '../widgets/app_toast.dart';
 import 'image_provider_factory.dart';
 import 'media_preview.dart';
 import 'video_playback_session.dart';
@@ -55,6 +56,7 @@ class _VideoViewerState extends State<VideoViewer>
   bool _isDraggingSlider = false;
   double _sliderValue = 0.0;
   bool _isMuted = false;
+  bool _hasShownErrorToast = false;
 
   @override
   void initState() {
@@ -76,7 +78,15 @@ class _VideoViewerState extends State<VideoViewer>
   }
 
   void _onSessionChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      if (_session.error != null && !_hasShownErrorToast) {
+        _hasShownErrorToast = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          showToast('视频加载失败: ${_session.error}', type: ToastType.error);
+        });
+      }
+      setState(() {});
+    }
   }
 
   void _startHideTimer() {

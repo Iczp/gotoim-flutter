@@ -66,6 +66,8 @@ class ImageMessageContent extends StatelessWidget {
               ?.localPath ??
           message.localFilePath,
       createdAt: message.createdAt,
+      userId: message.ownerId.toString(),
+      chatTarget: message.sessionUnitId,
       bytes: bytes,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,

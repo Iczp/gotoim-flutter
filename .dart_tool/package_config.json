@@ -530,6 +530,12 @@
       "languageVersion": "3.0"
     },
     {
+      "name": "gal",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/gal-2.3.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "glob",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/glob-2.1.3",
       "packageUri": "lib/",

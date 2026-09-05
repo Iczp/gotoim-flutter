@@ -24,6 +24,9 @@ class SessionMenuSheet extends StatelessWidget {
     final action = await showModalBottomSheet<SessionMenuAction>(
       context: context,
       useRootNavigator: true,
+      isDismissible: true,
+      enableDrag: true,
+      barrierColor: Colors.black54,
       showDragHandle: true,
       builder: (_) => SessionMenuSheet(session: session),
     );

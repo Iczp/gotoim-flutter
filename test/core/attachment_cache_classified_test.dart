@@ -133,5 +133,46 @@ void main() {
       final found = await cache.find('img_2002', 'photo.jpg');
       expect(found, equals(path));
     });
+
+    test('writes and isolates by userId and chatTarget', () async {
+      final bytes = Uint8List.fromList([7, 8, 9]);
+      final msgDate = DateTime(2026, 9, 5);
+
+      final user1Path = await cache.write(
+        'msg_u1',
+        'doc.pdf',
+        bytes,
+        userId: 'user_100',
+        chatTarget: 'friend_200',
+        messageDate: msgDate,
+      );
+
+      expect(user1Path, isNotNull);
+      expect(user1Path!, contains('user_100'));
+      expect(user1Path, contains('friend_200'));
+      expect(user1Path, contains('文档'));
+      expect(user1Path, contains('2026-09-05'));
+
+      // Find with exact userId and chatTarget
+      final foundU1 = await cache.find(
+        'msg_u1',
+        'doc.pdf',
+        userId: 'user_100',
+        chatTarget: 'friend_200',
+        messageDate: msgDate,
+      );
+      expect(foundU1, equals(user1Path));
+
+      // Query from a different user should NOT find it directly under user_101
+      final foundU2Exact = await cache.find(
+        'msg_u1',
+        'doc.pdf',
+        userId: 'user_101',
+        chatTarget: 'friend_200',
+        messageDate: msgDate,
+      );
+      // Fallback recursive search across other users will locate it
+      expect(foundU2Exact, equals(user1Path));
+    });
   });
 }

@@ -963,6 +963,8 @@ class ChatController extends ChangeNotifier {
         id: message.localId,
         source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        userId: ownerId.toString(),
+        chatTarget: sessionUnitId,
         messageDate: message.createdAt,
         category: resolveAttachmentCategory(
           message.fileName,
@@ -979,6 +981,8 @@ class ChatController extends ChangeNotifier {
         id: message.localId,
         source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        userId: ownerId.toString(),
+        chatTarget: sessionUnitId,
         messageDate: message.createdAt,
         category: resolveAttachmentCategory(
           message.fileName,
@@ -992,6 +996,8 @@ class ChatController extends ChangeNotifier {
         id: message.localId,
         source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        userId: ownerId.toString(),
+        chatTarget: sessionUnitId,
         messageDate: message.createdAt,
         category: resolveAttachmentCategory(
           message.fileName,

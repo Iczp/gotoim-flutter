@@ -27,71 +27,75 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
 
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('面对面建群'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '与身边的朋友输入同样的四个数字，即可进入同一个群聊',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: codeController,
-                keyboardType: TextInputType.number,
-                maxLength: 4,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                autofocus: true,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 8,
-                ),
-                decoration: InputDecoration(
-                  hintText: '----',
-                  counterText: '',
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('面对面建群'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '与身边的朋友输入同样的四个数字，即可进入同一个群聊',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: nameController,
-                maxLength: 20,
-                decoration: const InputDecoration(
-                  labelText: '群聊名称（可选）',
-                  hintText: '默认：面对面群 + 数字码',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+                const SizedBox(height: 16),
+                TextField(
+                  controller: codeController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  autofocus: true,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 8,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '----',
+                    counterText: '',
+                    filled: true,
+                    fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  maxLength: 20,
+                  decoration: const InputDecoration(
+                    labelText: '群聊名称（可选）',
+                    hintText: '默认：面对面群 + 数字码',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (codeController.text.trim().length != 4) {
+                    showToast('请输入完整的4位数字建群码', type: ToastType.warning);
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(true);
+                },
+                child: const Text('立即进入/创建'),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (codeController.text.trim().length != 4) {
-                  showToast('请输入完整的4位数字建群码', type: ToastType.warning);
-                  return;
-                }
-                Navigator.of(dialogContext).pop(true);
-              },
-              child: const Text('立即进入/创建'),
-            ),
-          ],
         );
       },
     );

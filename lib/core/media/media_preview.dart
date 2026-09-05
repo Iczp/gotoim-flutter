@@ -2,6 +2,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../app/app_navigation.dart';
+import '../services/media/media_gallery_saver.dart';
+import '../widgets/app_toast.dart';
 import 'image_provider_factory.dart';
 import 'image_viewer.dart';
 import 'media_downloader.dart';
@@ -25,6 +27,8 @@ class MediaPreviewItem {
     this.fileName,
     this.localPath,
     this.createdAt,
+    this.userId,
+    this.chatTarget,
   });
   final String id;
   final String messageId;
@@ -37,8 +41,12 @@ class MediaPreviewItem {
   final String? fileName;
   /// 本地已下载文件缓存路径（可选）。
   final String? localPath;
-  /// 消息创建日期（用于按日期分类保存附件到 `LocalShare/聊天文件/<分类>/<yyyy-MM-dd>`）。
+  /// 消息创建日期（用于按日期分类保存附件到 `LocalShare/聊天文件/<用户>/<聊天对象>/<分类>/<yyyy-MM-dd>`）。
   final DateTime? createdAt;
+  /// 用户 ID（支持多账号切换隔离）。
+  final String? userId;
+  /// 聊天对象会话 ID 或名称。
+  final String? chatTarget;
 
   MediaPreviewItem copyWith({
     String? id,
@@ -51,6 +59,8 @@ class MediaPreviewItem {
     String? fileName,
     String? localPath,
     DateTime? createdAt,
+    String? userId,
+    String? chatTarget,
   }) =>
       MediaPreviewItem(
         id: id ?? this.id,
@@ -63,6 +73,8 @@ class MediaPreviewItem {
         fileName: fileName ?? this.fileName,
         localPath: localPath ?? this.localPath,
         createdAt: createdAt ?? this.createdAt,
+        userId: userId ?? this.userId,
+        chatTarget: chatTarget ?? this.chatTarget,
       );
 }
 
@@ -221,45 +233,40 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
     }
   }
 
-  /// 下载当前媒体到本地缓存。
+  /// 下载/复制当前媒体到系统相册。
   Future<void> _downloadCurrent() async {
     final item = widget.items[_index];
     try {
       final cached = await widget.downloader.getCachedPath(item);
       if (cached != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('已保存在本地：${item.fileName ?? cached.split(r'\').last}'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
+        // 已经下载 -> 复制到相册
+        if (item.type == MediaPreviewType.image) {
+          await MediaGallerySaver.saveImage(cached);
+          showToast('已复制到系统相册', type: ToastType.success);
+        } else if (item.type == MediaPreviewType.video) {
+          await MediaGallerySaver.saveVideo(cached);
+          showToast('已复制到系统相册', type: ToastType.success);
+        } else {
+          showToast('已保存在本地', type: ToastType.info);
         }
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('正在下载媒体文件...'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
+        // 未下载 -> 下载到相册
+        showToast('正在下载媒体文件...', type: ToastType.info);
         final path = await widget.downloader.download(item);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('下载完成：${item.fileName ?? path.split(r'\').last}'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
+        if (path.isNotEmpty) {
+          if (item.type == MediaPreviewType.image) {
+            await MediaGallerySaver.saveImage(path);
+            showToast('已下载并保存到相册', type: ToastType.success);
+          } else if (item.type == MediaPreviewType.video) {
+            await MediaGallerySaver.saveVideo(path);
+            showToast('已下载并保存到相册', type: ToastType.success);
+          } else {
+            showToast('下载完成', type: ToastType.success);
+          }
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('下载失败：$e')),
-        );
-      }
+      showToast('保存相册失败：$e', type: ToastType.error);
     }
   }
 

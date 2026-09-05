@@ -582,7 +582,7 @@ Future<String?> showPromptModal({
   String cancelText = '取消',
   bool showCloseButton = false,
   FutureOr<bool?> Function(String inputContent)? onConfirm,
-  AppModalOptions options = const AppModalOptions(),
+  AppModalOptions options = const AppModalOptions(barrierDismissible: false),
 }) async {
   final result = await showModalDialog<void>(
     context: context,

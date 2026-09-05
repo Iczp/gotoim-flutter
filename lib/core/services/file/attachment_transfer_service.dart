@@ -61,6 +61,8 @@ class AttachmentTransferService extends ChangeNotifier {
   Future<String?> findCachedPath({
     required String id,
     required String fileName,
+    String? userId,
+    String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async {
@@ -69,6 +71,8 @@ class AttachmentTransferService extends ChangeNotifier {
     final cached = await _cache.find(
       id,
       fileName,
+      userId: userId,
+      chatTarget: chatTarget,
       messageDate: messageDate,
       category: category,
     );
@@ -87,6 +91,8 @@ class AttachmentTransferService extends ChangeNotifier {
     required String id,
     required String source,
     required String fileName,
+    String? userId,
+    String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async {
@@ -94,6 +100,8 @@ class AttachmentTransferService extends ChangeNotifier {
     final cached = await findCachedPath(
       id: id,
       fileName: fileName,
+      userId: userId,
+      chatTarget: chatTarget,
       messageDate: messageDate,
       category: category,
     );
@@ -127,6 +135,8 @@ class AttachmentTransferService extends ChangeNotifier {
         id,
         fileName,
         data,
+        userId: userId,
+        chatTarget: chatTarget,
         messageDate: messageDate,
         category: category,
       );
@@ -163,6 +173,8 @@ class AttachmentTransferService extends ChangeNotifier {
     required String id,
     required String source,
     required String fileName,
+    String? userId,
+    String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async {
@@ -172,6 +184,8 @@ class AttachmentTransferService extends ChangeNotifier {
         id: id,
         source: source,
         fileName: fileName,
+        userId: userId,
+        chatTarget: chatTarget,
         messageDate: messageDate,
         category: category,
       );
@@ -188,6 +202,8 @@ class AttachmentTransferService extends ChangeNotifier {
     required String id,
     required String source,
     required String fileName,
+    String? userId,
+    String? chatTarget,
     DateTime? messageDate,
     String? category,
     String? mimeType,
@@ -197,6 +213,8 @@ class AttachmentTransferService extends ChangeNotifier {
         id: id,
         source: source,
         fileName: fileName,
+        userId: userId,
+        chatTarget: chatTarget,
         messageDate: messageDate,
         category: category,
       );

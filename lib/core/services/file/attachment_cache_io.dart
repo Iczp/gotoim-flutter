@@ -15,6 +15,12 @@ class _IoAttachmentCache implements AttachmentCache {
   String _sanitizeName(String fileName) =>
       fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
 
+  String _sanitizeSegment(String? value, String fallback) {
+    if (value == null || value.trim().isEmpty) return fallback;
+    final sanitized = value.trim().replaceAll(RegExp(r'[\\/:*?"<>|\s]'), '_');
+    return sanitized.isEmpty ? fallback : sanitized;
+  }
+
   /// 获取局域网文件共享站“聊天文件”根目录：
   /// ${Documents}/LocalShare/聊天文件
   Future<Directory> _getChatFilesRoot() async {
@@ -28,18 +34,22 @@ class _IoAttachmentCache implements AttachmentCache {
     return dir;
   }
 
-  /// 获取按分类和日期分级的目标目录：
-  /// `${Documents}/LocalShare/聊天文件/<分类>/<yyyy-MM-dd>`
+  /// 获取按 用户/聊天对象/类型/日期 分级的目标目录：
+  /// `${Documents}/LocalShare/聊天文件/<用户>/<聊天对象>/<分类>/<yyyy-MM-dd>`
   Future<Directory> _resolveDirectory({
     required String fileName,
+    String? userId,
+    String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async {
     final root = await _getChatFilesRoot();
+    final userSegment = _sanitizeSegment(userId, 'default_user');
+    final targetSegment = _sanitizeSegment(chatTarget, 'default_target');
     final cat = category ?? resolveAttachmentCategory(fileName);
     final date = resolveDateFolder(messageDate);
     final dir = Directory(
-      '${root.path}${Platform.pathSeparator}$cat${Platform.pathSeparator}$date',
+      '${root.path}${Platform.pathSeparator}$userSegment${Platform.pathSeparator}$targetSegment${Platform.pathSeparator}$cat${Platform.pathSeparator}$date',
     );
     if (!await dir.exists()) {
       await dir.create(recursive: true);
@@ -60,11 +70,15 @@ class _IoAttachmentCache implements AttachmentCache {
     String key,
     String fileName,
     Uint8List bytes, {
+    String? userId,
+    String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async {
     final directory = await _resolveDirectory(
       fileName: fileName,
+      userId: userId,
+      chatTarget: chatTarget,
       messageDate: messageDate,
       category: category,
     );
@@ -77,48 +91,59 @@ class _IoAttachmentCache implements AttachmentCache {
   Future<String?> find(
     String key,
     String fileName, {
+    String? userId,
+    String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async {
     final safeKey = _sanitizeKey(key);
     final safeName = _sanitizeName(fileName);
-
-    // 1. 如果指定了日期或能确定分类，优先在精确路径下寻找
     final root = await _getChatFilesRoot();
-    final cat = category ?? resolveAttachmentCategory(fileName);
-    final date = resolveDateFolder(messageDate);
-    final exactDir = Directory(
-      '${root.path}${Platform.pathSeparator}$cat${Platform.pathSeparator}$date',
-    );
-    if (await exactDir.exists()) {
-      final exactFile = File('${exactDir.path}${Platform.pathSeparator}${safeKey}_$safeName');
-      if (await exactFile.exists() && await exactFile.length() > 0) {
-        return exactFile.path;
-      }
-      final exactPlain = File('${exactDir.path}${Platform.pathSeparator}$safeName');
-      if (await exactPlain.exists() && await exactPlain.length() > 0) {
-        return exactPlain.path;
-      }
-    }
 
-    // 2. 若精确路径未找到或消息日期跨天，扫描 LocalShare/聊天文件 下所有分类子目录
-    if (await root.exists()) {
-      await for (final entity in root.list(recursive: true, followLinks: false)) {
-        if (entity is File) {
-          final name = entity.uri.pathSegments.isNotEmpty
-              ? entity.uri.pathSegments.last
-              : '';
-          if ((name == '${safeKey}_$safeName' ||
-                  name == safeName ||
-                  (safeKey.isNotEmpty && name.startsWith('${safeKey}_'))) &&
-              await entity.length() > 0) {
-            return entity.path;
-          }
+    // 1. 如果指定了用户与聊天对象，优先在精确的 用户/聊天对象/类型/日期 目录下寻找
+    if (userId != null && chatTarget != null) {
+      final userSegment = _sanitizeSegment(userId, 'default_user');
+      final targetSegment = _sanitizeSegment(chatTarget, 'default_target');
+      final cat = category ?? resolveAttachmentCategory(fileName);
+      final date = resolveDateFolder(messageDate);
+      final exactDir = Directory(
+        '${root.path}${Platform.pathSeparator}$userSegment${Platform.pathSeparator}$targetSegment${Platform.pathSeparator}$cat${Platform.pathSeparator}$date',
+      );
+      if (await exactDir.exists()) {
+        final exactFile = File('${exactDir.path}${Platform.pathSeparator}${safeKey}_$safeName');
+        if (await exactFile.exists() && await exactFile.length() > 0) {
+          return exactFile.path;
+        }
+        final exactPlain = File('${exactDir.path}${Platform.pathSeparator}$safeName');
+        if (await exactPlain.exists() && await exactPlain.length() > 0) {
+          return exactPlain.path;
         }
       }
+
+      // 2. 在当前用户的当前会话目录下递回查找
+      final targetDir = Directory(
+        '${root.path}${Platform.pathSeparator}$userSegment${Platform.pathSeparator}$targetSegment',
+      );
+      if (await targetDir.exists()) {
+        final found = await _searchInDirectory(targetDir, safeKey, safeName);
+        if (found != null) return found;
+      }
+
+      // 3. 在当前用户目录下跨会话查找
+      final userDir = Directory('${root.path}${Platform.pathSeparator}$userSegment');
+      if (await userDir.exists()) {
+        final found = await _searchInDirectory(userDir, safeKey, safeName);
+        if (found != null) return found;
+      }
     }
 
-    // 3. 兜底兼容旧版私有缓存目录（getApplicationSupportDirectory()/attachments）
+    // 4. 扫描 LocalShare/聊天文件 下所有层级子目录（跨用户/未传入用户信息时查找）
+    if (await root.exists()) {
+      final found = await _searchInDirectory(root, safeKey, safeName);
+      if (found != null) return found;
+    }
+
+    // 5. 兜底兼容旧版私有缓存目录（getApplicationSupportDirectory()/attachments）
     try {
       final supportRoot = await getApplicationSupportDirectory();
       final legacyDir = Directory(
@@ -132,6 +157,27 @@ class _IoAttachmentCache implements AttachmentCache {
       }
     } catch (_) {}
 
+    return null;
+  }
+
+  Future<String?> _searchInDirectory(
+    Directory dir,
+    String safeKey,
+    String safeName,
+  ) async {
+    await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      if (entity is File) {
+        final name = entity.uri.pathSegments.isNotEmpty
+            ? entity.uri.pathSegments.last
+            : '';
+        if ((name == '${safeKey}_$safeName' ||
+                name == safeName ||
+                (safeKey.isNotEmpty && name.startsWith('${safeKey}_'))) &&
+            await entity.length() > 0) {
+          return entity.path;
+        }
+      }
+    }
     return null;
   }
 

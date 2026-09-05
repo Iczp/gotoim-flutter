@@ -589,6 +589,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             localPath: controller.attachmentState(message.localId).localPath ??
                 message.localFilePath,
             createdAt: message.createdAt,
+            userId: message.ownerId.toString(),
+            chatTarget: message.sessionUnitId,
             bytes: controller.imagePreview(message.localId),
             heroTag: buildMediaHeroTag(
               messageId: message.localId,
@@ -710,6 +712,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
               messageId: message.localId,
               type: MediaPreviewType.video,
               source: source,
+              userId: message.ownerId.toString(),
+              chatTarget: message.sessionUnitId,
+              createdAt: message.createdAt,
               heroTag: buildMediaHeroTag(
                 messageId: message.localId,
                 mediaId: message.localId,

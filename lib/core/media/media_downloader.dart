@@ -56,6 +56,8 @@ class DefaultMediaDownloader implements MediaDownloader {
     return _cache.find(
       item.id,
       fileName,
+      userId: item.userId,
+      chatTarget: item.chatTarget,
       messageDate: item.createdAt,
       category: category,
     );
@@ -90,6 +92,8 @@ class DefaultMediaDownloader implements MediaDownloader {
         item.id,
         fileName,
         bytes,
+        userId: item.userId,
+        chatTarget: item.chatTarget,
         messageDate: item.createdAt,
         category: category,
       );
@@ -134,6 +138,8 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
     return _transferService.findCachedPath(
       id: item.id,
       fileName: fileName,
+      userId: item.userId,
+      chatTarget: item.chatTarget,
       messageDate: item.createdAt,
       category: category,
     );
@@ -173,6 +179,8 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
         id: item.id,
         source: item.source,
         fileName: fileName,
+        userId: item.userId,
+        chatTarget: item.chatTarget,
         messageDate: item.createdAt,
         category: category,
       );

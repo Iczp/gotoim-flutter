@@ -84,57 +84,14 @@ class CurrentOwnerHeader extends ConsumerWidget {
                   tooltip: '搜索',
                   onPressed: () => context.push('/search'),
                 ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.add_circle_outline_rounded),
-                  tooltip: '更多功能',
-                  offset: const Offset(0, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'scan':
-                        ref
-                            .read(unifiedScanDispatcherProvider)
-                            .openAndDispatch(context, ref);
-                      case 'add_friend':
-                        context.push('/add-friend');
-                      case 'create_group':
-                        context.push('/create-group');
-                    }
+                Builder(
+                  builder: (buttonContext) {
+                    return IconButton(
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      tooltip: '更多功能',
+                      onPressed: () => _showAddMenu(buttonContext, context, ref),
+                    );
                   },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem<String>(
-                      value: 'scan',
-                      child: Row(
-                        children: [
-                          Icon(Icons.qr_code_scanner_rounded, size: 20),
-                          SizedBox(width: 12),
-                          Text('扫一扫'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem<String>(
-                      value: 'add_friend',
-                      child: Row(
-                        children: [
-                          Icon(Icons.person_add_outlined, size: 20),
-                          SizedBox(width: 12),
-                          Text('添加好友'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem<String>(
-                      value: 'create_group',
-                      child: Row(
-                        children: [
-                          Icon(Icons.group_add_outlined, size: 20),
-                          SizedBox(width: 12),
-                          Text('创建群聊'),
-                        ],
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -142,5 +99,183 @@ class CurrentOwnerHeader extends ConsumerWidget {
         ),
       ),
     ),);
+  }
+
+  void _showAddMenu(
+    BuildContext buttonContext,
+    BuildContext pageContext,
+    WidgetRef ref,
+  ) {
+    final renderBox = buttonContext.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+    final origin = renderBox.localToGlobal(Offset.zero);
+    final targetRect = origin & renderBox.size;
+
+    Navigator.of(pageContext, rootNavigator: true).push(
+      _HeaderMenuRoute(
+        targetRect: targetRect,
+        onSelected: (value) {
+          switch (value) {
+            case 'scan':
+              ref
+                  .read(unifiedScanDispatcherProvider)
+                  .openAndDispatch(pageContext, ref);
+            case 'add_friend':
+              pageContext.push('/add-friend');
+            case 'create_group':
+              pageContext.push('/create-group');
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _HeaderMenuRoute extends PopupRoute<void> {
+  _HeaderMenuRoute({
+    required this.targetRect,
+    required this.onSelected,
+  });
+
+  final Rect targetRect;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Color? get barrierColor => Colors.transparent;
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  String? get barrierLabel => '关闭菜单';
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 140);
+
+  @override
+  Widget buildModalBarrier() {
+    // 触摸屏幕其他任意位置时立即隐藏菜单，无需等待完整的点击抬起
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => navigator?.pop(),
+      child: const SizedBox.expand(),
+    );
+  }
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final mediaQuery = MediaQuery.of(context);
+
+    // 靠右侧对齐，紧贴 + 号按钮下方
+    const menuWidth = 148.0;
+    final top = targetRect.bottom + 6;
+    final right = (mediaQuery.size.width - targetRect.right).clamp(8.0, 40.0);
+
+    return Stack(
+      children: [
+        Positioned(
+          top: top,
+          right: right,
+          child: FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            ),
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.92, end: 1.0).animate(
+                CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                ),
+              ),
+              alignment: Alignment.topRight,
+              child: Material(
+                elevation: 6,
+                shadowColor: Colors.black26,
+                color: colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(12),
+                clipBehavior: Clip.antiAlias,
+                child: SizedBox(
+                  width: menuWidth,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _MenuItem(
+                        icon: Icons.qr_code_scanner_rounded,
+                        text: '扫一扫',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          onSelected('scan');
+                        },
+                      ),
+                      Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.2)),
+                      _MenuItem(
+                        icon: Icons.person_add_outlined,
+                        text: '添加好友',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          onSelected('add_friend');
+                        },
+                      ),
+                      Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.2)),
+                      _MenuItem(
+                        icon: Icons.group_add_outlined,
+                        text: '创建群聊',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          onSelected('create_group');
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MenuItem extends StatelessWidget {
+  const _MenuItem({
+    required this.icon,
+    required this.text,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String text;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: theme.colorScheme.onSurface),
+            const SizedBox(width: 12),
+            Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
