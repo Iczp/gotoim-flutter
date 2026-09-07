@@ -255,6 +255,13 @@ class DiagnosticsHomePage extends StatelessWidget {
                 showArrow: true,
                 onTap: () => context.push('/diagnostics/theme'),
               ),
+              Cell(
+                icon: const Icon(Icons.dashboard_customize_outlined),
+                title: '工作台二维 Widget 布局引擎',
+                subtitle: '4列栅格、多尺寸小组件/Banner贴边混排、文件夹气泡与防冲突拖拽装箱',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/workbench-layout'),
+              ),
             ],
           ),
 

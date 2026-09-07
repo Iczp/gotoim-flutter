@@ -37,6 +37,7 @@ import '../../features/diagnostics/presentation/toast_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/modal_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/target_picker_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/remote_devtools_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/workbench_layout_diagnostics_page.dart';
 import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/local_file_server/pages/terminal_details_page.dart';
 import '../../features/local_file_server/pages/shared_file_manager_page.dart';
@@ -267,6 +268,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/target-picker',
         builder: (context, state) => const TargetPickerDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/workbench-layout',
+        builder: (context, state) => const WorkbenchLayoutDiagnosticsPage(),
       ),
       GoRoute(
         path: '/workbench',
