@@ -13,6 +13,8 @@ class ImageViewer extends StatefulWidget {
     this.heroTag,
     required this.source,
     this.bytes,
+    this.thumbnail,
+    this.thumbnailBytes,
     this.onScaleChanged,
     this.onDismissProgress,
     this.onDismissEnd,
@@ -27,6 +29,8 @@ class ImageViewer extends StatefulWidget {
   final Object? heroTag;
   final String source;
   final Uint8List? bytes;
+  final String? thumbnail;
+  final Uint8List? thumbnailBytes;
   final ValueChanged<double>? onScaleChanged;
   final ValueChanged<Offset>? onDismissProgress;
   final VoidCallback? onDismissEnd;
@@ -262,38 +266,104 @@ class _ImageViewerState extends State<ImageViewer>
     _animController.forward(from: 0.0);
   }
 
+  Widget _buildThumbnailWidget() {
+    if (widget.thumbnailBytes != null) {
+      return Image.memory(
+        widget.thumbnailBytes!,
+        fit: BoxFit.contain,
+      );
+    }
+    final thumb = widget.thumbnail;
+    if (thumb != null && thumb.isNotEmpty && thumb != widget.source) {
+      return Image(
+        image: createImageProvider(thumb),
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildErrorWidget(
+    BuildContext context,
+    Object error,
+    StackTrace? stackTrace,
+  ) {
+    if (!_hasShownErrorToast) {
+      _hasShownErrorToast = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showToast('图片加载失败', type: ToastType.error);
+      });
+    }
+    return const Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.broken_image_outlined,
+          color: Colors.white70,
+          size: 48,
+        ),
+        SizedBox(height: 8),
+        Text(
+          '图片加载失败',
+          style: TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final imageWidget =
-        widget.bytes != null
-            ? Image.memory(widget.bytes!, fit: BoxFit.contain)
-            : Image(
-                image: createImageProvider(widget.source),
-                fit: BoxFit.contain,
-                errorBuilder: (_, error, _) {
-                  if (!_hasShownErrorToast) {
-                    _hasShownErrorToast = true;
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      showToast('图片加载失败', type: ToastType.error);
-                    });
-                  }
-                  return const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.broken_image_outlined,
-                        color: Colors.white70,
-                        size: 48,
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        '图片加载失败',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
-                    ],
-                  );
-                },
-              );
+    final hasThumbnail = widget.thumbnailBytes != null ||
+        (widget.thumbnail != null &&
+            widget.thumbnail!.isNotEmpty &&
+            widget.thumbnail != widget.source);
+
+    Widget highResWidget;
+    if (widget.bytes != null) {
+      highResWidget = Image.memory(
+        widget.bytes!,
+        fit: BoxFit.contain,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (!hasThumbnail) return child;
+          final isLoaded = wasSynchronouslyLoaded || frame != null;
+          return AnimatedOpacity(
+            opacity: isLoaded ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: child,
+          );
+        },
+        errorBuilder: _buildErrorWidget,
+      );
+    } else {
+      highResWidget = Image(
+        image: createImageProvider(widget.source),
+        fit: BoxFit.contain,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (!hasThumbnail) return child;
+          final isLoaded = wasSynchronouslyLoaded || frame != null;
+          return AnimatedOpacity(
+            opacity: isLoaded ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: child,
+          );
+        },
+        errorBuilder: _buildErrorWidget,
+      );
+    }
+
+    final Widget imageWidget = hasThumbnail
+        ? Stack(
+            fit: StackFit.passthrough,
+            alignment: Alignment.center,
+            children: <Widget>[
+              _buildThumbnailWidget(),
+              highResWidget,
+            ],
+          )
+        : highResWidget;
 
     Widget content = Material(
       type: MaterialType.transparency,

@@ -46,6 +46,8 @@ class ChatComposerState extends State<ChatComposer>
   final FocusNode _focusNode = FocusNode();
   final PageController _pageController = PageController();
   bool _showFunctions = false;
+  bool _isSwitchingToKeyboard = false;
+  Timer? _switchKeyboardTimeout;
   bool _voiceMode = false;
   bool _startingRecording = false;
   bool _recording = false;
@@ -84,7 +86,8 @@ class ChatComposerState extends State<ChatComposer>
     inputFloorPercent: 30,
     inputPeakPercent: 80,
   );
-  static const _fallbackFunctionTrayHeight = 238.0;
+  static const _fallbackFunctionTrayHeight = 300.0;
+  static const _minValidKeyboardHeight = 180.0;
   double _keyboardTrayHeight = _fallbackFunctionTrayHeight;
 
   @override
@@ -112,12 +115,13 @@ class ChatComposerState extends State<ChatComposer>
 
   void _captureKeyboardHeight() {
     if (!mounted) return;
-    final view = View.of(context);
-    final height = view.viewInsets.bottom / view.devicePixelRatio;
-    if (height < 180) return;
-    final clampedHeight = height.clamp(200.0, 420.0);
-    if ((clampedHeight - _keyboardTrayHeight).abs() < 1) return;
-    setState(() => _keyboardTrayHeight = clampedHeight);
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    if (bottomInset > _minValidKeyboardHeight) {
+      final clampedHeight = bottomInset.clamp(240.0, 420.0);
+      if ((clampedHeight - _keyboardTrayHeight).abs() >= 1) {
+        setState(() => _keyboardTrayHeight = clampedHeight);
+      }
+    }
   }
 
   @override
@@ -125,6 +129,7 @@ class ChatComposerState extends State<ChatComposer>
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_levelSubscription?.cancel());
     _durationTimer?.cancel();
+    _switchKeyboardTimeout?.cancel();
     _hideRecordingOverlay();
     if (_recording || _startingRecording) {
       unawaited(widget.controller.cancelVoiceRecording());
@@ -134,13 +139,32 @@ class ChatComposerState extends State<ChatComposer>
     super.dispose();
   }
 
+  void _startSwitchingToKeyboard() {
+    _switchKeyboardTimeout?.cancel();
+    _isSwitchingToKeyboard = true;
+    _switchKeyboardTimeout = Timer(const Duration(milliseconds: 500), () {
+      if (mounted && _isSwitchingToKeyboard) {
+        setState(() {
+          _isSwitchingToKeyboard = false;
+          _showFunctions = false;
+        });
+      }
+    });
+  }
+
   void _toggleFunctions() {
+    _switchKeyboardTimeout?.cancel();
     if (_showFunctions) {
-      setState(() => _showFunctions = false);
-      _focusNode.requestFocus();
+      setState(() {
+        _showFunctions = false;
+        _isSwitchingToKeyboard = false;
+      });
     } else {
       _focusNode.unfocus();
-      setState(() => _showFunctions = true);
+      setState(() {
+        _showFunctions = true;
+        _isSwitchingToKeyboard = false;
+      });
     }
   }
 
@@ -168,15 +192,23 @@ class ChatComposerState extends State<ChatComposer>
   }
 
   void closeInputArea() {
+    _switchKeyboardTimeout?.cancel();
     _focusNode.unfocus();
-    if (_showFunctions) setState(() => _showFunctions = false);
+    if (_showFunctions || _isSwitchingToKeyboard) {
+      setState(() {
+        _showFunctions = false;
+        _isSwitchingToKeyboard = false;
+      });
+    }
   }
 
   void focusText() {
     if (_voiceMode || _showFunctions) {
+      if (_showFunctions) {
+        _startSwitchingToKeyboard();
+      }
       setState(() {
         _voiceMode = false;
-        _showFunctions = false;
       });
     }
     _focusNode.requestFocus();
@@ -406,174 +438,202 @@ class ChatComposerState extends State<ChatComposer>
   }
 
   @override
-  Widget build(BuildContext context) => Material(
-    elevation: 8,
-    child: SafeArea(
-      top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          if (_menuMode && widget.controller.officialAccountMenus.isNotEmpty)
-            ChatPublicAccountMenu(
-              menus: widget.controller.officialAccountMenus
-                  .map(PublicAccountMenuItem.fromJson)
-                  .toList(),
-              onToggleKeyboard: () => setState(() => _menuMode = false),
-              onMenuItemSelected: _onMenuItemSelected,
-            )
-          else ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: <Widget>[
-                  SizedBox(
-                    width: 44,
-                    height: 42,
-                    child: IconButton(
-                      tooltip: widget.controller.isOfficialAccount
-                          ? '切换公众号菜单'
-                          : (_voiceMode ? '切换键盘' : '语音输入'),
-                      onPressed: widget.controller.isOfficialAccount
-                          ? () => setState(() => _menuMode = true)
-                          : _toggleVoiceMode,
-                      padding: EdgeInsets.zero,
-                      icon: Icon(
-                        widget.controller.isOfficialAccount
-                            ? Icons.menu_rounded
-                            : (_voiceMode
-                                ? Icons.keyboard_alt_outlined
-                                : Icons.mic_none),
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    if (bottomInset > _minValidKeyboardHeight) {
+      final clamped = bottomInset.clamp(240.0, 420.0);
+      if ((clamped - _keyboardTrayHeight).abs() >= 1) {
+        _keyboardTrayHeight = clamped;
+      }
+      if (_isSwitchingToKeyboard) {
+        _switchKeyboardTimeout?.cancel();
+        _switchKeyboardTimeout = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _isSwitchingToKeyboard) {
+            setState(() {
+              _isSwitchingToKeyboard = false;
+              _showFunctions = false;
+            });
+          }
+        });
+      }
+    }
+
+    final effectiveBottomHeight = (_showFunctions || _isSwitchingToKeyboard)
+        ? (_keyboardTrayHeight > bottomInset ? _keyboardTrayHeight : bottomInset)
+        : bottomInset;
+
+    final isKeyboardActive = bottomInset > 0 || _isSwitchingToKeyboard;
+    final needBottomSafeArea = effectiveBottomHeight == 0;
+
+    return Material(
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        bottom: needBottomSafeArea,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (_menuMode && widget.controller.officialAccountMenus.isNotEmpty)
+              ChatPublicAccountMenu(
+                menus: widget.controller.officialAccountMenus
+                    .map(PublicAccountMenuItem.fromJson)
+                    .toList(),
+                onToggleKeyboard: () => setState(() => _menuMode = false),
+                onMenuItemSelected: _onMenuItemSelected,
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    SizedBox(
+                      width: 44,
+                      height: 42,
+                      child: IconButton(
+                        tooltip: widget.controller.isOfficialAccount
+                            ? '切换公众号菜单'
+                            : (_voiceMode ? '切换键盘' : '语音输入'),
+                        onPressed: widget.controller.isOfficialAccount
+                            ? () => setState(() => _menuMode = true)
+                            : _toggleVoiceMode,
+                        padding: EdgeInsets.zero,
+                        icon: Icon(
+                          widget.controller.isOfficialAccount
+                              ? Icons.menu_rounded
+                              : (_voiceMode
+                                  ? Icons.keyboard_alt_outlined
+                                  : Icons.mic_none),
+                        ),
                       ),
                     ),
-                  ),
-                Expanded(
-                  child:
-                      _voiceMode
+                    Expanded(
+                      child: _voiceMode
                           ? GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onLongPressStart: _startRecording,
-                            onLongPressMoveUpdate: _moveRecording,
-                            onLongPressEnd: _endRecording,
-                            child: Container(
-                              height: 42,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color:
-                                    _recording
-                                        ? Theme.of(
-                                          context,
-                                        ).colorScheme.primaryContainer
-                                        : Theme.of(
-                                          context,
-                                        ).colorScheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(8),
+                              behavior: HitTestBehavior.opaque,
+                              onLongPressStart: _startRecording,
+                              onLongPressMoveUpdate: _moveRecording,
+                              onLongPressEnd: _endRecording,
+                              child: Container(
+                                height: 42,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: _recording
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .primaryContainer
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHigh,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  _recording
+                                      ? (_cancelRecording ? '松开取消' : '松开发送')
+                                      : '按住说话',
+                                ),
                               ),
-                              child: Text(
-                                _recording
-                                    ? (_cancelRecording ? '松开取消' : '松开发送')
-                                    : '按住说话',
-                              ),
-                            ),
-                          )
+                            )
                           : ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 132),
-                            child: TextField(
-                              controller: widget.input,
-                              focusNode: _focusNode,
-                              onTap: () {
-                                if (_showFunctions) {
-                                  setState(() => _showFunctions = false);
-                                }
-                              },
-                              onChanged: _onInputChanged,
-                              enabled: !widget.controller.isMuted,
-                              minLines: 1,
-                              maxLines: 5,
-                              textInputAction: TextInputAction.newline,
-                              decoration: InputDecoration(
-                                hintText:
-                                    widget.controller.isMuted
-                                        ? '你已被禁言，暂不能发言'
-                                        : '输入消息',
-                                isDense: true,
-                                border: const OutlineInputBorder(),
+                              constraints: const BoxConstraints(maxHeight: 132),
+                              child: TextField(
+                                controller: widget.input,
+                                focusNode: _focusNode,
+                                onTap: () {
+                                  if (_showFunctions) {
+                                    _startSwitchingToKeyboard();
+                                  }
+                                },
+                                onChanged: _onInputChanged,
+                                enabled: !widget.controller.isMuted,
+                                minLines: 1,
+                                maxLines: 5,
+                                textInputAction: TextInputAction.newline,
+                                decoration: InputDecoration(
+                                  hintText: widget.controller.isMuted
+                                      ? '你已被禁言，暂不能发言'
+                                      : '输入消息',
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                ),
                               ),
                             ),
+                    ),
+                    if (!_voiceMode)
+                      SizedBox(
+                        width: 44,
+                        height: 42,
+                        child: IconButton(
+                          tooltip: _showFunctions ? '打开键盘' : '更多功能',
+                          onPressed: _toggleFunctions,
+                          padding: EdgeInsets.zero,
+                          icon: AnimatedRotation(
+                            turns: _showFunctions ? 0.125 : 0,
+                            duration: const Duration(milliseconds: 180),
+                            child: const Icon(Icons.add_circle_outline),
                           ),
-                ),
-                if (!_voiceMode)
-                  SizedBox(
-                    width: 44,
-                    height: 42,
-                    child: IconButton(
-                      tooltip: _showFunctions ? '打开键盘' : '更多功能',
-                      onPressed: _toggleFunctions,
-                      padding: EdgeInsets.zero,
-                      icon: AnimatedRotation(
-                        turns: _showFunctions ? 0.125 : 0,
-                        duration: const Duration(milliseconds: 180),
-                        child: const Icon(Icons.add_circle_outline),
+                        ),
                       ),
-                    ),
-                  ),
-                if (!_voiceMode)
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(56, 40),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed:
-                        widget.controller.isSending || widget.controller.isMuted
+                    if (!_voiceMode)
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(56, 40),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: widget.controller.isSending ||
+                                widget.controller.isMuted
                             ? null
                             : () {
-                              final value = widget.input.text;
-                              widget.input.clear();
-                              widget.controller.send(value);
-                            },
-                    child: const Text('发送'),
-                  ),
-              ],
-            ),
-          ),
-          if (widget.controller.quoting case final quote?)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(54, 0, 12, 8),
-              child: ChatQuotePreview(
-                senderName: quote.senderName,
-                content: widget.quoteContentBuilder(quote),
-                onClear: widget.controller.cancelQuote,
-              ),
-            ),
-          TweenAnimationBuilder<double>(
-            tween: Tween<double>(end: _showFunctions ? 1 : 0),
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            child: SizedBox(
-              height: _keyboardTrayHeight,
-              child: ChatFunctionPanel(
-                items: _functions,
-                pageController: _pageController,
-                page: _page,
-                onPageChanged: (value) => setState(() => _page = value),
-                onSelected: _selectFunction,
-              ),
-            ),
-            builder: (context, heightFactor, child) {
-              if (heightFactor <= 0) return const SizedBox.shrink();
-              return ClipRect(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  heightFactor: heightFactor,
-                  child: child,
+                                final value = widget.input.text;
+                                widget.input.clear();
+                                widget.controller.send(value);
+                              },
+                        child: const Text('发送'),
+                      ),
+                  ],
                 ),
-              );
-            },
-          ),
-        ],
-      ],
-    ),
-  ),
-);
+              ),
+              if (widget.controller.quoting case final quote?)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(54, 0, 12, 8),
+                  child: ChatQuotePreview(
+                    senderName: quote.senderName,
+                    content: widget.quoteContentBuilder(quote),
+                    onClear: widget.controller.cancelQuote,
+                  ),
+                ),
+              ClipRect(
+                child: AnimatedContainer(
+                  duration: isKeyboardActive
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  height: effectiveBottomHeight,
+                  child: OverflowBox(
+                    minHeight: _keyboardTrayHeight,
+                    maxHeight: _keyboardTrayHeight,
+                    alignment: Alignment.topCenter,
+                    child: _showFunctions
+                        ? SizedBox(
+                            height: _keyboardTrayHeight,
+                            child: ChatFunctionPanel(
+                              items: _functions,
+                              pageController: _pageController,
+                              page: _page,
+                              onPageChanged: (value) => setState(() => _page = value),
+                              onSelected: _selectFunction,
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

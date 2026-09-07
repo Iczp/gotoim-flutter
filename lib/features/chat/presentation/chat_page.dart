@@ -167,6 +167,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           }
         },
         child: Scaffold(
+          resizeToAvoidBottomInset: false,
           floatingActionButton:
               controller.newMessageCount > 0
                   ? FloatingActionButton.extended(
@@ -220,15 +221,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   onDelete: _deleteSelectedMessages,
                   onMergeForward: _showMergeForwardTargets,
                 ),
-                composer: SafeArea(
-                  top: false,
-                  child: ChatComposer(
-                    key: _composerKey,
-                    controller: controller,
-                    input: input,
-                    quoteContentBuilder:
-                        (quote) => _buildQuotedContent(quote, _mediaItems),
-                  ),
+                composer: ChatComposer(
+                  key: _composerKey,
+                  controller: controller,
+                  input: input,
+                  quoteContentBuilder:
+                      (quote) => _buildQuotedContent(quote, _mediaItems),
                 ),
               ),
             ],

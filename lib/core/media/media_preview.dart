@@ -701,6 +701,8 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
                       heroTag: null,
                       source: _localPath ?? widget.item.source,
                       bytes: widget.item.bytes,
+                      thumbnail: widget.item.thumbnail,
+                      thumbnailBytes: widget.item.bytes,
                       onScaleChanged: widget.onScaleChanged,
                       onDismissProgress: widget.onDismissProgress,
                       onDismissEnd: widget.onDismissEnd,
