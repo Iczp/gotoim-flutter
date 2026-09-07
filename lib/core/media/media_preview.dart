@@ -1,4 +1,5 @@
-import 'dart:typed_data';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_navigation.dart';
@@ -547,10 +548,22 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
   double _progress = 0.0;
   Object? _error;
 
+  bool _fileExists(String? path) {
+    if (path == null || path.isEmpty) return false;
+    if (kIsWeb) return true;
+    try {
+      return File(path).existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    if (widget.item.localPath != null && widget.item.localPath!.isNotEmpty) {
+    if (widget.item.localPath != null &&
+        widget.item.localPath!.isNotEmpty &&
+        _fileExists(widget.item.localPath)) {
       _localPath = widget.item.localPath;
       _isReady = true;
     } else if (widget.item.bytes != null &&
@@ -573,7 +586,9 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
   }
 
   Future<void> _checkStatus() async {
-    if (widget.item.localPath != null && widget.item.localPath!.isNotEmpty) {
+    if (widget.item.localPath != null &&
+        widget.item.localPath!.isNotEmpty &&
+        _fileExists(widget.item.localPath)) {
       if (mounted) {
         setState(() {
           _localPath = widget.item.localPath;
@@ -594,7 +609,7 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
 
     final cached = await widget.downloader.getCachedPath(widget.item);
     if (!mounted) return;
-    if (cached != null) {
+    if (cached != null && _fileExists(cached)) {
       setState(() {
         _localPath = cached;
         _isReady = true;
@@ -606,6 +621,15 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
 
   void _startDownload() {
     if (_isDownloading) return;
+    final source = widget.item.source;
+    if (source.isEmpty ||
+        (!source.startsWith('http://') && !source.startsWith('https://'))) {
+      setState(() {
+        _error = '文件不存在或已被清理';
+      });
+      showToast('媒体文件不存在或已被清理', type: ToastType.error);
+      return;
+    }
     setState(() {
       _isDownloading = true;
       _error = null;
@@ -633,6 +657,7 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
         _isDownloading = false;
         _error = err;
       });
+      showToast('下载媒体失败: $err', type: ToastType.error);
     });
   }
 

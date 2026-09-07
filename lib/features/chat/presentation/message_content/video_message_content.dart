@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/floating_window/floating_window.dart';
@@ -27,15 +29,33 @@ class VideoMessageContent extends StatelessWidget {
   final ChatMessagePresentation presentation;
 
   Uri? get _uri {
-    final source = message.mediaUrl ?? message.localFilePath ?? '';
-    if (source.isEmpty) return null;
-    if (message.localFilePath != null) return Uri.file(source);
-    return Uri.tryParse(resolveApiUrl(source, apiBaseUrl));
+    final localPath = message.localFilePath;
+    if (localPath != null && localPath.isNotEmpty && !kIsWeb) {
+      try {
+        final file = File(localPath);
+        if (file.existsSync()) {
+          return Uri.file(localPath);
+        }
+      } catch (_) {}
+    }
+    final remote = message.mediaUrl;
+    if (remote != null && remote.isNotEmpty) {
+      return Uri.tryParse(resolveApiUrl(remote, apiBaseUrl));
+    }
+    if (localPath != null && localPath.isNotEmpty) {
+      return Uri.file(localPath);
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final coverUrl = message.videoCoverUrl ?? message.thumbnailUrl;
+    final existingLocalPath = (message.localFilePath != null &&
+            !kIsWeb &&
+            File(message.localFilePath!).existsSync())
+        ? message.localFilePath
+        : null;
     final item = MediaPreviewItem(
       id: message.localId,
       messageId: message.localId,
@@ -47,7 +67,7 @@ class VideoMessageContent extends StatelessWidget {
               .where((it) => it.id == message.localId)
               .firstOrNull
               ?.localPath ??
-          message.localFilePath,
+          existingLocalPath,
       createdAt: message.createdAt,
       userId: message.ownerId.toString(),
       chatTarget: message.sessionUnitId,

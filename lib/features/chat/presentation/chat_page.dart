@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -566,8 +568,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _mediaItems = messages.reversed
         .where((item) => item.messageType == 2 || item.messageType == 4)
         .map((message) {
+          final localFile = (message.localFilePath != null &&
+                  !kIsWeb &&
+                  File(message.localFilePath!).existsSync())
+              ? message.localFilePath
+              : null;
+          final sourceUrl = (message.mediaUrl != null && message.mediaUrl!.isNotEmpty)
+              ? message.mediaUrl!
+              : (localFile ?? message.localFilePath ?? '');
           final source = resolveApiUrl(
-            message.mediaUrl ?? message.localFilePath ?? '',
+            sourceUrl,
             baseUrl,
           );
           final thumbRaw = message.thumbnailUrl ?? message.videoCoverUrl;
@@ -576,6 +586,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
           final fileName = message.fileName.isNotEmpty
               ? message.fileName
               : '${message.localId}${message.fileSuffix.isNotEmpty ? message.fileSuffix : (message.messageType == 4 ? '.mp4' : '.jpg')}';
+          final cachedAttachmentPath =
+              controller.attachmentState(message.localId).localPath;
+          final validCachedPath = (cachedAttachmentPath != null &&
+                  !kIsWeb &&
+                  File(cachedAttachmentPath).existsSync())
+              ? cachedAttachmentPath
+              : localFile;
           return MediaPreviewItem(
             id: message.localId,
             messageId: message.localId,
@@ -586,8 +603,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             source: source,
             thumbnail: thumbnail,
             fileName: fileName,
-            localPath: controller.attachmentState(message.localId).localPath ??
-                message.localFilePath,
+            localPath: validCachedPath,
             createdAt: message.createdAt,
             userId: message.ownerId.toString(),
             chatTarget: message.sessionUnitId,

@@ -7,5 +7,9 @@ VideoPlayerController createVideoController(String source) {
     return VideoPlayerController.networkUrl(uri);
   }
   final path = uri?.scheme == 'file' ? uri!.toFilePath() : source;
-  return VideoPlayerController.file(File(path));
+  final file = File(path);
+  if (!file.existsSync()) {
+    throw FileSystemException('本地视频文件不存在或已被清理', path);
+  }
+  return VideoPlayerController.file(file);
 }

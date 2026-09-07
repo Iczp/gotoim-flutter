@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -49,11 +50,15 @@ class DefaultMediaDownloader implements MediaDownloader {
   @override
   Future<String?> getCachedPath(MediaPreviewItem item) async {
     if (item.localPath != null && item.localPath!.isNotEmpty) {
-      return item.localPath;
+      try {
+        if (kIsWeb || File(item.localPath!).existsSync()) {
+          return item.localPath;
+        }
+      } catch (_) {}
     }
     final fileName = _resolveFileName(item);
     final category = item.type == MediaPreviewType.video ? '视频' : '图片';
-    return _cache.find(
+    final found = await _cache.find(
       item.id,
       fileName,
       userId: item.userId,
@@ -61,6 +66,12 @@ class DefaultMediaDownloader implements MediaDownloader {
       messageDate: item.createdAt,
       category: category,
     );
+    if (found != null) {
+      try {
+        if (kIsWeb || File(found).existsSync()) return found;
+      } catch (_) {}
+    }
+    return null;
   }
 
   @override
@@ -131,11 +142,15 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
   @override
   Future<String?> getCachedPath(MediaPreviewItem item) async {
     if (item.localPath != null && item.localPath!.isNotEmpty) {
-      return item.localPath;
+      try {
+        if (kIsWeb || File(item.localPath!).existsSync()) {
+          return item.localPath;
+        }
+      } catch (_) {}
     }
     final fileName = _resolveFileName(item);
     final category = item.type == MediaPreviewType.video ? '视频' : '图片';
-    return _transferService.findCachedPath(
+    final found = await _transferService.findCachedPath(
       id: item.id,
       fileName: fileName,
       userId: item.userId,
@@ -143,6 +158,12 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
       messageDate: item.createdAt,
       category: category,
     );
+    if (found != null) {
+      try {
+        if (kIsWeb || File(found).existsSync()) return found;
+      } catch (_) {}
+    }
+    return null;
   }
 
   @override

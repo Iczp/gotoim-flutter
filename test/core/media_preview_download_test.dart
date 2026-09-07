@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/media/media_preview.dart';
@@ -150,12 +151,18 @@ void main() {
     });
 
     testWidgets('video preview presents top-level floating window button', (tester) async {
+      final tempFile = File('${Directory.systemTemp.path}/test_demo_${DateTime.now().microsecondsSinceEpoch}.mp4');
+      await tempFile.writeAsBytes([1, 2, 3]);
+      addTearDown(() async {
+        if (await tempFile.exists()) await tempFile.delete();
+      });
+
       final videoItem = MediaPreviewItem(
         id: 'vid-1',
         messageId: 'msg-v1',
         type: MediaPreviewType.video,
         source: 'https://example.com/demo.mp4',
-        localPath: 'C:/fake/path/demo.mp4',
+        localPath: tempFile.path,
         heroTag: 'hero-vid',
       );
 
@@ -171,7 +178,8 @@ void main() {
       );
 
       await tester.tap(find.text('Open Video'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Top chrome must have close button and floating mini-window button
       expect(find.byTooltip('关闭'), findsOneWidget);

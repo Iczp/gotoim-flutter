@@ -77,12 +77,29 @@ class _VideoViewerState extends State<VideoViewer>
     }
   }
 
+  String _formatErrorMessage(Object? error) {
+    if (error == null) return '未知错误';
+    final str = error.toString();
+    if (str.contains('本地视频文件不存在') ||
+        str.contains('FileNotFoundException') ||
+        str.contains('ENOENT')) {
+      return '本地视频文件不存在或已被清理';
+    }
+    if (str.contains('Source error') || str.contains('ExoPlaybackException')) {
+      return '视频资源加载失败或格式不支持';
+    }
+    if (str.contains('PlatformException')) {
+      return '播放器解析失败';
+    }
+    return str;
+  }
+
   void _onSessionChanged() {
     if (mounted) {
       if (_session.error != null && !_hasShownErrorToast) {
         _hasShownErrorToast = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          showToast('视频加载失败: ${_session.error}', type: ToastType.error);
+          showToast('视频加载失败: ${_formatErrorMessage(_session.error)}', type: ToastType.error);
         });
       }
       setState(() {});
@@ -153,7 +170,7 @@ class _VideoViewerState extends State<VideoViewer>
             const Icon(Icons.error_outline, color: Colors.white70, size: 48),
             const SizedBox(height: 12),
             Text(
-              '视频加载失败：${_session.error}',
+              '视频加载失败：${_formatErrorMessage(_session.error)}',
               style: const TextStyle(color: Colors.white70, fontSize: 13),
               textAlign: TextAlign.center,
             ),

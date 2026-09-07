@@ -1,6 +1,7 @@
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/media/media_preview.dart';
@@ -51,6 +52,11 @@ class ImageMessageContent extends StatelessWidget {
             )
             : const Center(child: Icon(Icons.image_outlined, size: 42));
     final thumbRaw = message.thumbnailUrl;
+    final existingLocalPath = (message.localFilePath != null &&
+            !kIsWeb &&
+            File(message.localFilePath!).existsSync())
+        ? message.localFilePath
+        : null;
     final item = MediaPreviewItem(
       id: message.localId,
       messageId: message.localId,
@@ -64,7 +70,7 @@ class ImageMessageContent extends StatelessWidget {
               .where((it) => it.id == message.localId)
               .firstOrNull
               ?.localPath ??
-          message.localFilePath,
+          existingLocalPath,
       createdAt: message.createdAt,
       userId: message.ownerId.toString(),
       chatTarget: message.sessionUnitId,

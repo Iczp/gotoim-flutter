@@ -142,8 +142,13 @@ class ChatMessage {
   String? get mediaUrl {
     final value = firstNonEmpty(<Object?>[
       content['url'],
-      content['thumbnailUrl'],
+      content['videoUrl'],
       content['imageUrl'],
+      content['attachmentUrl'],
+      content['fileUrl'],
+      content['downloadUrl'],
+      content['actionUrl'],
+      content['thumbnailUrl'],
     ]);
     return value.isEmpty ? null : value;
   }
