@@ -4,6 +4,38 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/media/media_preview.dart';
 import 'package:gotoim_flutter/core/media/video_viewer.dart';
 import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
+
+class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
+  @override
+  Future<void> init() async {}
+  @override
+  Future<void> dispose(int textureId) async {}
+  @override
+  Future<int?> create(DataSource dataSource) async => 1;
+  @override
+  Future<void> setLooping(int textureId, bool looping) async {}
+  @override
+  Future<void> play(int textureId) async {}
+  @override
+  Future<void> pause(int textureId) async {}
+  @override
+  Future<void> setVolume(int textureId, double volume) async {}
+  @override
+  Future<void> setPlaybackSpeed(int textureId, double speed) async {}
+  @override
+  Future<void> seekTo(int textureId, Duration position) async {}
+  @override
+  Future<Duration> getPosition(int textureId) async => Duration.zero;
+  @override
+  Stream<VideoEvent> videoEventsFor(int textureId) {
+    return Stream.value(VideoEvent(
+      eventType: VideoEventType.initialized,
+      duration: const Duration(seconds: 10),
+      size: const Size(1920, 1080),
+    ));
+  }
+}
 
 ChatMessage _createTestMsg({
   required String id,
@@ -34,6 +66,9 @@ ChatMessage _createTestMsg({
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  VideoPlayerPlatform.instance = _FakeVideoPlayerPlatform();
+
   group('Media Gallery Ordering & reverse: true handling', () {
     test('natural chronological ordering is reversed from desc messages array', () {
       // In ChatController, messages array is sorted by score DESC (newest at index 0)
