@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../../../core/utils/message_text_formatter.dart';
+
 Map<String, dynamic> asMap(Object? value) {
   if (value is Map) {
     return value.cast<String, dynamic>();
@@ -65,12 +67,14 @@ String messageContentText(Map<String, dynamic> message) {
   }
   final content = asMap(message['content']);
   return switch (asInt(message['messageType'])) {
-    0 || 1 => firstNonEmpty([content['text'], content['content']]),
+    0 || 1 => stripMessageTags(
+      firstNonEmpty([content['text'], content['content']]),
+    ),
     3 => content['time']?.toString() ?? '',
     5 => content['fileName']?.toString() ?? '',
     6 => content['url']?.toString() ?? '',
     10 || 12 => content['title']?.toString() ?? '',
-    null => messagePreview(message['content']),
+    null => stripMessageTags(messagePreview(message['content'])),
     _ => '',
   };
 }

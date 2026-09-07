@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/media/media_preview.dart';
 import '../../../../core/services/file/attachment_transfer_service.dart';
+import '../../../../core/utils/message_text_formatter.dart';
+import '../../../../core/utils/message_time_formatter.dart';
 import '../../../../core/widgets/floating_popover.dart';
 import '../../../session/presentation/chat_object_avatar.dart';
 import '../../data/models/chat_message.dart';
@@ -401,61 +402,13 @@ class ChatMessageRow extends StatelessWidget {
       fontWeight: FontWeight.w600,
     );
 
-    // Regular expression matching <a uid="...">text</a> or <a oid="...">text</a>
-    final regExp = RegExp(
-      r'<a\s+uid="([^"]+)">([^<]+)</a>|<a\s+oid="([^"]+)">([^<]+)</a>',
-      caseSensitive: false,
+    final spans = parseMessageTagsToSpans(
+      rawText,
+      textStyle: textStyle,
+      linkStyle: linkStyle,
+      onSessionUnitTap: onSessionUnitTap,
+      onChatObjectTap: onChatObjectTap,
     );
-
-    final spans = <InlineSpan>[];
-    var lastIndex = 0;
-
-    for (final match in regExp.allMatches(rawText)) {
-      if (match.start > lastIndex) {
-        spans.add(TextSpan(
-          text: rawText.substring(lastIndex, match.start),
-          style: textStyle,
-        ));
-      }
-
-      final uid = match.group(1);
-      final uidText = match.group(2);
-      final oid = match.group(3);
-      final oidText = match.group(4);
-
-      if (uid != null && uidText != null) {
-        spans.add(
-          TextSpan(
-            text: uidText,
-            style: linkStyle,
-            recognizer: (onSessionUnitTap != null)
-                ? (TapGestureRecognizer()
-                  ..onTap = () => onSessionUnitTap!(uid, uidText))
-                : null,
-          ),
-        );
-      } else if (oid != null && oidText != null) {
-        spans.add(
-          TextSpan(
-            text: oidText,
-            style: linkStyle,
-            recognizer: (onChatObjectTap != null)
-                ? (TapGestureRecognizer()
-                  ..onTap = () => onChatObjectTap!(oid, oidText))
-                : null,
-          ),
-        );
-      }
-
-      lastIndex = match.end;
-    }
-
-    if (lastIndex < rawText.length) {
-      spans.add(TextSpan(
-        text: rawText.substring(lastIndex),
-        style: textStyle,
-      ));
-    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
@@ -475,8 +428,5 @@ class ChatMessageRow extends StatelessWidget {
     );
   }
 
-  String _time(DateTime? value) =>
-      value == null
-          ? ''
-          : '${value.month}-${value.day} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+  String _time(DateTime? value) => formatChatMessageTime(value);
 }

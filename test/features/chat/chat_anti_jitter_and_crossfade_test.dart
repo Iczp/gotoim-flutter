@@ -52,7 +52,7 @@ void main() {
 
       expect(find.byType(ImageViewer), findsOneWidget);
       expect(find.byType(Image), findsNWidgets(2));
-      expect(find.byType(AnimatedOpacity), findsNWidgets(2));
+      expect(find.byType(AnimatedOpacity), findsOneWidget);
     });
 
     testWidgets('ImageViewer renders Stack with thumbnail and highRes AnimatedOpacity when thumbnail URL provided', (tester) async {
@@ -70,7 +70,7 @@ void main() {
 
       expect(find.byType(ImageViewer), findsOneWidget);
       expect(find.byType(Image), findsNWidgets(2));
-      expect(find.byType(AnimatedOpacity), findsNWidgets(2));
+      expect(find.byType(AnimatedOpacity), findsOneWidget);
     });
 
     testWidgets('ImageViewer retains previous source as thumbnail base on source update without flashing', (tester) async {
@@ -101,10 +101,10 @@ void main() {
       );
 
       // Now it seamlessly creates a 2-layer Stack:
-      // Base layer displays old source 'http://example.com/original.jpg' with AnimatedOpacity (fade-out),
+      // Base layer displays old source 'http://example.com/original.jpg' as permanent solid underlay,
       // High-res layer loads local file with AnimatedOpacity (fade-in)!
       expect(find.byType(Image), findsNWidgets(2));
-      expect(find.byType(AnimatedOpacity), findsNWidgets(2));
+      expect(find.byType(AnimatedOpacity), findsOneWidget);
     });
   });
 
