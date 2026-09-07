@@ -69,6 +69,9 @@ class _ImageViewerState extends State<ImageViewer>
   bool _isDismissDragging = false;
   bool _hasShownErrorToast = false;
 
+  String? _effectiveThumbnailUrl;
+  Uint8List? _effectiveThumbnailBytes;
+
   late final AnimationController _animController;
   Animation<double>? _scaleAnimation;
   Animation<double>? _rotationAnimation;
@@ -83,6 +86,13 @@ class _ImageViewerState extends State<ImageViewer>
   @override
   void initState() {
     super.initState();
+    _effectiveThumbnailBytes = widget.thumbnailBytes;
+    if (widget.thumbnail != null && widget.thumbnail!.isNotEmpty) {
+      _effectiveThumbnailUrl = widget.thumbnail;
+    } else if (widget.thumbnailBytes == null && widget.bytes == null) {
+      _effectiveThumbnailUrl = widget.source;
+    }
+
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 240),
@@ -96,6 +106,21 @@ class _ImageViewerState extends State<ImageViewer>
         });
         widget.onScaleChanged?.call(_scale);
       });
+  }
+
+  @override
+  void didUpdateWidget(ImageViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.thumbnailBytes != null) {
+      _effectiveThumbnailBytes = widget.thumbnailBytes;
+    }
+    if (widget.thumbnail != null && widget.thumbnail!.isNotEmpty) {
+      _effectiveThumbnailUrl = widget.thumbnail;
+    } else if (widget.source != oldWidget.source &&
+        oldWidget.source.isNotEmpty) {
+      // Retain previously rendered source as thumbnail base during transition
+      _effectiveThumbnailUrl ??= oldWidget.source;
+    }
   }
 
   @override
@@ -266,22 +291,36 @@ class _ImageViewerState extends State<ImageViewer>
     _animController.forward(from: 0.0);
   }
 
-  Widget _buildThumbnailWidget() {
-    if (widget.thumbnailBytes != null) {
-      return Image.memory(
-        widget.thumbnailBytes!,
+  Widget _buildThumbnailWidget({double opacity = 1.0}) {
+    Widget child = const SizedBox.shrink();
+    if (_effectiveThumbnailBytes != null) {
+      child = Image.memory(
+        _effectiveThumbnailBytes!,
+        width: double.infinity,
+        height: double.infinity,
         fit: BoxFit.contain,
+        gaplessPlayback: true,
       );
+    } else {
+      final thumb = _effectiveThumbnailUrl;
+      if (thumb != null && thumb.isNotEmpty) {
+        child = Image(
+          image: createImageProvider(thumb),
+          width: double.infinity,
+          height: double.infinity,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        );
+      }
     }
-    final thumb = widget.thumbnail;
-    if (thumb != null && thumb.isNotEmpty && thumb != widget.source) {
-      return Image(
-        image: createImageProvider(thumb),
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-      );
-    }
-    return const SizedBox.shrink();
+
+    return AnimatedOpacity(
+      opacity: opacity,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      child: child,
+    );
   }
 
   Widget _buildErrorWidget(
@@ -314,24 +353,34 @@ class _ImageViewerState extends State<ImageViewer>
 
   @override
   Widget build(BuildContext context) {
-    final hasThumbnail = widget.thumbnailBytes != null ||
-        (widget.thumbnail != null &&
-            widget.thumbnail!.isNotEmpty &&
-            widget.thumbnail != widget.source);
+    final hasThumbnail = _effectiveThumbnailBytes != null ||
+        (_effectiveThumbnailUrl != null &&
+            _effectiveThumbnailUrl!.isNotEmpty &&
+            (_effectiveThumbnailUrl != widget.source || widget.bytes != null));
 
     Widget highResWidget;
     if (widget.bytes != null) {
       highResWidget = Image.memory(
         widget.bytes!,
+        width: double.infinity,
+        height: double.infinity,
         fit: BoxFit.contain,
+        gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (!hasThumbnail) return child;
           final isLoaded = wasSynchronouslyLoaded || frame != null;
-          return AnimatedOpacity(
-            opacity: isLoaded ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            child: child,
+          return Stack(
+            fit: StackFit.passthrough,
+            alignment: Alignment.center,
+            children: <Widget>[
+              _buildThumbnailWidget(opacity: isLoaded ? 0.0 : 1.0),
+              AnimatedOpacity(
+                opacity: isLoaded ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                child: child,
+              ),
+            ],
           );
         },
         errorBuilder: _buildErrorWidget,
@@ -339,31 +388,32 @@ class _ImageViewerState extends State<ImageViewer>
     } else {
       highResWidget = Image(
         image: createImageProvider(widget.source),
+        width: double.infinity,
+        height: double.infinity,
         fit: BoxFit.contain,
+        gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (!hasThumbnail) return child;
           final isLoaded = wasSynchronouslyLoaded || frame != null;
-          return AnimatedOpacity(
-            opacity: isLoaded ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            child: child,
+          return Stack(
+            fit: StackFit.passthrough,
+            alignment: Alignment.center,
+            children: <Widget>[
+              _buildThumbnailWidget(opacity: isLoaded ? 0.0 : 1.0),
+              AnimatedOpacity(
+                opacity: isLoaded ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                child: child,
+              ),
+            ],
           );
         },
         errorBuilder: _buildErrorWidget,
       );
     }
 
-    final Widget imageWidget = hasThumbnail
-        ? Stack(
-            fit: StackFit.passthrough,
-            alignment: Alignment.center,
-            children: <Widget>[
-              _buildThumbnailWidget(),
-              highResWidget,
-            ],
-          )
-        : highResWidget;
+    final Widget imageWidget = highResWidget;
 
     Widget content = Material(
       type: MaterialType.transparency,

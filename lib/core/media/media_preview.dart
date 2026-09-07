@@ -690,121 +690,202 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isImage = widget.item.type == MediaPreviewType.image;
+
+    Widget body;
+    if (isImage) {
+      body = Stack(
+        fit: StackFit.expand,
+        alignment: Alignment.center,
+        children: [
+          ImageViewer(
+            heroTag: null,
+            source: _localPath ?? widget.item.source,
+            bytes: widget.item.bytes,
+            thumbnail: widget.item.thumbnail,
+            thumbnailBytes: widget.item.bytes,
+            onScaleChanged: widget.onScaleChanged,
+            onDismissProgress: widget.onDismissProgress,
+            onDismissEnd: widget.onDismissEnd,
+          ),
+          if (_isDownloading && !_isReady)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox.square(
+                      dimension: 40,
+                      child: CircularProgressIndicator(
+                        value: _progress > 0 ? _progress : null,
+                        color: Colors.white,
+                        backgroundColor: Colors.white24,
+                        strokeWidth: 3.2,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '${(_progress * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (_error != null && !_isReady)
+            Center(
+              child: GestureDetector(
+                onTap: _startDownload,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.refresh_rounded,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        '下载失败，点击重试',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    } else {
+      body = _isReady
+          ? VideoViewer(
+              heroTag: null,
+              item: widget.item.copyWith(
+                source: _localPath ?? widget.item.source,
+              ),
+              active: widget.active,
+              items: widget.items,
+              initialIndex: widget.index,
+              isDragging: widget.isDragging,
+            )
+          : Stack(
+              fit: StackFit.expand,
+              alignment: Alignment.center,
+              children: [
+                _buildThumbnail(),
+                if (!_isDownloading && _error == null)
+                  const Center(
+                    child: Icon(
+                      Icons.play_circle_fill_rounded,
+                      color: Colors.white70,
+                      size: 64,
+                    ),
+                  ),
+                if (_isDownloading && !_isReady)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox.square(
+                            dimension: 40,
+                            child: CircularProgressIndicator(
+                              value: _progress > 0 ? _progress : null,
+                              color: Colors.white,
+                              backgroundColor: Colors.white24,
+                              strokeWidth: 3.2,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            '${(_progress * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_error != null)
+                  Center(
+                    child: GestureDetector(
+                      onTap: _startDownload,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.72),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.refresh_rounded,
+                              color: Colors.white,
+                              size: 30,
+                            ),
+                            SizedBox(height: 6),
+                            Text(
+                              '下载失败，点击重试',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+    }
+
     return Hero(
       tag: widget.item.heroTag,
       child: Material(
         type: MaterialType.transparency,
-        child:
-            _isReady
-                ? (widget.item.type == MediaPreviewType.image
-                    ? ImageViewer(
-                      heroTag: null,
-                      source: _localPath ?? widget.item.source,
-                      bytes: widget.item.bytes,
-                      thumbnail: widget.item.thumbnail,
-                      thumbnailBytes: widget.item.bytes,
-                      onScaleChanged: widget.onScaleChanged,
-                      onDismissProgress: widget.onDismissProgress,
-                      onDismissEnd: widget.onDismissEnd,
-                    )
-                    : VideoViewer(
-                      heroTag: null,
-                      item: widget.item.copyWith(
-                        source: _localPath ?? widget.item.source,
-                      ),
-                      active: widget.active,
-                      items: widget.items,
-                      initialIndex: widget.index,
-                      isDragging: widget.isDragging,
-                    ))
-                : Stack(
-                  fit: StackFit.expand,
-                  alignment: Alignment.center,
-                  children: [
-                    _buildThumbnail(),
-                    if (widget.item.type == MediaPreviewType.video &&
-                        !_isDownloading &&
-                        _error == null)
-                      const Center(
-                        child: Icon(
-                          Icons.play_circle_fill_rounded,
-                          color: Colors.white70,
-                          size: 64,
-                        ),
-                      ),
-                    if (_isDownloading && !_isReady)
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 16,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.65),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox.square(
-                                dimension: 40,
-                                child: CircularProgressIndicator(
-                                  value: _progress > 0 ? _progress : null,
-                                  color: Colors.white,
-                                  backgroundColor: Colors.white24,
-                                  strokeWidth: 3.2,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                '${(_progress * 100).clamp(0, 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    if (_error != null)
-                      Center(
-                        child: GestureDetector(
-                          onTap: _startDownload,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 14,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.72),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.refresh_rounded,
-                                  color: Colors.white,
-                                  size: 30,
-                                ),
-                                SizedBox(height: 6),
-                                Text(
-                                  '下载失败，点击重试',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+        child: body,
       ),
     );
   }

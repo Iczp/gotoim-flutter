@@ -103,6 +103,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
       mediaItems: mediaItems,
       initialIndex: mediaInitialIndex,
       presentation: presentation,
+      onRetry: onRetry,
     ),
     4 => VideoMessageContent(
       message: message,

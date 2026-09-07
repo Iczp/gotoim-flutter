@@ -295,7 +295,12 @@ class ChatMessageRow extends StatelessWidget {
                         ),
                       ),
                     // 各种消息（自个约束，不加 padding，气泡尾巴宽度 12）
-                    messageContentWidget,
+                    Align(
+                      alignment: message.isMine
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: messageContentWidget,
+                    ),
                     // 引用消息 (各自加 padding: 12)
                     if (renderedQuote != null)
                       Padding(

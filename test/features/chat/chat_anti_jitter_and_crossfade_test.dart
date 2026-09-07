@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/media/image_viewer.dart';
 import 'package:gotoim_flutter/features/chat/application/chat_controller.dart';
 import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
+import 'package:gotoim_flutter/features/chat/presentation/message_content/image_message_content.dart';
 import 'package:gotoim_flutter/features/chat/presentation/widgets/chat_composer.dart';
 
 // Valid 1x1 transparent PNG bytes
@@ -51,7 +52,7 @@ void main() {
 
       expect(find.byType(ImageViewer), findsOneWidget);
       expect(find.byType(Image), findsNWidgets(2));
-      expect(find.byType(AnimatedOpacity), findsOneWidget);
+      expect(find.byType(AnimatedOpacity), findsNWidgets(2));
     });
 
     testWidgets('ImageViewer renders Stack with thumbnail and highRes AnimatedOpacity when thumbnail URL provided', (tester) async {
@@ -69,7 +70,111 @@ void main() {
 
       expect(find.byType(ImageViewer), findsOneWidget);
       expect(find.byType(Image), findsNWidgets(2));
-      expect(find.byType(AnimatedOpacity), findsOneWidget);
+      expect(find.byType(AnimatedOpacity), findsNWidgets(2));
+    });
+
+    testWidgets('ImageViewer retains previous source as thumbnail base on source update without flashing', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ImageViewer(
+              source: 'http://example.com/original.jpg',
+              enableLogs: false,
+            ),
+          ),
+        ),
+      );
+
+      // Initially only 1 Image because source == thumbnail
+      expect(find.byType(Image), findsOneWidget);
+
+      // Now update widget to simulate download completion (source becomes local path)
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ImageViewer(
+              source: '/data/user/0/cache/original.jpg',
+              enableLogs: false,
+            ),
+          ),
+        ),
+      );
+
+      // Now it seamlessly creates a 2-layer Stack:
+      // Base layer displays old source 'http://example.com/original.jpg' with AnimatedOpacity (fade-out),
+      // High-res layer loads local file with AnimatedOpacity (fade-in)!
+      expect(find.byType(Image), findsNWidgets(2));
+      expect(find.byType(AnimatedOpacity), findsNWidgets(2));
+    });
+  });
+
+  group('ChatMessage Sending State & Alignment Tests', () {
+    test('ChatMessage.isMine is true when state is sending or pending regardless of senderSessionUnitId', () {
+      final sendingMessage = ChatMessage(
+        localId: 'local-1',
+        serverId: null,
+        clientMessageId: 'client-1',
+        ownerId: 100,
+        sessionUnitId: 'unit-mine',
+        senderSessionUnitId: null, // Even if senderSessionUnitId is null
+        messageType: 2,
+        state: 'sending',
+        score: 1,
+        createdAt: DateTime.now(),
+        raw: const <String, dynamic>{},
+      );
+      expect(sendingMessage.isMine, isTrue);
+
+      final pendingMessage = ChatMessage(
+        localId: 'local-2',
+        serverId: null,
+        clientMessageId: 'client-2',
+        ownerId: 100,
+        sessionUnitId: 'unit-mine',
+        senderSessionUnitId: 'other-id', // Even if mismatched
+        messageType: 2,
+        state: 'pending',
+        score: 2,
+        createdAt: DateTime.now(),
+        raw: const <String, dynamic>{},
+      );
+      expect(pendingMessage.isMine, isTrue);
+    });
+
+    testWidgets('ImageMessageContent renders aligned to the right (centerRight) when isMine is true', (tester) async {
+      final sendingMessage = ChatMessage(
+        localId: 'local-img-1',
+        serverId: null,
+        clientMessageId: 'client-img-1',
+        ownerId: 100,
+        sessionUnitId: 'unit-mine',
+        senderSessionUnitId: 'unit-mine',
+        messageType: 2,
+        state: 'sending',
+        score: 1,
+        createdAt: DateTime.now(),
+        raw: const <String, dynamic>{},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ImageMessageContent(
+              message: sendingMessage,
+              bytes: kTransparentPng,
+              apiBaseUrl: 'http://example.com',
+              progress: 0.5,
+              mediaItems: const [],
+              initialIndex: 0,
+            ),
+          ),
+        ),
+      );
+
+      final alignFinder = find.byWidgetPredicate(
+        (widget) => widget is Align && widget.alignment == Alignment.centerRight,
+      );
+      expect(alignFinder, findsOneWidget);
     });
   });
 

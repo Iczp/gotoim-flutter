@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/media/media_preview.dart';
 import '../../../../core/utils/api_url_resolver.dart';
 import '../../data/models/chat_message.dart';
+import '../widgets/chat_message_delivery_state.dart';
 import 'chat_message_presentation.dart';
 import 'media_message_layout.dart';
 
@@ -20,6 +21,7 @@ class ImageMessageContent extends StatelessWidget {
     required this.mediaItems,
     required this.initialIndex,
     this.presentation = ChatMessagePresentation.normal,
+    this.onRetry,
     super.key,
   });
 
@@ -30,6 +32,7 @@ class ImageMessageContent extends StatelessWidget {
   final List<MediaPreviewItem> mediaItems;
   final int initialIndex;
   final ChatMessagePresentation presentation;
+  final VoidCallback? onRetry;
 
   String get _url => resolveApiUrl(message.mediaUrl, apiBaseUrl);
 
@@ -87,7 +90,7 @@ class ImageMessageContent extends StatelessWidget {
         resolvedInitialIndex < 0
             ? <MediaPreviewItem>[item, ...mediaItems]
             : mediaItems;
-    return InkWell(
+    final inkWell = InkWell(
       onTap:
           () => MediaPreview.open(
             context,
@@ -139,6 +142,29 @@ class ImageMessageContent extends StatelessWidget {
           ),
         ),
       ),
+    );
+
+    Widget body = inkWell;
+    if (message.isMine &&
+        presentation == ChatMessagePresentation.normal &&
+        (message.state == 'sending' || message.state == 'failed')) {
+      body = Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          ChatMessageDeliveryState(
+            isMine: message.isMine,
+            state: message.state,
+            onRetry: onRetry,
+          ),
+          Flexible(child: inkWell),
+        ],
+      );
+    }
+
+    return Align(
+      alignment: message.isMine ? Alignment.centerRight : Alignment.centerLeft,
+      child: body,
     );
   }
 }
