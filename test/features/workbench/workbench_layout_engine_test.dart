@@ -157,4 +157,64 @@ void main() {
       expect(matrix[2], ['c', 'c', null, null]);
     });
   });
+
+  group('WorkbenchLayoutEngine - Reorder & Pack', () {
+    test('reorders item forward accurately', () {
+      final items = [
+        const WorkbenchGridItem(id: '1', title: 'A1', type: WorkbenchGridItemType.app, x: 0, y: 0),
+        const WorkbenchGridItem(id: '2', title: 'A2', type: WorkbenchGridItemType.app, x: 1, y: 0),
+        const WorkbenchGridItem(id: '3', title: 'A3', type: WorkbenchGridItemType.app, x: 2, y: 0),
+        const WorkbenchGridItem(id: '4', title: 'A4', type: WorkbenchGridItemType.app, x: 3, y: 0),
+      ];
+
+      // Drag A1 to A3 (col 2, row 0)
+      final reordered = engine.reorderAndPack(
+        items: items,
+        dragId: '1',
+        targetX: 2,
+        targetY: 0,
+      );
+
+      expect(reordered[0].id, '2');
+      expect(reordered[0].x, 0);
+
+      expect(reordered[1].id, '3');
+      expect(reordered[1].x, 1);
+
+      expect(reordered[2].id, '1');
+      expect(reordered[2].x, 2);
+
+      expect(reordered[3].id, '4');
+      expect(reordered[3].x, 3);
+    });
+
+    test('reorders item backward accurately', () {
+      final items = [
+        const WorkbenchGridItem(id: '1', title: 'A1', type: WorkbenchGridItemType.app, x: 0, y: 0),
+        const WorkbenchGridItem(id: '2', title: 'A2', type: WorkbenchGridItemType.app, x: 1, y: 0),
+        const WorkbenchGridItem(id: '3', title: 'A3', type: WorkbenchGridItemType.app, x: 2, y: 0),
+        const WorkbenchGridItem(id: '4', title: 'A4', type: WorkbenchGridItemType.app, x: 3, y: 0),
+      ];
+
+      // Drag A4 to A1 (col 0, row 0)
+      final reordered = engine.reorderAndPack(
+        items: items,
+        dragId: '4',
+        targetX: 0,
+        targetY: 0,
+      );
+
+      expect(reordered[0].id, '4');
+      expect(reordered[0].x, 0);
+
+      expect(reordered[1].id, '1');
+      expect(reordered[1].x, 1);
+
+      expect(reordered[2].id, '2');
+      expect(reordered[2].x, 2);
+
+      expect(reordered[3].id, '3');
+      expect(reordered[3].x, 3);
+    });
+  });
 }

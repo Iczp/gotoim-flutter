@@ -29,6 +29,8 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
     with SingleTickerProviderStateMixin {
   late AnimationController _jiggleController;
 
+  final GlobalKey _canvasKey = GlobalKey();
+
   // Active drag tracking
   Offset? _dragPosition;
   String? _activeDragId;
@@ -80,7 +82,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
         final availableWidth = totalWidth - (padding * 2) - (spacing * (columns - 1));
         final cellWidth = math.max(0.0, availableWidth / columns);
         // Cell height proportioned for standard 1x1 app shortcut (icon + label)
-        final cellHeight = cellWidth * 1.06;
+        final cellHeight = cellWidth * 1.15;
 
         final totalRows = notifier.engine.calculateTotalRows(state.items);
         final contentHeight =
@@ -94,6 +96,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
               ? const NeverScrollableScrollPhysics()
               : const AlwaysScrollableScrollPhysics(),
           child: SizedBox(
+            key: _canvasKey,
             width: totalWidth,
             height: math.max(constraints.maxHeight, contentHeight),
             child: Stack(
@@ -209,7 +212,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
             widget.onOpenApp(item);
           },
           onLongPress: () {
-            HapticFeedback.mediumImpact();
+            HapticFeedback.heavyImpact();
             notifier.toggleEditMode(true);
           },
           onDelete: () => notifier.removeItem(item.id),
@@ -250,7 +253,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
             notifier.openFolderBubble(item);
           },
           onLongPress: () {
-            HapticFeedback.mediumImpact();
+            HapticFeedback.heavyImpact();
             notifier.toggleEditMode(true);
           },
           onDelete: () => notifier.removeItem(item.id),
@@ -287,7 +290,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
     if (state.isEditing) {
       interactiveChild = GestureDetector(
         onPanStart: (details) {
-          HapticFeedback.selectionClick();
+          HapticFeedback.heavyImpact();
           setState(() {
             _activeDragId = item.id;
             _dragPosition = details.globalPosition;
@@ -299,16 +302,19 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
             _dragPosition = details.globalPosition;
           });
 
-          // Convert local pointer position inside canvas to grid (x, y)
-          final RenderBox? box = context.findRenderObject() as RenderBox?;
-          if (box != null) {
-            final local = box.globalToLocal(details.globalPosition);
-            final targetX = ((local.dx - padding) / (cellWidth + spacing))
+          // Convert global pointer position into accurate canvas coordinates
+          final RenderBox? canvasBox =
+              _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+          if (canvasBox != null) {
+            final local = canvasBox.globalToLocal(details.globalPosition);
+            final strideX = cellWidth + spacing;
+            final strideY = cellHeight + spacing;
+            final targetX = ((local.dx - padding + (cellWidth * 0.35)) / strideX)
                 .floor()
                 .clamp(0, WorkbenchLayoutEngine.columns - item.spanX);
             final targetY = math.max(
               0,
-              ((local.dy - padding) / (cellHeight + spacing)).floor(),
+              ((local.dy - padding + (cellHeight * 0.35)) / strideY).floor(),
             );
 
             notifier.updateDragHover(
@@ -318,7 +324,6 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
           }
         },
         onPanEnd: (_) {
-          HapticFeedback.lightImpact();
           setState(() {
             _activeDragId = null;
             _dragPosition = null;

@@ -146,6 +146,77 @@ class WorkbenchLayoutEngine {
     return placedItems;
   }
 
+  /// Finds the item in [items] occupying the cell at ([targetX], [targetY]), if any.
+  WorkbenchGridItem? findItemAtCell(
+    List<WorkbenchGridItem> items,
+    int targetX,
+    int targetY,
+  ) {
+    for (final item in items) {
+      if (item.rect.containsCell(targetX, targetY)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  /// Reorders [items] by moving the item with [dragId] to the position of ([targetX], [targetY]),
+  /// then recalculates and packs all items to guarantee a 100% collision-free, compact layout.
+  List<WorkbenchGridItem> reorderAndPack({
+    required List<WorkbenchGridItem> items,
+    required String dragId,
+    required int targetX,
+    required int targetY,
+  }) {
+    final oldIndex = items.indexWhere((e) => e.id == dragId);
+    if (oldIndex == -1) return items;
+
+    final dragItem = items[oldIndex];
+    final cleanTargetX = targetX.clamp(0, columns - dragItem.spanX);
+    final cleanTargetY = math.max(0, targetY);
+
+    // 1. Find if an existing item is directly under (cleanTargetX, cleanTargetY)
+    int newIndex = -1;
+    for (int i = 0; i < items.length; i++) {
+      if (items[i].id != dragId &&
+          items[i].rect.containsCell(cleanTargetX, cleanTargetY)) {
+        newIndex = i;
+        break;
+      }
+    }
+
+    // 2. If not directly on an item, find the nearest item in reading order
+    if (newIndex == -1) {
+      final totalRows = calculateTotalRows(items);
+      if (cleanTargetY >= totalRows) {
+        newIndex = items.length - 1;
+      } else {
+        final targetOrder = cleanTargetY * columns + cleanTargetX;
+        for (int i = 0; i < items.length; i++) {
+          if (items[i].id == dragId) continue;
+          final itemOrder = items[i].y * columns + items[i].x;
+          if (itemOrder >= targetOrder) {
+            newIndex = i;
+            break;
+          }
+        }
+        if (newIndex == -1) {
+          newIndex = items.length - 1;
+        }
+      }
+    }
+
+    if (oldIndex == newIndex) {
+      return packItems(items);
+    }
+
+    final reordered = List<WorkbenchGridItem>.from(items);
+    final movedItem = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex.clamp(0, reordered.length), movedItem);
+
+    return packItems(reordered);
+  }
+
   /// Whether [dragItem] can be merged into [targetItem] as a folder.
   ///
   /// True if:

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/workbench_repository.dart';
@@ -9,6 +11,10 @@ import 'workbench_layout_state.dart';
 /// 2D workbench widget desktop.
 class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
   final WorkbenchLayoutEngine engine = const WorkbenchLayoutEngine();
+
+  List<WorkbenchGridItem>? _originalItemsBeforeDrag;
+  Timer? _folderMergeTimer;
+  String? _potentialMergeTargetId;
 
   @override
   WorkbenchLayoutState build() {
@@ -220,6 +226,10 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
   /// Toggle desktop edit mode.
   void toggleEditMode([bool? force]) {
     final next = force ?? !state.isEditing;
+    _folderMergeTimer?.cancel();
+    _potentialMergeTargetId = null;
+    _originalItemsBeforeDrag = null;
+
     state = state.copyWith(
       isEditing: next,
       clearDragging: true,
@@ -230,94 +240,130 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
 
   /// Start dragging an item by its [id].
   void startDragging(String id) {
+    _folderMergeTimer?.cancel();
+    _potentialMergeTargetId = null;
+    _originalItemsBeforeDrag = List<WorkbenchGridItem>.from(state.items);
+
+    final itemIndex = _originalItemsBeforeDrag!.indexWhere((e) => e.id == id);
+    final initialRect =
+        itemIndex != -1 ? _originalItemsBeforeDrag![itemIndex].rect : null;
+
     state = state.copyWith(
       draggingItemId: id,
-      clearTargetSlot: true,
+      targetSlot: initialRect,
       clearFolderMergeTarget: true,
     );
   }
 
   /// Update drag hover position with target grid coordinates [targetX, targetY].
   void updateDragHover({required int targetX, required int targetY}) {
-    final dragItem = state.draggingItem;
-    if (dragItem == null) return;
+    if (state.draggingItemId == null || _originalItemsBeforeDrag == null) return;
+
+    final dragId = state.draggingItemId!;
+    final dragItem = _originalItemsBeforeDrag!.firstWhere(
+      (e) => e.id == dragId,
+      orElse: () => state.items.firstWhere((e) => e.id == dragId),
+    );
 
     final cleanX = targetX.clamp(0, WorkbenchLayoutEngine.columns - dragItem.spanX);
     final cleanY = targetY < 0 ? 0 : targetY;
 
-    // Check if hovering over another item that can be merged into a folder
-    WorkbenchGridItem? candidateMerge;
-    for (final item in state.items) {
-      if (item.id != dragItem.id &&
-          item.rect.containsCell(cleanX, cleanY) &&
-          engine.canMergeIntoFolder(dragItem, item)) {
-        candidateMerge = item;
+    // Check if hovering over an item that can merge into a folder
+    WorkbenchGridItem? hitItem;
+    for (final item in _originalItemsBeforeDrag!) {
+      if (item.id != dragItem.id && item.rect.containsCell(cleanX, cleanY)) {
+        hitItem = item;
         break;
       }
     }
 
-    if (candidateMerge != null) {
-      state = state.copyWith(
-        folderMergeTargetId: candidateMerge.id,
-        targetSlot: candidateMerge.rect,
-      );
-      return;
+    if (hitItem != null && engine.canMergeIntoFolder(dragItem, hitItem)) {
+      if (_potentialMergeTargetId != hitItem.id) {
+        _potentialMergeTargetId = hitItem.id;
+        _folderMergeTimer?.cancel();
+        _folderMergeTimer = Timer(const Duration(milliseconds: 380), () {
+          if (state.draggingItemId != null && _potentialMergeTargetId == hitItem!.id) {
+            HapticFeedback.mediumImpact(); // Vibration when folder merge preview triggers
+            state = state.copyWith(
+              folderMergeTargetId: hitItem.id,
+              targetSlot: hitItem.rect,
+            );
+          }
+        });
+      }
+
+      if (state.folderMergeTargetId != null) {
+        return;
+      }
+    } else {
+      _potentialMergeTargetId = null;
+      _folderMergeTimer?.cancel();
+      if (state.folderMergeTargetId != null) {
+        state = state.copyWith(clearFolderMergeTarget: true);
+      }
     }
 
-    // Normal slot displacement preview
-    final displaced = engine.previewDisplacement(
-      items: state.items,
-      dragItem: dragItem,
+    // Reorder and pack from the clean original layout
+    final reorderedAndPacked = engine.reorderAndPack(
+      items: _originalItemsBeforeDrag!,
+      dragId: dragItem.id,
       targetX: cleanX,
       targetY: cleanY,
     );
 
-    // Keep dragged item at target position in preview
-    final previewItems = <WorkbenchGridItem>[
-      ...displaced,
-      dragItem.copyWith(
-        x: cleanX,
-        y: cleanY,
-      ),
-    ];
+    WorkbenchGridItem? newDragItem;
+    try {
+      newDragItem = reorderedAndPacked.firstWhere((e) => e.id == dragItem.id);
+    } catch (_) {
+      newDragItem = null;
+    }
+
+    final newSlot = newDragItem?.rect;
+    if (newSlot != null && newSlot != state.targetSlot) {
+      HapticFeedback.selectionClick(); // Vibration feedback when slot shifts!
+    }
 
     state = state.copyWith(
-      items: previewItems,
+      items: reorderedAndPacked,
+      targetSlot: newSlot,
       clearFolderMergeTarget: true,
-      targetSlot: GridRect(
-        x: cleanX,
-        y: cleanY,
-        spanX: dragItem.spanX,
-        spanY: dragItem.spanY,
-      ),
     );
   }
 
   /// Drop the currently dragged item and commit changes.
   void dropItem() {
-    final dragItem = state.draggingItem;
-    if (dragItem == null) {
+    _folderMergeTimer?.cancel();
+    _potentialMergeTargetId = null;
+    HapticFeedback.mediumImpact(); // Vibration feedback when dropped!
+
+    final dragId = state.draggingItemId;
+    if (dragId == null) {
       cancelDrag();
       return;
     }
 
-    // 1. Folder Merge
+    // 1. Folder Merge Commit
     if (state.folderMergeTargetId != null) {
       final targetId = state.folderMergeTargetId!;
-      final targetIndex = state.items.indexWhere((e) => e.id == targetId);
-      if (targetIndex != -1) {
-        final targetItem = state.items[targetIndex];
+      final baseIndex = state.items.indexWhere((e) => e.id == targetId);
+      final dragIndex = state.items.indexWhere((e) => e.id == dragId);
+
+      if (baseIndex != -1 && dragIndex != -1) {
+        final targetItem = state.items[baseIndex];
+        final dragItem = state.items[dragIndex];
         final newFolder = engine.mergeIntoFolder(
           baseItem: targetItem,
           droppedItem: dragItem,
         );
 
         final updatedItems = state.items
-            .where((e) => e.id != dragItem.id && e.id != targetId)
+            .where((e) => e.id != dragId && e.id != targetId)
             .toList()
-          ..insert(targetIndex, newFolder);
+          ..insert(baseIndex > dragIndex ? baseIndex - 1 : baseIndex, newFolder);
 
         final packed = engine.packItems(updatedItems);
+        _originalItemsBeforeDrag = null;
+
         state = state.copyWith(
           items: packed,
           clearDragging: true,
@@ -328,10 +374,11 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
       }
     }
 
-    // 2. Normal slot drop
-    final packed = engine.packItems(state.items);
+    // 2. Normal Slot Drop Commit
+    // The items in state.items are ALREADY the correctly reordered and packed layout!
+    _originalItemsBeforeDrag = null;
+
     state = state.copyWith(
-      items: packed,
       clearDragging: true,
       clearTargetSlot: true,
       clearFolderMergeTarget: true,
@@ -340,11 +387,24 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
 
   /// Cancel current drag operation.
   void cancelDrag() {
-    state = state.copyWith(
-      clearDragging: true,
-      clearTargetSlot: true,
-      clearFolderMergeTarget: true,
-    );
+    _folderMergeTimer?.cancel();
+    _potentialMergeTargetId = null;
+
+    if (_originalItemsBeforeDrag != null) {
+      state = state.copyWith(
+        items: _originalItemsBeforeDrag,
+        clearDragging: true,
+        clearTargetSlot: true,
+        clearFolderMergeTarget: true,
+      );
+      _originalItemsBeforeDrag = null;
+    } else {
+      state = state.copyWith(
+        clearDragging: true,
+        clearTargetSlot: true,
+        clearFolderMergeTarget: true,
+      );
+    }
   }
 
   /// Adds a new widget item and automatically packs it into the layout.
@@ -400,6 +460,10 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
 
   /// Resets to default initial preset.
   void resetToDefaultLayout() {
+    _folderMergeTimer?.cancel();
+    _potentialMergeTargetId = null;
+    _originalItemsBeforeDrag = null;
+
     final packed = engine.packItems(createDefaultPreset());
     state = state.copyWith(
       items: packed,
