@@ -8,6 +8,7 @@ import '../../core/widgets/glass_container.dart';
 import '../../features/home/presentation/home_sections.dart';
 import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/presentation/chat_owner_drawer.dart';
+import '../../features/workbench/application/workbench_layout_notifier.dart';
 import '../layout/app_breakpoints.dart';
 
 /// Responsive host for the IM's top-level sections.
@@ -56,7 +57,24 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       return;
     }
 
-    // 2. If not on the default messages section, switch back to messages first.
+    // 2. If on Workbench, prioritize closing folder bubble or exiting edit mode!
+    if (_section == HomeSection.workbench) {
+      final workbenchState = ref.read(workbenchLayoutProvider);
+      final workbenchNotifier = ref.read(workbenchLayoutProvider.notifier);
+
+      if (workbenchState.openFolder != null) {
+        workbenchNotifier.closeFolderBubble();
+        return;
+      }
+
+      if (workbenchState.isEditing) {
+        HapticFeedback.lightImpact();
+        workbenchNotifier.toggleEditMode(false);
+        return;
+      }
+    }
+
+    // 3. If not on the default messages section, switch back to messages first.
     if (_section != HomeSection.messages) {
       _select(HomeSection.messages);
       return;

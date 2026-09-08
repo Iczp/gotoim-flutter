@@ -280,11 +280,28 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
           return;
         }
       },
-      child: Scaffold(
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
+            if (layoutState.openFolder != null) {
+              notifier.closeFolderBubble();
+              return KeyEventResult.handled;
+            }
+            if (layoutState.isEditing) {
+              HapticFeedback.lightImpact();
+              notifier.toggleEditMode(false);
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Scaffold(
         appBar: AppBar(
           leading: layoutState.isEditing
               ? IconButton(
-                  icon: const Icon(Icons.close_rounded),
+                  icon: const Icon(Icons.arrow_back_rounded),
                   tooltip: '退出编辑',
                   onPressed: () {
                     HapticFeedback.lightImpact();
@@ -403,6 +420,7 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
             ),
         ],
       ),
+    ),
     ),
   );
 }

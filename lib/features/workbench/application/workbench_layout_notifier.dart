@@ -16,6 +16,8 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
   List<WorkbenchGridItem>? _originalItemsBeforeDrag;
   Timer? _folderMergeTimer;
   String? _potentialMergeTargetId;
+  int? _lastHoverTargetX;
+  int? _lastHoverTargetY;
 
   @override
   WorkbenchLayoutState build() {
@@ -250,11 +252,18 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
   void startDragging(String id) {
     _folderMergeTimer?.cancel();
     _potentialMergeTargetId = null;
+    _lastHoverTargetX = null;
+    _lastHoverTargetY = null;
     _originalItemsBeforeDrag = List<WorkbenchGridItem>.from(state.items);
 
     final itemIndex = _originalItemsBeforeDrag!.indexWhere((e) => e.id == id);
     final initialRect =
         itemIndex != -1 ? _originalItemsBeforeDrag![itemIndex].rect : null;
+
+    if (initialRect != null) {
+      _lastHoverTargetX = initialRect.x;
+      _lastHoverTargetY = initialRect.y;
+    }
 
     state = state.copyWith(
       draggingItemId: id,
@@ -275,6 +284,16 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
 
     final cleanX = targetX.clamp(0, WorkbenchLayoutEngine.columns - dragItem.spanX);
     final cleanY = targetY < 0 ? 0 : targetY;
+
+    // High performance guard: If target grid cell has not changed, avoid running expensive layout calculation!
+    if (cleanX == _lastHoverTargetX &&
+        cleanY == _lastHoverTargetY &&
+        state.folderMergeTargetId == null &&
+        _potentialMergeTargetId == null) {
+      return;
+    }
+    _lastHoverTargetX = cleanX;
+    _lastHoverTargetY = cleanY;
 
     // Check if hovering over an item that can merge into a folder
     WorkbenchGridItem? hitItem;

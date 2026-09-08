@@ -31,12 +31,31 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
   late AnimationController _jiggleController;
 
   final GlobalKey _canvasKey = GlobalKey();
+  final GlobalKey _menuKey = GlobalKey();
 
-  // Active drag tracking
-  Offset? _dragPosition;
+  // Active drag tracking (decoupled via ValueNotifier to avoid 60fps canvas rebuilds)
+  final ValueNotifier<Offset?> _dragPositionNotifier =
+      ValueNotifier<Offset?>(null);
   String? _activeDragId;
   String? _menuItemId;
+  DateTime? _menuDismissedTime;
   Offset? _longPressStartPos;
+
+  bool _consumeTapIfMenuDismissed() {
+    if (_menuDismissedTime != null &&
+        DateTime.now().difference(_menuDismissedTime!) <
+            const Duration(milliseconds: 260)) {
+      return true;
+    }
+    if (_menuItemId != null) {
+      setState(() {
+        _menuDismissedTime = DateTime.now();
+        _menuItemId = null;
+      });
+      return true;
+    }
+    return false;
+  }
 
   @override
   void initState() {
@@ -49,6 +68,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
 
   @override
   void dispose() {
+    _dragPositionNotifier.dispose();
     _jiggleController.dispose();
     super.dispose();
   }
@@ -77,7 +97,9 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final totalWidth = constraints.maxWidth;
+        final screenWidth = constraints.maxWidth;
+        // Responsive width constraint: on tablet/desktop, limit canvas to 640px and center it
+        final totalWidth = screenWidth > 640 ? 640.0 : screenWidth;
         const padding = 16.0;
         const spacing = 12.0;
         const columns = WorkbenchLayoutEngine.columns;
@@ -94,81 +116,115 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
             (totalRows > 0 ? (totalRows - 1) * spacing : 0.0) +
             80.0; // Extra breathing room at bottom
 
-        return SingleChildScrollView(
-          physics: state.draggingItemId != null
-              ? const NeverScrollableScrollPhysics()
-              : const AlwaysScrollableScrollPhysics(),
-          child: SizedBox(
-            key: _canvasKey,
-            width: totalWidth,
-            height: math.max(constraints.maxHeight, contentHeight),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // 1. Ghost / Target Slot Placeholder Indicator
-                if (state.targetSlot != null && state.draggingItemId != null)
-                  _buildPlaceholderIndicator(
-                    state.targetSlot!,
-                    cellWidth: cellWidth,
-                    cellHeight: cellHeight,
-                    padding: padding,
-                    spacing: spacing,
-                    totalWidth: totalWidth,
-                    colorScheme: colorScheme,
-                  ),
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (_menuItemId != null &&
+                (notification is ScrollStartNotification ||
+                 notification is ScrollUpdateNotification)) {
+              setState(() {
+                _menuDismissedTime = DateTime.now();
+                _menuItemId = null;
+              });
+            }
+            return false;
+          },
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (event) {
+              if (_menuItemId != null) {
+                final RenderBox? menuBox =
+                    _menuKey.currentContext?.findRenderObject() as RenderBox?;
+                if (menuBox != null && menuBox.hasSize) {
+                  final localPos = menuBox.globalToLocal(event.position);
+                  if (!menuBox.paintBounds.contains(localPos)) {
+                    setState(() {
+                      _menuDismissedTime = DateTime.now();
+                      _menuItemId = null;
+                    });
+                  }
+                } else {
+                  setState(() {
+                    _menuDismissedTime = DateTime.now();
+                    _menuItemId = null;
+                  });
+                }
+              }
+            },
+            child: SingleChildScrollView(
+              physics: state.draggingItemId != null
+                  ? const NeverScrollableScrollPhysics()
+                  : const AlwaysScrollableScrollPhysics(),
+              child: Center(
+                child: SizedBox(
+                  key: _canvasKey,
+                  width: totalWidth,
+                  height: math.max(constraints.maxHeight, contentHeight),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // 1. Ghost / Target Slot Placeholder Indicator
+                      if (state.targetSlot != null && state.draggingItemId != null)
+                        _buildPlaceholderIndicator(
+                          state.targetSlot!,
+                          cellWidth: cellWidth,
+                          cellHeight: cellHeight,
+                          padding: padding,
+                          spacing: spacing,
+                          totalWidth: totalWidth,
+                          colorScheme: colorScheme,
+                        ),
 
-                // 2. Animated grid items
-                for (final item in state.items)
-                  _buildAnimatedGridItem(
-                    item: item,
-                    cellWidth: cellWidth,
-                    cellHeight: cellHeight,
-                    padding: padding,
-                    spacing: spacing,
-                    totalWidth: totalWidth,
-                    state: state,
-                    notifier: notifier,
-                  ),
+                      // 2. Animated grid items
+                      for (final item in state.items)
+                        _buildAnimatedGridItem(
+                          item: item,
+                          cellWidth: cellWidth,
+                          cellHeight: cellHeight,
+                          padding: padding,
+                          spacing: spacing,
+                          totalWidth: totalWidth,
+                          state: state,
+                          notifier: notifier,
+                        ),
 
-                // 3. Floating dragged item follower
-                if (_activeDragId != null && _dragPosition != null)
-                  _buildDraggingFollower(
-                    itemId: _activeDragId!,
-                    state: state,
-                    cellWidth: cellWidth,
-                    cellHeight: cellHeight,
-                    spacing: spacing,
-                    totalWidth: totalWidth,
-                  ),
+                      // 3. Floating dragged item follower (isolated with ValueListenableBuilder & Positioned.fill)
+                      Positioned.fill(
+                        child: ValueListenableBuilder<Offset?>(
+                          valueListenable: _dragPositionNotifier,
+                          builder: (context, dragPos, child) {
+                            if (_activeDragId == null || dragPos == null) {
+                              return const SizedBox.shrink();
+                            }
+                            return _buildDraggingFollower(
+                              itemId: _activeDragId!,
+                              dragPosition: dragPos,
+                              state: state,
+                              cellWidth: cellWidth,
+                              cellHeight: cellHeight,
+                              spacing: spacing,
+                              totalWidth: totalWidth,
+                            );
+                          },
+                        ),
+                      ),
 
-                // 4. Tap-outside dismiss barrier for context menu
-                if (_menuItemId != null && _activeDragId == null)
-                  Positioned.fill(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        setState(() {
-                          _menuItemId = null;
-                        });
-                      },
-                      child: const SizedBox.expand(),
-                    ),
+                      // 4. Context Action Menu Popover
+                      if (_menuItemId != null && _activeDragId == null)
+                        _buildContextMenu(
+                          itemId: _menuItemId!,
+                          state: state,
+                          notifier: notifier,
+                          cellWidth: cellWidth,
+                          cellHeight: cellHeight,
+                          padding: padding,
+                          spacing: spacing,
+                          totalWidth: totalWidth,
+                          colorScheme: colorScheme,
+                        ),
+                    ],
                   ),
-
-                // 5. Context Action Menu Popover
-                if (_menuItemId != null && _activeDragId == null)
-                  _buildContextMenu(
-                    itemId: _menuItemId!,
-                    state: state,
-                    notifier: notifier,
-                    cellWidth: cellWidth,
-                    cellHeight: cellHeight,
-                    padding: padding,
-                    spacing: spacing,
-                    totalWidth: totalWidth,
-                    colorScheme: colorScheme,
-                  ),
-              ],
+                ),
+              ),
             ),
           ),
         );
@@ -240,6 +296,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
           isEditing: state.isEditing,
           onTap: () {
             if (state.isEditing) return;
+            if (_consumeTapIfMenuDismissed()) return;
             widget.onOpenApp(item);
           },
           onLongPress: null,
@@ -253,6 +310,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
           isEditing: state.isEditing,
           onTap: () {
             if (state.isEditing) return;
+            if (_consumeTapIfMenuDismissed()) return;
             widget.onOpenApp(item);
           },
           onDelete: () => notifier.removeItem(item.id),
@@ -265,6 +323,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
           isEditing: state.isEditing,
           onTap: () {
             if (state.isEditing) return;
+            if (_consumeTapIfMenuDismissed()) return;
             widget.onOpenApp(item);
           },
           onDelete: () => notifier.removeItem(item.id),
@@ -278,6 +337,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
           isMergeTarget: isMergeTarget,
           onTap: () {
             if (state.isEditing) return;
+            if (_consumeTapIfMenuDismissed()) return;
             notifier.openFolderBubble(item);
           },
           onLongPress: null,
@@ -289,7 +349,10 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
         childWidget = CardGridWidget(
           item: item,
           isEditing: state.isEditing,
-          onTap: () => widget.onOpenApp(item),
+          onTap: () {
+            if (_consumeTapIfMenuDismissed()) return;
+            widget.onOpenApp(item);
+          },
           onDelete: () => notifier.removeItem(item.id),
         );
         break;
@@ -312,8 +375,16 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
     );
 
     // Hold-to-drag gesture detector: press and hold shows menu; moving finger hides menu and begins dragging!
+    // Secondary tap (right-click) for desktop: immediately triggers context action menu
     interactiveChild = GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp: (details) {
+        HapticFeedback.selectionClick();
+        setState(() {
+          _menuItemId = item.id;
+          _longPressStartPos = details.globalPosition;
+        });
+      },
       onLongPressStart: (details) {
         // Guaranteed physical hardware vibration + system haptic feedback
         Native.vibrate(HapticFeedbackType.vibrate, 60);
@@ -335,8 +406,8 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
               setState(() {
                 _menuItemId = null;
                 _activeDragId = item.id;
-                _dragPosition = details.globalPosition;
               });
+              _dragPositionNotifier.value = details.globalPosition;
 
               if (!state.isEditing) {
                 notifier.toggleEditMode(true);
@@ -347,9 +418,8 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
         }
 
         if (_activeDragId != null) {
-          setState(() {
-            _dragPosition = details.globalPosition;
-          });
+          // Zero-rebuild follower tracking: only updates ValueNotifier, never calls setState!
+          _dragPositionNotifier.value = details.globalPosition;
 
           // Convert global pointer position into accurate canvas coordinates
           final RenderBox? canvasBox =
@@ -388,9 +458,9 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
         if (_activeDragId != null) {
           Native.vibrate(HapticFeedbackType.medium, 40);
           HapticFeedback.mediumImpact();
+          _dragPositionNotifier.value = null;
           setState(() {
             _activeDragId = null;
-            _dragPosition = null;
             _menuItemId = null;
           });
           notifier.dropItem();
@@ -399,9 +469,9 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
       onLongPressCancel: () {
         _longPressStartPos = null;
         if (_activeDragId != null) {
+          _dragPositionNotifier.value = null;
           setState(() {
             _activeDragId = null;
-            _dragPosition = null;
             _menuItemId = null;
           });
           notifier.cancelDrag();
@@ -418,15 +488,18 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
       top: itemTop,
       width: itemWidth,
       height: itemHeight,
-      child: Opacity(
-        opacity: isBeingDragged ? 0.35 : 1.0,
-        child: interactiveChild,
+      child: RepaintBoundary(
+        child: Opacity(
+          opacity: isBeingDragged ? 0.35 : 1.0,
+          child: interactiveChild,
+        ),
       ),
     );
   }
 
   Widget _buildDraggingFollower({
     required String itemId,
+    required Offset dragPosition,
     required dynamic state,
     required double cellWidth,
     required double cellHeight,
@@ -438,29 +511,35 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
 
     final RenderBox? box =
         _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || _dragPosition == null) return const SizedBox.shrink();
+    if (box == null) return const SizedBox.shrink();
 
-    final local = box.globalToLocal(_dragPosition!);
+    final local = box.globalToLocal(dragPosition);
 
     final width = dragItem.edgeToEdge && dragItem.spanX == 4
         ? totalWidth
         : (dragItem.spanX * cellWidth + (dragItem.spanX - 1) * spacing);
     final height = dragItem.spanY * cellHeight + (dragItem.spanY - 1) * spacing;
 
-    return Positioned(
-      left: local.dx - (width / 2),
-      top: local.dy - (height / 2),
-      width: width,
-      height: height,
-      child: IgnorePointer(
-        child: Transform.scale(
-          scale: 1.08,
-          child: Material(
-            elevation: 16,
-            borderRadius: BorderRadius.circular(18),
-            color: Colors.transparent,
-            shadowColor: Colors.black.withValues(alpha: 0.35),
-            child: _buildItemPreview(dragItem),
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Transform.translate(
+        offset: Offset(local.dx - (width / 2), local.dy - (height / 2)),
+        child: SizedBox(
+          width: width,
+          height: height,
+          child: RepaintBoundary(
+            child: IgnorePointer(
+              child: Transform.scale(
+                scale: 1.08,
+                child: Material(
+                  elevation: 16,
+                  borderRadius: BorderRadius.circular(18),
+                  color: Colors.transparent,
+                  shadowColor: Colors.black.withValues(alpha: 0.35),
+                  child: _buildItemPreview(dragItem),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -517,6 +596,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
         : itemTop + itemHeight + 8.0;
 
     return Positioned(
+      key: _menuKey,
       left: left,
       top: top,
       width: menuWidth,
