@@ -35,6 +35,8 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
   // Active drag tracking
   Offset? _dragPosition;
   String? _activeDragId;
+  String? _menuItemId;
+  Offset? _longPressStartPos;
 
   @override
   void initState() {
@@ -82,8 +84,8 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
 
         final availableWidth = totalWidth - (padding * 2) - (spacing * (columns - 1));
         final cellWidth = math.max(0.0, availableWidth / columns);
-        // Cell height proportioned for standard 1x1 app shortcut (icon + label)
-        final cellHeight = cellWidth * 1.15;
+        // Height proportioned for 1x1 app shortcut with icon + 2-line title/subtitle + badge
+        final cellHeight = cellWidth * 1.34;
 
         final totalRows = notifier.engine.calculateTotalRows(state.items);
         final contentHeight =
@@ -137,6 +139,34 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
                     cellHeight: cellHeight,
                     spacing: spacing,
                     totalWidth: totalWidth,
+                  ),
+
+                // 4. Tap-outside dismiss barrier for context menu
+                if (_menuItemId != null && _activeDragId == null)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        setState(() {
+                          _menuItemId = null;
+                        });
+                      },
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+
+                // 5. Context Action Menu Popover
+                if (_menuItemId != null && _activeDragId == null)
+                  _buildContextMenu(
+                    itemId: _menuItemId!,
+                    state: state,
+                    notifier: notifier,
+                    cellWidth: cellWidth,
+                    cellHeight: cellHeight,
+                    padding: padding,
+                    spacing: spacing,
+                    totalWidth: totalWidth,
+                    colorScheme: colorScheme,
                   ),
               ],
             ),
@@ -281,7 +311,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
       child: childWidget,
     );
 
-    // Hold-to-drag gesture detector: only press and hold triggers drag + vibration!
+    // Hold-to-drag gesture detector: press and hold shows menu; moving finger hides menu and begins dragging!
     interactiveChild = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onLongPressStart: (details) {
@@ -289,68 +319,93 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
         Native.vibrate(HapticFeedbackType.vibrate, 60);
         HapticFeedback.vibrate();
 
-        // Auto enter edit mode if not already active
-        if (!state.isEditing) {
-          notifier.toggleEditMode(true);
-        }
-
         setState(() {
-          _activeDragId = item.id;
-          _dragPosition = details.globalPosition;
+          _menuItemId = item.id;
+          _longPressStartPos = details.globalPosition;
         });
-        notifier.startDragging(item.id);
       },
       onLongPressMoveUpdate: (details) {
-        setState(() {
-          _dragPosition = details.globalPosition;
-        });
+        // Movement threshold check: if finger moves > 8px, dismiss menu and start dragging
+        if (_longPressStartPos != null) {
+          final distance =
+              (details.globalPosition - _longPressStartPos!).distance;
+          if (distance > 8.0) {
+            if (_menuItemId != null) {
+              // 隐藏菜单，启动拖拽
+              setState(() {
+                _menuItemId = null;
+                _activeDragId = item.id;
+                _dragPosition = details.globalPosition;
+              });
 
-        // Convert global pointer position into accurate canvas coordinates
-        final RenderBox? canvasBox =
-            _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-        if (canvasBox != null) {
-          final local = canvasBox.globalToLocal(details.globalPosition);
-          final strideX = cellWidth + spacing;
-          final strideY = cellHeight + spacing;
+              if (!state.isEditing) {
+                notifier.toggleEditMode(true);
+              }
+              notifier.startDragging(item.id);
+            }
+          }
+        }
 
-          final width = item.edgeToEdge && item.spanX == 4
-              ? totalWidth
-              : (item.spanX * cellWidth + (item.spanX - 1) * spacing);
-          final height = item.spanY * cellHeight + (item.spanY - 1) * spacing;
+        if (_activeDragId != null) {
+          setState(() {
+            _dragPosition = details.globalPosition;
+          });
 
-          // Find top-left grid cell corresponding to centered follower
-          final itemLeft = local.dx - (width / 2);
-          final itemTop = local.dy - (height / 2);
+          // Convert global pointer position into accurate canvas coordinates
+          final RenderBox? canvasBox =
+              _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+          if (canvasBox != null) {
+            final local = canvasBox.globalToLocal(details.globalPosition);
+            final strideX = cellWidth + spacing;
+            final strideY = cellHeight + spacing;
 
-          final targetX = ((itemLeft - padding + (cellWidth * 0.5)) / strideX)
-              .floor()
-              .clamp(0, WorkbenchLayoutEngine.columns - item.spanX);
-          final targetY = math.max(
-            0,
-            ((itemTop - padding + (cellHeight * 0.5)) / strideY).floor(),
-          );
+            final width = item.edgeToEdge && item.spanX == 4
+                ? totalWidth
+                : (item.spanX * cellWidth + (item.spanX - 1) * spacing);
+            final height = item.spanY * cellHeight + (item.spanY - 1) * spacing;
 
-          notifier.updateDragHover(
-            targetX: targetX,
-            targetY: targetY,
-          );
+            // Find top-left grid cell corresponding to centered follower
+            final itemLeft = local.dx - (width / 2);
+            final itemTop = local.dy - (height / 2);
+
+            final targetX = ((itemLeft - padding + (cellWidth * 0.5)) / strideX)
+                .floor()
+                .clamp(0, WorkbenchLayoutEngine.columns - item.spanX);
+            final targetY = math.max(
+              0,
+              ((itemTop - padding + (cellHeight * 0.5)) / strideY).floor(),
+            );
+
+            notifier.updateDragHover(
+              targetX: targetX,
+              targetY: targetY,
+            );
+          }
         }
       },
       onLongPressEnd: (_) {
-        Native.vibrate(HapticFeedbackType.medium, 40);
-        HapticFeedback.mediumImpact();
-        setState(() {
-          _activeDragId = null;
-          _dragPosition = null;
-        });
-        notifier.dropItem();
+        _longPressStartPos = null;
+        if (_activeDragId != null) {
+          Native.vibrate(HapticFeedbackType.medium, 40);
+          HapticFeedback.mediumImpact();
+          setState(() {
+            _activeDragId = null;
+            _dragPosition = null;
+            _menuItemId = null;
+          });
+          notifier.dropItem();
+        }
       },
       onLongPressCancel: () {
-        setState(() {
-          _activeDragId = null;
-          _dragPosition = null;
-        });
-        notifier.cancelDrag();
+        _longPressStartPos = null;
+        if (_activeDragId != null) {
+          setState(() {
+            _activeDragId = null;
+            _dragPosition = null;
+            _menuItemId = null;
+          });
+          notifier.cancelDrag();
+        }
       },
       child: interactiveChild,
     );
@@ -425,5 +480,200 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
       case WorkbenchGridItemType.custom:
         return CardGridWidget(item: item, onTap: () {});
     }
+  }
+
+  Widget _buildContextMenu({
+    required String itemId,
+    required dynamic state,
+    required WorkbenchLayoutNotifier notifier,
+    required double cellWidth,
+    required double cellHeight,
+    required double padding,
+    required double spacing,
+    required double totalWidth,
+    required ColorScheme colorScheme,
+  }) {
+    final itemIndex = state.items.indexWhere((e) => e.id == itemId);
+    if (itemIndex == -1) return const SizedBox.shrink();
+    final item = state.items[itemIndex] as WorkbenchGridItem;
+
+    final isEdgeToEdge = item.edgeToEdge && item.spanX == 4;
+    final itemLeft = isEdgeToEdge ? 0.0 : (padding + item.x * (cellWidth + spacing));
+    final itemTop = padding + item.y * (cellHeight + spacing);
+    final itemWidth = isEdgeToEdge
+        ? totalWidth
+        : (item.spanX * cellWidth + (item.spanX - 1) * spacing);
+    final itemHeight = item.spanY * cellHeight + (item.spanY - 1) * spacing;
+
+    const menuWidth = 190.0;
+    const menuEstimatedHeight = 145.0;
+
+    final left = (itemLeft + (itemWidth / 2) - (menuWidth / 2))
+        .clamp(12.0, totalWidth - menuWidth - 12.0);
+    // Show above if enough room, otherwise below
+    final showAbove = itemTop > menuEstimatedHeight + 20.0;
+    final top = showAbove
+        ? itemTop - menuEstimatedHeight - 8.0
+        : itemTop + itemHeight + 8.0;
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: menuWidth,
+      child: Material(
+        elevation: 12,
+        borderRadius: BorderRadius.circular(16),
+        color: colorScheme.surfaceContainerHighest,
+        shadowColor: Colors.black.withValues(alpha: 0.3),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header with mini title & subtitle preview
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (item.subtitle != null && item.subtitle!.isNotEmpty)
+                            Text(
+                              item.subtitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(
+                height: 1,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+              // Action 1: Toggle edit mode
+              InkWell(
+                onTap: () {
+                  setState(() => _menuItemId = null);
+                  HapticFeedback.lightImpact();
+                  notifier.toggleEditMode();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Row(
+                    children: [
+                      Icon(
+                        state.isEditing
+                            ? Icons.check_circle_outline
+                            : Icons.tune_rounded,
+                        size: 18,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        state.isEditing ? '完成编辑' : '编辑主屏幕',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Action 2: If folder, open folder
+              if (item.type == WorkbenchGridItemType.folder) ...[
+                Divider(
+                  height: 1,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+                InkWell(
+                  onTap: () {
+                    setState(() => _menuItemId = null);
+                    notifier.openFolderBubble(item);
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(Icons.folder_open_outlined, size: 18),
+                        SizedBox(width: 10),
+                        Text(
+                          '展开文件夹',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              Divider(
+                height: 1,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+              // Action 3: Remove from workbench
+              InkWell(
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                onTap: () {
+                  setState(() => _menuItemId = null);
+                  Native.vibrate(HapticFeedbackType.medium, 40);
+                  HapticFeedback.mediumImpact();
+                  notifier.removeItem(item.id);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.delete_outline_rounded,
+                        size: 18,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '移出工作台',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

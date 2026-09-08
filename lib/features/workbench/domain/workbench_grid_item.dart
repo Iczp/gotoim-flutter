@@ -88,6 +88,8 @@ class WorkbenchGridItem {
     required this.type,
     required this.x,
     required this.y,
+    this.subtitle,
+    this.badge,
     this.spanX = 1,
     this.spanY = 1,
     this.edgeToEdge = false,
@@ -102,6 +104,8 @@ class WorkbenchGridItem {
 
   final String id;
   final String title;
+  final String? subtitle;
+  final String? badge;
   final WorkbenchGridItemType type;
   final int x;
   final int y;
@@ -127,6 +131,8 @@ class WorkbenchGridItem {
   WorkbenchGridItem copyWith({
     String? id,
     String? title,
+    String? subtitle,
+    String? badge,
     WorkbenchGridItemType? type,
     int? x,
     int? y,
@@ -140,6 +146,8 @@ class WorkbenchGridItem {
     return WorkbenchGridItem(
       id: id ?? this.id,
       title: title ?? this.title,
+      subtitle: subtitle ?? this.subtitle,
+      badge: badge ?? this.badge,
       type: type ?? this.type,
       x: x ?? this.x,
       y: y ?? this.y,
@@ -155,6 +163,8 @@ class WorkbenchGridItem {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'id': id,
     'title': title,
+    if (subtitle != null) 'subtitle': subtitle,
+    if (badge != null) 'badge': badge,
     'type': type.name,
     'x': x,
     'y': y,
@@ -171,6 +181,8 @@ class WorkbenchGridItem {
     return WorkbenchGridItem(
       id: json['id'] as String,
       title: json['title'] as String,
+      subtitle: json['subtitle'] as String?,
+      badge: json['badge'] as String?,
       type: WorkbenchGridItemType.values.firstWhere(
         (e) => e.name == json['type'],
         orElse: () => WorkbenchGridItemType.app,
@@ -208,6 +220,8 @@ class WorkbenchGridItem {
           runtimeType == other.runtimeType &&
           id == other.id &&
           title == other.title &&
+          subtitle == other.subtitle &&
+          badge == other.badge &&
           type == other.type &&
           x == other.x &&
           y == other.y &&
@@ -216,9 +230,9 @@ class WorkbenchGridItem {
           edgeToEdge == other.edgeToEdge;
 
   @override
-  int get hashCode => Object.hash(id, title, type, x, y, spanX, spanY, edgeToEdge);
+  int get hashCode => Object.hash(id, title, subtitle, badge, type, x, y, spanX, spanY, edgeToEdge);
 
   @override
   String toString() =>
-      'WorkbenchGridItem(id: $id, title: $title, type: $type, x: $x, y: $y, spanX: $spanX, spanY: $spanY)';
+      'WorkbenchGridItem(id: $id, title: $title, subtitle: $subtitle, badge: $badge, type: $type, x: $x, y: $y, spanX: $spanX, spanY: $spanY)';
 }

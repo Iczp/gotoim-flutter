@@ -52,7 +52,8 @@ class AppGridWidget extends StatelessWidget {
     final extra = item.extra ?? const {};
     final iconName = extra['icon'] as String?;
     final colorInt = extra['color'] as int?;
-    final badge = extra['badge'] as String?;
+    final badge = item.badge ?? (extra['badge'] as String?);
+    final subtitle = item.subtitle ?? (extra['subtitle'] as String?);
 
     final primaryColor = colorInt != null ? Color(colorInt) : colorScheme.primary;
 
@@ -178,20 +179,35 @@ class AppGridWidget extends StatelessWidget {
                     ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Flexible(
-                child: Text(
-                  item.title,
+              const SizedBox(height: 5),
+              // Line 1: Main Title
+              Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11.5,
+                  letterSpacing: -0.2,
+                  height: 1.15,
+                ),
+              ),
+              const SizedBox(height: 2),
+              // Line 2: Subtitle (shown if available)
+              if (subtitle != null && subtitle.isNotEmpty)
+                Text(
+                  subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 9.5,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
                     letterSpacing: -0.2,
+                    height: 1.1,
                   ),
                 ),
-              ),
             ],
           ),
         ),

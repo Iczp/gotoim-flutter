@@ -49,6 +49,7 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
       const WorkbenchGridItem(
         id: 'app_oa',
         title: '协同办公',
+        subtitle: '移动办公门户',
         type: WorkbenchGridItemType.app,
         x: 0,
         y: 2,
@@ -57,14 +58,17 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
       const WorkbenchGridItem(
         id: 'app_approval',
         title: '审批中心',
+        subtitle: '3条待审单据',
+        badge: '3',
         type: WorkbenchGridItemType.app,
         x: 1,
         y: 2,
-        extra: {'icon': 'verified_user', 'color': 0xFF388E3C, 'badge': '3'},
+        extra: {'icon': 'verified_user', 'color': 0xFF388E3C},
       ),
       const WorkbenchGridItem(
         id: 'app_calendar',
         title: '日程会议',
+        subtitle: '今日2场待办',
         type: WorkbenchGridItemType.app,
         x: 2,
         y: 2,
@@ -151,6 +155,8 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
       const WorkbenchGridItem(
         id: 'app_mail',
         title: '企业邮箱',
+        subtitle: '未读邮件 12',
+        badge: '12',
         type: WorkbenchGridItemType.app,
         x: 2,
         y: 4,
@@ -159,6 +165,7 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
       const WorkbenchGridItem(
         id: 'app_contact',
         title: '组织架构',
+        subtitle: '全员在线通讯',
         type: WorkbenchGridItemType.app,
         x: 3,
         y: 4,

@@ -266,11 +266,34 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
     final notifier = ref.read(workbenchLayoutProvider.notifier);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('工作台'),
-        actions: [
+    return PopScope(
+      canPop: !layoutState.isEditing && layoutState.openFolder == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (layoutState.openFolder != null) {
+          notifier.closeFolderBubble();
+          return;
+        }
+        if (layoutState.isEditing) {
+          HapticFeedback.lightImpact();
+          notifier.toggleEditMode(false);
+          return;
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: layoutState.isEditing
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: '退出编辑',
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    notifier.toggleEditMode(false);
+                  },
+                )
+              : null,
+          title: Text(layoutState.isEditing ? '编辑工作台' : '工作台'),
+          actions: [
           // Launch mode switcher
           Tooltip(
             message: _useDeepLinkMode ? '当前：Deep Link 唤醒模式' : '当前：直接启动模式',
@@ -380,6 +403,7 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
             ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
