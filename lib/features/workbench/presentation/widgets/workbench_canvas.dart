@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/workbench_layout_notifier.dart';
 import '../../domain/workbench_grid_item.dart';
 import '../../domain/workbench_layout_engine.dart';
+import '../../../../core/native/native.dart';
 import 'items/app_grid_widget.dart';
 import 'items/banner_grid_widget.dart';
 import 'items/card_grid_widget.dart';
@@ -211,10 +212,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
             if (state.isEditing) return;
             widget.onOpenApp(item);
           },
-          onLongPress: () {
-            HapticFeedback.heavyImpact();
-            notifier.toggleEditMode(true);
-          },
+          onLongPress: null,
           onDelete: () => notifier.removeItem(item.id),
         );
         break;
@@ -252,10 +250,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
             if (state.isEditing) return;
             notifier.openFolderBubble(item);
           },
-          onLongPress: () {
-            HapticFeedback.heavyImpact();
-            notifier.toggleEditMode(true);
-          },
+          onLongPress: null,
           onDelete: () => notifier.removeItem(item.id),
         );
         break;
@@ -286,60 +281,79 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
       child: childWidget,
     );
 
-    // If editing, wrap with drag detector
-    if (state.isEditing) {
-      interactiveChild = GestureDetector(
-        onPanStart: (details) {
-          HapticFeedback.heavyImpact();
-          setState(() {
-            _activeDragId = item.id;
-            _dragPosition = details.globalPosition;
-          });
-          notifier.startDragging(item.id);
-        },
-        onPanUpdate: (details) {
-          setState(() {
-            _dragPosition = details.globalPosition;
-          });
+    // Hold-to-drag gesture detector: only press and hold triggers drag + vibration!
+    interactiveChild = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPressStart: (details) {
+        // Guaranteed physical hardware vibration + system haptic feedback
+        Native.vibrate(HapticFeedbackType.vibrate, 60);
+        HapticFeedback.vibrate();
 
-          // Convert global pointer position into accurate canvas coordinates
-          final RenderBox? canvasBox =
-              _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-          if (canvasBox != null) {
-            final local = canvasBox.globalToLocal(details.globalPosition);
-            final strideX = cellWidth + spacing;
-            final strideY = cellHeight + spacing;
-            final targetX = ((local.dx - padding + (cellWidth * 0.35)) / strideX)
-                .floor()
-                .clamp(0, WorkbenchLayoutEngine.columns - item.spanX);
-            final targetY = math.max(
-              0,
-              ((local.dy - padding + (cellHeight * 0.35)) / strideY).floor(),
-            );
+        // Auto enter edit mode if not already active
+        if (!state.isEditing) {
+          notifier.toggleEditMode(true);
+        }
 
-            notifier.updateDragHover(
-              targetX: targetX,
-              targetY: targetY,
-            );
-          }
-        },
-        onPanEnd: (_) {
-          setState(() {
-            _activeDragId = null;
-            _dragPosition = null;
-          });
-          notifier.dropItem();
-        },
-        onPanCancel: () {
-          setState(() {
-            _activeDragId = null;
-            _dragPosition = null;
-          });
-          notifier.cancelDrag();
-        },
-        child: interactiveChild,
-      );
-    }
+        setState(() {
+          _activeDragId = item.id;
+          _dragPosition = details.globalPosition;
+        });
+        notifier.startDragging(item.id);
+      },
+      onLongPressMoveUpdate: (details) {
+        setState(() {
+          _dragPosition = details.globalPosition;
+        });
+
+        // Convert global pointer position into accurate canvas coordinates
+        final RenderBox? canvasBox =
+            _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+        if (canvasBox != null) {
+          final local = canvasBox.globalToLocal(details.globalPosition);
+          final strideX = cellWidth + spacing;
+          final strideY = cellHeight + spacing;
+
+          final width = item.edgeToEdge && item.spanX == 4
+              ? totalWidth
+              : (item.spanX * cellWidth + (item.spanX - 1) * spacing);
+          final height = item.spanY * cellHeight + (item.spanY - 1) * spacing;
+
+          // Find top-left grid cell corresponding to centered follower
+          final itemLeft = local.dx - (width / 2);
+          final itemTop = local.dy - (height / 2);
+
+          final targetX = ((itemLeft - padding + (cellWidth * 0.5)) / strideX)
+              .floor()
+              .clamp(0, WorkbenchLayoutEngine.columns - item.spanX);
+          final targetY = math.max(
+            0,
+            ((itemTop - padding + (cellHeight * 0.5)) / strideY).floor(),
+          );
+
+          notifier.updateDragHover(
+            targetX: targetX,
+            targetY: targetY,
+          );
+        }
+      },
+      onLongPressEnd: (_) {
+        Native.vibrate(HapticFeedbackType.medium, 40);
+        HapticFeedback.mediumImpact();
+        setState(() {
+          _activeDragId = null;
+          _dragPosition = null;
+        });
+        notifier.dropItem();
+      },
+      onLongPressCancel: () {
+        setState(() {
+          _activeDragId = null;
+          _dragPosition = null;
+        });
+        notifier.cancelDrag();
+      },
+      child: interactiveChild,
+    );
 
     return AnimatedPositioned(
       key: ValueKey(item.id),
@@ -367,7 +381,8 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
     final dragItem = state.draggingItem;
     if (dragItem == null) return const SizedBox.shrink();
 
-    final RenderBox? box = context.findRenderObject() as RenderBox?;
+    final RenderBox? box =
+        _canvasKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || _dragPosition == null) return const SizedBox.shrink();
 
     final local = box.globalToLocal(_dragPosition!);

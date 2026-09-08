@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/workbench_repository.dart';
 import '../domain/workbench_grid_item.dart';
 import '../domain/workbench_layout_engine.dart';
+import '../../../core/native/native.dart';
 import 'workbench_layout_state.dart';
 
 /// Notifier providing state management and interactive operations for the
@@ -283,6 +284,7 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
         _folderMergeTimer?.cancel();
         _folderMergeTimer = Timer(const Duration(milliseconds: 380), () {
           if (state.draggingItemId != null && _potentialMergeTargetId == hitItem!.id) {
+            Native.vibrate(HapticFeedbackType.vibrate, 45);
             HapticFeedback.mediumImpact(); // Vibration when folder merge preview triggers
             state = state.copyWith(
               folderMergeTargetId: hitItem.id,
@@ -320,6 +322,7 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
 
     final newSlot = newDragItem?.rect;
     if (newSlot != null && newSlot != state.targetSlot) {
+      Native.vibrate(HapticFeedbackType.light, 25);
       HapticFeedback.selectionClick(); // Vibration feedback when slot shifts!
     }
 
@@ -334,6 +337,7 @@ class WorkbenchLayoutNotifier extends Notifier<WorkbenchLayoutState> {
   void dropItem() {
     _folderMergeTimer?.cancel();
     _potentialMergeTargetId = null;
+    Native.vibrate(HapticFeedbackType.medium, 40);
     HapticFeedback.mediumImpact(); // Vibration feedback when dropped!
 
     final dragId = state.draggingItemId;

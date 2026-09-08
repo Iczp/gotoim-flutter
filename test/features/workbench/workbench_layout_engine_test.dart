@@ -216,5 +216,38 @@ void main() {
       expect(reordered[3].id, '3');
       expect(reordered[3].x, 3);
     });
+
+    test('swaps 1x1 items cleanly across different rows without disturbing others', () {
+      final items = [
+        const WorkbenchGridItem(id: 'banner', title: 'Banner', type: WorkbenchGridItemType.banner, x: 0, y: 0, spanX: 4, spanY: 2),
+        const WorkbenchGridItem(id: 'a1', title: 'A1', type: WorkbenchGridItemType.app, x: 0, y: 2),
+        const WorkbenchGridItem(id: 'a2', title: 'A2', type: WorkbenchGridItemType.app, x: 1, y: 2),
+        const WorkbenchGridItem(id: 'card', title: 'Card', type: WorkbenchGridItemType.cardWidget, x: 0, y: 3, spanX: 2, spanY: 2),
+        const WorkbenchGridItem(id: 'a3', title: 'A3', type: WorkbenchGridItemType.app, x: 2, y: 3),
+      ];
+
+      // Drag a1 (0, 2) onto a3 (2, 3)
+      final reordered = engine.reorderAndPack(
+        items: items,
+        dragId: 'a1',
+        targetX: 2,
+        targetY: 3,
+      );
+
+      final banner = reordered.firstWhere((e) => e.id == 'banner');
+      final a1 = reordered.firstWhere((e) => e.id == 'a1');
+      final a2 = reordered.firstWhere((e) => e.id == 'a2');
+      final card = reordered.firstWhere((e) => e.id == 'card');
+      final a3 = reordered.firstWhere((e) => e.id == 'a3');
+
+      // Banner and card should remain completely untouched
+      expect(banner.rect, const GridRect(x: 0, y: 0, spanX: 4, spanY: 2));
+      expect(card.rect, const GridRect(x: 0, y: 3, spanX: 2, spanY: 2));
+      expect(a2.rect, const GridRect(x: 1, y: 2, spanX: 1, spanY: 1));
+
+      // a1 and a3 should be swapped cleanly
+      expect(a1.rect, const GridRect(x: 2, y: 3, spanX: 1, spanY: 1));
+      expect(a3.rect, const GridRect(x: 0, y: 2, spanX: 1, spanY: 1));
+    });
   });
 }

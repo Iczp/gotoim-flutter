@@ -161,7 +161,8 @@ class WorkbenchLayoutEngine {
   }
 
   /// Reorders [items] by moving the item with [dragId] to the position of ([targetX], [targetY]),
-  /// then recalculates and packs all items to guarantee a 100% collision-free, compact layout.
+  /// then calculates a collision-free displacement layout where non-colliding items keep their
+  /// positions, and colliding items are cleanly displaced or swapped without scrambling the grid.
   List<WorkbenchGridItem> reorderAndPack({
     required List<WorkbenchGridItem> items,
     required String dragId,
@@ -174,47 +175,169 @@ class WorkbenchLayoutEngine {
     final dragItem = items[oldIndex];
     final cleanTargetX = targetX.clamp(0, columns - dragItem.spanX);
     final cleanTargetY = math.max(0, targetY);
+    final targetRect = GridRect(
+      x: cleanTargetX,
+      y: cleanTargetY,
+      spanX: dragItem.spanX,
+      spanY: dragItem.spanY,
+    );
 
-    // 1. Find if an existing item is directly under (cleanTargetX, cleanTargetY)
-    int newIndex = -1;
-    for (int i = 0; i < items.length; i++) {
-      if (items[i].id != dragId &&
-          items[i].rect.containsCell(cleanTargetX, cleanTargetY)) {
-        newIndex = i;
-        break;
+    if (dragItem.rect == targetRect) {
+      return items;
+    }
+
+    // Special fast-path for 1x1 items on the same row (preserving reading order shift)
+    if (dragItem.spanX == 1 && dragItem.spanY == 1) {
+      final sameRowItems = items
+          .where((e) => e.y == dragItem.y && e.spanX == 1 && e.spanY == 1)
+          .toList();
+      if (cleanTargetY == dragItem.y && sameRowItems.length > 1) {
+        final hasTargetCell = sameRowItems.any((e) => e.x == cleanTargetX);
+        if (hasTargetCell) {
+          final minX = math.min(dragItem.x, cleanTargetX);
+          final maxX = math.max(dragItem.x, cleanTargetX);
+          final intermediateItems = sameRowItems
+              .where((e) => e.x >= minX && e.x <= maxX)
+              .toList();
+
+          if (intermediateItems.length == (maxX - minX + 1)) {
+            final result = <WorkbenchGridItem>[];
+            final shiftForward = cleanTargetX > dragItem.x;
+
+            for (final item in items) {
+              if (item.id == dragId) {
+                result.add(item.copyWith(x: cleanTargetX, y: cleanTargetY));
+              } else if (item.y == dragItem.y && item.x >= minX && item.x <= maxX) {
+                final newX = shiftForward ? item.x - 1 : item.x + 1;
+                result.add(item.copyWith(x: newX));
+              } else {
+                result.add(item);
+              }
+            }
+
+            result.sort((a, b) {
+              final orderA = a.y * columns + a.x;
+              final orderB = b.y * columns + b.x;
+              return orderA.compareTo(orderB);
+            });
+            return result;
+          }
+        }
       }
     }
 
-    // 2. If not directly on an item, find the nearest item in reading order
-    if (newIndex == -1) {
-      final totalRows = calculateTotalRows(items);
-      if (cleanTargetY >= totalRows) {
-        newIndex = items.length - 1;
+    // General 2D collision-displacement layout:
+    // 1. Dragged item is placed at targetRect
+    final occupied = <int, Set<int>>{};
+    _markOccupied(
+      occupied,
+      targetRect.x,
+      targetRect.y,
+      targetRect.spanX,
+      targetRect.spanY,
+    );
+
+    final placedDragItem = dragItem.copyWith(
+      x: targetRect.x,
+      y: targetRect.y,
+      spanX: targetRect.spanX,
+      spanY: targetRect.spanY,
+    );
+
+    // 2. Separate remaining items into non-colliding and colliding
+    final otherItems = items.where((e) => e.id != dragId).toList();
+    final nonColliding = <WorkbenchGridItem>[];
+    final colliding = <WorkbenchGridItem>[];
+
+    for (final item in otherItems) {
+      if (item.rect.intersects(targetRect)) {
+        colliding.add(item);
       } else {
-        final targetOrder = cleanTargetY * columns + cleanTargetX;
-        for (int i = 0; i < items.length; i++) {
-          if (items[i].id == dragId) continue;
-          final itemOrder = items[i].y * columns + items[i].x;
-          if (itemOrder >= targetOrder) {
-            newIndex = i;
+        nonColliding.add(item);
+      }
+    }
+
+    // Sort non-colliding items by reading order
+    nonColliding.sort((a, b) {
+      final orderA = a.y * columns + a.x;
+      final orderB = b.y * columns + b.x;
+      return orderA.compareTo(orderB);
+    });
+
+    // Mark non-colliding items in occupancy grid
+    final stablePlaced = <WorkbenchGridItem>[];
+    for (final item in nonColliding) {
+      if (_canFitAt(occupied, item.x, item.y, item.spanX, item.spanY)) {
+        _markOccupied(occupied, item.x, item.y, item.spanX, item.spanY);
+        stablePlaced.add(item);
+      } else {
+        colliding.add(item);
+      }
+    }
+
+    // 3. If single 1x1 colliding item and dragItem is 1x1, directly swap to dragItem's old spot if free
+    if (colliding.length == 1 &&
+        dragItem.spanX == 1 &&
+        dragItem.spanY == 1 &&
+        colliding.first.spanX == 1 &&
+        colliding.first.spanY == 1) {
+      final singleColliding = colliding.first;
+      if (_canFitAt(occupied, dragItem.x, dragItem.y, 1, 1)) {
+        _markOccupied(occupied, dragItem.x, dragItem.y, 1, 1);
+        final swapped = singleColliding.copyWith(x: dragItem.x, y: dragItem.y);
+        final result = [...stablePlaced, swapped, placedDragItem];
+        result.sort((a, b) {
+          final orderA = a.y * columns + a.x;
+          final orderB = b.y * columns + b.x;
+          return orderA.compareTo(orderB);
+        });
+        return result;
+      }
+    }
+
+    // 4. Displace colliding items to nearest available free slots
+    final displacedPlaced = <WorkbenchGridItem>[];
+    for (final item in colliding) {
+      final spanX = item.spanX.clamp(1, columns);
+      final spanY = math.max(1, item.spanY);
+
+      final startY = math.min(dragItem.y, item.y);
+      int freeX = 0;
+      int freeY = startY;
+      bool placed = false;
+
+      while (!placed) {
+        for (int x = 0; x <= columns - spanX; x++) {
+          if (_canFitAt(occupied, x, freeY, spanX, spanY)) {
+            freeX = x;
+            placed = true;
             break;
           }
         }
-        if (newIndex == -1) {
-          newIndex = items.length - 1;
+        if (!placed) {
+          freeY++;
         }
       }
+
+      _markOccupied(occupied, freeX, freeY, spanX, spanY);
+      displacedPlaced.add(
+        item.copyWith(
+          x: freeX,
+          y: freeY,
+          spanX: spanX,
+          spanY: spanY,
+        ),
+      );
     }
 
-    if (oldIndex == newIndex) {
-      return packItems(items);
-    }
+    final finalResult = [...stablePlaced, ...displacedPlaced, placedDragItem];
+    finalResult.sort((a, b) {
+      final orderA = a.y * columns + a.x;
+      final orderB = b.y * columns + b.x;
+      return orderA.compareTo(orderB);
+    });
 
-    final reordered = List<WorkbenchGridItem>.from(items);
-    final movedItem = reordered.removeAt(oldIndex);
-    reordered.insert(newIndex.clamp(0, reordered.length), movedItem);
-
-    return packItems(reordered);
+    return finalResult;
   }
 
   /// Whether [dragItem] can be merged into [targetItem] as a folder.
