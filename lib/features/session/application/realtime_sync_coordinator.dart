@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/app_navigation.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../chat/application/chat_controller.dart';
@@ -196,6 +197,25 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
     onKicked: (reason) async {
       debugPrint('[realtimeSync][kicked] reason=$reason');
       await ref.read(authControllerProvider.notifier).logout();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = rootNavigatorKey.currentContext;
+        if (context == null || !context.mounted) return;
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (dialogContext) => AlertDialog(
+                title: const Text('您已被强制踢出'),
+                content: Text('原因：${reason.isEmpty ? '未知原因' : reason}'),
+                actions: <Widget>[
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('确定'),
+                  ),
+                ],
+              ),
+        );
+      });
     },
   );
   ref.onDispose(coordinator.dispose);

@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../../../core/database/unified_database.dart';
 import '../datasources/contacts_api.dart';
 import '../models/contact_group.dart';
+import '../models/online_friend.dart';
 
 class ContactsRepository {
   ContactsRepository(this._api, this._database);
@@ -12,6 +13,9 @@ class ContactsRepository {
 
   Future<List<ContactGroup>> loadIndexedFriends({required int ownerId}) =>
       _api.getIndexedFriends(ownerId: ownerId);
+
+  Future<List<OnlineFriend>> loadOnlineFriends({required int ownerId}) =>
+      _api.getOnlineFriends(ownerId: ownerId);
 
   Future<List<ContactGroup>> loadLocalIndexedFriends({
     required int ownerId,

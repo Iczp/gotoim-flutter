@@ -7,6 +7,11 @@ class LoggedInDevice {
     required this.model,
     required this.updatedAt,
     required this.groups,
+    required this.ipAddress,
+    required this.host,
+    required this.browser,
+    required this.browserInfo,
+    required this.platform,
   });
 
   factory LoggedInDevice.fromJson(Map<String, dynamic> json) => LoggedInDevice(
@@ -28,6 +33,11 @@ class LoggedInDevice {
         .map((group) => group['name']?.toString() ?? '')
         .where((name) => name.isNotEmpty)
         .toList(growable: false),
+    ipAddress: json['ipAddress']?.toString() ?? '',
+    host: json['host']?.toString() ?? '',
+    browser: json['browser']?.toString() ?? '',
+    browserInfo: json['browserInfo']?.toString() ?? '',
+    platform: json['platform']?.toString() ?? '',
   );
 
   final String deviceId;
@@ -39,4 +49,9 @@ class LoggedInDevice {
   final String model;
   final DateTime? updatedAt;
   final List<String> groups;
+  final String ipAddress;
+  final String host;
+  final String browser;
+  final String browserInfo;
+  final String platform;
 }

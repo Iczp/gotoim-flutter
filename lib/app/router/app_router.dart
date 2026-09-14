@@ -100,19 +100,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
-      GoRoute(
-        path: '/search',
-        builder: (context, state) => const SearchPage(),
-      ),
+      GoRoute(path: '/search', builder: (context, state) => const SearchPage()),
       GoRoute(
         path: '/create-group',
         builder: (context, state) => const CreateGroupPage(),
       ),
       GoRoute(
         path: '/add-friend',
-        builder: (context, state) => AddFriendPage(
-          initialKeyword: state.uri.queryParameters['keyword'],
-        ),
+        builder:
+            (context, state) => AddFriendPage(
+              initialKeyword: state.uri.queryParameters['keyword'],
+            ),
       ),
       GoRoute(
         path: '/diagnostics/search-and-group',
@@ -280,6 +278,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/devices',
         builder: (context, state) => const LoginDevicesPage(),
+      ),
+      GoRoute(
+        path: '/online-devices',
+        builder: (context, state) => const LoginDevicesPage(onlineOnly: true),
       ),
       GoRoute(
         path: '/account/profile',

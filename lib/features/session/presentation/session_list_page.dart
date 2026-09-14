@@ -44,8 +44,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
       '📍 ScrollPosition | '
       'pixels=${pos.pixels.toStringAsFixed(1)} '
       'range=[${pos.minScrollExtent.toStringAsFixed(1)}, ${pos.maxScrollExtent.toStringAsFixed(1)}] '
-      'extentAfter=${pos.extentAfter.toStringAsFixed(1)} '
-      'activity=${pos.activity?.runtimeType}',
+      'extentAfter=${pos.extentAfter.toStringAsFixed(1)}',
     );
   }
 
@@ -175,7 +174,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                         label: controller.currentDeviceLabel,
                         deviceCount: controller.onlineDevices.length,
                         isLoading: controller.isLoadingOnlineDevices,
-                        onPressed: () => context.push('/devices'),
+                        onPressed: () => context.push('/online-devices'),
                       ),
                     ),
                     if (controller.error != null)

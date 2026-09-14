@@ -5,7 +5,9 @@ import '../application/session_list_controller.dart';
 import '../data/models/logged_in_device.dart';
 
 class LoginDevicesPage extends ConsumerStatefulWidget {
-  const LoginDevicesPage({super.key});
+  const LoginDevicesPage({this.onlineOnly = false, super.key});
+
+  final bool onlineOnly;
 
   @override
   ConsumerState<LoginDevicesPage> createState() => _LoginDevicesPageState();
@@ -17,6 +19,10 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
     super.initState();
     Future<void>.microtask(() async {
       final controller = ref.read(sessionListControllerProvider);
+      if (widget.onlineOnly) {
+        await controller.loadOnlineDevices();
+        return;
+      }
       await Future.wait<void>([
         controller.loadDevices(),
         controller.loadOnlineDevices(),
@@ -28,29 +34,38 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
   Widget build(BuildContext context) {
     final controller = ref.watch(sessionListControllerProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('设备管理')),
+      appBar: AppBar(title: Text(widget.onlineOnly ? '当前在线' : '设备管理')),
       body: RefreshIndicator(
         onRefresh:
-            () => Future.wait<void>([
-              controller.loadDevices(),
-              controller.loadOnlineDevices(),
-            ]),
+            widget.onlineOnly
+                ? controller.loadOnlineDevices
+                : () => Future.wait<void>([
+                  controller.loadDevices(),
+                  controller.loadOnlineDevices(),
+                ]),
         child:
-            controller.devices.isEmpty && controller.isLoadingDevices
+            (widget.onlineOnly &&
+                        controller.onlineDevices.isEmpty &&
+                        controller.isLoadingOnlineDevices) ||
+                    (!widget.onlineOnly &&
+                        controller.devices.isEmpty &&
+                        controller.isLoadingDevices)
                 ? const Center(child: CircularProgressIndicator())
                 : ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.only(top: 8, bottom: 8),
                   children: <Widget>[
-                    _SectionTitle('我的设备（${controller.devices.length}）'),
-                    ...controller.devices.map(
-                      (device) => _DeviceCard(
-                        device: device,
-                        isCurrent:
-                            device.deviceId == controller.currentDeviceId,
-                        onForceLogout: null,
+                    if (!widget.onlineOnly) ...[
+                      _SectionTitle('我的设备（${controller.devices.length}）'),
+                      ...controller.devices.map(
+                        (device) => _DeviceCard(
+                          device: device,
+                          isCurrent:
+                              device.deviceId == controller.currentDeviceId,
+                          onForceLogout: null,
+                        ),
                       ),
-                    ),
+                    ],
                     _SectionTitle('当前在线（${controller.onlineDevices.length}）'),
                     ...controller.onlineDevices.map(
                       (device) => _DeviceCard(
@@ -241,6 +256,29 @@ class _DeviceCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '设备组：${device.groups.join('、')}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                  if (device.platform.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '平台：${device.platform}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                  if (device.browser.isNotEmpty ||
+                      device.browserInfo.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '浏览器：${device.browser.isNotEmpty ? device.browser : device.browserInfo}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                  if (device.ipAddress.isNotEmpty ||
+                      device.host.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '网络：${[device.ipAddress, device.host].where((value) => value.isNotEmpty).join(' · ')}',
                       style: theme.textTheme.bodySmall,
                     ),
                   ],

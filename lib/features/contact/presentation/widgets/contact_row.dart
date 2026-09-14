@@ -7,12 +7,14 @@ import 'contacts_page_chrome.dart';
 class ContactRow extends StatelessWidget {
   const ContactRow({
     required this.contact,
+    required this.onlineDeviceTypes,
     required this.showDivider,
     required this.onTap,
     super.key,
   });
 
   final ContactEntry contact;
+  final List<String> onlineDeviceTypes;
   final bool showDivider;
   final VoidCallback onTap;
 
@@ -24,10 +26,21 @@ class ContactRow extends StatelessWidget {
       child: Row(
         children: <Widget>[
           const SizedBox(width: 16),
-          ChatObjectAvatar(
-            name: contact.displayName,
-            imageUrl: contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
-            radius: 21,
+          Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              ChatObjectAvatar(
+                name: contact.displayName,
+                imageUrl: contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
+                radius: 21,
+              ),
+              if (onlineDeviceTypes.isNotEmpty)
+                Positioned(
+                  right: -3,
+                  bottom: -3,
+                  child: _OnlineDeviceBadge(deviceTypes: onlineDeviceTypes),
+                ),
+            ],
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -62,4 +75,40 @@ class ContactRow extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _OnlineDeviceBadge extends StatelessWidget {
+  const _OnlineDeviceBadge({required this.deviceTypes});
+
+  final List<String> deviceTypes;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = deviceTypes.first.toLowerCase();
+    final icon =
+        type.contains('phone') || type.contains('mobile')
+            ? Icons.smartphone_rounded
+            : type.contains('web')
+            ? Icons.language_rounded
+            : Icons.desktop_windows_rounded;
+    return Transform.rotate(
+      angle: .785398,
+      child: Container(
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Theme.of(context).colorScheme.surface,
+            width: 2,
+          ),
+        ),
+        child: Transform.rotate(
+          angle: -.785398,
+          child: Icon(icon, size: 10, color: Colors.white),
+        ),
+      ),
+    );
+  }
 }

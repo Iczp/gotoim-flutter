@@ -89,9 +89,6 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
         systemNavigationBarColor: Colors.transparent,
       ),
       child: Scaffold(
-
-
-
         body: SafeArea(
           bottom: false,
           child: Column(
@@ -243,6 +240,9 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
               final contact = group.contacts[index];
               return ContactRow(
                 contact: contact,
+                onlineDeviceTypes: ref
+                    .read(contactsControllerProvider)
+                    .onlineDeviceTypes(contact.id),
                 showDivider: index + 1 < group.contacts.length,
                 onTap: () => _openContactProfile(context, contact, ownerId),
               );

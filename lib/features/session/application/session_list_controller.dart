@@ -69,6 +69,10 @@ class SessionListController extends ChangeNotifier {
         _connectionState = event.state;
         notifyListeners();
       } else if (event is SignalRCommandEvent &&
+          (event.command == SignalRCommand.onlineMe ||
+              event.command == SignalRCommand.offlineMe)) {
+        _scheduleOnlineDevicesReload();
+      } else if (event is SignalRCommandEvent &&
           _shouldSyncForCommand(event.command)) {
         _scheduleRemoteChanges();
       }
@@ -86,6 +90,7 @@ class SessionListController extends ChangeNotifier {
   late final StreamSubscription<SessionChangeEvent> _changeSubscription;
   Timer? _localReloadTimer;
   Timer? _remoteChangeTimer;
+  Timer? _onlineDevicesReloadTimer;
   final List<SessionSummary> _sessions = [];
   List<ChatOwner> _owners = const [];
   ChatOwner? _currentOwner;
@@ -273,7 +278,16 @@ class SessionListController extends ChangeNotifier {
     _changeSubscription.cancel();
     _localReloadTimer?.cancel();
     _remoteChangeTimer?.cancel();
+    _onlineDevicesReloadTimer?.cancel();
     super.dispose();
+  }
+
+  void _scheduleOnlineDevicesReload() {
+    _onlineDevicesReloadTimer?.cancel();
+    _onlineDevicesReloadTimer = Timer(
+      const Duration(milliseconds: 200),
+      () => unawaited(loadOnlineDevices(silent: true)),
+    );
   }
 
   bool _shouldSyncForCommand(SignalRCommand command) =>

@@ -1,6 +1,7 @@
 import '../../../../core/network/api_client.dart';
 import '../models/contact_group.dart';
 import '../../../session/data/models/paged_result_dto.dart';
+import '../models/online_friend.dart';
 
 class ContactsApi {
   ContactsApi(this._apiClient);
@@ -15,5 +16,16 @@ class ContactsApi {
       response,
       ContactGroup.fromJson,
     ).items.where((group) => group.contacts.isNotEmpty).toList(growable: false);
+  }
+
+  Future<List<OnlineFriend>> getOnlineFriends({required int ownerId}) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/chat/online/online-friends',
+      query: <String, Object?>{'ownerId': ownerId, 'maxResultCount': 2000},
+    );
+    return PagedResultDto<OnlineFriend>.fromJson(
+      response,
+      OnlineFriend.fromJson,
+    ).items;
   }
 }
