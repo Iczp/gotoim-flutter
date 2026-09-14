@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/media/app_image_cache_manager.dart';
 import '../../../core/media/media_preview.dart';
 
 /// 诊断中心：统一媒体预览与下载缓存诊断页面
@@ -89,6 +90,111 @@ class _MediaPreviewDiagnosticsPageState
       sw.stop();
       setState(() {
         _status = '清理缓存失败：$e';
+        _elapsedMs = sw.elapsedMilliseconds;
+      });
+    }
+  }
+
+  Future<void> _inspectImageCache() async {
+    final sw = Stopwatch()..start();
+    try {
+      final stats = await AppImageCacheManager.getStats();
+      final url = _imageCtrl.text.trim();
+      final cachedPath = await AppImageCacheManager.getCachedPath(url);
+      sw.stop();
+      setState(() {
+        _status = '获取图片持久缓存信息成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _detail = '持久缓存目录: ${stats['directory']}\n'
+            '缓存文件总数: ${stats['fileCount']} 个\n'
+            '总占用大小: ${((stats['totalBytes'] as int? ?? 0) / 1024).toStringAsFixed(1)} KB\n'
+            '当前测试图离线状态: ${cachedPath != null ? "已在本地持久缓存 ($cachedPath)" : "尚未缓存"}';
+      });
+    } catch (e) {
+      sw.stop();
+      setState(() {
+        _status = '获取图片缓存信息失败: $e';
+        _elapsedMs = sw.elapsedMilliseconds;
+      });
+    }
+  }
+
+  Future<void> _preloadImageToCache() async {
+    final sw = Stopwatch()..start();
+    final url = _imageCtrl.text.trim();
+    setState(() {
+      _status = '正在预热下载测试图到持久缓存...';
+      _detail = '目标 URL: $url';
+    });
+    try {
+      final fileInfo = await AppImageCacheManager.instance.downloadFile(url);
+      sw.stop();
+      final exists = await fileInfo.file.exists();
+      final size = exists ? await fileInfo.file.length() : 0;
+      setState(() {
+        _status = '预热下载成功 (离线可用)';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _detail = '本地持久文件路径: ${fileInfo.file.path}\n'
+            '文件大小: $size 字节 (${(size / 1024).toStringAsFixed(1)} KB)\n'
+            '缓存有效截止时间: ${fileInfo.validTill} (离线保障)';
+      });
+    } catch (e) {
+      sw.stop();
+      setState(() {
+        _status = '预热下载失败: $e';
+        _elapsedMs = sw.elapsedMilliseconds;
+      });
+    }
+  }
+
+  Future<void> _testOfflineRead() async {
+    final sw = Stopwatch()..start();
+    final url = _imageCtrl.text.trim();
+    setState(() {
+      _status = '正在执行离线读取测试 (直接读取本地缓存)...';
+    });
+    try {
+      final cachedPath = await AppImageCacheManager.getCachedPath(url);
+      sw.stop();
+      if (cachedPath != null && (kIsWeb || File(cachedPath).existsSync())) {
+        final length = kIsWeb ? 0 : File(cachedPath).lengthSync();
+        setState(() {
+          _status = '离线读取成功！即时渲染可用';
+          _elapsedMs = sw.elapsedMilliseconds;
+          _detail = '秒级命中持久缓存: $cachedPath\n'
+              '文件大小: $length 字节\n'
+              '在无网络环境下立即展示，耗时仅 ${sw.elapsedMilliseconds} ms，绝无无限加载！';
+        });
+      } else {
+        setState(() {
+          _status = '当前测试图尚未离线缓存';
+          _elapsedMs = sw.elapsedMilliseconds;
+          _detail = '请先点击“预热下载到持久缓存”按钮';
+        });
+      }
+    } catch (e) {
+      sw.stop();
+      setState(() {
+        _status = '离线读取测试异常: $e';
+        _elapsedMs = sw.elapsedMilliseconds;
+      });
+    }
+  }
+
+  Future<void> _clearAllImageCache() async {
+    final sw = Stopwatch()..start();
+    try {
+      await AppImageCacheManager.clearAll();
+      sw.stop();
+      setState(() {
+        _status = '已清空所有图片离线持久缓存';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _detail = '已清空 AppSupport/app_image_cache 目录并重置缓存元数据';
+      });
+    } catch (e) {
+      sw.stop();
+      setState(() {
+        _status = '清空图片持久缓存失败: $e';
         _elapsedMs = sw.elapsedMilliseconds;
       });
     }
@@ -332,10 +438,71 @@ class _MediaPreviewDiagnosticsPageState
               ],
             ),
             const SizedBox(height: 16),
+            Card(
+              elevation: 1,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.teal.shade200),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.offline_pin_rounded, color: Colors.teal.shade700),
+                        const SizedBox(width: 8),
+                        Text(
+                          '图片持久离线缓存诊断',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal.shade900,
+                              ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      '验证在无网络/离线环境下，图片是否能秒级从持久化目录直读，避免无限加载转圈。',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: _inspectImageCache,
+                          icon: const Icon(Icons.info_outline, size: 18),
+                          label: const Text('检查缓存状态'),
+                        ),
+                        FilledButton.icon(
+                          onPressed: _preloadImageToCache,
+                          icon: const Icon(Icons.download_for_offline, size: 18),
+                          label: const Text('预热下载到持久缓存'),
+                        ),
+                        FilledButton.tonalIcon(
+                          onPressed: _testOfflineRead,
+                          icon: const Icon(Icons.flash_on_rounded, size: 18),
+                          label: const Text('模拟无网离线读取'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _clearAllImageCache,
+                          icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                          label: const Text('清空图片持久缓存'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _clearCache,
               icon: const Icon(Icons.cleaning_services_rounded),
-              label: const Text('清理诊断媒体本地缓存（便于复测下载百分比）'),
+              label: const Text('清理诊断媒体下载缓存（附件原件）'),
             ),
             const SizedBox(height: 16),
             Card(

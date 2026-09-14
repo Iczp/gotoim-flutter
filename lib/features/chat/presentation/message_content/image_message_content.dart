@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/media/app_image_cache_manager.dart';
 import '../../../../core/media/media_preview.dart';
 import '../../../../core/utils/api_url_resolver.dart';
 import '../../data/models/chat_message.dart';
@@ -38,28 +39,43 @@ class ImageMessageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image =
-        bytes != null
-            ? Image.memory(bytes!, fit: BoxFit.contain)
-            : _url.isNotEmpty
-            ? CachedNetworkImage(
-              imageUrl: _url,
-              fit: BoxFit.contain,
-              placeholder:
-                  (_, _) => const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              errorWidget:
-                  (_, _, _) =>
-                      const Icon(Icons.broken_image_outlined, size: 42),
-            )
-            : const Center(child: Icon(Icons.image_outlined, size: 42));
     final thumbRaw = message.thumbnailUrl;
     final existingLocalPath = (message.localFilePath != null &&
             !kIsWeb &&
             File(message.localFilePath!).existsSync())
         ? message.localFilePath
         : null;
+    final resolvedLocalPath = mediaItems
+            .where((it) => it.id == message.localId)
+            .firstOrNull
+            ?.localPath ??
+        existingLocalPath;
+    final hasValidLocalPath = resolvedLocalPath != null &&
+        !kIsWeb &&
+        File(resolvedLocalPath).existsSync();
+
+    final Widget image;
+    if (bytes != null) {
+      image = Image.memory(bytes!, fit: BoxFit.contain);
+    } else if (hasValidLocalPath) {
+      image = Image.file(File(resolvedLocalPath), fit: BoxFit.contain);
+    } else if (_url.isNotEmpty) {
+      image = CachedNetworkImage(
+        imageUrl: _url,
+        cacheManager: AppImageCacheManager.instance,
+        fit: BoxFit.contain,
+        placeholder:
+            (_, _) => const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+        errorWidget:
+            (_, _, _) =>
+                const Icon(Icons.broken_image_outlined, size: 42),
+      );
+    } else {
+      image = const Center(child: Icon(Icons.image_outlined, size: 42));
+    }
+
     final item = MediaPreviewItem(
       id: message.localId,
       messageId: message.localId,
@@ -69,11 +85,7 @@ class ImageMessageContent extends StatelessWidget {
       fileName: message.fileName.isNotEmpty
           ? message.fileName
           : '${message.localId}${message.fileSuffix.isNotEmpty ? message.fileSuffix : '.jpg'}',
-      localPath: mediaItems
-              .where((it) => it.id == message.localId)
-              .firstOrNull
-              ?.localPath ??
-          existingLocalPath,
+      localPath: resolvedLocalPath,
       createdAt: message.createdAt,
       userId: message.ownerId.toString(),
       chatTarget: message.sessionUnitId,

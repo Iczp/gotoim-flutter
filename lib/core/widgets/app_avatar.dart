@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/app_environment.dart';
+import '../media/app_image_cache_manager.dart';
 import '../theme/app_theme_tokens.dart';
 import '../utils/api_url_resolver.dart';
 import 'avatar_preferences.dart';
@@ -48,6 +49,7 @@ class AppAvatar extends ConsumerWidget {
               ),
               child: CachedNetworkImage(
                 imageUrl: url,
+                cacheManager: AppImageCacheManager.instance,
                 width: effectiveSize,
                 height: effectiveSize,
                 memCacheWidth:
@@ -57,14 +59,11 @@ class AppAvatar extends ConsumerWidget {
                     (effectiveSize * MediaQuery.devicePixelRatioOf(context))
                         .round(),
                 fit: BoxFit.cover,
+                fadeInDuration: const Duration(milliseconds: 150),
+                fadeOutDuration: const Duration(milliseconds: 150),
                 placeholder:
-                    (context, url) => SizedBox(
-                      width: effectiveSize,
-                      height: effectiveSize,
-                      child: const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
+                    (context, url) =>
+                        _fallback(context, effectiveSize, selectedShape),
                 errorWidget:
                     (context, url, error) =>
                         _fallback(context, effectiveSize, selectedShape),

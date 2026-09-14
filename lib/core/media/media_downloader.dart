@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/file/attachment_cache.dart';
 import '../services/file/attachment_transfer_service.dart';
+import 'app_image_cache_manager.dart';
 import 'media_preview.dart';
 
 /// 统一媒体下载器抽象，负责在全屏预览时探查本地缓存、执行下载与广播进度。
@@ -70,6 +71,15 @@ class DefaultMediaDownloader implements MediaDownloader {
       try {
         if (kIsWeb || File(found).existsSync()) return found;
       } catch (_) {}
+    }
+
+    if (item.type == MediaPreviewType.image && item.source.isNotEmpty) {
+      final appCached = await AppImageCacheManager.getCachedPath(item.source);
+      if (appCached != null) {
+        try {
+          if (kIsWeb || File(appCached).existsSync()) return appCached;
+        } catch (_) {}
+      }
     }
     return null;
   }
