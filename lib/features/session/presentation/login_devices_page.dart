@@ -15,42 +15,112 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
   @override
   void initState() {
     super.initState();
-    Future<void>.microtask(
-      () => ref.read(sessionListControllerProvider).loadDevices(),
-    );
+    Future<void>.microtask(() async {
+      final controller = ref.read(sessionListControllerProvider);
+      await Future.wait<void>([
+        controller.loadDevices(),
+        controller.loadOnlineDevices(),
+      ]);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = ref.watch(sessionListControllerProvider);
     return Scaffold(
-      appBar: AppBar(title: Text('登录设备(${controller.devices.length})')),
+      appBar: AppBar(title: const Text('设备管理')),
       body: RefreshIndicator(
-        onRefresh: controller.loadDevices,
+        onRefresh:
+            () => Future.wait<void>([
+              controller.loadDevices(),
+              controller.loadOnlineDevices(),
+            ]),
         child:
             controller.devices.isEmpty && controller.isLoadingDevices
                 ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
+                : ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.only(top: 8, bottom: 8),
-                  itemCount: controller.devices.length,
-                  itemBuilder:
-                      (context, index) => _DeviceCard(
-                        device: controller.devices[index],
+                  children: <Widget>[
+                    _SectionTitle('我的设备（${controller.devices.length}）'),
+                    ...controller.devices.map(
+                      (device) => _DeviceCard(
+                        device: device,
                         isCurrent:
-                            controller.devices[index].deviceId ==
-                            controller.currentDeviceId,
+                            device.deviceId == controller.currentDeviceId,
+                        onForceLogout: null,
                       ),
+                    ),
+                    _SectionTitle('当前在线（${controller.onlineDevices.length}）'),
+                    ...controller.onlineDevices.map(
+                      (device) => _DeviceCard(
+                        device: device,
+                        isCurrent:
+                            device.deviceId == controller.currentDeviceId,
+                        onForceLogout:
+                            () => _confirmForceLogout(
+                              context,
+                              controller,
+                              device,
+                            ),
+                      ),
+                    ),
+                  ],
                 ),
       ),
     );
   }
+
+  Future<void> _confirmForceLogout(
+    BuildContext context,
+    SessionListController controller,
+    LoggedInDevice device,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('强制下线'),
+            content: const Text('确定要断开此设备的在线连接吗？该设备将收到强制退出通知。'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('强制下线'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await controller.forceLogoutDevice(device);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已请求断开该设备连接')));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('强制下线失败：$error')));
+      }
+    }
+  }
 }
 
 class _DeviceCard extends StatelessWidget {
-  const _DeviceCard({required this.device, required this.isCurrent});
+  const _DeviceCard({
+    required this.device,
+    required this.isCurrent,
+    required this.onForceLogout,
+  });
   final LoggedInDevice device;
   final bool isCurrent;
+  final VoidCallback? onForceLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -135,6 +205,22 @@ class _DeviceCard extends StatelessWidget {
                   ),
               ],
             ),
+            if (!isCurrent &&
+                device.connectionId.isNotEmpty &&
+                onForceLogout != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: onForceLogout,
+                  icon: Icon(Icons.logout_rounded, color: colorScheme.error),
+                  label: Text(
+                    '强制下线',
+                    style: TextStyle(color: colorScheme.error),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(10),
@@ -166,4 +252,16 @@ class _DeviceCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 14, 20, 2),
+    child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+  );
 }

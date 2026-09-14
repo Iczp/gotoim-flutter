@@ -173,8 +173,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                     SliverToBoxAdapter(
                       child: CurrentDeviceBar(
                         label: controller.currentDeviceLabel,
-                        deviceCount: controller.devices.length,
-                        isLoading: controller.isLoadingDevices,
+                        deviceCount: controller.onlineDevices.length,
+                        isLoading: controller.isLoadingOnlineDevices,
                         onPressed: () => context.push('/devices'),
                       ),
                     ),
@@ -330,9 +330,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
 }
 
 class _LoadMoreFooter extends StatelessWidget {
-
-
-
   const _LoadMoreFooter({required this.controller});
   final SessionListController controller;
 

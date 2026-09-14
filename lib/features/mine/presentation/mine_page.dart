@@ -106,10 +106,11 @@ class MinePage extends ConsumerWidget {
           title: '我的内容',
           children: [
             Cell(
-              icon: const Icon(Icons.manage_accounts_outlined),
-              title: '账号设置',
+              icon: const Icon(Icons.settings_outlined),
+              title: '设置',
+              subtitle: '账号设置、外观与主题、登录设备',
               showArrow: true,
-              onTap: () => context.push('/account/profile'),
+              onTap: () => context.push('/settings'),
             ),
             Cell(
               icon: const Icon(Icons.qr_code_scanner_rounded),

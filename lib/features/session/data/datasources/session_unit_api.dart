@@ -117,6 +117,27 @@ class SessionUnitApi {
     );
   }
 
+  Future<PagedResultDto<LoggedInDevice>> getOnlineDevices() async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/chat/online/by-current-user',
+    );
+    return PagedResultDto<LoggedInDevice>.fromJson(
+      response,
+      LoggedInDevice.fromJson,
+    );
+  }
+
+  Future<void> abortOnlineConnections({
+    required List<String> connectionIds,
+    required String reason,
+  }) => _apiClient.post<Map<String, dynamic>>(
+    '/api/chat/online/abort',
+    data: <String, Object?>{
+      'connectionIdList': connectionIds,
+      'reason': reason,
+    },
+  );
+
   Future<void> setTopping(String sessionUnitId, bool value) async {
     await _apiClient.post<Map<String, dynamic>>(
       '/api/chat/session-unit-setting/set-topping/$sessionUnitId',

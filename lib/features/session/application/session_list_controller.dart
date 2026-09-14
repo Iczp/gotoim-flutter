@@ -57,7 +57,6 @@ void ensureSessionInvalidatorRegistered() {
   });
 }
 
-
 class SessionListController extends ChangeNotifier {
   SessionListController(
     this._repository,
@@ -98,6 +97,8 @@ class SessionListController extends ChangeNotifier {
   Object? _error;
   List<LoggedInDevice> _devices = const [];
   bool _isLoadingDevices = false;
+  List<LoggedInDevice> _onlineDevices = const [];
+  bool _isLoadingOnlineDevices = false;
   late SignalRConnectionState _connectionState;
   int _focusUnreadRequest = 0;
 
@@ -111,6 +112,7 @@ class SessionListController extends ChangeNotifier {
   int? get totalCount => _totalCount;
   Object? get error => _error;
   List<LoggedInDevice> get devices => _devices;
+  List<LoggedInDevice> get onlineDevices => _onlineDevices;
   String get currentDeviceId => _deviceContext.deviceId;
   String get currentDeviceLabel => [
     _deviceContext.deviceType,
@@ -118,6 +120,7 @@ class SessionListController extends ChangeNotifier {
     _deviceContext.model,
   ].where((value) => value.isNotEmpty).join(' · ');
   bool get isLoadingDevices => _isLoadingDevices;
+  bool get isLoadingOnlineDevices => _isLoadingOnlineDevices;
   SessionRealtimeStatus get connectionState => switch (_connectionState) {
     SignalRConnectionState.disconnected => SessionRealtimeStatus.disconnected,
     SignalRConnectionState.connecting => SessionRealtimeStatus.connecting,
@@ -189,6 +192,7 @@ class SessionListController extends ChangeNotifier {
         _remoteInitialized = true;
       }
       unawaited(loadDevices(silent: true));
+      unawaited(loadOnlineDevices(silent: true));
     } catch (error) {
       // A cached identity is sufficient to render the identity drawer and an
       // empty (but usable) offline session list. Do not replace it with a
@@ -234,6 +238,31 @@ class SessionListController extends ChangeNotifier {
       debugPrint('Load login devices failed: $error');
     } finally {
       _isLoadingDevices = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> forceLogoutDevice(LoggedInDevice device) async {
+    if (device.connectionId.isEmpty) {
+      throw StateError('该在线连接缺少 connectionId，无法强制下线');
+    }
+    await _repository.abortOnlineConnection(
+      connectionId: device.connectionId,
+      reason: '用户主动断开连接',
+    );
+    await loadOnlineDevices(silent: true);
+  }
+
+  Future<void> loadOnlineDevices({bool silent = false}) async {
+    if (_isLoadingOnlineDevices) return;
+    _isLoadingOnlineDevices = true;
+    if (!silent) notifyListeners();
+    try {
+      _onlineDevices = await _repository.loadOnlineDevices();
+    } catch (error) {
+      debugPrint('Load online devices failed: $error');
+    } finally {
+      _isLoadingOnlineDevices = false;
       notifyListeners();
     }
   }

@@ -42,6 +42,17 @@ class SessionRepository {
   Future<List<LoggedInDevice>> loadDevices() async =>
       (await _api.getDevices()).items;
 
+  Future<List<LoggedInDevice>> loadOnlineDevices() async =>
+      (await _api.getOnlineDevices()).items;
+
+  Future<void> abortOnlineConnection({
+    required String connectionId,
+    required String reason,
+  }) => _api.abortOnlineConnections(
+    connectionIds: [connectionId],
+    reason: reason,
+  );
+
   Future<ChatOwner> resolveCurrentOwner() async {
     final owners = await loadOwners();
     if (owners.isEmpty) {

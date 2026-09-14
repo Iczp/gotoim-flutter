@@ -39,8 +39,8 @@ class CurrentDeviceBar extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '当前设备：${label.isEmpty ? '未知设备' : label}'
-                  '${deviceCount > 1 ? ' · 多设备登录($deviceCount)' : ''}',
+                  '当前在线：$deviceCount 台设备'
+                  '${label.isEmpty ? '' : ' · 本机：$label'}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w500,
                   ),

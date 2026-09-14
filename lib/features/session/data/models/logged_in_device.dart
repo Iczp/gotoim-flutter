@@ -1,5 +1,6 @@
 class LoggedInDevice {
   const LoggedInDevice({
+    required this.connectionId,
     required this.deviceId,
     required this.deviceType,
     required this.brand,
@@ -9,13 +10,17 @@ class LoggedInDevice {
   });
 
   factory LoggedInDevice.fromJson(Map<String, dynamic> json) => LoggedInDevice(
+    connectionId: json['connectionId']?.toString() ?? '',
     deviceId: json['deviceId']?.toString() ?? '',
     deviceType: json['deviceType']?.toString() ?? '',
     brand: (json['deviceBrand'] ?? json['brand'] ?? '').toString(),
     model: (json['deviceModel'] ?? json['model'] ?? '').toString(),
     updatedAt:
         DateTime.tryParse(
-          (json['lastModificationTime'] ?? json['creationTime'] ?? '')
+          (json['activeTime'] ??
+                  json['lastModificationTime'] ??
+                  json['creationTime'] ??
+                  '')
               .toString(),
         )?.toLocal(),
     groups: (json['groups'] is List ? json['groups'] as List : const [])
@@ -26,6 +31,9 @@ class LoggedInDevice {
   );
 
   final String deviceId;
+
+  /// SignalR connection identifier; required by the online abort endpoint.
+  final String connectionId;
   final String deviceType;
   final String brand;
   final String model;

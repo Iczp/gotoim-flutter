@@ -18,13 +18,16 @@ class RealtimeSyncCoordinator {
     required SignalRGateway gateway,
     required SessionRepository sessionRepository,
     required MessageRepository messageRepository,
-  })  : _gateway = gateway,
-        _sessionRepository = sessionRepository,
-        _messageRepository = messageRepository;
+    required Future<void> Function(String reason) onKicked,
+  }) : _gateway = gateway,
+       _sessionRepository = sessionRepository,
+       _messageRepository = messageRepository,
+       _onKicked = onKicked;
 
   final SignalRGateway _gateway;
   final SessionRepository _sessionRepository;
   final MessageRepository _messageRepository;
+  final Future<void> Function(String reason) _onKicked;
   StreamSubscription<SignalRAppEvent>? _subscription;
   Timer? _syncTimer;
   final Set<int> _pendingOwnerIds = <int>{};
@@ -42,6 +45,14 @@ class RealtimeSyncCoordinator {
     }
     if (event is! SignalRCommandEvent) return;
     switch (event.command) {
+      case SignalRCommand.kicked:
+        final payload = event.payload;
+        final reason =
+            payload is Map
+                ? (payload['reason'] ?? payload['Reason'] ?? '未知原因').toString()
+                : '未知原因';
+        unawaited(_onKicked(reason));
+        break;
       case SignalRCommand.messageCreated:
       case SignalRCommand.messageForwarded:
       case SignalRCommand.messageUpdated:
@@ -59,10 +70,8 @@ class RealtimeSyncCoordinator {
 
   Future<void> _handleRealtimeMessage(SignalRCommandEvent event) async {
     try {
-      final message =
-          await _messageRepository.applyRealtimePayloadFromCachedSession(
-        event.payload,
-      );
+      final message = await _messageRepository
+          .applyRealtimePayloadFromCachedSession(event.payload);
       if (message != null) {
         _scheduleOwnerSync(message.ownerId);
       } else {
@@ -81,8 +90,9 @@ class RealtimeSyncCoordinator {
     }
     final sessionUnitId = _extractSessionUnitId(event.payload);
     if (sessionUnitId != null && sessionUnitId.isNotEmpty) {
-      final friend =
-          await _sessionRepository.loadLocalFriendDetail(sessionUnitId);
+      final friend = await _sessionRepository.loadLocalFriendDetail(
+        sessionUnitId,
+      );
       if (friend != null && friend.ownerId != null && friend.ownerId! > 0) {
         _scheduleOwnerSync(friend.ownerId!);
         return;
@@ -183,6 +193,10 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
     gateway: ref.watch(signalRGatewayProvider),
     sessionRepository: ref.watch(sessionRepositoryProvider),
     messageRepository: ref.watch(messageRepositoryProvider),
+    onKicked: (reason) async {
+      debugPrint('[realtimeSync][kicked] reason=$reason');
+      await ref.read(authControllerProvider.notifier).logout();
+    },
   );
   ref.onDispose(coordinator.dispose);
   return coordinator;
