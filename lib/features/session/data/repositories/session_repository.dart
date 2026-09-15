@@ -210,7 +210,9 @@ class SessionRepository {
       sessionUnitId: sessionUnitId,
     );
     final local = await _dao.readById(sessionUnitId);
-    final merged = remote.mergeWithLocal(local);
+    final merged = (remote.mergeWithLocal(
+      local,
+    )).withCurrentOwnerFallback(await _currentOwnerSnapshot(ownerId));
     await _dao.upsertAll(<SessionSummary>[merged]);
     _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
     debugPrint('[loadFriendDetail][remote] session=$sessionUnitId persisted=1');
@@ -252,15 +254,31 @@ class SessionRepository {
     required Iterable<SessionSummary> remote,
   }) async {
     final merged = <SessionSummary>[];
+    final currentOwner = await _currentOwnerSnapshot(ownerId);
     for (final item in remote) {
       final local = await _dao.readById(item.id);
       merged.add(
-        local != null && local.ownerId == ownerId
-            ? item.mergeWithLocal(local)
-            : item,
+        (local != null && local.ownerId == ownerId
+                ? item.mergeWithLocal(local)
+                : item)
+            .withCurrentOwnerFallback(currentOwner),
       );
     }
     return merged;
+  }
+
+  Future<Map<String, dynamic>?> _currentOwnerSnapshot(int ownerId) async {
+    final owners = await _dao.readOwners();
+    for (final owner in owners) {
+      if (owner.id != ownerId) continue;
+      return <String, dynamic>{
+        'id': owner.id,
+        'displayName': owner.name,
+        'thumbnail': owner.imageUrl,
+        'objectTypeDescription': owner.typeDescription,
+      };
+    }
+    return null;
   }
 
   Future<void> setTopping({

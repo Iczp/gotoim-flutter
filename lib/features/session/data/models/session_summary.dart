@@ -45,21 +45,44 @@ class SessionSummary {
     );
   }
 
-  /// 合并本地已持久化的数据。列表/增量摘要可能不携带完整的 lastMessage；
-  /// 单条 /friend/{id} 详情才是当前会话 owner 与 lastMessage 的权威来源。
+  /// Merges partial responses without losing the peer identity persisted in a
+  /// local Friend. `owner` is the sending/current side; the remote chat peer
+  /// is `destination`. A full `/friend/{id}` response replaces these fields.
   SessionSummary mergeWithLocal(SessionSummary? local) {
     if (local == null) return this;
     final remoteLastMessage = asMap(raw['lastMessage']);
     final localLastMessage = asMap(local.raw['lastMessage']);
-    if (remoteLastMessage.isNotEmpty || localLastMessage.isEmpty) {
+    final remoteDestination = asMap(raw['destination']);
+    final localDestination = asMap(local.raw['destination']);
+    final needsLastMessage =
+        remoteLastMessage.isEmpty && localLastMessage.isNotEmpty;
+    final needsDestination =
+        remoteDestination.isEmpty && localDestination.isNotEmpty;
+    if (!needsLastMessage && !needsDestination) {
       return this;
     }
-    final mergedRaw =
-        Map<String, dynamic>.from(raw)
-          ..['lastMessage'] = localLastMessage
-          ..['lastMessageTime'] =
-              raw['lastMessageTime'] ?? local.raw['lastMessageTime'];
+    final mergedRaw = Map<String, dynamic>.from(raw);
+    if (needsLastMessage) {
+      mergedRaw['lastMessage'] = localLastMessage;
+      mergedRaw['lastMessageTime'] =
+          raw['lastMessageTime'] ?? local.raw['lastMessageTime'];
+    }
+    if (needsDestination) mergedRaw['destination'] = localDestination;
     return SessionSummary.fromJson(mergedRaw);
+  }
+
+  /// Fills a missing sender/current-side owner from the selected chat object.
+  /// This must never replace `destination`, which is the remote AI/contact.
+  SessionSummary withCurrentOwnerFallback(Map<String, dynamic>? currentObject) {
+    if (currentObject == null ||
+        currentObject.isEmpty ||
+        asMap(raw['owner']).isNotEmpty) {
+      return this;
+    }
+    return SessionSummary.fromJson(<String, dynamic>{
+      ...raw,
+      'owner': currentObject,
+    });
   }
 
   factory SessionSummary.fromDatabaseRow(Map<String, Object?> row) {

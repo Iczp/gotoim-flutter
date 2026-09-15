@@ -90,13 +90,35 @@ class MessageRepository {
       sessionUnitId: sessionUnitId,
       messageId: messageId,
     );
-    final friend = SessionSummary.fromJson(<String, dynamic>{
+    final remote = SessionSummary.fromJson(<String, dynamic>{
       ...raw,
       'ownerId': raw['ownerId'] ?? ownerId,
     });
+    // Set-read is a state acknowledgement, not an authoritative peer profile
+    // response. Keep destination (the AI/contact) from the local Friend when
+    // that endpoint returns only session fields.
+    final cachedOwner = await _currentOwnerSnapshot(ownerId);
+    final friend = (remote.mergeWithLocal(
+      await _sessionDao?.readById(sessionUnitId),
+    )).withCurrentOwnerFallback(cachedOwner);
     await _sessionDao?.upsertAll(<SessionSummary>[friend]);
     _sessionChangeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
     return friend;
+  }
+
+  Future<Map<String, dynamic>?> _currentOwnerSnapshot(int ownerId) async {
+    final owners = await _sessionDao?.readOwners();
+    if (owners == null) return null;
+    for (final owner in owners) {
+      if (owner.id != ownerId) continue;
+      return <String, dynamic>{
+        'id': owner.id,
+        'displayName': owner.name,
+        'thumbnail': owner.imageUrl,
+        'objectTypeDescription': owner.typeDescription,
+      };
+    }
+    return null;
   }
 
   Future<void> deleteRemote(ChatMessage message) async {

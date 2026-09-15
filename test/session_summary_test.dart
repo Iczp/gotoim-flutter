@@ -61,30 +61,83 @@ void main() {
     expect(cached.single.title, 'Flutter Team');
   });
 
-  test('session summary mergeWithLocal preserves local lastMessage when remote has none', () {
-    final local = SessionSummary.fromJson(<String, dynamic>{
-      'id': 'unit-1',
-      'ownerId': 42,
-      'destination': <String, dynamic>{'displayName': '张三'},
-      'lastMessage': <String, dynamic>{
-        'id': 7297000,
-        'content': <String, dynamic>{'text': '本地最后一条消息'},
-        'creationTime': '2026-08-26T10:00:00Z',
-      },
-      'lastMessageTime': '2026-08-26T10:00:00Z',
-    });
+  test(
+    'session summary mergeWithLocal preserves local lastMessage when remote has none',
+    () {
+      final local = SessionSummary.fromJson(<String, dynamic>{
+        'id': 'unit-1',
+        'ownerId': 42,
+        'destination': <String, dynamic>{'displayName': '张三'},
+        'lastMessage': <String, dynamic>{
+          'id': 7297000,
+          'content': <String, dynamic>{'text': '本地最后一条消息'},
+          'creationTime': '2026-08-26T10:00:00Z',
+        },
+        'lastMessageTime': '2026-08-26T10:00:00Z',
+      });
 
-    final remoteWithoutLastMessage = SessionSummary.fromJson(<String, dynamic>{
-      'id': 'unit-1',
-      'ownerId': 42,
-      'destination': <String, dynamic>{'displayName': '张三（最新昵称）'},
-      // 远端 friend detail 接口不返回 lastMessage
-    });
+      final remoteWithoutLastMessage = SessionSummary.fromJson(
+        <String, dynamic>{
+          'id': 'unit-1',
+          'ownerId': 42,
+          'destination': <String, dynamic>{'displayName': '张三（最新昵称）'},
+          // 远端 friend detail 接口不返回 lastMessage
+        },
+      );
 
-    final merged = remoteWithoutLastMessage.mergeWithLocal(local);
+      final merged = remoteWithoutLastMessage.mergeWithLocal(local);
 
-    expect(merged.title, '张三（最新昵称）');
-    expect(merged.preview, '本地最后一条消息');
-    expect(merged.lastMessageId, 7297000);
-  });
+      expect(merged.title, '张三（最新昵称）');
+      expect(merged.preview, '本地最后一条消息');
+      expect(merged.lastMessageId, 7297000);
+    },
+  );
+
+  test(
+    'session summary mergeWithLocal keeps the local destination for partial state responses',
+    () {
+      final local = SessionSummary.fromJson(<String, dynamic>{
+        'id': 'aurora-session',
+        'ownerId': 42,
+        'destination': <String, dynamic>{
+          'displayName': 'Aurora AI',
+          'thumbnail': 'https://example.test/aurora.png',
+        },
+      });
+      final setReadResponse = SessionSummary.fromJson(<String, dynamic>{
+        'id': 'aurora-session',
+        'ownerId': 42,
+        'owner': <String, dynamic>{'displayName': '当前发送人'},
+        'readMessageId': 7297610,
+      });
+
+      final merged = setReadResponse.mergeWithLocal(local);
+
+      expect(merged.title, 'Aurora AI');
+      expect(merged.raw['destination'], local.raw['destination']);
+      expect(merged.raw['owner'], <String, dynamic>{'displayName': '当前发送人'});
+    },
+  );
+
+  test(
+    'session summary fills a missing owner from CurrentObject without changing destination',
+    () {
+      final summary = SessionSummary.fromJson(<String, dynamic>{
+        'id': 'aurora-session',
+        'ownerId': 42,
+        'destination': <String, dynamic>{'displayName': 'Aurora AI'},
+      });
+
+      final resolved = summary.withCurrentOwnerFallback(<String, dynamic>{
+        'id': 42,
+        'displayName': '当前发送人',
+      });
+
+      expect(resolved.raw['owner'], <String, dynamic>{
+        'id': 42,
+        'displayName': '当前发送人',
+      });
+      expect(resolved.title, 'Aurora AI');
+    },
+  );
 }

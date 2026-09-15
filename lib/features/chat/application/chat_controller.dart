@@ -261,6 +261,10 @@ class ChatController extends ChangeNotifier {
           '[ChatTrace] ⏳ [3/5] deferred network sync triggered | '
           'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
         );
+        // The friend detail supplies the authoritative remote destination
+        // (AI/contact) and lastMessage. It must follow the local Friend cache
+        // directly, before subsequent message/read-state synchronization.
+        await _refreshFriendDetail();
         if (_messages.isNotEmpty) {
           final syncWatch = Stopwatch()..start();
           await loadLatest();
@@ -269,13 +273,6 @@ class ChatController extends ChangeNotifier {
             'cost=${syncWatch.elapsedMilliseconds}ms | '
             'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
           );
-        }
-
-        // The friend detail supplies the authoritative remote AI owner and
-        // lastMessage. Do not mark the conversation read until it and the
-        // visible message cache have both settled.
-        await _refreshFriendDetail();
-        if (_messages.isNotEmpty) {
           await markLatestRead();
         }
       }),

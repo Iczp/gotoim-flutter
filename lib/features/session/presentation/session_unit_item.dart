@@ -33,11 +33,9 @@ class SessionUnitItem extends StatelessWidget {
     final tokens = context.appTokens;
     final raw = item.raw;
     final setting = _map(raw['setting']);
-    // A direct AI session identifies the remote participant in `owner` on
-    // /friend/{sessionUnitId}. Until that detail is available, keep the
-    // current object (or destination) avatar as a visual fallback.
-    final owner = _map(raw['owner']);
-    final currentObject = _map(raw['currentObject']);
+    // `owner` identifies the sending/current side. The remote participant
+    // (including Aurora AI) is always `destination`. Before its detail is
+    // refreshed, this value comes from the persisted local Friend record.
     final destination = _map(raw['destination']);
     final badge = _number(raw['publicBadge']);
     final immersed = setting['isImmersed'] == true;
@@ -65,19 +63,12 @@ class SessionUnitItem extends StatelessWidget {
                   const SizedBox(width: 16),
                   ChatObjectAvatar(
                     name:
-                        (owner['displayName'] ??
-                                owner['name'] ??
-                                currentObject['displayName'] ??
-                                currentObject['name'] ??
+                        (destination['displayName'] ??
+                                destination['name'] ??
                                 item.title)
                             .toString(),
                     imageUrl:
-                        (owner['thumbnail'] ??
-                                owner['portrait'] ??
-                                currentObject['thumbnail'] ??
-                                currentObject['portrait'] ??
-                                destination['thumbnail'] ??
-                                destination['portrait'])
+                        (destination['thumbnail'] ?? destination['portrait'])
                             ?.toString(),
                     radius: 24,
                   ),
