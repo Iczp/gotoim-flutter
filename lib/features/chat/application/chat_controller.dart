@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
+import '../../../core/realtime/signalr_gateway.dart';
 import '../../../core/native/native.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../../../core/services/file/attachment_cache.dart';
@@ -71,6 +72,7 @@ class ChatController extends ChangeNotifier {
     required ClipboardService clipboardService,
     required ChatSettingsRepository chatSettingsRepository,
     required AiStreamChangeBus aiStreamChangeBus,
+    required SignalRGateway signalRGateway,
     required this.ownerId,
     required this.sessionUnitId,
     required String initialTitle,
@@ -82,6 +84,7 @@ class ChatController extends ChangeNotifier {
        _clipboardService = clipboardService,
        _chatSettingsRepository = chatSettingsRepository,
        _aiStreamChangeBus = aiStreamChangeBus,
+       _signalRGateway = signalRGateway,
        _title = initialTitle;
   static const pageSize = 30;
   static const initialPageSize = 10;
@@ -95,6 +98,7 @@ class ChatController extends ChangeNotifier {
   final ClipboardService _clipboardService;
   final ChatSettingsRepository _chatSettingsRepository;
   final AiStreamChangeBus _aiStreamChangeBus;
+  final SignalRGateway _signalRGateway;
   final int ownerId;
   final String sessionUnitId;
   final List<ChatMessage> _messages = <ChatMessage>[];
@@ -110,7 +114,9 @@ class ChatController extends ChangeNotifier {
   String _title;
   StreamSubscription<SessionChangeEvent>? _sessionChangeSubscription;
   StreamSubscription<AiStreamEvent>? _aiStreamSubscription;
+  StreamSubscription<SignalRAppEvent>? _signalRSubscription;
   Timer? _aiStreamElapsedTimer;
+  Timer? _aiRunRecoveryTimer;
   final Map<int, AiStreamReply> _aiStreamReplies = <int, AiStreamReply>{};
   ChatMessage? quoting;
   bool selectionMode = false;
@@ -136,6 +142,15 @@ class ChatController extends ChangeNotifier {
       _aiStreamReplies.values.toList()
         ..sort((a, b) => b.sourceMessageId.compareTo(a.sourceMessageId));
   String get title => friend?.title ?? _title;
+  String get peerDisplayName => firstNonEmpty(<Object?>[
+    asMap(friend?.raw['destination'])['displayName'],
+    asMap(friend?.raw['destination'])['name'],
+    title,
+  ]);
+  String? get peerAvatarUrl =>
+      (asMap(friend?.raw['destination'])['thumbnail'] ??
+              asMap(friend?.raw['destination'])['portrait'])
+          ?.toString();
   bool get isMuted => friend?.isMuted == true;
   int get destinationObjectType =>
       asInt(asMap(friend?.raw['destination'])['objectType']) ?? 0;
@@ -200,6 +215,7 @@ class ChatController extends ChangeNotifier {
       }
     });
     _aiStreamSubscription = _aiStreamChangeBus.events.listen(_onAiStreamEvent);
+    _signalRSubscription = _signalRGateway.events.listen(_onSignalREvent);
     _restoreAiStreamReplies();
 
     isLoading = true;
@@ -261,22 +277,49 @@ class ChatController extends ChangeNotifier {
           '[ChatTrace] ⏳ [3/5] deferred network sync triggered | '
           'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
         );
+        await _restoreActiveAiRun();
         // The friend detail supplies the authoritative remote destination
         // (AI/contact) and lastMessage. It must follow the local Friend cache
         // directly, before subsequent message/read-state synchronization.
         await _refreshFriendDetail();
-        if (_messages.isNotEmpty) {
-          final syncWatch = Stopwatch()..start();
-          await loadLatest();
-          debugPrint(
-            '[ChatTrace] ✔ [4/5] latest messages synced | '
-            'cost=${syncWatch.elapsedMilliseconds}ms | '
-            'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
-          );
-          await markLatestRead();
-        }
+        // SignalR may have been disconnected while the AI final message was
+        // persisted.  Always run the incremental pull, including for a fresh
+        // local cache (cursor = 0), so reopening a conversation cannot lose
+        // an offline reply merely because SQLite has no prior message yet.
+        final syncWatch = Stopwatch()..start();
+        await loadLatest();
+        debugPrint(
+          '[ChatTrace] ✔ [4/5] latest messages synced | '
+          'cost=${syncWatch.elapsedMilliseconds}ms | '
+          'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
+        );
+        // Reading is intentionally last: it must only acknowledge messages
+        // after the remote Friend and message payloads are persisted locally.
+        await markLatestRead();
       }),
     );
+  }
+
+  Future<void> _restoreActiveAiRun() async {
+    try {
+      final payload = await _sessionRepository.loadActiveAiRun(
+        sessionUnitId: sessionUnitId,
+      );
+      final event = AiStreamEvent.fromRecoveryPayload(payload);
+      if (event == null || event.requesterSessionUnitId != sessionUnitId) {
+        return;
+      }
+      _aiStreamChangeBus.restore(event);
+      _restoreAiStreamReplies();
+      notifyListeners();
+      debugPrint(
+        '[ChatTrace] AI run recovered from Redis | run=${event.runId} status=${event.kind.name}',
+      );
+    } catch (exception) {
+      // Recovery is a reliability enhancement. A temporary API failure must
+      // not prevent normal chat history or SignalR from remaining usable.
+      debugPrint('[ChatTrace] AI run recovery unavailable | error=$exception');
+    }
   }
 
   void _onAttachmentTransferChanged() {
@@ -350,7 +393,7 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> loadLatest() async {
-    if (isLoadingLatest || _messages.isEmpty) return;
+    if (isLoadingLatest) return;
     isLoadingLatest = true;
     // The cursor must come from Drift instead of this controller's temporary
     // page.  A new chat controller is created on re-entry, so only the local
@@ -360,7 +403,6 @@ class ChatController extends ChangeNotifier {
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
       );
-      if (minMessageId <= 0) return;
       final latest = await _repository.loadLatest(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
@@ -1069,7 +1111,9 @@ class ChatController extends ChangeNotifier {
     _attachmentTransferService.removeListener(_onAttachmentTransferChanged);
     unawaited(_sessionChangeSubscription?.cancel());
     unawaited(_aiStreamSubscription?.cancel());
+    unawaited(_signalRSubscription?.cancel());
     _aiStreamElapsedTimer?.cancel();
+    _aiRunRecoveryTimer?.cancel();
     super.dispose();
   }
 
@@ -1077,7 +1121,19 @@ class ChatController extends ChangeNotifier {
     if (event.requesterSessionUnitId != sessionUnitId) return;
     _restoreAiStreamReplies();
     _syncAiStreamElapsedTimer();
+    _syncAiRunRecoveryPolling();
     notifyListeners();
+  }
+
+  void _onSignalREvent(SignalRAppEvent event) {
+    if (event is! SignalRConnectionEvent) return;
+    if (event.state == SignalRConnectionState.connected) {
+      _aiRunRecoveryTimer?.cancel();
+      _aiRunRecoveryTimer = null;
+      unawaited(_restoreActiveAiRun());
+      return;
+    }
+    _syncAiRunRecoveryPolling();
   }
 
   void _restoreAiStreamReplies() {
@@ -1106,6 +1162,7 @@ class ChatController extends ChangeNotifier {
             ),
       );
     _syncAiStreamElapsedTimer();
+    _syncAiRunRecoveryPolling();
   }
 
   void _syncAiStreamElapsedTimer() {
@@ -1122,6 +1179,26 @@ class ChatController extends ChangeNotifier {
     _aiStreamElapsedTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
       notifyListeners();
     });
+  }
+
+  void _syncAiRunRecoveryPolling() {
+    final hasLiveRun = _aiStreamReplies.values.any(
+      (reply) =>
+          reply.status == AiStreamStatus.thinking ||
+          reply.status == AiStreamStatus.streaming,
+    );
+    final needsPolling =
+        hasLiveRun &&
+        _signalRGateway.connectionState != SignalRConnectionState.connected;
+    if (!needsPolling) {
+      _aiRunRecoveryTimer?.cancel();
+      _aiRunRecoveryTimer = null;
+      return;
+    }
+    _aiRunRecoveryTimer ??= Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => unawaited(_restoreActiveAiRun()),
+    );
   }
 }
 

@@ -25,6 +25,8 @@ import '../../chat_settings/application/chat_settings_controller.dart';
 import '../../chat_settings/presentation/member_profile_sheet.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/session_change_bus.dart';
+import '../../session/presentation/chat_object_avatar.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../call_center/application/call_center_controller.dart';
 import 'message_content/chat_message_content_renderer.dart';
 import 'message_content/chat_message_presentation.dart';
@@ -126,6 +128,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       clipboardService: ref.read(clipboardServiceProvider),
       chatSettingsRepository: ref.read(chatSettingsRepositoryProvider),
       aiStreamChangeBus: ref.read(aiStreamChangeBusProvider),
+      signalRGateway: ref.read(signalRGatewayProvider),
       ownerId: widget.ownerId,
       sessionUnitId: widget.sessionUnitId,
       initialTitle: widget.title,
@@ -268,13 +271,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          CircleAvatar(
+          ChatObjectAvatar(
+            name: controller.peerDisplayName,
+            imageUrl: controller.peerAvatarUrl,
+            size: 44,
             radius: 22,
-            child: Icon(
-              reply.status == AiStreamStatus.failed
-                  ? Icons.error_outline
-                  : Icons.smart_toy_outlined,
-            ),
           ),
           const SizedBox(width: 12),
           Flexible(
@@ -287,7 +288,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(controller.title, style: theme.textTheme.labelSmall),
+                  Text(
+                    controller.peerDisplayName,
+                    style: theme.textTheme.labelSmall,
+                  ),
                   const SizedBox(height: 4),
                   Text(text),
                   const SizedBox(height: 6),

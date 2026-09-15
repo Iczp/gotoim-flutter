@@ -60,7 +60,7 @@ class AiStreamEvent {
       requesterSessionUnitId: requesterSessionUnitId,
       sourceMessageId: sourceMessageId,
       sequence: sequence,
-      delta: value('delta'),
+      delta: value('delta').isNotEmpty ? value('delta') : value('previewText'),
       error: value('error'),
       finalMessageId: integer('finalMessageId'),
       // Older servers may not yet include timing fields. The client receive
@@ -70,6 +70,27 @@ class AiStreamEvent {
       queueMilliseconds: integer('queueMilliseconds') ?? 0,
       elapsedMilliseconds: integer('elapsedMilliseconds') ?? 0,
     );
+  }
+
+  static AiStreamEvent? fromRecoveryPayload(Object? payload) {
+    if (payload is! Map) return null;
+    final data = Map<String, dynamic>.from(payload);
+    final status = (data['status'] ?? data['Status'] ?? '').toString();
+    final AiStreamEventKind? kind;
+    if (status == 'running' || status == 'queued') {
+      kind = AiStreamEventKind.started;
+    } else if (status == 'streaming') {
+      kind = AiStreamEventKind.delta;
+    } else if (status == 'completed') {
+      kind = AiStreamEventKind.completed;
+    } else if (status == 'failed' || status == 'cancelled') {
+      kind = AiStreamEventKind.failed;
+    } else {
+      kind = null;
+    }
+    return kind == null
+        ? null
+        : fromPayload(kind, data, receivedAt: DateTime.now());
   }
 }
 
@@ -115,6 +136,29 @@ class AiStreamChangeBus {
           event.queueMilliseconds > 0
               ? event.queueMilliseconds
               : previous?.queueMilliseconds ?? 0,
+      elapsedMilliseconds: event.elapsedMilliseconds,
+    );
+    if (!_controller.isClosed) _controller.add(event);
+  }
+
+  /// Replaces a snapshot with Redis recovery data rather than appending its
+  /// preview text to an already received SignalR delta.
+  void restore(AiStreamEvent event) {
+    _activeBySourceMessageId[event.sourceMessageId] = AiStreamSnapshot(
+      runId: event.runId,
+      requesterSessionUnitId: event.requesterSessionUnitId,
+      sourceMessageId: event.sourceMessageId,
+      sequence: event.sequence,
+      text: event.delta,
+      status: switch (event.kind) {
+        AiStreamEventKind.started => AiStreamStatus.thinking,
+        AiStreamEventKind.delta => AiStreamStatus.streaming,
+        AiStreamEventKind.completed => AiStreamStatus.completed,
+        AiStreamEventKind.failed => AiStreamStatus.failed,
+      },
+      error: event.error,
+      startedAt: event.startedAt,
+      queueMilliseconds: event.queueMilliseconds,
       elapsedMilliseconds: event.elapsedMilliseconds,
     );
     if (!_controller.isClosed) _controller.add(event);

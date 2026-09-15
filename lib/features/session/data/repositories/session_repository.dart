@@ -219,6 +219,10 @@ class SessionRepository {
     return merged;
   }
 
+  Future<Map<String, dynamic>?> loadActiveAiRun({
+    required String sessionUnitId,
+  }) => _api.getActiveAiRun(sessionUnitId: sessionUnitId);
+
   Future<List<SessionSummary>> loadChanges({required int ownerId}) async {
     final initialTicks = await _dao.readMaxTicks(ownerId);
     if (initialTicks == null || initialTicks <= 0) return const [];

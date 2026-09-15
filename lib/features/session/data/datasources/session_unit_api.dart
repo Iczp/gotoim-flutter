@@ -88,6 +88,18 @@ class SessionUnitApi {
     });
   }
 
+  Future<Map<String, dynamic>?> getActiveAiRun({
+    required String sessionUnitId,
+  }) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      // The ABP conventional action exposes its Guid input as a route
+      // parameter. Keep this aligned with Swagger:
+      // GET /api/chat/ai/active/{sessionUnitId}
+      '/api/chat/ai/active/$sessionUnitId',
+    );
+    return response.isEmpty ? null : response;
+  }
+
   Future<PagedResultDto<SessionSummary>> getChanges({
     required int ownerId,
     required int minTicks,
