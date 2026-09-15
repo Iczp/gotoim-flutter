@@ -1,3 +1,5 @@
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
@@ -50,6 +52,9 @@ class ClientDeviceContext {
     'pushClientId': pushClientId,
     'brand': brand,
     'model': model,
+    // The SignalR connection-pool backend accepts these DTO-style aliases.
+    'deviceBrand': brand,
+    'deviceModel': model,
     'platform': platform,
     'browser': browser,
   };
@@ -80,6 +85,7 @@ class ClientDeviceContextFactory {
       deviceId ??= _uuid.v4();
     }
     final kind = platformFacade.kind.name;
+    final deviceDetails = await _readDeviceDetails();
     return ClientDeviceContext(
       appId: environment.appId,
       appName: environment.appName,
@@ -87,11 +93,40 @@ class ClientDeviceContextFactory {
       deviceId: deviceId,
       deviceType: platformFacade.isWeb ? 'web' : kind,
       platform: kind,
-      brand: '',
-      model: '',
-      browser: platformFacade.isWeb ? 'web' : '',
+      brand: deviceDetails.brand,
+      model: deviceDetails.model,
+      browser: deviceDetails.browser,
       pushClientId: '',
     );
+  }
+
+  Future<({String brand, String model, String browser})>
+  _readDeviceDetails() async {
+    try {
+      final data = (await DeviceInfoPlugin().deviceInfo).data;
+      String value(Iterable<String> keys) {
+        for (final key in keys) {
+          final raw = data[key]?.toString().trim() ?? '';
+          if (raw.isNotEmpty && raw != 'null') return raw;
+        }
+        return '';
+      }
+
+      return (
+        brand: value(const <String>[
+          'brand',
+          'manufacturer',
+          'vendor',
+          'computerName',
+        ]),
+        model: value(const <String>['model', 'productName', 'machine', 'name']),
+        browser: value(const <String>['browserName', 'userAgent']),
+      );
+    } catch (_) {
+      // Device metadata is supplementary. SignalR must remain connectable on
+      // platforms where a native device-info implementation is unavailable.
+      return (brand: '', model: '', browser: kIsWeb ? 'web' : '');
+    }
   }
 }
 

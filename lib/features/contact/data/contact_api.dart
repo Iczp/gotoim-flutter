@@ -50,6 +50,27 @@ class ContactApi {
     );
   }
 
+  /// 搜索聊天对象（全局搜索用户、群聊、机器人等）
+  Future<Map<String, dynamic>> searchChatObjects({
+    required String keyword,
+    bool isEnabledParentId = false,
+    int maxResultCount = 20,
+    int? objectType,
+    List<int>? objectTypes,
+  }) async {
+    return _client.get<Map<String, dynamic>>(
+      '/api/chat/chat-object',
+      query: <String, Object?>{
+        'Keyword': keyword,
+        'IsEnabledParentId': isEnabledParentId,
+        'MaxResultCount': maxResultCount,
+        if (objectType != null) 'ObjectType': objectType,
+        if (objectTypes != null && objectTypes.isNotEmpty)
+          'ObjectTypes': objectTypes,
+      },
+    );
+  }
+
   /// 根据唯一编码查询聊天对象
   Future<Map<String, dynamic>> getChatObjectByCode(String code) async {
     return _client.get<Map<String, dynamic>>(

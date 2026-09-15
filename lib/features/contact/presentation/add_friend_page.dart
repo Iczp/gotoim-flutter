@@ -63,9 +63,9 @@ class _AddFriendPageState extends ConsumerState<AddFriendPage> {
     });
 
     try {
-      final res = await ref.read(contactApiProvider).searchContacts(
-        ownerId: ownerId,
+      final res = await ref.read(contactApiProvider).searchChatObjects(
         keyword: term,
+        isEnabledParentId: false,
         maxResultCount: 20,
       );
 
@@ -303,22 +303,28 @@ class _AddFriendPageState extends ConsumerState<AddFriendPage> {
     final dest = item['destination'];
     final name = (dest is Map
             ? (dest['name'] ?? dest['displayName'])
-            : (item['name'] ?? item['displayName']))
+            : (item['displayName'] ?? item['name']))
         ?.toString() ??
         '-';
     final avatar = (dest is Map
-            ? (dest['portraitUrl'] ?? dest['avatar'])
-            : (item['portraitUrl'] ?? item['avatar']))
+            ? (dest['portraitUrl'] ?? dest['thumbnail'] ?? dest['avatar'])
+            : (item['portrait'] ?? item['thumbnail'] ?? item['portraitUrl'] ?? item['avatar']))
         ?.toString();
     final isFriend = item['isFriendship'] == true;
     final objectTypeDesc = (dest is Map ? dest['objectTypeDescription'] : item['objectTypeDescription'])?.toString();
-    final unitId = item['id']?.toString() ?? '';
+    final code = (dest is Map ? dest['code'] : item['code'])?.toString();
+    final unitId = item['sessionUnitId']?.toString() ?? item['id']?.toString() ?? '';
+
+    String? subtitleText = objectTypeDesc;
+    if (code != null && code.isNotEmpty && code != name) {
+      subtitleText = subtitleText != null ? '$subtitleText · 编码: $code' : '编码: $code';
+    }
 
     return ListTile(
       leading: AppAvatar(name: name, imageUrl: avatar, radius: 22),
       title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(
-        objectTypeDesc ?? 'Goto IM 用户',
+        subtitleText ?? 'Goto IM 用户',
         style: TextStyle(
           fontSize: 12,
           color: Theme.of(context).colorScheme.onSurfaceVariant,

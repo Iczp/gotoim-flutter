@@ -189,9 +189,9 @@ class SearchRepository {
     required String keyword,
   }) async {
     try {
-      final res = await _contactApi.searchContacts(
-        ownerId: ownerId,
+      final res = await _contactApi.searchChatObjects(
         keyword: keyword,
+        isEnabledParentId: false,
         maxResultCount: 20,
       );
 
@@ -204,12 +204,12 @@ class SearchRepository {
         final dest = item['destination'];
         final name = (dest is Map
                 ? (dest['name'] ?? dest['displayName'])
-                : (item['name'] ?? item['displayName']))
+                : (item['displayName'] ?? item['name']))
             ?.toString() ??
             '-';
         final avatar = (dest is Map
-                ? (dest['portraitUrl'] ?? dest['avatar'])
-                : (item['portraitUrl'] ?? item['avatar']))
+                ? (dest['portraitUrl'] ?? dest['thumbnail'] ?? dest['avatar'])
+                : (item['portrait'] ?? item['thumbnail'] ?? item['portraitUrl'] ?? item['avatar']))
             ?.toString();
         final objectType = ((dest is Map ? dest['objectType'] : item['objectType']) as num?)?.toInt();
         final objectTypeDesc = (dest is Map ? dest['objectTypeDescription'] : item['objectTypeDescription'])?.toString();
