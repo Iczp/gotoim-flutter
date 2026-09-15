@@ -15,10 +15,10 @@ class MessageRepository {
     required MessageDao dao,
     SessionDao? sessionDao,
     SessionChangeBus? sessionChangeBus,
-  })  : _api = api,
-        _dao = dao,
-        _sessionDao = sessionDao,
-        _sessionChangeBus = sessionChangeBus;
+  }) : _api = api,
+       _dao = dao,
+       _sessionDao = sessionDao,
+       _sessionChangeBus = sessionChangeBus;
   final MessageApi _api;
   final MessageDao _dao;
   final SessionDao? _sessionDao;
@@ -32,29 +32,26 @@ class MessageRepository {
     required int ownerId,
     required String sessionUnitId,
     int limit = 99,
-  }) =>
-      _dao.readPage(
-        ownerId: ownerId,
-        sessionUnitId: sessionUnitId,
-        limit: limit,
-      );
+  }) => _dao.readPage(
+    ownerId: ownerId,
+    sessionUnitId: sessionUnitId,
+    limit: limit,
+  );
 
   Future<ChatMessage?> findLocalByServerId({
     required int ownerId,
     required String sessionUnitId,
     required int serverId,
-  }) =>
-      _dao.findByServerId(
-        ownerId: ownerId,
-        sessionUnitId: sessionUnitId,
-        serverId: serverId,
-      );
+  }) => _dao.findByServerId(
+    ownerId: ownerId,
+    sessionUnitId: sessionUnitId,
+    serverId: serverId,
+  );
 
   Future<int> maxLocalServerId({
     required int ownerId,
     required String sessionUnitId,
-  }) =>
-      _dao.maxServerId(ownerId, sessionUnitId);
+  }) => _dao.maxServerId(ownerId, sessionUnitId);
 
   /// Retries a failed text message in-place so its local identity and UI slot
   /// remain stable instead of inserting a duplicate bubble.
@@ -247,11 +244,12 @@ class MessageRepository {
         '[loadMessages][remote] session=$sessionUnitId maxMessageId=$maxMessageId '
         'received=${remote.items.length} persisted=${remote.items.length}',
       );
-      final all = <String, ChatMessage>{
-        for (final item in local) item.localId: item,
-        for (final item in remote.items) item.localId: item,
-      }.values.toList()
-        ..sort((a, b) => b.score.compareTo(a.score));
+      final all =
+          <String, ChatMessage>{
+              for (final item in local) item.localId: item,
+              for (final item in remote.items) item.localId: item,
+            }.values.toList()
+            ..sort((a, b) => b.score.compareTo(a.score));
       return MessagePage(all, hasMore);
     } catch (error) {
       debugPrint(
@@ -344,9 +342,10 @@ class MessageRepository {
         quoteMessageId: quote?.serverId,
         remindList: remindList,
       );
-      final serverId = response['id'] is num
-          ? (response['id'] as num).toInt()
-          : int.tryParse('${response['id']}');
+      final serverId =
+          response['id'] is num
+              ? (response['id'] as num).toInt()
+              : int.tryParse('${response['id']}');
       local = local.copyWith(
         serverId: serverId,
         score: serverId == null ? local.score : serverId * 1000000,
@@ -393,21 +392,24 @@ class MessageRepository {
   /// Stores a realtime message even when its chat page is not open. The
   /// session cache supplies the authoritative local owner association.
   Future<ChatMessage?> applyRealtimePayloadFromCachedSession(
-    Object? payload,
-  ) async {
+    Object? payload, {
+    String? sessionUnitId,
+  }) async {
     final json = _findRealtimeMessage(payload);
     if (json == null) return null;
-    final sessionUnitId = firstNonEmpty(<Object?>[
-      json['sessionUnitId'],
-      asMap(json['sessionUnit'])['id'],
-    ]);
-    if (sessionUnitId.isEmpty) return null;
-    final session = await _sessionDao?.readById(sessionUnitId);
+    final resolvedSessionUnitId =
+        sessionUnitId ??
+        firstNonEmpty(<Object?>[
+          json['sessionUnitId'],
+          asMap(json['sessionUnit'])['id'],
+        ]);
+    if (resolvedSessionUnitId.isEmpty) return null;
+    final session = await _sessionDao?.readById(resolvedSessionUnitId);
     final ownerId = session?.ownerId;
     if (ownerId == null) return null;
     return applyRealtimePayload(
       ownerId: ownerId,
-      sessionUnitId: sessionUnitId,
+      sessionUnitId: resolvedSessionUnitId,
       payload: json,
     );
   }
@@ -487,25 +489,23 @@ class MessageRepository {
     required ChatMessage local,
     required SelectedFile file,
     void Function(int sent, int total)? onProgress,
-  }) =>
-      _sendLocalUpload(
-        local: local,
-        file: file,
-        messageType: 2,
-        onProgress: onProgress,
-      );
+  }) => _sendLocalUpload(
+    local: local,
+    file: file,
+    messageType: 2,
+    onProgress: onProgress,
+  );
 
   Future<ChatMessage> sendLocalVideo({
     required ChatMessage local,
     required SelectedFile file,
     void Function(int sent, int total)? onProgress,
-  }) =>
-      _sendLocalUpload(
-        local: local,
-        file: file,
-        messageType: 4,
-        onProgress: onProgress,
-      );
+  }) => _sendLocalUpload(
+    local: local,
+    file: file,
+    messageType: 4,
+    onProgress: onProgress,
+  );
 
   Future<ChatMessage> _sendLocalUpload({
     required ChatMessage local,
@@ -646,13 +646,12 @@ class MessageRepository {
         fileLength: file.size,
         openRead: file.readAsByteStream,
         messageType: 3,
-        extraFields: <String, Object?>{
-          'duration': durationSeconds,
-        },
+        extraFields: <String, Object?>{'duration': durationSeconds},
       );
-      final serverId = response['id'] is num
-          ? (response['id'] as num).toInt()
-          : int.tryParse('${response['id']}');
+      final serverId =
+          response['id'] is num
+              ? (response['id'] as num).toInt()
+              : int.tryParse('${response['id']}');
       result = local.copyWith(
         serverId: serverId,
         score: serverId == null ? local.score : serverId * 1000000,
@@ -699,9 +698,10 @@ class MessageRepository {
         fileLength: file.size,
         openRead: file.readAsByteStream,
       );
-      final serverId = response['id'] is num
-          ? (response['id'] as num).toInt()
-          : int.tryParse('${response['id']}');
+      final serverId =
+          response['id'] is num
+              ? (response['id'] as num).toInt()
+              : int.tryParse('${response['id']}');
       result = local.copyWith(
         serverId: serverId,
         score: serverId == null ? local.score : serverId * 1000000,

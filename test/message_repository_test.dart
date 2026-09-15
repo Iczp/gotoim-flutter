@@ -49,6 +49,21 @@ void main() {
     expect(value.senderAvatarUrl, '/avatars/1.png');
   });
 
+  test('message keeps sender session unit identity from compact payload', () {
+    final value = ChatMessage.fromJson(
+      <String, dynamic>{
+        'id': 2,
+        'messageType': 0,
+        'senderSessionUnitId': 'bot-session-unit',
+      },
+      ownerId: 7,
+      sessionUnitId: 'human-session-unit',
+    );
+
+    expect(value.senderSessionUnitId, 'bot-session-unit');
+    expect(value.isMine, isFalse);
+  });
+
   test('history returns a complete local page without HTTP', () async {
     final database = UnifiedDatabase(
       DatabaseConnection(NativeDatabase.memory()),

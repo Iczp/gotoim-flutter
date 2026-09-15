@@ -98,6 +98,54 @@ void main() {
     },
   );
 
+  test(
+    'loadChanges does not erase a cached last message when omitted remotely',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = SessionDao(database);
+      await dao.upsertAll([
+        SessionSummary.fromJson({
+          'id': 'aurora',
+          'ownerId': 7,
+          'score': 100,
+          'ticks': 100,
+          'destination': {'name': 'Aurora'},
+          'lastMessage': {
+            'id': 99,
+            'content': {'text': '旧的 AI 回复'},
+          },
+        }),
+      ]);
+      final client = _FakeApiClient(
+        responses: {
+          '/api/chat/session-unit-cache/changes': {
+            'items': [
+              {
+                'id': 'aurora',
+                'ownerId': 7,
+                'score': 101,
+                'ticks': 101,
+                'destination': {'name': 'Aurora'},
+              },
+            ],
+            'totalCount': 1,
+          },
+        },
+      );
+      final repository = SessionRepository(
+        api: SessionUnitApi(client),
+        dao: dao,
+      );
+
+      await repository.loadChanges(ownerId: 7);
+
+      expect((await dao.readById('aurora'))?.preview, '旧的 AI 回复');
+    },
+  );
+
   test('loadFriends exposes the server total count', () async {
     final database = UnifiedDatabase(
       DatabaseConnection(NativeDatabase.memory()),

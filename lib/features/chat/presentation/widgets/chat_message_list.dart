@@ -13,6 +13,7 @@ typedef ChatMessageItemBuilder =
 class ChatMessageList extends StatelessWidget {
   const ChatMessageList({
     required this.messages,
+    this.transientItems = const <Widget>[],
     required this.scrollController,
     required this.isLoading,
     required this.hasMore,
@@ -25,6 +26,7 @@ class ChatMessageList extends StatelessWidget {
   });
 
   final List<ChatMessage> messages;
+  final List<Widget> transientItems;
   final ScrollController scrollController;
   final bool isLoading;
   final bool hasMore;
@@ -62,7 +64,7 @@ class ChatMessageList extends StatelessWidget {
         return false;
       },
       child:
-          messages.isEmpty
+          messages.isEmpty && transientItems.isEmpty
               ? _EmptyMessagesState(
                 isLoading: isLoading,
                 error: error,
@@ -88,9 +90,13 @@ class ChatMessageList extends StatelessWidget {
                     horizontal: 12,
                     vertical: 16,
                   ),
-                  itemCount: messages.length + 1,
+                  itemCount: transientItems.length + messages.length + 1,
                   itemBuilder: (context, index) {
-                    if (index == messages.length) {
+                    if (index < transientItems.length) {
+                      return transientItems[index];
+                    }
+                    final messageIndex = index - transientItems.length;
+                    if (messageIndex == messages.length) {
                       return _ChatHistoryFooter(
                         isLoading: isLoading,
                         hasMore: hasMore,
@@ -98,19 +104,14 @@ class ChatMessageList extends StatelessWidget {
                         onLoadMore: onLoadMore,
                       );
                     }
-                    final message = messages[index];
-                    return itemBuilder(
-                      context,
-                      message,
-                      index,
-                    );
+                    final message = messages[messageIndex];
+                    return itemBuilder(context, message, messageIndex);
                   },
                 ),
               ),
     ),
   );
 }
-
 
 class _EmptyMessagesState extends StatelessWidget {
   const _EmptyMessagesState({

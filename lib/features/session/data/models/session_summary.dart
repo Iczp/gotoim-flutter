@@ -45,8 +45,8 @@ class SessionSummary {
     );
   }
 
-  /// 合并本地已持久化的数据（例如：远端 /api/chat/session-unit-cache/friend/{id} 接口不返回 lastMessage，
-  /// 需要保留本地已有的 lastMessage 与 lastMessageTime，避免会话预览被冲掉）。
+  /// 合并本地已持久化的数据。列表/增量摘要可能不携带完整的 lastMessage；
+  /// 单条 /friend/{id} 详情才是当前会话 owner 与 lastMessage 的权威来源。
   SessionSummary mergeWithLocal(SessionSummary? local) {
     if (local == null) return this;
     final remoteLastMessage = asMap(raw['lastMessage']);
@@ -54,10 +54,11 @@ class SessionSummary {
     if (remoteLastMessage.isNotEmpty || localLastMessage.isEmpty) {
       return this;
     }
-    final mergedRaw = Map<String, dynamic>.from(raw)
-      ..['lastMessage'] = localLastMessage
-      ..['lastMessageTime'] =
-          raw['lastMessageTime'] ?? local.raw['lastMessageTime'];
+    final mergedRaw =
+        Map<String, dynamic>.from(raw)
+          ..['lastMessage'] = localLastMessage
+          ..['lastMessageTime'] =
+              raw['lastMessageTime'] ?? local.raw['lastMessageTime'];
     return SessionSummary.fromJson(mergedRaw);
   }
 
@@ -138,14 +139,14 @@ class SessionSummary {
 
   @override
   int get hashCode => Object.hash(
-        id,
-        ownerId,
-        score,
-        ticks,
-        title,
-        preview,
-        updatedAt,
-        unreadCount,
-        isPinned,
-      );
+    id,
+    ownerId,
+    score,
+    ticks,
+    title,
+    preview,
+    updatedAt,
+    unreadCount,
+    isPinned,
+  );
 }

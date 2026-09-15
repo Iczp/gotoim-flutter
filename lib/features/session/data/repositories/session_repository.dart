@@ -121,17 +121,21 @@ class SessionRepository {
       }
       rethrow;
     }
-    await _dao.upsertAll(remote.items);
-    final hasMore = remote.items.length == limit - localItems.length;
+    final remoteItems = await _mergeWithLocalSummaries(
+      ownerId: ownerId,
+      remote: remote.items,
+    );
+    await _dao.upsertAll(remoteItems);
+    final hasMore = remoteItems.length == limit - localItems.length;
     debugPrint(
-      '[loadFriends][remote] ownerId=$ownerId received=${remote.items.length} '
-      'persisted=${remote.items.length} hasMore=$hasMore '
+      '[loadFriends][remote] ownerId=$ownerId received=${remoteItems.length} '
+      'persisted=${remoteItems.length} hasMore=$hasMore '
       'totalCount=${remote.totalCount}',
     );
     if (!hasMore) await _dao.markLoadedAll(ownerId, true);
     final unique = <String, SessionSummary>{
       for (final item in localItems) item.id: item,
-      for (final item in remote.items) item.id: item,
+      for (final item in remoteItems) item.id: item,
     };
     debugPrint(
       '[loadFriends][result] source=local+remote ownerId=$ownerId '
@@ -221,20 +225,42 @@ class SessionRepository {
     while (true) {
       final page = await _api.getChanges(ownerId: ownerId, minTicks: minTicks);
       if (page.items.isEmpty) break;
-      for (final item in page.items) {
+      final items = await _mergeWithLocalSummaries(
+        ownerId: ownerId,
+        remote: page.items,
+      );
+      for (final item in items) {
         changed[item.id] = item;
       }
-      await _dao.upsertAll(page.items);
-      for (final item in page.items) {
+      await _dao.upsertAll(items);
+      for (final item in items) {
         _changeBus?.publish(ownerId: ownerId, sessionUnitId: item.id);
       }
-      final nextTicks = page.items
+      final nextTicks = items
           .map((item) => item.ticks)
           .fold<int>(minTicks, (max, ticks) => ticks > max ? ticks : max);
-      if (page.items.length < 99 || nextTicks <= minTicks) break;
+      if (items.length < 99 || nextTicks <= minTicks) break;
       minTicks = nextTicks;
     }
     return changed.values.toList(growable: false);
+  }
+
+  /// List and change APIs can omit the heavy lastMessage projection. Never
+  /// replace a locally persisted conversation preview with that absence.
+  Future<List<SessionSummary>> _mergeWithLocalSummaries({
+    required int ownerId,
+    required Iterable<SessionSummary> remote,
+  }) async {
+    final merged = <SessionSummary>[];
+    for (final item in remote) {
+      final local = await _dao.readById(item.id);
+      merged.add(
+        local != null && local.ownerId == ownerId
+            ? item.mergeWithLocal(local)
+            : item,
+      );
+    }
+    return merged;
   }
 
   Future<void> setTopping({

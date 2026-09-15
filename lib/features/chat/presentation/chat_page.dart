@@ -18,6 +18,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/floating_popover.dart';
 import '../../../core/widgets/target_picker/target_picker.dart';
 import '../application/chat_controller.dart';
+import '../application/ai_stream_change_bus.dart';
 import '../data/models/chat_message.dart';
 import '../../chat_settings/data/models/chat_member.dart';
 import '../../chat_settings/application/chat_settings_controller.dart';
@@ -124,6 +125,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       sessionChangeBus: ref.read(sessionChangeBusProvider),
       clipboardService: ref.read(clipboardServiceProvider),
       chatSettingsRepository: ref.read(chatSettingsRepositoryProvider),
+      aiStreamChangeBus: ref.read(aiStreamChangeBusProvider),
       ownerId: widget.ownerId,
       sessionUnitId: widget.sessionUnitId,
       initialTitle: widget.title,
@@ -201,6 +203,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Expanded(
                 child: ChatMessageList(
                   messages: controller.messages,
+                  transientItems: controller.aiStreamReplies
+                      .map((reply) => _buildAiStreamReply(reply))
+                      .toList(growable: false),
                   scrollController: _scrollController,
                   isLoading: controller.isLoading,
                   hasMore: controller.hasMore,
@@ -209,8 +214,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   onLoadMore: controller.loadMore,
                   onTapOutside: _closeInputArea,
                   itemBuilder:
-                      (context, message, index) =>
-                          _buildMessageItem(context, message, index, mediaItems),
+                      (context, message, index) => _buildMessageItem(
+                        context,
+                        message,
+                        index,
+                        mediaItems,
+                      ),
                 ),
               ),
               ChatInputArea(
@@ -235,6 +244,85 @@ class _ChatPageState extends ConsumerState<ChatPage>
       );
     },
   );
+
+  Widget _buildAiStreamReply(AiStreamReply reply) {
+    final theme = Theme.of(context);
+    final text = switch (reply.status) {
+      AiStreamStatus.thinking => 'AI 正在思考…',
+      AiStreamStatus.failed => reply.error,
+      _ => reply.text.isEmpty ? 'AI 正在生成…' : reply.text,
+    };
+    final showProgress =
+        reply.status == AiStreamStatus.thinking ||
+        reply.status == AiStreamStatus.streaming;
+    final elapsed = _formatAiDuration(
+      reply.displayElapsedMilliseconds(DateTime.now()),
+    );
+    final queue =
+        reply.queueMilliseconds > 0
+            ? _formatAiDuration(reply.queueMilliseconds)
+            : '—';
+    return Padding(
+      key: ValueKey<String>('ai-stream-${reply.runId}'),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          CircleAvatar(
+            radius: 22,
+            child: Icon(
+              reply.status == AiStreamStatus.failed
+                  ? Icons.error_outline
+                  : Icons.smart_toy_outlined,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(controller.title, style: theme.textTheme.labelSmall),
+                  const SizedBox(height: 4),
+                  Text(text),
+                  const SizedBox(height: 6),
+                  Text(
+                    '排队 $queue · 调用 $elapsed',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (showProgress) ...<Widget>[
+                    const SizedBox(height: 8),
+                    const SizedBox(
+                      height: 2,
+                      width: 72,
+                      child: LinearProgressIndicator(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatAiDuration(int milliseconds) {
+    if (milliseconds < 1000) return '${milliseconds}ms';
+    if (milliseconds < 60000) {
+      return '${(milliseconds / 1000).toStringAsFixed(1)}s';
+    }
+    final minutes = milliseconds ~/ 60000;
+    final seconds = (milliseconds % 60000) ~/ 1000;
+    return '$minutes分$seconds秒';
+  }
 
   /// 收起键盘和底部功能面板
   void _closeInputArea() {
@@ -282,7 +370,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
 
     final avatarMenuController = FloatingPopoverController();
-    final avatarMenuItems = _buildAvatarMenuItems(message, avatarMenuController);
+    final avatarMenuItems = _buildAvatarMenuItems(
+      message,
+      avatarMenuController,
+    );
 
     final quote = _restoreQuoteMessage(message);
     final row = ChatMessageRow(
@@ -340,19 +431,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
           menuItems.isEmpty
               ? null
               : (_) => ChatMessageMenu(
-                    items: menuItems,
-                    layoutMode: ChatMessageMenuLayoutMode.doubleRow,
-                  ),
+                items: menuItems,
+                layoutMode: ChatMessageMenuLayoutMode.doubleRow,
+              ),
       avatarMenuController: avatarMenuController,
       avatarMenuBuilder:
           avatarMenuItems.isEmpty
               ? null
               : (_) => ChatAvatarMenu(items: avatarMenuItems),
     );
-    return KeyedSubtree(
-      key: ValueKey<String>(message.localId),
-      child: row,
-    );
+    return KeyedSubtree(key: ValueKey<String>(message.localId), child: row);
   }
 
   List<ChatAvatarMenuItem> _buildAvatarMenuItems(
@@ -439,12 +527,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   '对「${message.senderName}」设置禁言',
-                  style: Theme.of(bottomSheetContext)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(bottomSheetContext).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
               const Divider(height: 1),
@@ -566,31 +650,32 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _mediaItems = messages.reversed
         .where((item) => item.messageType == 2 || item.messageType == 4)
         .map((message) {
-          final localFile = (message.localFilePath != null &&
-                  !kIsWeb &&
-                  File(message.localFilePath!).existsSync())
-              ? message.localFilePath
-              : null;
-          final sourceUrl = (message.mediaUrl != null && message.mediaUrl!.isNotEmpty)
-              ? message.mediaUrl!
-              : (localFile ?? message.localFilePath ?? '');
-          final source = resolveApiUrl(
-            sourceUrl,
-            baseUrl,
-          );
+          final localFile =
+              (message.localFilePath != null &&
+                      !kIsWeb &&
+                      File(message.localFilePath!).existsSync())
+                  ? message.localFilePath
+                  : null;
+          final sourceUrl =
+              (message.mediaUrl != null && message.mediaUrl!.isNotEmpty)
+                  ? message.mediaUrl!
+                  : (localFile ?? message.localFilePath ?? '');
+          final source = resolveApiUrl(sourceUrl, baseUrl);
           final thumbRaw = message.thumbnailUrl ?? message.videoCoverUrl;
           final thumbnail =
               thumbRaw != null ? resolveApiUrl(thumbRaw, baseUrl) : null;
-          final fileName = message.fileName.isNotEmpty
-              ? message.fileName
-              : '${message.localId}${message.fileSuffix.isNotEmpty ? message.fileSuffix : (message.messageType == 4 ? '.mp4' : '.jpg')}';
+          final fileName =
+              message.fileName.isNotEmpty
+                  ? message.fileName
+                  : '${message.localId}${message.fileSuffix.isNotEmpty ? message.fileSuffix : (message.messageType == 4 ? '.mp4' : '.jpg')}';
           final cachedAttachmentPath =
               controller.attachmentState(message.localId).localPath;
-          final validCachedPath = (cachedAttachmentPath != null &&
-                  !kIsWeb &&
-                  File(cachedAttachmentPath).existsSync())
-              ? cachedAttachmentPath
-              : localFile;
+          final validCachedPath =
+              (cachedAttachmentPath != null &&
+                      !kIsWeb &&
+                      File(cachedAttachmentPath).existsSync())
+                  ? cachedAttachmentPath
+                  : localFile;
           return MediaPreviewItem(
             id: message.localId,
             messageId: message.localId,
@@ -781,9 +866,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ChatMember.fromJson(<String, dynamic>{
         'id': sessionUnitId,
         'displayName': displayName,
-        'owner': <String, dynamic>{
-          'displayName': displayName,
-        },
+        'owner': <String, dynamic>{'displayName': displayName},
       }),
     );
   }
@@ -846,9 +929,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final targets = await controller.loadForwardTargets();
     if (!mounted) return;
     if (targets.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有可转发的会话')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有可转发的会话')));
       return;
     }
     final selectedSessions = await TargetPicker.pickSessionUnits(
@@ -876,9 +959,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final targets = await controller.loadForwardTargets();
     if (!mounted) return;
     if (targets.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有可转发的会话')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有可转发的会话')));
       return;
     }
     final selectedSessions = await TargetPicker.pickSessionUnits(

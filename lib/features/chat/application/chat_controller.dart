@@ -15,6 +15,7 @@ import '../../../core/services/media/media_service.dart';
 import '../../../core/services/media/audio_playback_service.dart';
 import '../../../core/services/media/voice_cache_service.dart';
 import 'chat_unread_divider.dart';
+import 'ai_stream_change_bus.dart';
 import '../data/datasources/message_api.dart';
 import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
@@ -42,21 +43,21 @@ final voiceCacheServiceProvider = Provider<VoiceCacheService>(
 
 final audioPlaybackServiceProvider =
     ChangeNotifierProvider<AudioPlaybackService>((ref) {
-  return AudioPlaybackService(
-    environment: ref.watch(appEnvironmentProvider),
-    voiceCacheService: ref.watch(voiceCacheServiceProvider),
-    nativeSensor: ref.watch(nativeSensorProvider),
-  );
-});
+      return AudioPlaybackService(
+        environment: ref.watch(appEnvironmentProvider),
+        voiceCacheService: ref.watch(voiceCacheServiceProvider),
+        nativeSensor: ref.watch(nativeSensorProvider),
+      );
+    });
 
 final attachmentTransferServiceProvider =
     ChangeNotifierProvider<AttachmentTransferService>((ref) {
-  return AttachmentTransferService(
-    client: ref.watch(apiClientProvider),
-    environment: ref.watch(appEnvironmentProvider),
-    filePickerService: ref.watch(filePickerServiceProvider),
-  );
-});
+      return AttachmentTransferService(
+        client: ref.watch(apiClientProvider),
+        environment: ref.watch(appEnvironmentProvider),
+        filePickerService: ref.watch(filePickerServiceProvider),
+      );
+    });
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -69,17 +70,19 @@ class ChatController extends ChangeNotifier {
     required SessionChangeBus sessionChangeBus,
     required ClipboardService clipboardService,
     required ChatSettingsRepository chatSettingsRepository,
+    required AiStreamChangeBus aiStreamChangeBus,
     required this.ownerId,
     required this.sessionUnitId,
     required String initialTitle,
-  })  : _filePickerService = filePickerService,
-        _attachmentTransferService = attachmentTransferService,
-        _mediaService = mediaService,
-        _audioPlaybackService = audioPlaybackService,
-        _sessionChangeBus = sessionChangeBus,
-        _clipboardService = clipboardService,
-        _chatSettingsRepository = chatSettingsRepository,
-        _title = initialTitle;
+  }) : _filePickerService = filePickerService,
+       _attachmentTransferService = attachmentTransferService,
+       _mediaService = mediaService,
+       _audioPlaybackService = audioPlaybackService,
+       _sessionChangeBus = sessionChangeBus,
+       _clipboardService = clipboardService,
+       _chatSettingsRepository = chatSettingsRepository,
+       _aiStreamChangeBus = aiStreamChangeBus,
+       _title = initialTitle;
   static const pageSize = 30;
   static const initialPageSize = 10;
   final MessageRepository _repository;
@@ -91,6 +94,7 @@ class ChatController extends ChangeNotifier {
   final SessionChangeBus _sessionChangeBus;
   final ClipboardService _clipboardService;
   final ChatSettingsRepository _chatSettingsRepository;
+  final AiStreamChangeBus _aiStreamChangeBus;
   final int ownerId;
   final String sessionUnitId;
   final List<ChatMessage> _messages = <ChatMessage>[];
@@ -105,6 +109,9 @@ class ChatController extends ChangeNotifier {
   SessionSummary? friend;
   String _title;
   StreamSubscription<SessionChangeEvent>? _sessionChangeSubscription;
+  StreamSubscription<AiStreamEvent>? _aiStreamSubscription;
+  Timer? _aiStreamElapsedTimer;
+  final Map<int, AiStreamReply> _aiStreamReplies = <int, AiStreamReply>{};
   ChatMessage? quoting;
   bool selectionMode = false;
   int newMessageCount = 0;
@@ -125,6 +132,9 @@ class ChatController extends ChangeNotifier {
       _attachmentTransferService.stateFor(messageLocalId);
 
   List<ChatMessage> get messages => List.unmodifiable(_messages);
+  List<AiStreamReply> get aiStreamReplies =>
+      _aiStreamReplies.values.toList()
+        ..sort((a, b) => b.sourceMessageId.compareTo(a.sourceMessageId));
   String get title => friend?.title ?? _title;
   bool get isMuted => friend?.isMuted == true;
   int get destinationObjectType =>
@@ -139,11 +149,7 @@ class ChatController extends ChangeNotifier {
     }
     if (isOfficialAccount) {
       return const [
-        {
-          'name': '最新资讯',
-          'type': 'click',
-          'key': '最新资讯',
-        },
+        {'name': '最新资讯', 'type': 'click', 'key': '最新资讯'},
         {
           'name': '服务大厅',
           'subButtons': [
@@ -152,11 +158,7 @@ class ChatController extends ChangeNotifier {
             {'name': '帮助中心', 'type': 'click', 'key': '帮助中心'},
           ],
         },
-        {
-          'name': '个人中心',
-          'type': 'click',
-          'key': '个人中心',
-        },
+        {'name': '个人中心', 'type': 'click', 'key': '个人中心'},
       ];
     }
     return const [];
@@ -197,6 +199,8 @@ class ChatController extends ChangeNotifier {
         unawaited(_reloadFromLocalChange());
       }
     });
+    _aiStreamSubscription = _aiStreamChangeBus.events.listen(_onAiStreamEvent);
+    _restoreAiStreamReplies();
 
     isLoading = true;
     final localLoadWatch = Stopwatch()..start();
@@ -220,6 +224,7 @@ class ChatController extends ChangeNotifier {
       _messages
         ..clear()
         ..addAll(localPage.items);
+      _restoreAiStreamReplies();
       hasMore = localPage.hasMore;
 
       _initialUnreadDividerMessageId = findInitialUnreadDividerMessageId(
@@ -258,18 +263,21 @@ class ChatController extends ChangeNotifier {
         );
         if (_messages.isNotEmpty) {
           final syncWatch = Stopwatch()..start();
-          unawaited(
-            loadLatest().then((_) {
-              debugPrint(
-                '[ChatTrace] ✔ [4/5] latest messages synced | '
-                'cost=${syncWatch.elapsedMilliseconds}ms | '
-                'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
-              );
-              return markLatestRead();
-            }),
+          await loadLatest();
+          debugPrint(
+            '[ChatTrace] ✔ [4/5] latest messages synced | '
+            'cost=${syncWatch.elapsedMilliseconds}ms | '
+            'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
           );
         }
-        unawaited(_refreshFriendDetail());
+
+        // The friend detail supplies the authoritative remote AI owner and
+        // lastMessage. Do not mark the conversation read until it and the
+        // visible message cache have both settled.
+        await _refreshFriendDetail();
+        if (_messages.isNotEmpty) {
+          await markLatestRead();
+        }
       }),
     );
   }
@@ -768,8 +776,7 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<List<SessionSummary>> loadForwardTargets() async =>
-      (await _sessionRepository.loadFriends(ownerId: ownerId, limit: 100))
-          .items
+      (await _sessionRepository.loadFriends(ownerId: ownerId, limit: 100)).items
           .where((item) => item.id != sessionUnitId)
           .toList(growable: false);
 
@@ -790,8 +797,9 @@ class ChatController extends ChangeNotifier {
     if (selected.any((message) => message.serverId == null)) {
       throw StateError('请等待所选消息发送完成后再合并转发');
     }
-    final ids =
-        selected.map((message) => message.serverId!).toList(growable: false);
+    final ids = selected
+        .map((message) => message.serverId!)
+        .toList(growable: false);
     await _repository.forwardHistory(
       targetSessionUnitId: targetSessionUnitId,
       messageIds: ids,
@@ -858,6 +866,10 @@ class ChatController extends ChangeNotifier {
       );
       if (!known && !message.isMine) receivedIncoming = true;
       _replaceMessage(message);
+      if (message.quoteMessageId != null) {
+        _aiStreamReplies.remove(message.quoteMessageId);
+        _aiStreamChangeBus.removeBySourceMessageId(message.quoteMessageId!);
+      }
     }
     if (receivedIncoming && !_viewingLatest) newMessageCount++;
     notifyListeners();
@@ -865,8 +877,8 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> startVoiceRecording() => _mediaService.startAudioRecording(
-        const AudioRecordingRequest(fileNamePrefix: 'gotoim_voice'),
-      );
+    const AudioRecordingRequest(fileNamePrefix: 'gotoim_voice'),
+  );
 
   Future<bool> hasVoiceRecordingPermission() =>
       _mediaService.hasAudioRecordingPermission();
@@ -926,13 +938,14 @@ class ChatController extends ChangeNotifier {
     final sending = message.copyWith(state: 'sending');
     _replaceMessage(sending);
     notifyListeners();
-    final sent = message.messageType == 3
-        ? await _repository.sendLocalVoice(local: sending, file: file)
-        : message.messageType == 2
+    final sent =
+        message.messageType == 3
+            ? await _repository.sendLocalVoice(local: sending, file: file)
+            : message.messageType == 2
             ? await _repository.sendLocalImage(local: sending, file: file)
             : message.messageType == 4
-                ? await _repository.sendLocalVideo(local: sending, file: file)
-                : await _repository.sendLocalFile(local: sending, file: file);
+            ? await _repository.sendLocalVideo(local: sending, file: file)
+            : await _repository.sendLocalFile(local: sending, file: file);
     _replaceMessage(sent);
     if (sent.state == 'sent') _pendingFiles.remove(message.localId);
     notifyListeners();
@@ -1058,6 +1071,119 @@ class ChatController extends ChangeNotifier {
   void dispose() {
     _attachmentTransferService.removeListener(_onAttachmentTransferChanged);
     unawaited(_sessionChangeSubscription?.cancel());
+    unawaited(_aiStreamSubscription?.cancel());
+    _aiStreamElapsedTimer?.cancel();
     super.dispose();
   }
+
+  void _onAiStreamEvent(AiStreamEvent event) {
+    if (event.requesterSessionUnitId != sessionUnitId) return;
+    _restoreAiStreamReplies();
+    _syncAiStreamElapsedTimer();
+    notifyListeners();
+  }
+
+  void _restoreAiStreamReplies() {
+    final persistedSourceMessageIds =
+        _messages
+            .map((message) => message.quoteMessageId)
+            .whereType<int>()
+            .toSet();
+    for (final sourceMessageId in persistedSourceMessageIds) {
+      _aiStreamChangeBus.removeBySourceMessageId(sourceMessageId);
+    }
+    _aiStreamReplies
+      ..clear()
+      ..addEntries(
+        _aiStreamChangeBus
+            .activeForRequesterSessionUnit(sessionUnitId)
+            .where(
+              (item) =>
+                  !persistedSourceMessageIds.contains(item.sourceMessageId),
+            )
+            .map(
+              (item) => MapEntry(
+                item.sourceMessageId,
+                AiStreamReply.fromSnapshot(item),
+              ),
+            ),
+      );
+    _syncAiStreamElapsedTimer();
+  }
+
+  void _syncAiStreamElapsedTimer() {
+    final hasLiveRun = _aiStreamReplies.values.any(
+      (reply) =>
+          reply.status == AiStreamStatus.thinking ||
+          reply.status == AiStreamStatus.streaming,
+    );
+    if (!hasLiveRun) {
+      _aiStreamElapsedTimer?.cancel();
+      _aiStreamElapsedTimer = null;
+      return;
+    }
+    _aiStreamElapsedTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      notifyListeners();
+    });
+  }
+}
+
+class AiStreamReply {
+  const AiStreamReply({
+    required this.runId,
+    required this.sourceMessageId,
+    required this.sequence,
+    required this.status,
+    this.text = '',
+    this.error = '',
+    this.startedAt,
+    this.queueMilliseconds = 0,
+    this.elapsedMilliseconds = 0,
+  });
+
+  final String runId;
+  final int sourceMessageId;
+  final int sequence;
+  final AiStreamStatus status;
+  final String text;
+  final String error;
+  final DateTime? startedAt;
+  final int queueMilliseconds;
+  final int elapsedMilliseconds;
+
+  factory AiStreamReply.fromSnapshot(AiStreamSnapshot snapshot) =>
+      AiStreamReply(
+        runId: snapshot.runId,
+        sourceMessageId: snapshot.sourceMessageId,
+        sequence: snapshot.sequence,
+        status: snapshot.status,
+        text: snapshot.text,
+        error: snapshot.error,
+        startedAt: snapshot.startedAt,
+        queueMilliseconds: snapshot.queueMilliseconds,
+        elapsedMilliseconds: snapshot.elapsedMilliseconds,
+      );
+
+  int displayElapsedMilliseconds(DateTime now) {
+    final live =
+        status == AiStreamStatus.thinking || status == AiStreamStatus.streaming;
+    if (!live || startedAt == null) return elapsedMilliseconds;
+    return now.toUtc().difference(startedAt!).inMilliseconds >
+            elapsedMilliseconds
+        ? now.toUtc().difference(startedAt!).inMilliseconds
+        : elapsedMilliseconds;
+  }
+
+  AiStreamReply copyWith({int? sequence, AiStreamStatus? status}) =>
+      AiStreamReply(
+        runId: runId,
+        sourceMessageId: sourceMessageId,
+        sequence: sequence ?? this.sequence,
+        status: status ?? this.status,
+        text: text,
+        error: error,
+        startedAt: startedAt,
+        queueMilliseconds: queueMilliseconds,
+        elapsedMilliseconds: elapsedMilliseconds,
+      );
 }

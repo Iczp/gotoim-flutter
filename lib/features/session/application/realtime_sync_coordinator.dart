@@ -7,6 +7,7 @@ import '../../../app/app_navigation.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../chat/application/chat_controller.dart';
+import '../../chat/application/ai_stream_change_bus.dart';
 import '../../chat/data/repositories/message_repository.dart';
 import 'session_list_controller.dart';
 import '../data/repositories/session_repository.dart';
@@ -19,20 +20,24 @@ class RealtimeSyncCoordinator {
     required SignalRGateway gateway,
     required SessionRepository sessionRepository,
     required MessageRepository messageRepository,
+    required AiStreamChangeBus aiStreamChangeBus,
     required Future<void> Function(String reason) onKicked,
   }) : _gateway = gateway,
        _sessionRepository = sessionRepository,
        _messageRepository = messageRepository,
+       _aiStreamChangeBus = aiStreamChangeBus,
        _onKicked = onKicked;
 
   final SignalRGateway _gateway;
   final SessionRepository _sessionRepository;
   final MessageRepository _messageRepository;
+  final AiStreamChangeBus _aiStreamChangeBus;
   final Future<void> Function(String reason) _onKicked;
   StreamSubscription<SignalRAppEvent>? _subscription;
   Timer? _syncTimer;
   final Set<int> _pendingOwnerIds = <int>{};
   final Map<int, Future<void>> _syncInFlightByOwner = <int, Future<void>>{};
+  final Map<String, Future<void>> _unitSyncInFlight = <String, Future<void>>{};
 
   void start() {
     _subscription ??= _gateway.events.listen(_onEvent);
@@ -61,20 +66,87 @@ class RealtimeSyncCoordinator {
         unawaited(_handleRealtimeMessage(event));
         break;
       case SignalRCommand.messageBadgeUpdated:
-      case SignalRCommand.sessionUnitChanged:
         unawaited(_scheduleTargetedSync(event));
+        break;
+      case SignalRCommand.sessionUnitChanged:
+        // Read/badge updates do not necessarily change the conversation
+        // watermark. Sync the exact affected unit instead of re-querying the
+        // owner-wide /changes endpoint.
+        unawaited(_syncChangedSessionUnit(event));
+        break;
+      case SignalRCommand.aiStarted:
+        _publishAiEvent(
+          AiStreamEventKind.started,
+          event.payload,
+          event.receivedAt,
+        );
+        break;
+      case SignalRCommand.aiDelta:
+        _publishAiEvent(
+          AiStreamEventKind.delta,
+          event.payload,
+          event.receivedAt,
+        );
+        break;
+      case SignalRCommand.aiCompleted:
+        _publishAiEvent(
+          AiStreamEventKind.completed,
+          event.payload,
+          event.receivedAt,
+        );
+        break;
+      case SignalRCommand.aiFailed:
+        _publishAiEvent(
+          AiStreamEventKind.failed,
+          event.payload,
+          event.receivedAt,
+        );
         break;
       default:
         break;
     }
   }
 
+  void _publishAiEvent(
+    AiStreamEventKind kind,
+    Object? payload,
+    DateTime receivedAt,
+  ) {
+    final event = AiStreamEvent.fromPayload(
+      kind,
+      payload,
+      receivedAt: receivedAt,
+    );
+    if (event == null) {
+      debugPrint('[realtimeSync][ai-stream-invalid] kind=${kind.name}');
+      return;
+    }
+    _aiStreamChangeBus.publish(event);
+  }
+
   Future<void> _handleRealtimeMessage(SignalRCommandEvent event) async {
     try {
-      final message = await _messageRepository
-          .applyRealtimePayloadFromCachedSession(event.payload);
-      if (message != null) {
-        _scheduleOwnerSync(message.ownerId);
+      final sessionUnitIds =
+          event.scopes
+              .whereType<Map>()
+              .map((scope) => scope['sessionUnitId'] ?? scope['SessionUnitId'])
+              .whereType<Object>()
+              .map((id) => '$id')
+              .where((id) => id.isNotEmpty)
+              .toSet();
+      final changedOwnerIds = <int>{};
+      for (final sessionUnitId in sessionUnitIds) {
+        final message = await _messageRepository
+            .applyRealtimePayloadFromCachedSession(
+              event.payload,
+              sessionUnitId: sessionUnitId,
+            );
+        if (message != null) changedOwnerIds.add(message.ownerId);
+      }
+      if (changedOwnerIds.isNotEmpty) {
+        for (final ownerId in changedOwnerIds) {
+          _scheduleOwnerSync(ownerId);
+        }
       } else {
         _scheduleCurrentOwnerSync();
       }
@@ -102,6 +174,49 @@ class RealtimeSyncCoordinator {
     _scheduleCurrentOwnerSync();
   }
 
+  Future<void> _syncChangedSessionUnit(SignalRCommandEvent event) async {
+    final sessionUnitId = _extractSessionUnitId(event.payload);
+    if (sessionUnitId == null || sessionUnitId.isEmpty) {
+      _scheduleCurrentOwnerSync();
+      return;
+    }
+
+    var ownerId = _extractOwnerId(event.payload);
+    if (ownerId == null || ownerId <= 0) {
+      ownerId =
+          (await _sessionRepository.loadLocalFriendDetail(
+            sessionUnitId,
+          ))?.ownerId;
+    }
+    if (ownerId == null || ownerId <= 0) {
+      _scheduleCurrentOwnerSync();
+      return;
+    }
+
+    final key = '$ownerId/$sessionUnitId';
+    final existing = _unitSyncInFlight[key];
+    if (existing != null) return existing;
+    final sync = () async {
+      try {
+        await _sessionRepository.loadRemoteFriendDetail(
+          ownerId: ownerId!,
+          sessionUnitId: sessionUnitId,
+        );
+      } catch (error) {
+        debugPrint(
+          '[realtimeSync][session-unit-detail-failed] '
+          'owner=$ownerId session=$sessionUnitId error=$error',
+        );
+      }
+    }();
+    _unitSyncInFlight[key] = sync;
+    return sync.whenComplete(() {
+      if (identical(_unitSyncInFlight[key], sync)) {
+        _unitSyncInFlight.remove(key);
+      }
+    });
+  }
+
   int? _extractOwnerId(Object? payload) {
     if (payload is! Map) return null;
     final map = Map<String, dynamic>.from(payload);
@@ -120,6 +235,13 @@ class RealtimeSyncCoordinator {
         final parsed = int.tryParse(rawOwnerId);
         if (parsed != null) return parsed;
       }
+    }
+    final sessionUnit = map['sessionUnit'] ?? map['SessionUnit'];
+    if (sessionUnit is Map) {
+      final unitMap = Map<String, dynamic>.from(sessionUnit);
+      final rawUnitOwnerId = unitMap['ownerId'] ?? unitMap['OwnerId'];
+      if (rawUnitOwnerId is num) return rawUnitOwnerId.toInt();
+      if (rawUnitOwnerId is String) return int.tryParse(rawUnitOwnerId);
     }
     return null;
   }
@@ -194,6 +316,7 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
     gateway: ref.watch(signalRGatewayProvider),
     sessionRepository: ref.watch(sessionRepositoryProvider),
     messageRepository: ref.watch(messageRepositoryProvider),
+    aiStreamChangeBus: ref.watch(aiStreamChangeBusProvider),
     onKicked: (reason) async {
       debugPrint('[realtimeSync][kicked] reason=$reason');
       await ref.read(authControllerProvider.notifier).logout();

@@ -33,6 +33,11 @@ class SessionUnitItem extends StatelessWidget {
     final tokens = context.appTokens;
     final raw = item.raw;
     final setting = _map(raw['setting']);
+    // A direct AI session identifies the remote participant in `owner` on
+    // /friend/{sessionUnitId}. Until that detail is available, keep the
+    // current object (or destination) avatar as a visual fallback.
+    final owner = _map(raw['owner']);
+    final currentObject = _map(raw['currentObject']);
     final destination = _map(raw['destination']);
     final badge = _number(raw['publicBadge']);
     final immersed = setting['isImmersed'] == true;
@@ -59,9 +64,20 @@ class SessionUnitItem extends StatelessWidget {
                 children: [
                   const SizedBox(width: 16),
                   ChatObjectAvatar(
-                    name: item.title,
+                    name:
+                        (owner['displayName'] ??
+                                owner['name'] ??
+                                currentObject['displayName'] ??
+                                currentObject['name'] ??
+                                item.title)
+                            .toString(),
                     imageUrl:
-                        (destination['thumbnail'] ?? destination['portrait'])
+                        (owner['thumbnail'] ??
+                                owner['portrait'] ??
+                                currentObject['thumbnail'] ??
+                                currentObject['portrait'] ??
+                                destination['thumbnail'] ??
+                                destination['portrait'])
                             ?.toString(),
                     radius: 24,
                   ),
@@ -110,9 +126,7 @@ class SessionUnitItem extends StatelessWidget {
                           Row(
                             children: [
                               Expanded(
-                                child: SessionLastMessagePreview(
-                                  item: item,
-                                ),
+                                child: SessionLastMessagePreview(item: item),
                               ),
                               if (immersed)
                                 Padding(

@@ -56,6 +56,10 @@ enum SignalRCommand {
   messageUpdated('updated@message'),
   messageBadgeUpdated('updated-badge@message'),
   messageRollbacked('rollbacked@message'),
+  aiStarted('started@ai'),
+  aiDelta('delta@ai'),
+  aiCompleted('completed@ai'),
+  aiFailed('failed@ai'),
   kicked('kicked'),
   welcome('welcome'),
   sessionUnitChanged('changed@session-unit');
