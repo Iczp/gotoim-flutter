@@ -35,8 +35,13 @@ final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((ref) {
     tokenStorage: ref.watch(tokenStorageProvider),
     tokenRefresher: authRepository as OpenIdConnectAuthRepository,
     deviceContext: ref.watch(clientDeviceContextProvider),
-    onSessionInvalidated: () =>
-        ref.read(authControllerProvider.notifier).sessionInvalidated(),
+    // A request may discover an expired token while AuthController itself is
+    // still being constructed. Defer the read so invalidation cannot form an
+    // ApiClient -> AuthController -> ApiClient provider cycle.
+    onSessionInvalidated: () async {
+      await Future<void>.delayed(Duration.zero);
+      await ref.read(authControllerProvider.notifier).sessionInvalidated();
+    },
   );
 });
 
@@ -54,30 +59,34 @@ final deviceRegistrationApiProvider = Provider<DeviceRegistrationApi>((ref) {
 
 /// 由 bootstrap 创建并覆写，保证通知点击回调在应用启动时即可注册。
 final localNotificationServiceProvider = Provider<LocalNotificationService>(
-  (ref) => throw UnimplementedError(
-    'LocalNotificationService must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'LocalNotificationService must be provided at bootstrap.',
+      ),
 );
 
 /// Unified application entry point for client/platform APIs.
 final clientCapabilityServiceProvider = Provider<ClientCapabilityService>(
-  (ref) => throw UnimplementedError(
-    'ClientCapabilityService must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'ClientCapabilityService must be provided at bootstrap.',
+      ),
 );
 
 /// JSON request/response dispatcher used by WebView adapters and diagnostics.
 final jsApiDispatcherProvider = Provider<JsApiDispatcher>(
-  (ref) => throw UnimplementedError(
-    'JsApiDispatcher must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'JsApiDispatcher must be provided at bootstrap.',
+      ),
 );
 
 /// The single SQL database shared by native and Web clients.
 final unifiedDatabaseProvider = Provider<UnifiedDatabase>(
-  (ref) => throw UnimplementedError(
-    'UnifiedDatabase must be provided at bootstrap.',
-  ),
+  (ref) =>
+      throw UnimplementedError(
+        'UnifiedDatabase must be provided at bootstrap.',
+      ),
 );
 
 /// Development-only LAN Remote DevTools server. Bootstrap supplies its single
@@ -89,27 +98,27 @@ final remoteDevServerProvider = Provider<RemoteDevServer>(
 /// ABP Application Configuration API.
 final Provider<AbpConfigurationApi> abpConfigurationApiProvider =
     Provider<AbpConfigurationApi>((ref) {
-  return AbpConfigurationApi(ref.watch(apiClientProvider));
-});
+      return AbpConfigurationApi(ref.watch(apiClientProvider));
+    });
 
 /// ABP Application Configuration Repository with SQLite caching.
 final Provider<AbpConfigurationRepository> abpConfigurationRepositoryProvider =
     Provider<AbpConfigurationRepository>((ref) {
-  return AbpConfigurationRepository(
-    api: ref.watch(abpConfigurationApiProvider),
-    database: ref.watch(unifiedDatabaseProvider),
-  );
-});
+      return AbpConfigurationRepository(
+        api: ref.watch(abpConfigurationApiProvider),
+        database: ref.watch(unifiedDatabaseProvider),
+      );
+    });
 
 /// Current logged-in user from ABP `/api/abp/application-configuration`.
-final Provider<AbpCurrentUser?> currentUserProvider =
-    Provider<AbpCurrentUser?>((ref) {
-  return ref.watch(authControllerProvider).currentUser;
-});
+final Provider<AbpCurrentUser?> currentUserProvider = Provider<AbpCurrentUser?>(
+  (ref) {
+    return ref.watch(authControllerProvider).currentUser;
+  },
+);
 
 /// Latest application configuration from ABP `/api/abp/application-configuration`.
 final Provider<AbpApplicationConfigurationDto?> abpConfigurationProvider =
     Provider<AbpApplicationConfigurationDto?>((ref) {
-  return ref.watch(authControllerProvider).applicationConfiguration;
-});
-
+      return ref.watch(authControllerProvider).applicationConfiguration;
+    });

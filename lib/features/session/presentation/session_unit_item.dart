@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme_tokens.dart';
+import '../../../core/widgets/online_device_badge.dart';
 import '../data/models/session_summary.dart';
 import 'chat_object_avatar.dart';
 import 'relative_time_text.dart';
@@ -15,6 +16,7 @@ class SessionUnitItem extends StatelessWidget {
     this.dividerIndent = 74.0,
     this.dividerEndIndent = 0.0,
     this.aiRunning = false,
+    this.onlineDeviceTypes = const <String>[],
     this.onLongPress,
     this.onTap,
     super.key,
@@ -25,6 +27,7 @@ class SessionUnitItem extends StatelessWidget {
   final double dividerIndent;
   final double dividerEndIndent;
   final bool aiRunning;
+  final List<String> onlineDeviceTypes;
   final VoidCallback? onLongPress;
   final VoidCallback? onTap;
 
@@ -63,16 +66,30 @@ class SessionUnitItem extends StatelessWidget {
               child: Row(
                 children: [
                   const SizedBox(width: 16),
-                  ChatObjectAvatar(
-                    name:
-                        (destination['displayName'] ??
-                                destination['name'] ??
-                                item.title)
-                            .toString(),
-                    imageUrl:
-                        (destination['thumbnail'] ?? destination['portrait'])
-                            ?.toString(),
-                    radius: 24,
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: <Widget>[
+                      ChatObjectAvatar(
+                        name:
+                            (destination['displayName'] ??
+                                    destination['name'] ??
+                                    item.title)
+                                .toString(),
+                        imageUrl:
+                            (destination['thumbnail'] ??
+                                    destination['portrait'])
+                                ?.toString(),
+                        radius: 24,
+                      ),
+                      if (onlineDeviceTypes.isNotEmpty)
+                        Positioned(
+                          right: -3,
+                          bottom: -3,
+                          child: OnlineDeviceBadge(
+                            deviceTypes: onlineDeviceTypes,
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(width: 14),
                   Expanded(

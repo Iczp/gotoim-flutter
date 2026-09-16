@@ -65,9 +65,10 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     final contacts = ref.watch(contactsControllerProvider);
     final ownerId = sessions.currentOwner?.id;
     if (ownerId != null && contacts.ownerId != ownerId) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => ref.read(contactsControllerProvider).initialize(ownerId),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(contactsControllerProvider).initialize(ownerId);
+      });
     }
     final groups = contacts.groups;
     final isInitialLoading =

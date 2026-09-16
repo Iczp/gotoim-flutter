@@ -10,12 +10,12 @@ import '../../auth/application/auth_controller.dart';
 import '../../contact/data/datasources/contacts_api.dart';
 import '../../contact/data/models/contact_group.dart';
 import '../../contact/data/models/online_friend.dart';
+import '../data/models/session_summary.dart';
 import '../data/repositories/session_repository.dart';
 import 'session_list_controller.dart';
 
-/// App-wide friend presence state. It exists even when the contacts page has
-/// never been opened: startup and SignalR reconnect obtain an authoritative
-/// Redis snapshot, while friend events update known contacts immediately.
+/// Global friend presence state shared by contact and session-list avatars.
+/// It obtains one startup snapshot and stays current through SignalR events.
 class FriendPresenceStore extends ChangeNotifier {
   FriendPresenceStore({
     required SignalRGateway gateway,
@@ -43,14 +43,21 @@ class FriendPresenceStore extends ChangeNotifier {
       _deviceTypesBySession[sessionUnitId] ?? const <String>[];
 
   void start() {
-    _subscription ??= _gateway.events.listen(_onSignalREvent);
+    _ensureSubscription();
     unawaited(refresh(force: true));
   }
 
-  /// Switches the presence namespace when the user selects another chat
-  /// object. A response for the old object is discarded by [_refreshInternal].
+  void _ensureSubscription() {
+    _subscription ??= _gateway.events.listen(_onSignalREvent);
+  }
+
+  /// Activates presence for the currently rendered contact owner's friends.
+  /// A response for the old owner is discarded by [_refreshInternal].
   Future<void> activateOwner(int ownerId) {
-    if (_activeOwnerId == ownerId) return refresh(force: true);
+    _ensureSubscription();
+    // Rebuilding Contacts for the same owner must not poll the server again.
+    if (_activeOwnerId == ownerId) return _refreshing ?? Future.value();
+    final previousOwnerId = _activeOwnerId;
     _activeOwnerId = ownerId;
     _deviceTypesBySession.clear();
     _sessionIdsByDestination.clear();
@@ -58,6 +65,10 @@ class FriendPresenceStore extends ChangeNotifier {
     notifyListeners();
     final inFlight = _refreshing;
     if (inFlight != null) {
+      // Startup may still be resolving the current owner. It is the same
+      // owner that Contacts is initializing, so sharing the in-flight request
+      // avoids an immediate duplicate online-friends query.
+      if (previousOwnerId == null) return inFlight;
       return inFlight.whenComplete(() => refresh(force: true));
     }
     return refresh(force: true);
@@ -66,18 +77,38 @@ class FriendPresenceStore extends ChangeNotifier {
   /// Lets a page bind its existing contact/session rows. Binding does not make
   /// a network request; any pending SignalR update becomes visible at once.
   void bindContacts(Iterable<ContactGroup> groups) {
+    _bindSessionDestinations(
+      groups.expand(
+        (group) => group.contacts.map(
+          (contact) => (sessionUnitId: contact.id, raw: contact.raw),
+        ),
+      ),
+    );
+  }
+
+  /// Registers currently rendered session rows so the same friend snapshot
+  /// can decorate their avatars without another HTTP request.
+  void bindSessions(Iterable<SessionSummary> sessions) {
+    _bindSessionDestinations(
+      sessions.map((session) => (sessionUnitId: session.id, raw: session.raw)),
+    );
+  }
+
+  void _bindSessionDestinations(
+    Iterable<({String sessionUnitId, Map<String, dynamic> raw})> entries,
+  ) {
     var changed = false;
-    for (final contact in groups.expand((group) => group.contacts)) {
-      final destinationId = _destinationId(contact);
-      if (destinationId == null || contact.id.isEmpty) continue;
+    for (final entry in entries) {
+      final destinationId = _destinationId(entry.raw);
+      if (destinationId == null || entry.sessionUnitId.isEmpty) continue;
       final ids = _sessionIdsByDestination.putIfAbsent(destinationId, () => {});
-      if (ids.add(contact.id)) changed = true;
+      if (ids.add(entry.sessionUnitId)) changed = true;
       final pending = _pendingTypesByDestination[destinationId];
       if (pending != null) {
-        final previous = _deviceTypesBySession[contact.id];
+        final previous = _deviceTypesBySession[entry.sessionUnitId];
         final next = pending.toList(growable: false);
         if (!listEquals(previous, next)) {
-          _deviceTypesBySession[contact.id] = next;
+          _deviceTypesBySession[entry.sessionUnitId] = next;
           changed = true;
         }
       }
@@ -157,6 +188,7 @@ class FriendPresenceStore extends ChangeNotifier {
     try {
       final ownerId =
           _activeOwnerId ?? (await _sessionRepository.resolveCurrentOwner()).id;
+      _activeOwnerId ??= ownerId;
       final online = await _contactsApi.getOnlineFriends(ownerId: ownerId);
       // The user may have switched chat objects while Redis was queried.
       if (_activeOwnerId != null && _activeOwnerId != ownerId) return;
@@ -188,12 +220,12 @@ class FriendPresenceStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  int? _destinationId(ContactEntry contact) {
-    final destination = contact.raw['destination'];
+  int? _destinationId(Map<String, dynamic> raw) {
+    final destination = raw['destination'];
     final value =
         destination is Map
             ? (destination['id'] ?? destination['Id'])
-            : (contact.raw['destinationId'] ?? contact.raw['DestinationId']);
+            : (raw['destinationId'] ?? raw['DestinationId']);
     return value is num ? value.toInt() : int.tryParse('$value');
   }
 
@@ -206,14 +238,12 @@ class FriendPresenceStore extends ChangeNotifier {
 
 final friendPresenceStoreProvider = ChangeNotifierProvider<FriendPresenceStore>(
   (ref) {
-    final store = FriendPresenceStore(
+    return FriendPresenceStore(
       gateway: ref.watch(signalRGatewayProvider),
       sessionRepository: ref.watch(sessionRepositoryProvider),
       contactsApi: ContactsApi(ref.watch(apiClientProvider)),
       minimumRefreshInterval:
           ref.watch(appEnvironmentProvider).friendPresenceRefreshMinInterval,
     );
-    ref.onDispose(store.dispose);
-    return store;
   },
 );

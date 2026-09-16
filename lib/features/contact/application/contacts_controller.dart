@@ -24,7 +24,9 @@ final contactsControllerProvider = ChangeNotifierProvider<ContactsController>(
   (ref) => ContactsController(
     contactsRepository: ref.watch(contactsRepositoryProvider),
     sessionRepository: ref.watch(sessionRepositoryProvider),
-    friendPresenceStore: ref.watch(friendPresenceStoreProvider),
+    // The controller listens to presence changes itself. Do not watch this
+    // ChangeNotifier here, or it is recreated on every status event.
+    friendPresenceStore: ref.read(friendPresenceStoreProvider),
   ),
 );
 
@@ -47,6 +49,7 @@ class ContactsController extends ChangeNotifier {
   bool isLoading = false;
   bool isRefreshing = false;
   Object? error;
+  bool _disposed = false;
 
   List<ContactGroup> get groups => List.unmodifiable(_groups);
   int get totalCount => _groups.fold(0, (total, group) => total + group.count);
@@ -54,10 +57,13 @@ class ContactsController extends ChangeNotifier {
   List<String> onlineDeviceTypes(String sessionUnitId) =>
       _friendPresenceStore.deviceTypesForSession(sessionUnitId);
 
-  void _onPresenceChanged() => notifyListeners();
+  void _onPresenceChanged() {
+    if (!_disposed) notifyListeners();
+  }
 
   Future<void> initialize(int? ownerId) async {
-    if (ownerId == null ||
+    if (_disposed ||
+        ownerId == null ||
         (_ownerId == ownerId && (_groups.isNotEmpty || isLoading))) {
       return;
     }
@@ -72,14 +78,14 @@ class ContactsController extends ChangeNotifier {
     try {
       local = await _loadLocal(ownerId);
     } catch (exception) {
-      if (_ownerId == ownerId) {
+      if (!_disposed && _ownerId == ownerId) {
         error = exception;
         debugPrint(
           '[contacts][local-failed] ownerId=$ownerId error=$exception',
         );
       }
     }
-    if (_ownerId != ownerId) return;
+    if (_disposed || _ownerId != ownerId) return;
     if (local.isNotEmpty) {
       _groups = local;
       _friendPresenceStore.bindContacts(local);
@@ -92,9 +98,8 @@ class ContactsController extends ChangeNotifier {
       final remote = await _contactsRepository.loadIndexedFriends(
         ownerId: ownerId,
       );
-      if (_ownerId != ownerId) return;
+      if (_disposed || _ownerId != ownerId) return;
       _groups = remote;
-      _friendPresenceStore.bindContacts(remote);
       _friendPresenceStore.bindContacts(remote);
       await _contactsRepository.saveIndexedFriends(
         ownerId: ownerId,
@@ -110,14 +115,14 @@ class ContactsController extends ChangeNotifier {
         '[contacts][remote] ownerId=$ownerId groups=${remote.length} total=$totalCount',
       );
     } catch (exception) {
-      if (_ownerId == ownerId) {
+      if (!_disposed && _ownerId == ownerId) {
         error = exception;
         debugPrint(
           '[contacts][remote-failed] ownerId=$ownerId keepLocal=${local.isNotEmpty} error=$exception',
         );
       }
     } finally {
-      if (_ownerId == ownerId) {
+      if (!_disposed && _ownerId == ownerId) {
         isLoading = false;
         notifyListeners();
       }
@@ -126,7 +131,7 @@ class ContactsController extends ChangeNotifier {
 
   Future<void> refresh() async {
     final ownerId = _ownerId;
-    if (ownerId == null || isRefreshing) return;
+    if (_disposed || ownerId == null || isRefreshing) return;
     isRefreshing = true;
     error = null;
     notifyListeners();
@@ -134,6 +139,7 @@ class ContactsController extends ChangeNotifier {
       final remote = await _contactsRepository.loadIndexedFriends(
         ownerId: ownerId,
       );
+      if (_disposed || _ownerId != ownerId) return;
       _groups = remote;
       await _contactsRepository.saveIndexedFriends(
         ownerId: ownerId,
@@ -149,16 +155,20 @@ class ContactsController extends ChangeNotifier {
         '[contacts][refresh] ownerId=$ownerId groups=${_groups.length} total=$totalCount',
       );
     } catch (exception) {
+      if (_disposed) return;
       error = exception;
       rethrow;
     } finally {
-      isRefreshing = false;
-      notifyListeners();
+      if (!_disposed) {
+        isRefreshing = false;
+        notifyListeners();
+      }
     }
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _friendPresenceStore.removeListener(_onPresenceChanged);
     super.dispose();
   }
