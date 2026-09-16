@@ -31,12 +31,16 @@ abstract class SplashCommand extends Command {
     void deepMerge(Map<String, dynamic> target, Map<String, dynamic> source) {
       source.forEach((key, value) {
         if (value is Map && target[key] is Map) {
-          deepMerge(target[key] as Map<String, dynamic>, value as Map<String, dynamic>);
+          deepMerge(
+            target[key] as Map<String, dynamic>,
+            value as Map<String, dynamic>,
+          );
         } else {
           target[key] = value;
         }
       });
     }
+
     deepMerge(result, override);
     return result;
   }

@@ -140,9 +140,38 @@ class ChatController extends ChangeNotifier {
       _attachmentTransferService.stateFor(messageLocalId);
 
   List<ChatMessage> get messages => List.unmodifiable(_messages);
-  List<AiStreamReply> get aiStreamReplies =>
-      _aiStreamReplies.values.toList()
-        ..sort((a, b) => b.sourceMessageId.compareTo(a.sourceMessageId));
+  List<AiStreamReply> get aiStreamReplies => _visibleAiStreamReplies();
+
+  /// A chat can receive stale/retried `started@ai` events for older source
+  /// messages. The message list has one inline AI placeholder, so render only
+  /// the newest live run; the complete run history remains available from the
+  /// AI-run timeline.
+  List<AiStreamReply> _visibleAiStreamReplies() {
+    final replies = _aiStreamReplies.values.toList();
+    final liveReplies =
+        replies
+            .where(
+              (reply) =>
+                  reply.status == AiStreamStatus.thinking ||
+                  reply.status == AiStreamStatus.streaming,
+            )
+            .toList();
+    if (liveReplies.length > 1) {
+      liveReplies.sort(
+        (left, right) => right.sourceMessageId.compareTo(left.sourceMessageId),
+      );
+      final newestLiveRunId = liveReplies.first.runId;
+      replies.removeWhere(
+        (reply) =>
+            (reply.status == AiStreamStatus.thinking ||
+                reply.status == AiStreamStatus.streaming) &&
+            reply.runId != newestLiveRunId,
+      );
+    }
+    replies.sort((a, b) => b.sourceMessageId.compareTo(a.sourceMessageId));
+    return List.unmodifiable(replies);
+  }
+
   List<AiRunRecord> get recentAiRuns => List.unmodifiable(_recentAiRuns);
   String get title => friend?.title ?? _title;
   String get peerDisplayName => firstNonEmpty(<Object?>[

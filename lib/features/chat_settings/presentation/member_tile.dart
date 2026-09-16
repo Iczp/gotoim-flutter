@@ -28,6 +28,7 @@ class MemberTile extends StatelessWidget {
                     imageUrl:
                         member.avatarUrl.isEmpty ? null : member.avatarUrl,
                     radius: 24,
+                    chatObjectId: member.chatObjectId,
                   ),
                   if (member.isCreator)
                     const Positioned(
@@ -55,6 +56,7 @@ class MemberTile extends StatelessWidget {
         name: member.name,
         imageUrl: member.avatarUrl.isEmpty ? null : member.avatarUrl,
         radius: 23,
+        chatObjectId: member.chatObjectId,
       ),
       title: Row(
         children: <Widget>[

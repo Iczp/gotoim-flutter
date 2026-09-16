@@ -90,6 +90,9 @@ class ChatMessage {
       state == 'pending';
   bool get isOpened => raw['isOpened'] == true || isMine;
   Map<String, dynamic> get senderSessionUnit => asMap(raw['senderSessionUnit']);
+  int? get senderChatObjectId =>
+      asInt(asMap(senderSessionUnit['owner'])['id']) ??
+      asInt(senderSessionUnit['ownerId']);
   String get senderName {
     final sender = senderSessionUnit;
     final owner = asMap(sender['owner']);

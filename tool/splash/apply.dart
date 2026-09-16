@@ -1,25 +1,22 @@
-// GENERATED FILE ¨C DO NOT EDIT MANUALLY
-// apply.dart ¨C splash apply subcommand
+// GENERATED FILE - DO NOT EDIT MANUALLY
+// apply.dart - splash apply subcommand
 import 'dart:io';
-import 'package:args/command_runner.dart';
 import 'splash_command.dart';
-import 'package:yaml/yaml.dart';
-import 'package:path/path.dart' as p;
-import 'package:process_run/process_run.dart';
 
 class SplashApplyCommand extends SplashCommand {
   @override
   final String name = 'apply';
 
   @override
-  final String description = 'Generate splash resources for all platforms and write generated Dart config.';
+  final String description =
+      'Generate splash resources for all platforms and write generated Dart config.';
 
   @override
   void run() {
     final flavor = argResults?['flavor'] as String?;
     final config = loadConfig();
     final merged = mergeFlavor(config, flavor);
-    final splash = merged['splash'] as Map;
+    final splash = merged['splash'] as Map? ?? {};
     final startup = merged['startup'] as Map? ?? {};
 
     // ---------- Mobile (Android / iOS) ----------
@@ -37,17 +34,24 @@ class SplashApplyCommand extends SplashCommand {
   void _runFlutterNativeSplash(Map splash) {
     // Write temporary flutter_native_splash.yaml
     final tempYaml = File('flutter_native_splash.yaml');
+    final color = splash['backgroundColor'] ?? '#FFFFFF';
+    final image = splash['image'] ?? '';
+    final darkImage = splash['darkImage'] ?? '';
     final yamlContent = '''
 flutter_native_splash:
-  color:  
-  image: 
-  dark_image: 
+  color: "$color"
+  image: "$image"
+  dark_image: "$darkImage"
   android: true
   ios: true
 ''';
     tempYaml.writeAsStringSync(yamlContent);
     // Execute the generator
-    Process.runSync('flutter', ['pub', 'run', 'flutter_native_splash:create'], runInShell: true);
+    Process.runSync('flutter', [
+      'pub',
+      'run',
+      'flutter_native_splash:create',
+    ], runInShell: true);
     // Clean up
     if (tempYaml.existsSync()) tempYaml.deleteSync();
   }
@@ -56,20 +60,34 @@ flutter_native_splash:
     // Windows
     final winTemplate = File('tool/templates/windows_splash.stub');
     if (winTemplate.existsSync()) {
-      final content = winTemplate.readAsStringSync()
-        .replaceAll('\', splash['backgroundColor'] ?? '#FFFFFF')
-        .replaceAll('\', splash['image'] ?? '')
-        .replaceAll('\', (splash['platforms']?['windows']?['timeoutMs'] ?? 5000).toString());
+      final content = winTemplate
+          .readAsStringSync()
+          .replaceAll(
+            '{{BACKGROUND_COLOR}}',
+            splash['backgroundColor'] ?? '#FFFFFF',
+          )
+          .replaceAll('{{IMAGE}}', splash['image'] ?? '')
+          .replaceAll(
+            '{{TIMEOUT_MS}}',
+            (splash['platforms']?['windows']?['timeoutMs'] ?? 5000).toString(),
+          );
       final winFile = File('windows/runner/windows_splash.cpp');
       _replaceOrCreateBlock(winFile, content);
     }
     // macOS
     final macTemplate = File('tool/templates/macos_splash.stub');
     if (macTemplate.existsSync()) {
-      final content = macTemplate.readAsStringSync()
-        .replaceAll('\', splash['backgroundColor'] ?? '#FFFFFF')
-        .replaceAll('\', splash['image'] ?? '')
-        .replaceAll('\', (splash['platforms']?['macos']?['timeoutMs'] ?? 5000).toString());
+      final content = macTemplate
+          .readAsStringSync()
+          .replaceAll(
+            '{{BACKGROUND_COLOR}}',
+            splash['backgroundColor'] ?? '#FFFFFF',
+          )
+          .replaceAll('{{IMAGE}}', splash['image'] ?? '')
+          .replaceAll(
+            '{{TIMEOUT_MS}}',
+            (splash['platforms']?['macos']?['timeoutMs'] ?? 5000).toString(),
+          );
       final macFile = File('macos/Runner/MacOSSplash.swift');
       _replaceOrCreateBlock(macFile, content);
     }
@@ -81,7 +99,7 @@ flutter_native_splash:
     if (!target.existsSync()) {
       // Create file with markers and content
       target.createSync(recursive: true);
-      target.writeAsStringSync('\n\n\n');
+      target.writeAsStringSync('$beginMarker\n$generatedContent\n$endMarker\n');
       return;
     }
     final lines = target.readAsLinesSync();
@@ -94,20 +112,29 @@ flutter_native_splash:
       target.writeAsStringSync(newLines.join('\n'));
     } else {
       // Append markers at end
-      target.writeAsStringSync('\n\n\n\n', mode: FileMode.append);
+      target.writeAsStringSync(
+        '\n$beginMarker\n$generatedContent\n$endMarker\n',
+        mode: FileMode.append,
+      );
     }
   }
 
   void _writeDartConfig(Map splash, Map startup) {
     final buffer = StringBuffer();
-    buffer.writeln('// GENERATED FILE ¨C DO NOT EDIT MANUALLY');
-    buffer.writeln('const String splashBackgroundColor = ;');
-    buffer.writeln('const String splashImage = ;');
+    buffer.writeln('// GENERATED FILE - DO NOT EDIT MANUALLY');
+    buffer.writeln(
+      "const String splashBackgroundColor = '${splash['backgroundColor'] ?? '#FFFFFF'}';",
+    );
+    buffer.writeln("const String splashImage = '${splash['image'] ?? ''}';");
     if (splash['darkImage'] != null) {
-      buffer.writeln('const String splashDarkImage = ;');
+      buffer.writeln(
+        "const String splashDarkImage = '${splash['darkImage']}';",
+      );
     }
     if (startup['fadeDurationMs'] != null) {
-      buffer.writeln('const int splashFadeDurationMs = ;');
+      buffer.writeln(
+        'const int splashFadeDurationMs = ${startup['fadeDurationMs']};',
+      );
     }
     final outFile = File('lib/core/startup/generated/splash_config.g.dart');
     outFile.createSync(recursive: true);

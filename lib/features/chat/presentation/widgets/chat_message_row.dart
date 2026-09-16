@@ -216,6 +216,7 @@ class ChatMessageRow extends StatelessWidget {
                   imageUrl: message.senderAvatarUrl,
                   size: 44,
                   radius: 22,
+                  chatObjectId: message.senderChatObjectId,
                 );
                 av = GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -297,9 +298,10 @@ class ChatMessageRow extends StatelessWidget {
                       ),
                     // 各种消息（自个约束，不加 padding，气泡尾巴宽度 12）
                     Align(
-                      alignment: message.isMine
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
+                      alignment:
+                          message.isMine
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
                       child: messageContentWidget,
                     ),
                     // 引用消息 (各自加 padding: 12)
@@ -390,7 +392,8 @@ class ChatMessageRow extends StatelessWidget {
   Widget _buildSystemMessage(BuildContext context) {
     final rawText = message.text.isEmpty ? '[系统消息]' : message.text;
     final theme = Theme.of(context);
-    final textStyle = theme.textTheme.bodySmall?.copyWith(
+    final textStyle =
+        theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
           fontSize: 12,
           height: 1.4,
@@ -416,7 +419,9 @@ class ChatMessageRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.5,
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text.rich(

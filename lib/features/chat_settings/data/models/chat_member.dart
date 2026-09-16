@@ -71,6 +71,9 @@ class ChatMember {
   final List<MemberIdName> tagList;
   final Map<String, dynamic> raw;
 
+  int? get chatObjectId =>
+      asInt(asMap(raw['owner'])['id']) ?? asInt(raw['ownerId']);
+
   Map<String, Object?> toDatabaseValues(
     int ownerId,
     String sessionUnitId,
