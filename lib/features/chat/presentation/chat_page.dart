@@ -286,6 +286,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             imageUrl: controller.peerAvatarUrl,
             size: 44,
             radius: 22,
+            chatObjectId: controller.peerChatObjectId,
           ),
           const SizedBox(width: 12),
           Flexible(

@@ -16,14 +16,14 @@ class UnifiedDatabase {
   UnifiedDatabase(this._connection);
 
   factory UnifiedDatabase.openDefault() => UnifiedDatabase(
-        driftDatabase(
-          name: databaseName,
-          web: DriftWebOptions(
-            sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-            driftWorker: Uri.parse('drift_worker.js'),
-          ),
-        ),
-      );
+    driftDatabase(
+      name: databaseName,
+      web: DriftWebOptions(
+        sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+        driftWorker: Uri.parse('drift_worker.js'),
+      ),
+    ),
+  );
 
   static const databaseName = 'gotoim';
   static const schemaVersion = 1;
@@ -49,9 +49,10 @@ class UnifiedDatabase {
   bool get isInitialized =>
       _initializationError == null && _initialization != null;
 
-  String get storageDescription => kIsWeb
-      ? 'SQLite WASM（浏览器 OPFS / IndexedDB 持久化）'
-      : 'SQLite 文件（应用 Documents 目录）';
+  String get storageDescription =>
+      kIsWeb
+          ? 'SQLite WASM（浏览器 OPFS / IndexedDB 持久化）'
+          : 'SQLite 文件（应用 Documents 目录）';
 
   /// Runs idempotent schema creation on first open, and keeps a SQLite
   /// [schemaVersion] for later additive migrations.
@@ -313,6 +314,7 @@ class UnifiedDatabase {
     required String sessionUnitId,
     required int score,
     required Map<String, dynamic> message,
+    bool incrementUnreadBadge = false,
   }) async {
     await initialize();
     final rows = await _connection.runSelect(
@@ -330,8 +332,12 @@ class UnifiedDatabase {
     raw['lastMessageTime'] = messageTime.toIso8601String();
     raw['ticks'] = ticks;
     raw['score'] = score;
-    raw['publicBadge'] = 0;
-    raw['privateBadge'] = 0;
+    if (incrementUnreadBadge) {
+      final current = raw['publicBadge'];
+      final currentBadge =
+          current is num ? current.toInt() : int.tryParse('$current') ?? 0;
+      raw['publicBadge'] = currentBadge + 1;
+    }
     await _connection.runUpdate(
       'UPDATE Friends SET score = ?, ticks = ?, updateTime = ?, raw = ? '
       'WHERE id = ? AND ownerId = ?',
@@ -641,14 +647,20 @@ class UnifiedDatabase {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is List) {
-        return decoded.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        return decoded
+            .map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
       }
     } catch (_) {}
     return const <String>[];
   }
 
   /// Adds a keyword to persistent search history, prepending and deduplicating.
-  Future<List<String>> addSearchKeyword(String keyword, {int maxCount = 20}) async {
+  Future<List<String>> addSearchKeyword(
+    String keyword, {
+    int maxCount = 20,
+  }) async {
     final term = keyword.trim();
     if (term.isEmpty) return readSearchHistory();
     final current = await readSearchHistory();
@@ -779,11 +791,11 @@ class DatabaseOverview {
   final List<DatabaseTableInfo> tables;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'name': name,
-        'schemaVersion': schemaVersion,
-        'storage': storage,
-        'tables': tables.map((table) => table.toJson()).toList(),
-      };
+    'name': name,
+    'schemaVersion': schemaVersion,
+    'storage': storage,
+    'tables': tables.map((table) => table.toJson()).toList(),
+  };
 }
 
 class DatabaseTableInfo {
@@ -798,10 +810,10 @@ class DatabaseTableInfo {
   final String createSql;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'name': name,
-        'rowCount': rowCount,
-        'createSql': createSql,
-      };
+    'name': name,
+    'rowCount': rowCount,
+    'createSql': createSql,
+  };
 }
 
 class DatabaseDiagnosticRecord {
@@ -831,12 +843,12 @@ class DatabaseDiagnosticRecord {
   final int updatedAt;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'id': id,
-        'title': title,
-        'payload': payload,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
-      };
+    'id': id,
+    'title': title,
+    'payload': payload,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+  };
 }
 
 const _version1Schema = <String>[

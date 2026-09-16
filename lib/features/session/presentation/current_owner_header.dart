@@ -34,71 +34,77 @@ class CurrentOwnerHeader extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-            // 左侧身份切换区域
-            Expanded(
-              child: InkWell(
-                onTap: onPressed,
-                borderRadius: BorderRadius.circular(24),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  child: Row(
-                    children: [
-                      ChatObjectAvatar(
-                        name: owner?.name ?? '-',
-                        imageUrl: owner?.imageUrl,
-                        radius: 18,
-                      ),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Text(
-                          owner?.name ?? 'Goto IM',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
+              // 左侧身份切换区域
+              Expanded(
+                child: InkWell(
+                  onTap: onPressed,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        ChatObjectAvatar(
+                          name: owner?.name ?? '-',
+                          imageUrl: owner?.imageUrl,
+                          radius: 18,
+                          chatObjectId: owner?.id,
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            owner?.name ?? 'Goto IM',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      if (hasMultiple)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            color: colorScheme.onSurfaceVariant,
+                        if (hasMultiple)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            const SizedBox(width: 8),
+              const SizedBox(width: 8),
 
-            // 右侧操作按钮：搜索与 + 号菜单
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.search_rounded),
-                  tooltip: '搜索',
-                  onPressed: () => context.push('/search'),
-                ),
-                Builder(
-                  builder: (buttonContext) {
-                    return IconButton(
-                      icon: const Icon(Icons.add_circle_outline_rounded),
-                      tooltip: '更多功能',
-                      onPressed: () => _showAddMenu(buttonContext, context, ref),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ],
+              // 右侧操作按钮：搜索与 + 号菜单
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.search_rounded),
+                    tooltip: '搜索',
+                    onPressed: () => context.push('/search'),
+                  ),
+                  Builder(
+                    builder: (buttonContext) {
+                      return IconButton(
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                        tooltip: '更多功能',
+                        onPressed:
+                            () => _showAddMenu(buttonContext, context, ref),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-    ),);
+    );
   }
 
   void _showAddMenu(
@@ -132,10 +138,7 @@ class CurrentOwnerHeader extends ConsumerWidget {
 }
 
 class _HeaderMenuRoute extends PopupRoute<void> {
-  _HeaderMenuRoute({
-    required this.targetRect,
-    required this.onSelected,
-  });
+  _HeaderMenuRoute({required this.targetRect, required this.onSelected});
 
   final Rect targetRect;
   final ValueChanged<String> onSelected;
@@ -189,10 +192,7 @@ class _HeaderMenuRoute extends PopupRoute<void> {
             ),
             child: ScaleTransition(
               scale: Tween<double>(begin: 0.92, end: 1.0).animate(
-                CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOutCubic,
-                ),
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
               ),
               alignment: Alignment.topRight,
               child: Material(
@@ -214,7 +214,10 @@ class _HeaderMenuRoute extends PopupRoute<void> {
                           onSelected('scan');
                         },
                       ),
-                      Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.2)),
+                      Divider(
+                        height: 1,
+                        color: theme.dividerColor.withValues(alpha: 0.2),
+                      ),
                       _MenuItem(
                         icon: Icons.person_add_outlined,
                         text: '添加好友',
@@ -223,7 +226,10 @@ class _HeaderMenuRoute extends PopupRoute<void> {
                           onSelected('add_friend');
                         },
                       ),
-                      Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.2)),
+                      Divider(
+                        height: 1,
+                        color: theme.dividerColor.withValues(alpha: 0.2),
+                      ),
                       _MenuItem(
                         icon: Icons.group_add_outlined,
                         text: '创建群聊',

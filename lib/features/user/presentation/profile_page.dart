@@ -173,6 +173,10 @@ class ProfilePage extends StatelessWidget {
                                 ? null
                                 : subject.avatarUrl,
                         radius: 48,
+                        chatObjectId:
+                            asInt(asMap(subject.raw['destination'])['id']) ??
+                            asInt(subject.raw['destinationId']) ??
+                            asInt(subject.raw['id']),
                       ),
                       if (subject.editableAvatar)
                         Positioned(

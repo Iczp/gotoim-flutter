@@ -110,6 +110,8 @@ class SessionSummary {
   int? get peerReadMessageId => asInt(raw['peerReadMessageId']);
   int? get ownerObjectType =>
       asInt(raw['ownerObjectType']) ?? asInt(asMap(raw['owner'])['objectType']);
+  int? get destinationId =>
+      asInt(asMap(raw['destination'])['id']) ?? asInt(raw['destinationId']);
 
   /// The original client shows the transfer control for shopkeeper/waiter
   /// identities (7/8), not just when the chat destination is a shop account.

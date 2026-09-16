@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../application/session_list_controller.dart';
-import '../application/friend_presence_store.dart';
 import '../data/models/session_summary.dart';
 import 'current_device_bar.dart';
 import 'current_owner_header.dart';
@@ -27,31 +26,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
   int _handledFocusUnreadRequest = 0;
   List<SessionListItem> _lastListItems = const <SessionListItem>[];
   final Map<String, GlobalKey> _sessionItemKeys = <String, GlobalKey>{};
-  List<SessionSummary> _pendingPresenceSessions = const <SessionSummary>[];
-  String _boundPresenceSessionIds = '';
-  bool _presenceBindScheduled = false;
 
   GlobalKey _sessionItemKey(String sessionUnitId) =>
       _sessionItemKeys.putIfAbsent(
         sessionUnitId,
         () => GlobalKey(debugLabel: 'session-list-item-$sessionUnitId'),
       );
-
-  void _schedulePresenceBinding(List<SessionSummary> sessions) {
-    final sessionIds = sessions.map((session) => session.id).join('|');
-    if (_boundPresenceSessionIds == sessionIds) return;
-    _boundPresenceSessionIds = sessionIds;
-    _pendingPresenceSessions = sessions;
-    if (_presenceBindScheduled) return;
-    _presenceBindScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _presenceBindScheduled = false;
-      if (!mounted) return;
-      ref
-          .read(friendPresenceStoreProvider)
-          .bindSessions(_pendingPresenceSessions);
-    });
-  }
 
   @override
   void initState() {
@@ -137,8 +117,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
   @override
   Widget build(BuildContext context) {
     final controller = ref.watch(sessionListControllerProvider);
-    final friendPresence = ref.watch(friendPresenceStoreProvider);
-    _schedulePresenceBinding(controller.sessions);
     final listItems = buildSessionListItems(
       controller.sessions,
       hasMore: controller.hasMore,
@@ -296,12 +274,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                             aiRunning:
                                 item.session != null &&
                                 controller.isAiRunning(item.session!.id),
-                            onlineDeviceTypes:
-                                item.session == null
-                                    ? const <String>[]
-                                    : friendPresence.deviceTypesForSession(
-                                      item.session!.id,
-                                    ),
                           );
                         },
                       ),

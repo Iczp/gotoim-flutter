@@ -9,6 +9,7 @@ import '../../../core/device/client_device_context.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../chat/application/ai_stream_change_bus.dart';
+import 'friend_presence_store.dart';
 import '../data/datasources/ai_api.dart';
 import '../data/datasources/session_dao.dart';
 import '../data/datasources/session_unit_api.dart';
@@ -45,6 +46,7 @@ final sessionListControllerProvider =
         ref.watch(clientDeviceContextProvider),
         ref.watch(sessionChangeBusProvider),
         ref.watch(aiStreamChangeBusProvider),
+        ref.read(friendPresenceStoreProvider),
       ),
     );
 
@@ -68,6 +70,7 @@ class SessionListController extends ChangeNotifier {
     this._deviceContext,
     this._changeBus,
     this._aiStreamChangeBus,
+    this._friendPresenceStore,
   ) : _connectionState = _signalRGateway.connectionState {
     _signalSubscription = _signalRGateway.events.listen((event) {
       if (event is SignalRConnectionEvent) {
@@ -90,6 +93,7 @@ class SessionListController extends ChangeNotifier {
     _changeSubscription = _changeBus.events.listen((event) {
       if (event.ownerId == _currentOwner?.id) _scheduleLocalReload();
     });
+    _friendPresenceStore.addListener(_syncOnlineDevicesFromPresence);
     _syncAiRunsFromBus();
     _aiStreamSubscription = _aiStreamChangeBus.events.listen((event) {
       _aiEventRevision++;
@@ -115,6 +119,7 @@ class SessionListController extends ChangeNotifier {
   final ClientDeviceContext _deviceContext;
   final SessionChangeBus _changeBus;
   final AiStreamChangeBus _aiStreamChangeBus;
+  final FriendPresenceStore _friendPresenceStore;
   late final StreamSubscription<SignalRAppEvent> _signalSubscription;
   late final StreamSubscription<SessionChangeEvent> _changeSubscription;
   late final StreamSubscription<AiStreamEvent> _aiStreamSubscription;
@@ -298,6 +303,7 @@ class SessionListController extends ChangeNotifier {
             _ownerById(savedOwnerId) ??
             remoteOwners.first;
         await _repository.saveCurrentOwnerId(_currentOwner!.id);
+        unawaited(_friendPresenceStore.activateOwner(_currentOwner!.id));
         await _loadNextPageInternal(reset: true);
         _remoteInitialized = true;
       }
@@ -360,6 +366,7 @@ class SessionListController extends ChangeNotifier {
       connectionId: device.connectionId,
       reason: '用户主动断开连接',
     );
+    await _friendPresenceStore.refresh(force: true);
     await loadOnlineDevices(silent: true);
   }
 
@@ -368,7 +375,8 @@ class SessionListController extends ChangeNotifier {
     _isLoadingOnlineDevices = true;
     if (!silent) notifyListeners();
     try {
-      _onlineDevices = await _repository.loadOnlineDevices();
+      await _friendPresenceStore.refresh();
+      _syncOnlineDevicesFromPresence(notify: false);
     } catch (error) {
       debugPrint('Load online devices failed: $error');
     } finally {
@@ -377,8 +385,22 @@ class SessionListController extends ChangeNotifier {
     }
   }
 
+  void _syncOnlineDevicesFromPresence({bool notify = true}) {
+    final next = _friendPresenceStore.onlineDevicesForChatObjectId(
+      _currentOwner?.id,
+    );
+    final unchanged =
+        _onlineDevices.length == next.length &&
+        _onlineDevices.map((item) => item.connectionId).join('|') ==
+            next.map((item) => item.connectionId).join('|');
+    if (unchanged) return;
+    _onlineDevices = next;
+    if (notify) notifyListeners();
+  }
+
   @override
   void dispose() {
+    _friendPresenceStore.removeListener(_syncOnlineDevicesFromPresence);
     _signalSubscription.cancel();
     _changeSubscription.cancel();
     _aiStreamSubscription.cancel();
@@ -471,6 +493,7 @@ class SessionListController extends ChangeNotifier {
     if (_currentOwner?.id == owner.id) return;
     _currentOwner = owner;
     await _repository.saveCurrentOwnerId(owner.id);
+    unawaited(_friendPresenceStore.activateOwner(owner.id));
     _sessions.clear();
     _hasMore = true;
     _totalCount = null;

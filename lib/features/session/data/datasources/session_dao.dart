@@ -87,11 +87,13 @@ class SessionDao {
     required String sessionUnitId,
     required int score,
     required Map<String, dynamic> message,
+    bool incrementUnreadBadge = false,
   }) => _database.updateFriendLastMessage(
     ownerId: ownerId,
     sessionUnitId: sessionUnitId,
     score: score,
     message: message,
+    incrementUnreadBadge: incrementUnreadBadge,
   );
 
   Future<int> resetMessages(int ownerId, String sessionUnitId) =>

@@ -9,10 +9,7 @@ enum SessionMenuAction { topping, notification, settings, clear }
 
 /// Modal bottom sheet for session long-press actions.
 class SessionMenuSheet extends StatelessWidget {
-  const SessionMenuSheet({
-    required this.session,
-    super.key,
-  });
+  const SessionMenuSheet({required this.session, super.key});
 
   final SessionSummary session;
 
@@ -107,6 +104,7 @@ class SessionMenuSheet extends StatelessWidget {
               name: session.title,
               imageUrl: null,
               radius: 22,
+              chatObjectId: session.destinationId,
             ),
             title: Text(
               session.title,
@@ -146,9 +144,7 @@ class SessionMenuSheet extends StatelessWidget {
             ),
             title: Text(
               '清空聊天记录',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.error,
-              ),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
             onTap: () => Navigator.pop(context, SessionMenuAction.clear),
           ),

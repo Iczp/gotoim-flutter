@@ -21,7 +21,7 @@ class OnlineDeviceBadge extends StatelessWidget {
         width: 18,
         height: 18,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary,
+          color: Colors.green,
           shape: BoxShape.circle,
           border: Border.all(
             color: Theme.of(context).colorScheme.surface,

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../app/application_providers.dart';
-import '../../session/application/friend_presence_store.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/data/repositories/session_repository.dart';
@@ -24,9 +23,6 @@ final contactsControllerProvider = ChangeNotifierProvider<ContactsController>(
   (ref) => ContactsController(
     contactsRepository: ref.watch(contactsRepositoryProvider),
     sessionRepository: ref.watch(sessionRepositoryProvider),
-    // The controller listens to presence changes itself. Do not watch this
-    // ChangeNotifier here, or it is recreated on every status event.
-    friendPresenceStore: ref.read(friendPresenceStoreProvider),
   ),
 );
 
@@ -34,16 +30,11 @@ class ContactsController extends ChangeNotifier {
   ContactsController({
     required ContactsRepository contactsRepository,
     required SessionRepository sessionRepository,
-    required FriendPresenceStore friendPresenceStore,
   }) : _contactsRepository = contactsRepository,
-       _sessionRepository = sessionRepository,
-       _friendPresenceStore = friendPresenceStore {
-    _friendPresenceStore.addListener(_onPresenceChanged);
-  }
+       _sessionRepository = sessionRepository;
 
   final ContactsRepository _contactsRepository;
   final SessionRepository _sessionRepository;
-  final FriendPresenceStore _friendPresenceStore;
   List<ContactGroup> _groups = const <ContactGroup>[];
   int? _ownerId;
   bool isLoading = false;
@@ -54,13 +45,6 @@ class ContactsController extends ChangeNotifier {
   List<ContactGroup> get groups => List.unmodifiable(_groups);
   int get totalCount => _groups.fold(0, (total, group) => total + group.count);
   int? get ownerId => _ownerId;
-  List<String> onlineDeviceTypes(String sessionUnitId) =>
-      _friendPresenceStore.deviceTypesForSession(sessionUnitId);
-
-  void _onPresenceChanged() {
-    if (!_disposed) notifyListeners();
-  }
-
   Future<void> initialize(int? ownerId) async {
     if (_disposed ||
         ownerId == null ||
@@ -69,7 +53,6 @@ class ContactsController extends ChangeNotifier {
     }
     _ownerId = ownerId;
     _groups = const <ContactGroup>[];
-    unawaited(_friendPresenceStore.activateOwner(ownerId));
     error = null;
     isLoading = true;
     notifyListeners();
@@ -88,7 +71,6 @@ class ContactsController extends ChangeNotifier {
     if (_disposed || _ownerId != ownerId) return;
     if (local.isNotEmpty) {
       _groups = local;
-      _friendPresenceStore.bindContacts(local);
       debugPrint(
         '[contacts][local] ownerId=$ownerId groups=${local.length} total=$totalCount',
       );
@@ -100,7 +82,6 @@ class ContactsController extends ChangeNotifier {
       );
       if (_disposed || _ownerId != ownerId) return;
       _groups = remote;
-      _friendPresenceStore.bindContacts(remote);
       await _contactsRepository.saveIndexedFriends(
         ownerId: ownerId,
         groups: remote,
@@ -169,7 +150,6 @@ class ContactsController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _friendPresenceStore.removeListener(_onPresenceChanged);
     super.dispose();
   }
 

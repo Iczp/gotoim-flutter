@@ -410,8 +410,21 @@ class MessageRepository {
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,
     );
+    // SignalR can replay the same durable message after a reconnect. Only a
+    // previously unseen incoming message may increase the local unread badge.
+    final wasPersisted =
+        message.serverId != null &&
+        await _dao.findByServerId(
+              ownerId: ownerId,
+              sessionUnitId: sessionUnitId,
+              serverId: message.serverId!,
+            ) !=
+            null;
     await _dao.upsertAll(<ChatMessage>[message]);
-    await _updateSessionSummary(message);
+    await _updateSessionSummary(
+      message,
+      incrementUnreadBadge: !message.isMine && !wasPersisted,
+    );
     return message;
   }
 
@@ -753,12 +766,16 @@ class MessageRepository {
     return result;
   }
 
-  Future<void> _updateSessionSummary(ChatMessage message) async {
+  Future<void> _updateSessionSummary(
+    ChatMessage message, {
+    bool incrementUnreadBadge = false,
+  }) async {
     await _sessionDao?.updateLastMessage(
       ownerId: message.ownerId,
       sessionUnitId: message.sessionUnitId,
       score: message.score,
       message: message.raw,
+      incrementUnreadBadge: incrementUnreadBadge,
     );
     _sessionChangeBus?.publish(
       ownerId: message.ownerId,

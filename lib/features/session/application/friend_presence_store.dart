@@ -8,9 +8,8 @@ import '../../../core/config/app_environment.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../contact/data/datasources/contacts_api.dart';
-import '../../contact/data/models/contact_group.dart';
 import '../../contact/data/models/online_friend.dart';
-import '../data/models/session_summary.dart';
+import '../data/models/logged_in_device.dart';
 import '../data/repositories/session_repository.dart';
 import 'session_list_controller.dart';
 
@@ -31,16 +30,30 @@ class FriendPresenceStore extends ChangeNotifier {
   final SessionRepository _sessionRepository;
   final ContactsApi _contactsApi;
   final Duration _minimumRefreshInterval;
-  final Map<String, List<String>> _deviceTypesBySession = {};
-  final Map<int, Set<String>> _sessionIdsByDestination = {};
-  final Map<int, Set<String>> _pendingTypesByDestination = {};
+  final Map<int, Set<String>> _deviceTypesByDestination = {};
+  final Map<int, List<LoggedInDevice>> _onlineDevicesByChatObject = {};
   StreamSubscription<SignalRAppEvent>? _subscription;
   DateTime? _lastRefreshAt;
   Future<void>? _refreshing;
   int? _activeOwnerId;
 
-  List<String> deviceTypesForSession(String sessionUnitId) =>
-      _deviceTypesBySession[sessionUnitId] ?? const <String>[];
+  List<String> deviceTypesForChatObjectId(int? destinationId) =>
+      destinationId == null
+          ? const <String>[]
+          : (_deviceTypesByDestination[destinationId]?.toList(
+                growable: false,
+              ) ??
+              const <String>[]);
+
+  /// Full connection/device details are available for the current chat owner
+  /// from `/api/chat/online/by-current-user`, not merely its device types.
+  List<LoggedInDevice> onlineDevicesForChatObjectId(int? chatObjectId) =>
+      chatObjectId == null
+          ? const <LoggedInDevice>[]
+          : List<LoggedInDevice>.unmodifiable(
+            _onlineDevicesByChatObject[chatObjectId] ??
+                const <LoggedInDevice>[],
+          );
 
   void start() {
     _ensureSubscription();
@@ -59,9 +72,8 @@ class FriendPresenceStore extends ChangeNotifier {
     if (_activeOwnerId == ownerId) return _refreshing ?? Future.value();
     final previousOwnerId = _activeOwnerId;
     _activeOwnerId = ownerId;
-    _deviceTypesBySession.clear();
-    _sessionIdsByDestination.clear();
-    _pendingTypesByDestination.clear();
+    _deviceTypesByDestination.clear();
+    _onlineDevicesByChatObject.clear();
     notifyListeners();
     final inFlight = _refreshing;
     if (inFlight != null) {
@@ -72,48 +84,6 @@ class FriendPresenceStore extends ChangeNotifier {
       return inFlight.whenComplete(() => refresh(force: true));
     }
     return refresh(force: true);
-  }
-
-  /// Lets a page bind its existing contact/session rows. Binding does not make
-  /// a network request; any pending SignalR update becomes visible at once.
-  void bindContacts(Iterable<ContactGroup> groups) {
-    _bindSessionDestinations(
-      groups.expand(
-        (group) => group.contacts.map(
-          (contact) => (sessionUnitId: contact.id, raw: contact.raw),
-        ),
-      ),
-    );
-  }
-
-  /// Registers currently rendered session rows so the same friend snapshot
-  /// can decorate their avatars without another HTTP request.
-  void bindSessions(Iterable<SessionSummary> sessions) {
-    _bindSessionDestinations(
-      sessions.map((session) => (sessionUnitId: session.id, raw: session.raw)),
-    );
-  }
-
-  void _bindSessionDestinations(
-    Iterable<({String sessionUnitId, Map<String, dynamic> raw})> entries,
-  ) {
-    var changed = false;
-    for (final entry in entries) {
-      final destinationId = _destinationId(entry.raw);
-      if (destinationId == null || entry.sessionUnitId.isEmpty) continue;
-      final ids = _sessionIdsByDestination.putIfAbsent(destinationId, () => {});
-      if (ids.add(entry.sessionUnitId)) changed = true;
-      final pending = _pendingTypesByDestination[destinationId];
-      if (pending != null) {
-        final previous = _deviceTypesBySession[entry.sessionUnitId];
-        final next = pending.toList(growable: false);
-        if (!listEquals(previous, next)) {
-          _deviceTypesBySession[entry.sessionUnitId] = next;
-          changed = true;
-        }
-      }
-    }
-    if (changed) notifyListeners();
   }
 
   void _onSignalREvent(SignalRAppEvent event) {
@@ -127,6 +97,9 @@ class FriendPresenceStore extends ChangeNotifier {
       _applyFriendEvent(event.payload, online: true);
     } else if (event.command == SignalRCommand.offlineFriend) {
       _applyFriendEvent(event.payload, online: false);
+    } else if (event.command == SignalRCommand.onlineMe ||
+        event.command == SignalRCommand.offlineMe) {
+      unawaited(refresh());
     }
   }
 
@@ -147,7 +120,7 @@ class FriendPresenceStore extends ChangeNotifier {
     if (deviceTypes.isEmpty) return;
     var changed = false;
     for (final destinationId in destinationIds) {
-      final types = _pendingTypesByDestination.putIfAbsent(
+      final types = _deviceTypesByDestination.putIfAbsent(
         destinationId,
         () => {},
       );
@@ -159,14 +132,6 @@ class FriendPresenceStore extends ChangeNotifier {
         final before = types.length;
         types.removeAll(deviceTypes);
         changed = types.length != before || changed;
-      }
-      for (final sessionId
-          in _sessionIdsByDestination[destinationId] ?? const <String>{}) {
-        final next = types.toList(growable: false);
-        if (!listEquals(_deviceTypesBySession[sessionId], next)) {
-          _deviceTypesBySession[sessionId] = next;
-          changed = true;
-        }
       }
     }
     if (changed) notifyListeners();
@@ -189,44 +154,64 @@ class FriendPresenceStore extends ChangeNotifier {
       final ownerId =
           _activeOwnerId ?? (await _sessionRepository.resolveCurrentOwner()).id;
       _activeOwnerId ??= ownerId;
-      final online = await _contactsApi.getOnlineFriends(ownerId: ownerId);
+      // Start both network requests concurrently. The friend endpoint gives
+      // presence only; the current-user endpoint retains complete device data.
+      final onlineFuture = _contactsApi.getOnlineFriends(ownerId: ownerId);
+      final ownDevicesFuture = _sessionRepository.loadOnlineDevices();
+      List<OnlineFriend> online = const <OnlineFriend>[];
+      List<LoggedInDevice> ownDevices = const <LoggedInDevice>[];
+      try {
+        online = await onlineFuture;
+      } catch (error) {
+        debugPrint('[friendPresence][friends-refresh] failed: $error');
+      }
+      try {
+        ownDevices = await ownDevicesFuture;
+      } catch (error) {
+        debugPrint('[friendPresence][own-devices-refresh] failed: $error');
+      }
+      final ownDeviceTypes = ownDevices
+          .map((device) => device.deviceType)
+          .where((type) => type.isNotEmpty);
       // The user may have switched chat objects while Redis was queried.
       if (_activeOwnerId != null && _activeOwnerId != ownerId) return;
       _lastRefreshAt = DateTime.now();
-      _replaceSnapshot(online);
+      _replaceSnapshot(
+        online,
+        currentOwnerId: ownerId,
+        currentOwnerDeviceTypes: ownDeviceTypes,
+        currentOwnerDevices: ownDevices,
+      );
     } catch (error) {
       debugPrint('[friendPresence][refresh] failed: $error');
     }
   }
 
-  void _replaceSnapshot(List<OnlineFriend> online) {
+  void _replaceSnapshot(
+    List<OnlineFriend> online, {
+    required int currentOwnerId,
+    required Iterable<String> currentOwnerDeviceTypes,
+    required List<LoggedInDevice> currentOwnerDevices,
+  }) {
     final nextByDestination = <int, Set<String>>{};
-    final nextBySession = <String, List<String>>{};
     for (final item in online) {
       nextByDestination
           .putIfAbsent(item.destinationId, () => {})
           .addAll(item.deviceTypes);
-      nextBySession[item.sessionUnitId] = item.deviceTypes;
-      _sessionIdsByDestination
-          .putIfAbsent(item.destinationId, () => {})
-          .add(item.sessionUnitId);
     }
-    _pendingTypesByDestination
+    final ownTypes = currentOwnerDeviceTypes.toSet();
+    if (currentOwnerId > 0 && ownTypes.isNotEmpty) {
+      nextByDestination.putIfAbsent(currentOwnerId, () => {}).addAll(ownTypes);
+    }
+    _deviceTypesByDestination
       ..clear()
       ..addAll(nextByDestination);
-    _deviceTypesBySession
+    _onlineDevicesByChatObject
       ..clear()
-      ..addAll(nextBySession);
+      ..[currentOwnerId] = List<LoggedInDevice>.unmodifiable(
+        currentOwnerDevices,
+      );
     notifyListeners();
-  }
-
-  int? _destinationId(Map<String, dynamic> raw) {
-    final destination = raw['destination'];
-    final value =
-        destination is Map
-            ? (destination['id'] ?? destination['Id'])
-            : (raw['destinationId'] ?? raw['DestinationId']);
-    return value is num ? value.toInt() : int.tryParse('$value');
   }
 
   @override

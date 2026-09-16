@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/online_device_badge.dart';
 import '../../../session/presentation/chat_object_avatar.dart';
 import '../../data/models/contact_group.dart';
 import 'contacts_page_chrome.dart';
@@ -8,14 +7,12 @@ import 'contacts_page_chrome.dart';
 class ContactRow extends StatelessWidget {
   const ContactRow({
     required this.contact,
-    required this.onlineDeviceTypes,
     required this.showDivider,
     required this.onTap,
     super.key,
   });
 
   final ContactEntry contact;
-  final List<String> onlineDeviceTypes;
   final bool showDivider;
   final VoidCallback onTap;
 
@@ -27,21 +24,11 @@ class ContactRow extends StatelessWidget {
       child: Row(
         children: <Widget>[
           const SizedBox(width: 16),
-          Stack(
-            clipBehavior: Clip.none,
-            children: <Widget>[
-              ChatObjectAvatar(
-                name: contact.displayName,
-                imageUrl: contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
-                radius: 21,
-              ),
-              if (onlineDeviceTypes.isNotEmpty)
-                Positioned(
-                  right: -3,
-                  bottom: -3,
-                  child: OnlineDeviceBadge(deviceTypes: onlineDeviceTypes),
-                ),
-            ],
+          ChatObjectAvatar(
+            name: contact.displayName,
+            imageUrl: contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
+            radius: 21,
+            chatObjectId: contact.destinationId,
           ),
           const SizedBox(width: 12),
           Expanded(

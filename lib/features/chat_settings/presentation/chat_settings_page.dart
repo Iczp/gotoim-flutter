@@ -76,6 +76,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                         name: controller.friend!.title,
                         imageUrl: _avatarFor(controller.friend!),
                         radius: 23,
+                        chatObjectId: controller.friend!.destinationId,
                       ),
                       title: Text(
                         controller.objectType == 2 ? '查看群资料' : '查看好友资料',
@@ -129,9 +130,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                                 : '未设置',
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: controller.rename.isNotEmpty
-                                  ? null
-                                  : Theme.of(context).disabledColor,
+                              color:
+                                  controller.rename.isNotEmpty
+                                      ? null
+                                      : Theme.of(context).disabledColor,
                             ),
                           ),
                         ),
@@ -162,9 +164,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     title: const Text('消息提醒'),
                     subtitle: const Text('本会话的通知、声音、振动与消息预览'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push(
-                      '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/notifications?title=${Uri.encodeQueryComponent(controller.title)}',
-                    ),
+                    onTap:
+                        () => context.push(
+                          '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/notifications?title=${Uri.encodeQueryComponent(controller.title)}',
+                        ),
                   ),
                   if (controller.objectType == 2)
                     ListTile(

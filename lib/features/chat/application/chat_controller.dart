@@ -154,6 +154,9 @@ class ChatController extends ChangeNotifier {
       (asMap(friend?.raw['destination'])['thumbnail'] ??
               asMap(friend?.raw['destination'])['portrait'])
           ?.toString();
+  int? get peerChatObjectId =>
+      asInt(asMap(friend?.raw['destination'])['id']) ??
+      asInt(friend?.raw['destinationId']);
   bool get isMuted => friend?.isMuted == true;
   int get destinationObjectType =>
       asInt(asMap(friend?.raw['destination'])['objectType']) ?? 0;

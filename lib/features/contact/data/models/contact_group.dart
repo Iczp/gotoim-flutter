@@ -47,6 +47,15 @@ class ContactEntry {
 
   String get displayName => rename.trim().isNotEmpty ? rename.trim() : name;
   String get avatarUrl => thumbnail.trim().isNotEmpty ? thumbnail : portrait;
+  int? get destinationId {
+    final destination = raw['destination'];
+    final value =
+        destination is Map
+            ? (destination['id'] ?? destination['Id'])
+            : (raw['destinationId'] ?? raw['DestinationId']);
+    return _asInt(value);
+  }
+
   String get surnameInitial {
     final value = displayName.trim();
     return value.isEmpty
