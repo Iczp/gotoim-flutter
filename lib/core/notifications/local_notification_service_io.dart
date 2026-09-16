@@ -219,6 +219,8 @@ class FlutterLocalNotificationService implements LocalNotificationService {
         channelDescription: 'Goto IM 本地通知',
         importance: Importance.max,
         priority: Priority.high,
+        playSound: request.playSound,
+        enableVibration: request.enableVibration,
         ongoing: request.ongoing,
         onlyAlertOnce: request.ongoing,
         autoCancel: !request.ongoing,
@@ -234,15 +236,15 @@ class FlutterLocalNotificationService implements LocalNotificationService {
                 )
                 .toList(),
       ),
-      iOS: const DarwinNotificationDetails(
+      iOS: DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
-        presentSound: true,
+        presentSound: request.playSound,
       ),
-      macOS: const DarwinNotificationDetails(
+      macOS: DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
-        presentSound: true,
+        presentSound: request.playSound,
       ),
       linux: const LinuxNotificationDetails(),
       windows: const WindowsNotificationDetails(),

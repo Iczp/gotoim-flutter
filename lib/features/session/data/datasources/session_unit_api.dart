@@ -100,6 +100,36 @@ class SessionUnitApi {
     return response.isEmpty ? null : response;
   }
 
+  /// Fetches active runs only for the conversations currently rendered by the
+  /// virtual list. GUIDs are sent in a body rather than a long query string.
+  Future<List<Map<String, dynamic>>> getActiveAiRuns({
+    required List<String> sessionUnitIds,
+  }) async {
+    if (sessionUnitIds.isEmpty) return const <Map<String, dynamic>>[];
+    final response = await _apiClient.post<List<dynamic>>(
+      '/api/chat/ai/active/batch',
+      data: <String, Object?>{'sessionUnitIds': sessionUnitIds},
+    );
+    return response
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentAiRuns({
+    required String sessionUnitId,
+    int maxResultCount = 20,
+  }) async {
+    final response = await _apiClient.get<List<dynamic>>(
+      '/api/chat/ai/recent/$sessionUnitId',
+      query: <String, Object?>{'maxResultCount': maxResultCount},
+    );
+    return response
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
   Future<PagedResultDto<SessionSummary>> getChanges({
     required int ownerId,
     required int minTicks,

@@ -11,6 +11,7 @@ import '../../chat/application/ai_stream_change_bus.dart';
 import '../../chat/data/repositories/message_repository.dart';
 import 'session_list_controller.dart';
 import '../data/repositories/session_repository.dart';
+import 'message_alert_coordinator.dart';
 
 /// The sole application-level consumer that turns realtime notifications into
 /// persisted IM state. Pages observe repository change buses instead of the
@@ -21,17 +22,20 @@ class RealtimeSyncCoordinator {
     required SessionRepository sessionRepository,
     required MessageRepository messageRepository,
     required AiStreamChangeBus aiStreamChangeBus,
+    required MessageAlertCoordinator messageAlertCoordinator,
     required Future<void> Function(String reason) onKicked,
   }) : _gateway = gateway,
        _sessionRepository = sessionRepository,
        _messageRepository = messageRepository,
        _aiStreamChangeBus = aiStreamChangeBus,
+       _messageAlertCoordinator = messageAlertCoordinator,
        _onKicked = onKicked;
 
   final SignalRGateway _gateway;
   final SessionRepository _sessionRepository;
   final MessageRepository _messageRepository;
   final AiStreamChangeBus _aiStreamChangeBus;
+  final MessageAlertCoordinator _messageAlertCoordinator;
   final Future<void> Function(String reason) _onKicked;
   StreamSubscription<SignalRAppEvent>? _subscription;
   Timer? _syncTimer;
@@ -141,7 +145,17 @@ class RealtimeSyncCoordinator {
               event.payload,
               sessionUnitId: sessionUnitId,
             );
-        if (message != null) changedOwnerIds.add(message.ownerId);
+        if (message != null) {
+          changedOwnerIds.add(message.ownerId);
+          if (event.command == SignalRCommand.messageCreated ||
+              event.command == SignalRCommand.messageForwarded) {
+            final session = await _sessionRepository.loadLocalFriendDetail(sessionUnitId);
+            await _messageAlertCoordinator.handleIncoming(
+              message: message,
+              session: session,
+            );
+          }
+        }
       }
       if (changedOwnerIds.isNotEmpty) {
         for (final ownerId in changedOwnerIds) {
@@ -317,6 +331,7 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
     sessionRepository: ref.watch(sessionRepositoryProvider),
     messageRepository: ref.watch(messageRepositoryProvider),
     aiStreamChangeBus: ref.watch(aiStreamChangeBusProvider),
+    messageAlertCoordinator: ref.watch(messageAlertCoordinatorProvider),
     onKicked: (reason) async {
       debugPrint('[realtimeSync][kicked] reason=$reason');
       await ref.read(authControllerProvider.notifier).logout();

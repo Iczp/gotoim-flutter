@@ -8,6 +8,7 @@ import '../../../app/application_providers.dart';
 import '../../../core/device/client_device_context.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../chat/application/ai_stream_change_bus.dart';
 import '../data/datasources/session_dao.dart';
 import '../data/datasources/session_unit_api.dart';
 import '../data/models/chat_owner.dart';
@@ -41,6 +42,7 @@ final sessionListControllerProvider =
         ref.watch(signalRGatewayProvider),
         ref.watch(clientDeviceContextProvider),
         ref.watch(sessionChangeBusProvider),
+        ref.watch(aiStreamChangeBusProvider),
       ),
     );
 
@@ -63,11 +65,17 @@ class SessionListController extends ChangeNotifier {
     this._signalRGateway,
     this._deviceContext,
     this._changeBus,
+    this._aiStreamChangeBus,
   ) : _connectionState = _signalRGateway.connectionState {
     _signalSubscription = _signalRGateway.events.listen((event) {
       if (event is SignalRConnectionEvent) {
+        final wasConnected =
+            _connectionState == SignalRConnectionState.connected;
         _connectionState = event.state;
         notifyListeners();
+        if (!wasConnected && event.state == SignalRConnectionState.connected) {
+          refreshVisibleAiRuns();
+        }
       } else if (event is SignalRCommandEvent &&
           (event.command == SignalRCommand.onlineMe ||
               event.command == SignalRCommand.offlineMe)) {
@@ -80,17 +88,42 @@ class SessionListController extends ChangeNotifier {
     _changeSubscription = _changeBus.events.listen((event) {
       if (event.ownerId == _currentOwner?.id) _scheduleLocalReload();
     });
+    _syncAiRunsFromBus();
+    _aiStreamSubscription = _aiStreamChangeBus.events.listen((event) {
+      _aiEventRevision++;
+      var changed = false;
+      switch (event.kind) {
+        case AiStreamEventKind.started:
+        case AiStreamEventKind.delta:
+          final previous = _aiRunSessionById[event.runId];
+          _aiRunSessionById[event.runId] = event.requesterSessionUnitId;
+          changed = previous != event.requesterSessionUnitId;
+        case AiStreamEventKind.completed:
+        case AiStreamEventKind.failed:
+          changed = _aiRunSessionById.remove(event.runId) != null;
+      }
+      // A delta changes the chat bubble, not the list indicator. Rebuilding
+      // the entire list for every token causes visible scroll jank.
+      if (changed) notifyListeners();
+    });
   }
   static const pageSize = 50;
   final SessionRepository _repository;
   final SignalRGateway _signalRGateway;
   final ClientDeviceContext _deviceContext;
   final SessionChangeBus _changeBus;
+  final AiStreamChangeBus _aiStreamChangeBus;
   late final StreamSubscription<SignalRAppEvent> _signalSubscription;
   late final StreamSubscription<SessionChangeEvent> _changeSubscription;
+  late final StreamSubscription<AiStreamEvent> _aiStreamSubscription;
+  final Map<String, String> _aiRunSessionById = <String, String>{};
+  final Set<String> _visibleAiSessionUnitIds = <String>{};
   Timer? _localReloadTimer;
   Timer? _remoteChangeTimer;
   Timer? _onlineDevicesReloadTimer;
+  Timer? _aiRecoveryTimer;
+  int _aiRecoveryRequestVersion = 0;
+  int _aiEventRevision = 0;
   final List<SessionSummary> _sessions = [];
   List<ChatOwner> _owners = const [];
   ChatOwner? _currentOwner;
@@ -134,6 +167,76 @@ class SessionListController extends ChangeNotifier {
     SignalRConnectionState.disconnecting => SessionRealtimeStatus.disconnecting,
   };
   int get focusUnreadRequest => _focusUnreadRequest;
+  bool isAiRunning(String sessionUnitId) =>
+      _aiRunSessionById.values.any((id) => id == sessionUnitId);
+
+  /// Receives actual rendered rows from the virtual list. Calls are coalesced
+  /// while scrolling, rather than being made from every item build.
+  void updateVisibleAiSessions(
+    Iterable<String> sessionUnitIds, {
+    bool force = false,
+  }) {
+    final visible =
+        sessionUnitIds.where((id) => id.isNotEmpty).toSet().take(30).toSet();
+    if (!force && setEquals(visible, _visibleAiSessionUnitIds)) return;
+    _visibleAiSessionUnitIds
+      ..clear()
+      ..addAll(visible);
+    _aiRecoveryTimer?.cancel();
+    if (visible.isEmpty) return;
+    _aiRecoveryTimer = Timer(
+      const Duration(milliseconds: 180),
+      () => unawaited(_recoverVisibleAiRuns(visible)),
+    );
+  }
+
+  void refreshVisibleAiRuns() =>
+      updateVisibleAiSessions(_visibleAiSessionUnitIds, force: true);
+
+  Future<void> _recoverVisibleAiRuns(Set<String> requestedIds) async {
+    final requestVersion = ++_aiRecoveryRequestVersion;
+    final eventRevision = _aiEventRevision;
+    try {
+      final records = await _repository.loadActiveAiRuns(requestedIds);
+      if (requestVersion != _aiRecoveryRequestVersion) return;
+      final recovered = records
+          .map(AiStreamEvent.fromRecoveryPayload)
+          .whereType<AiStreamEvent>()
+          .toList(growable: false);
+
+      // If SignalR changed while the request was in flight, do not let this
+      // older snapshot clear a newly started indicator.
+      var changed = false;
+      if (_aiEventRevision == eventRevision) {
+        final runIds = _aiRunSessionById.entries
+            .where((entry) => requestedIds.contains(entry.value))
+            .map((entry) => entry.key)
+            .toList(growable: false);
+        for (final runId in runIds) {
+          changed = _aiRunSessionById.remove(runId) != null || changed;
+        }
+      }
+      for (final event in recovered) {
+        _aiStreamChangeBus.restore(event);
+      }
+      if (changed) notifyListeners();
+    } catch (error) {
+      // Offline list rendering stays usable; a later SignalR reconnect will
+      // schedule another recovery request.
+      debugPrint('[aiRunRecovery][visible] failed: $error');
+    }
+  }
+
+  void _syncAiRunsFromBus() {
+    _aiRunSessionById
+      ..clear()
+      ..addEntries(
+        _aiStreamChangeBus.liveSnapshots.map(
+          (snapshot) =>
+              MapEntry(snapshot.runId, snapshot.requesterSessionUnitId),
+        ),
+      );
+  }
 
   void requestFocusUnread() {
     if (!_sessions.any((session) => session.unreadCount > 0)) return;
@@ -276,9 +379,11 @@ class SessionListController extends ChangeNotifier {
   void dispose() {
     _signalSubscription.cancel();
     _changeSubscription.cancel();
+    _aiStreamSubscription.cancel();
     _localReloadTimer?.cancel();
     _remoteChangeTimer?.cancel();
     _onlineDevicesReloadTimer?.cancel();
+    _aiRecoveryTimer?.cancel();
     super.dispose();
   }
 

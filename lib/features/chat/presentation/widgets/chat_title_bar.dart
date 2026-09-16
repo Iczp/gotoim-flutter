@@ -10,6 +10,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
     required this.showTransfer,
     required this.onTransfer,
     required this.onOpenSettings,
+    this.onOpenAiRuns,
     this.selectionMode = false,
     this.onCancelSelection,
     super.key,
@@ -19,6 +20,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showTransfer;
   final VoidCallback onTransfer;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onOpenAiRuns;
   final bool selectionMode;
   final VoidCallback? onCancelSelection;
 
@@ -36,6 +38,12 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
         : null,
     title: Text(title, overflow: TextOverflow.ellipsis),
     actions: <Widget>[
+      if (!selectionMode && onOpenAiRuns != null)
+        IconButton(
+          tooltip: 'AI 运行记录',
+          onPressed: onOpenAiRuns,
+          icon: const Icon(Icons.timeline_outlined),
+        ),
       if (showTransfer && !selectionMode)
         IconButton(
           tooltip: '转接',

@@ -84,7 +84,7 @@ class ChatMessageList extends StatelessWidget {
                     final index = messages.indexWhere(
                       (message) => message.localId == key.value,
                     );
-                    return index < 0 ? null : index;
+                    return index < 0 ? null : transientItems.length + index;
                   },
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,

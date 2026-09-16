@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../session/application/active_chat_registry.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/file/file_picker_service.dart';
@@ -40,6 +41,7 @@ import 'widgets/chat_selection_bar.dart';
 import 'widgets/chat_text_selection_sheet.dart';
 import 'widgets/chat_title_bar.dart';
 import 'widgets/chat_transfer_sheet.dart';
+import 'ai_run_timeline_page.dart';
 
 /// 聊天会话主页面（ChatPage）
 ///
@@ -110,6 +112,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       '[ChatTrace] 🚀 ChatPage.initState | session=${widget.sessionUnitId}',
     );
     WidgetsBinding.instance.addObserver(this);
+    ref.read(activeChatRegistryProvider).enterChat(widget.sessionUnitId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       debugPrint(
         '[ChatTrace] 🎨 [First Frame Painted] | '
@@ -142,6 +145,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       'totalSessionDuration=${_pageStopwatch.elapsedMilliseconds}ms',
     );
     WidgetsBinding.instance.removeObserver(this);
+    ref.read(activeChatRegistryProvider).leaveChat(widget.sessionUnitId);
     unawaited(_audioPlayback.stop());
     controller.dispose();
     input.dispose();
@@ -164,6 +168,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     animation: controller,
     builder: (context, _) {
       final mediaItems = _mediaItemsFor(controller.messages);
+      _pruneMessageKeys(controller.messages);
       return PopScope(
         canPop: !controller.selectionMode,
         onPopInvokedWithResult: (didPop, _) {
@@ -200,6 +205,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             onCancelSelection: controller.cancelSelection,
             onTransfer: _openTransferSheet,
             onOpenSettings: _openChatSettings,
+            onOpenAiRuns: _openAiRunTimeline,
           ),
           body: Column(
             children: <Widget>[
@@ -343,6 +349,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
     if (cleared == true) controller.handleMessagesCleared();
   }
+
+  Future<void> _openAiRunTimeline() => showHalfPageSheet<void>(
+    context: context,
+    options: const HalfPageSheetOptions(
+      heightFactor: .78,
+      constraints: BoxConstraints(maxWidth: 720),
+      keyboardBehavior: HalfPageSheetKeyboardBehavior.overlay,
+      routeSettings: RouteSettings(name: '/chat/ai-run-timeline'),
+    ),
+    builder: (_) => AiRunTimelinePage(controller: controller),
+  );
 
   /// 构建单条消息 Item（包装了长按菜单浮层与单条消息 Row）
   Widget _buildMessageItem(
@@ -631,6 +648,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   GlobalKey _messageKeyFor(String localId) =>
       _messageKeys.putIfAbsent(localId, GlobalKey.new);
+
+  void _pruneMessageKeys(List<ChatMessage> messages) {
+    if (_messageKeys.isEmpty) return;
+    final liveIds = messages.map((m) => m.localId).toSet();
+    _messageKeys.removeWhere((id, _) => !liveIds.contains(id));
+  }
 
   List<MediaPreviewItem> _mediaItemsFor(List<ChatMessage> messages) {
     final fingerprint = messages

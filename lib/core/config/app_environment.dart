@@ -36,6 +36,8 @@ class AppEnvironment {
     required this.scanLoginAuthScope,
     required this.signalRSkipNegotiation,
     required this.signalRReconnectDelays,
+    required this.presenceHeartbeatInterval,
+    required this.friendPresenceRefreshMinInterval,
     required this.jsBridgeHarnessUrl,
     required this.jsBridgeUploadUrl,
     required this.jsBridgeUploadAllowedHosts,
@@ -72,6 +74,11 @@ class AppEnvironment {
   final String scanLoginAuthScope;
   final bool signalRSkipNegotiation;
   final List<int> signalRReconnectDelays;
+
+  /// Business heartbeat for the IM presence records in Redis. This is
+  /// separate from SignalR's transport keep-alive.
+  final Duration presenceHeartbeatInterval;
+  final Duration friendPresenceRefreshMinInterval;
 
   /// Debug-only standalone H5 page used to verify the native JS bridge.
   final String jsBridgeHarnessUrl;
@@ -174,6 +181,21 @@ class AppEnvironment {
           fallback: '0,2000,10000,30000',
         ),
       ),
+      presenceHeartbeatInterval: Duration(
+        seconds: _positiveInt(
+          dotenv.get('PRESENCE_HEARTBEAT_INTERVAL_SECONDS', fallback: '10'),
+          fallback: 10,
+        ),
+      ),
+      friendPresenceRefreshMinInterval: Duration(
+        seconds: _positiveInt(
+          dotenv.get(
+            'FRIEND_PRESENCE_REFRESH_MIN_INTERVAL_SECONDS',
+            fallback: '10',
+          ),
+          fallback: 10,
+        ),
+      ),
       jsBridgeHarnessUrl: dotenv.get('JS_BRIDGE_HARNESS_URL', fallback: ''),
       jsBridgeUploadUrl: dotenv.get('JS_BRIDGE_UPLOAD_URL', fallback: ''),
       jsBridgeUploadAllowedHosts: _parseCsv(
@@ -203,6 +225,11 @@ class AppEnvironment {
       .map((item) => item.trim())
       .where((item) => item.isNotEmpty)
       .toList(growable: false);
+
+  static int _positiveInt(String value, {required int fallback}) {
+    final parsed = int.tryParse(value.trim());
+    return parsed != null && parsed > 0 ? parsed : fallback;
+  }
 
   static String _nonEmpty(String value, {required String fallback}) {
     return value.trim().isEmpty ? fallback : value;

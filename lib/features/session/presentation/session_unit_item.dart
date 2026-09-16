@@ -14,6 +14,7 @@ class SessionUnitItem extends StatelessWidget {
     required this.showDivider,
     this.dividerIndent = 74.0,
     this.dividerEndIndent = 0.0,
+    this.aiRunning = false,
     this.onLongPress,
     this.onTap,
     super.key,
@@ -23,6 +24,7 @@ class SessionUnitItem extends StatelessWidget {
   final bool showDivider;
   final double dividerIndent;
   final double dividerEndIndent;
+  final bool aiRunning;
   final VoidCallback? onLongPress;
   final VoidCallback? onTap;
 
@@ -119,6 +121,11 @@ class SessionUnitItem extends StatelessWidget {
                               Expanded(
                                 child: SessionLastMessagePreview(item: item),
                               ),
+                              if (aiRunning)
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 8),
+                                  child: _AiThinkingIndicator(),
+                                ),
                               if (immersed)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 4),
@@ -196,6 +203,35 @@ class SessionUnitItem extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AiThinkingIndicator extends StatelessWidget {
+  const _AiThinkingIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Semantics(
+      label: 'AI 正在思考',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 13,
+            height: 13,
+            child: CircularProgressIndicator(strokeWidth: 1.8, color: color),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'AI思考',
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: color),
+          ),
+        ],
       ),
     );
   }

@@ -53,6 +53,17 @@ class SessionRepository {
     reason: reason,
   );
 
+  Future<List<Map<String, dynamic>>> loadActiveAiRuns(
+    Iterable<String> sessionUnitIds,
+  ) {
+    final ids = sessionUnitIds
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .take(30)
+        .toList(growable: false);
+    return _api.getActiveAiRuns(sessionUnitIds: ids);
+  }
+
   Future<ChatOwner> resolveCurrentOwner() async {
     final owners = await loadOwners();
     if (owners.isEmpty) {
@@ -222,6 +233,14 @@ class SessionRepository {
   Future<Map<String, dynamic>?> loadActiveAiRun({
     required String sessionUnitId,
   }) => _api.getActiveAiRun(sessionUnitId: sessionUnitId);
+
+  Future<List<Map<String, dynamic>>> loadRecentAiRuns({
+    required String sessionUnitId,
+    int maxResultCount = 20,
+  }) => _api.getRecentAiRuns(
+    sessionUnitId: sessionUnitId,
+    maxResultCount: maxResultCount,
+  );
 
   Future<List<SessionSummary>> loadChanges({required int ownerId}) async {
     final initialTicks = await _dao.readMaxTicks(ownerId);

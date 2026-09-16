@@ -62,4 +62,43 @@ void main() {
     expect(restored.single.text, '已生成的一部分');
     expect(restored.single.status, AiStreamStatus.streaming);
   });
+
+  test('Redis recovery replaces transient preview and final event is ordered', () {
+    final bus = AiStreamChangeBus();
+    bus.publish(
+      const AiStreamEvent(
+        kind: AiStreamEventKind.delta,
+        runId: 'run-1',
+        requesterSessionUnitId: 'session-unit-1',
+        sourceMessageId: 7297610,
+        sequence: 2,
+        delta: '旧的瞬时片段',
+      ),
+    );
+    final recovered = AiStreamEvent.fromRecoveryPayload(<String, dynamic>{
+      'runId': 'run-1',
+      'requesterSessionUnitId': 'session-unit-1',
+      'sourceMessageId': 7297610,
+      'sequence': 4,
+      'status': 'streaming',
+      'previewText': 'Redis 中完整预览',
+      'startedAt': '2026-09-15T05:00:00.000Z',
+    });
+    bus.restore(recovered!);
+    bus.publish(
+      const AiStreamEvent(
+        kind: AiStreamEventKind.completed,
+        runId: 'run-1',
+        requesterSessionUnitId: 'session-unit-1',
+        sourceMessageId: 7297610,
+        sequence: 5,
+        finalMessageId: 7297611,
+      ),
+    );
+
+    final snapshot = bus.activeForRequesterSessionUnit('session-unit-1').single;
+    expect(snapshot.text, 'Redis 中完整预览');
+    expect(snapshot.status, AiStreamStatus.completed);
+    expect(snapshot.sequence, 5);
+  });
 }

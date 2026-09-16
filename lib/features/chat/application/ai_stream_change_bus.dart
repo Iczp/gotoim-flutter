@@ -169,6 +169,17 @@ class AiStreamChangeBus {
           .where((item) => item.requesterSessionUnitId == sessionUnitId)
           .toList(growable: false);
 
+  /// Live runs are retained independently of the chat page so consumers such
+  /// as the session list can start showing a running indicator even when they
+  /// subscribe after SignalR has already delivered the first event.
+  List<AiStreamSnapshot> get liveSnapshots => _activeBySourceMessageId.values
+      .where(
+        (item) =>
+            item.status == AiStreamStatus.thinking ||
+            item.status == AiStreamStatus.streaming,
+      )
+      .toList(growable: false);
+
   void removeBySourceMessageId(int sourceMessageId) {
     _activeBySourceMessageId.remove(sourceMessageId);
   }
@@ -177,6 +188,87 @@ class AiStreamChangeBus {
 }
 
 enum AiStreamStatus { thinking, streaming, completed, failed }
+
+/// A persisted AI run returned by `/api/chat/ai/recent/{sessionUnitId}`.
+/// This is deliberately separate from [AiStreamSnapshot]: snapshots are live
+/// transport state, whereas a record is Redis recovery/history data.
+class AiRunRecord {
+  const AiRunRecord({
+    required this.runId,
+    required this.sourceMessageId,
+    required this.status,
+    required this.updatedAt,
+    required this.queueMilliseconds,
+    required this.elapsedMilliseconds,
+    required this.sequence,
+    required this.previewText,
+    required this.error,
+    required this.timeline,
+    this.finalMessageId,
+  });
+
+  final String runId;
+  final int sourceMessageId;
+  final String status;
+  final DateTime? updatedAt;
+  final int queueMilliseconds;
+  final int elapsedMilliseconds;
+  final int sequence;
+  final String previewText;
+  final String error;
+  final int? finalMessageId;
+  final List<AiRunTimelineItem> timeline;
+
+  factory AiRunRecord.fromJson(Map<String, dynamic> data) => AiRunRecord(
+    runId: '${data['runId'] ?? ''}',
+    sourceMessageId: _asInt(data['sourceMessageId']) ?? 0,
+    status: '${data['status'] ?? 'unknown'}',
+    updatedAt: DateTime.tryParse('${data['updatedAt'] ?? ''}')?.toLocal(),
+    queueMilliseconds: _asInt(data['queueMilliseconds']) ?? 0,
+    elapsedMilliseconds: _asInt(data['elapsedMilliseconds']) ?? 0,
+    sequence: _asInt(data['sequence']) ?? 0,
+    previewText: '${data['previewText'] ?? ''}',
+    error: '${data['error'] ?? ''}',
+    finalMessageId: _asInt(data['finalMessageId']),
+    timeline: (data['timeline'] as List? ?? const <dynamic>[])
+        .whereType<Map>()
+        .map(
+          (item) => AiRunTimelineItem.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .toList(growable: false),
+  );
+}
+
+class AiRunTimelineItem {
+  const AiRunTimelineItem({
+    required this.occurredAt,
+    required this.eventType,
+    required this.status,
+    required this.sequence,
+    required this.elapsedMilliseconds,
+    required this.detail,
+  });
+
+  final DateTime? occurredAt;
+  final String eventType;
+  final String status;
+  final int sequence;
+  final int elapsedMilliseconds;
+  final String detail;
+
+  factory AiRunTimelineItem.fromJson(Map<String, dynamic> data) =>
+      AiRunTimelineItem(
+        occurredAt: DateTime.tryParse('${data['occurredAt'] ?? ''}')?.toLocal(),
+        eventType: '${data['eventType'] ?? ''}',
+        status: '${data['status'] ?? ''}',
+        sequence: _asInt(data['sequence']) ?? 0,
+        elapsedMilliseconds: _asInt(data['elapsedMilliseconds']) ?? 0,
+        detail: '${data['detail'] ?? ''}',
+      );
+}
+
+int? _asInt(Object? value) =>
+    value is num ? value.toInt() : int.tryParse('${value ?? ''}');
 
 class AiStreamSnapshot {
   const AiStreamSnapshot({

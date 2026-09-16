@@ -157,6 +157,15 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                 ]),
                 const SizedBox(height: 10),
                 _section(<Widget>[
+                  ListTile(
+                    leading: const Icon(Icons.notifications_active_outlined),
+                    title: const Text('消息提醒'),
+                    subtitle: const Text('本会话的通知、声音、振动与消息预览'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push(
+                      '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/notifications?title=${Uri.encodeQueryComponent(controller.title)}',
+                    ),
+                  ),
                   if (controller.objectType == 2)
                     ListTile(
                       leading: const Icon(Icons.admin_panel_settings_outlined),

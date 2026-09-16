@@ -333,8 +333,12 @@ class MessageRepository {
     required String text,
     ChatMessage? quote,
     List<String> remindList = const <String>[],
+    String? clientMessageId,
   }) async {
-    final clientId = '${DateTime.now().microsecondsSinceEpoch}';
+    final clientId =
+        (clientMessageId != null && clientMessageId.isNotEmpty)
+            ? clientMessageId
+            : '${DateTime.now().microsecondsSinceEpoch}';
     final maxScore = await _dao.maxScore(ownerId, sessionUnitId);
     var local = ChatMessage(
       localId: clientId,

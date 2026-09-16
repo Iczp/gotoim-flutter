@@ -149,6 +149,7 @@ class SessionListItemView extends StatelessWidget {
     this.showDivider = true,
     this.dividerIndent = 74.0,
     this.dividerEndIndent = 0.0,
+    this.aiRunning = false,
     super.key,
   });
 
@@ -158,6 +159,7 @@ class SessionListItemView extends StatelessWidget {
   final bool showDivider;
   final double dividerIndent;
   final double dividerEndIndent;
+  final bool aiRunning;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +172,7 @@ class SessionListItemView extends StatelessWidget {
         showDivider: showDivider,
         dividerIndent: dividerIndent,
         dividerEndIndent: dividerEndIndent,
+        aiRunning: aiRunning,
       ),
       SessionListItemKind.pinnedDivider => PinnedDividerItem(
         key: const ValueKey('pinned_divider'),

@@ -67,6 +67,8 @@ class LocalNotificationRequest {
     this.payload = '',
     this.delay = Duration.zero,
     this.ongoing = false,
+    this.playSound = true,
+    this.enableVibration = true,
     this.actions = const [],
   });
 
@@ -81,6 +83,8 @@ class LocalNotificationRequest {
   /// Android uses this for a non-dismissible status notification while a
   /// long-running user-visible feature (such as LAN sharing) is active.
   final bool ongoing;
+  final bool playSound;
+  final bool enableVibration;
 
   /// Optional user actions. Unsupported platforms safely ignore them.
   final List<LocalNotificationAction> actions;

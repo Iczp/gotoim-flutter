@@ -51,6 +51,7 @@ import '../../features/group_management/presentation/group_management_page.dart'
 import '../../features/account/presentation/account_profile_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../../features/settings/presentation/theme_settings_page.dart';
+import '../../features/settings/presentation/message_alert_settings_page.dart';
 import '../../features/search/presentation/search_page.dart';
 import '../../features/group/presentation/create_group_page.dart';
 import '../../features/contact/presentation/add_friend_page.dart';
@@ -123,6 +124,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/theme',
         builder: (context, state) => const ThemeSettingsPage(),
+      ),
+      GoRoute(
+        path: '/chat/:sessionUnitId/notifications',
+        builder: (context, state) => MessageAlertSettingsPage(
+          sessionUnitId: state.pathParameters['sessionUnitId']!,
+          title: state.uri.queryParameters['title'] ?? '聊天',
+        ),
       ),
       GoRoute(
         path: '/settings/avatar',

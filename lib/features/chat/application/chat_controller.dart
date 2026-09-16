@@ -117,7 +117,9 @@ class ChatController extends ChangeNotifier {
   StreamSubscription<SignalRAppEvent>? _signalRSubscription;
   Timer? _aiStreamElapsedTimer;
   Timer? _aiRunRecoveryTimer;
+  bool _isRecoveringAfterRealtimeReconnect = false;
   final Map<int, AiStreamReply> _aiStreamReplies = <int, AiStreamReply>{};
+  List<AiRunRecord> _recentAiRuns = const <AiRunRecord>[];
   ChatMessage? quoting;
   bool selectionMode = false;
   int newMessageCount = 0;
@@ -141,6 +143,7 @@ class ChatController extends ChangeNotifier {
   List<AiStreamReply> get aiStreamReplies =>
       _aiStreamReplies.values.toList()
         ..sort((a, b) => b.sourceMessageId.compareTo(a.sourceMessageId));
+  List<AiRunRecord> get recentAiRuns => List.unmodifiable(_recentAiRuns);
   String get title => friend?.title ?? _title;
   String get peerDisplayName => firstNonEmpty(<Object?>[
     asMap(friend?.raw['destination'])['displayName'],
@@ -240,6 +243,7 @@ class ChatController extends ChangeNotifier {
       _messages
         ..clear()
         ..addAll(localPage.items);
+      _deduplicateMessages();
       _restoreAiStreamReplies();
       hasMore = localPage.hasMore;
 
@@ -322,6 +326,18 @@ class ChatController extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshRecentAiRuns() async {
+    try {
+      _recentAiRuns = (await _sessionRepository.loadRecentAiRuns(
+        sessionUnitId: sessionUnitId,
+      )).map(AiRunRecord.fromJson).toList(growable: false);
+      notifyListeners();
+    } catch (exception) {
+      debugPrint('[ChatTrace] AI run history unavailable | error=$exception');
+      rethrow;
+    }
+  }
+
   void _onAttachmentTransferChanged() {
     notifyListeners();
   }
@@ -373,6 +389,7 @@ class ChatController extends ChangeNotifier {
             _messages.add(item);
           }
         }
+        _deduplicateMessages();
         hasMore = page.hasMore;
       }
       debugPrint(
@@ -414,8 +431,9 @@ class ChatController extends ChangeNotifier {
       };
       _messages
         ..clear()
-        ..addAll(byId.values)
-        ..sort((a, b) => b.score.compareTo(a.score));
+        ..addAll(byId.values);
+      _deduplicateMessages();
+      _messages.sort((a, b) => b.score.compareTo(a.score));
     } catch (exception) {
       debugPrint(
         '[loadMessages][latest-failed] session=$sessionUnitId error=$exception',
@@ -444,10 +462,11 @@ class ChatController extends ChangeNotifier {
     quoting = null;
     _mentionedTokens.clear();
     _hideMention();
+    final clientMessageId = '${DateTime.now().microsecondsSinceEpoch}';
     final pending = ChatMessage(
-      localId: '${DateTime.now().microsecondsSinceEpoch}',
+      localId: clientMessageId,
       serverId: null,
-      clientMessageId: null,
+      clientMessageId: clientMessageId,
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,
       senderSessionUnitId: sessionUnitId,
@@ -461,7 +480,7 @@ class ChatController extends ChangeNotifier {
         if (quote != null) 'quoteMessage': quote.raw,
       },
     );
-    _messages.insert(0, pending);
+    _replaceMessage(pending);
     notifyListeners();
     final sent = await _repository.sendText(
       ownerId: ownerId,
@@ -469,10 +488,9 @@ class ChatController extends ChangeNotifier {
       text: value,
       quote: quote,
       remindList: remindList,
+      clientMessageId: clientMessageId,
     );
-    _messages.remove(pending);
-    _messages.insert(0, sent);
-    _messages.sort((a, b) => b.score.compareTo(a.score));
+    _replaceMessage(sent);
     isSending = false;
     notifyListeners();
     _playSentEffect(sent);
@@ -644,7 +662,7 @@ class ChatController extends ChangeNotifier {
         );
         _pendingFiles[local.localId] = image;
         _imagePreviews[local.localId] = await image.readBytes();
-        _messages.insert(0, local);
+        _replaceMessage(local);
         notifyListeners();
         uploadProgress[local.localId] = 0;
         final sent = await _repository.sendLocalImage(
@@ -694,7 +712,7 @@ class ChatController extends ChangeNotifier {
     );
     _pendingFiles[local.localId] = image;
     _imagePreviews[local.localId] = await image.readBytes();
-    _messages.insert(0, local);
+    _replaceMessage(local);
     notifyListeners();
     uploadProgress[local.localId] = 0;
     final sent = await _repository.sendLocalImage(
@@ -719,7 +737,7 @@ class ChatController extends ChangeNotifier {
       file: video,
     );
     _pendingFiles[local.localId] = video;
-    _messages.insert(0, local);
+    _replaceMessage(local);
     uploadProgress[local.localId] = 0;
     notifyListeners();
     final sent = await _repository.sendLocalVideo(
@@ -939,8 +957,7 @@ class ChatController extends ChangeNotifier {
       duration: duration,
     );
     _pendingFiles[local.localId] = file;
-    _messages.insert(0, local);
-    _messages.sort((a, b) => b.score.compareTo(a.score));
+    _replaceMessage(local);
     notifyListeners();
     final sent = await _repository.sendLocalVoice(
       local: local,
@@ -960,8 +977,7 @@ class ChatController extends ChangeNotifier {
       file: file,
     );
     _pendingFiles[local.localId] = file;
-    _messages.insert(0, local);
-    _messages.sort((a, b) => b.score.compareTo(a.score));
+    _replaceMessage(local);
     notifyListeners();
 
     final sent = await _repository.sendLocalFile(local: local, file: file);
@@ -1082,14 +1098,39 @@ class ChatController extends ChangeNotifier {
 
   void _replaceMessage(ChatMessage value) {
     final index = _messages.indexWhere(
-      (message) => message.localId == value.localId,
+      (message) =>
+          message.localId == value.localId ||
+          (value.serverId != null && message.serverId == value.serverId) ||
+          (value.clientMessageId != null &&
+              value.clientMessageId!.trim().isNotEmpty &&
+              message.clientMessageId == value.clientMessageId),
     );
     if (index < 0) {
       _messages.insert(0, value);
     } else {
       _messages[index] = value;
     }
+    _deduplicateMessages();
     _messages.sort((a, b) => b.score.compareTo(a.score));
+  }
+
+  void _deduplicateMessages() {
+    final seenLocalIds = <String>{};
+    final seenServerIds = <int>{};
+    final seenClientIds = <String>{};
+    _messages.removeWhere((item) {
+      if (!seenLocalIds.add(item.localId)) return true;
+      if (item.serverId != null && !seenServerIds.add(item.serverId!)) {
+        return true;
+      }
+      final clientMsgId = item.clientMessageId?.trim();
+      if (clientMsgId != null &&
+          clientMsgId.isNotEmpty &&
+          !seenClientIds.add(clientMsgId)) {
+        return true;
+      }
+      return false;
+    });
   }
 
   void handleMessagesCleared() {
@@ -1130,10 +1171,38 @@ class ChatController extends ChangeNotifier {
     if (event.state == SignalRConnectionState.connected) {
       _aiRunRecoveryTimer?.cancel();
       _aiRunRecoveryTimer = null;
-      unawaited(_restoreActiveAiRun());
+      unawaited(_recoverAfterSignalRReconnect());
       return;
     }
     _syncAiRunRecoveryPolling();
+  }
+
+  /// SignalR is a fast path, not the source of truth. Once transport returns,
+  /// replay the durable state in the same safe order used when entering chat.
+  /// This covers a reply that was persisted while the app was backgrounded.
+  Future<void> _recoverAfterSignalRReconnect() async {
+    if (_isRecoveringAfterRealtimeReconnect) return;
+    _isRecoveringAfterRealtimeReconnect = true;
+    final watch = Stopwatch()..start();
+    try {
+      await _restoreActiveAiRun();
+      await _refreshFriendDetail();
+      await loadLatest();
+      await markLatestRead();
+      debugPrint(
+        '[ChatTrace] SignalR reconnect durable recovery complete | '
+        'session=$sessionUnitId cost=${watch.elapsedMilliseconds}ms',
+      );
+    } catch (exception) {
+      // Every sub-operation is already best-effort, but keep this boundary so
+      // a future recovery step can never crash the SignalR subscription.
+      debugPrint(
+        '[ChatTrace] SignalR reconnect durable recovery failed | '
+        'session=$sessionUnitId error=$exception',
+      );
+    } finally {
+      _isRecoveringAfterRealtimeReconnect = false;
+    }
   }
 
   void _restoreAiStreamReplies() {

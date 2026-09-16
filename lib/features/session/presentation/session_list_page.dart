@@ -24,6 +24,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
     with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   int _handledFocusUnreadRequest = 0;
+  List<SessionListItem> _lastListItems = const <SessionListItem>[];
+  final Map<String, GlobalKey> _sessionItemKeys = <String, GlobalKey>{};
+
+  GlobalKey _sessionItemKey(String sessionUnitId) =>
+      _sessionItemKeys.putIfAbsent(
+        sessionUnitId,
+        () => GlobalKey(debugLabel: 'session-list-item-$sessionUnitId'),
+      );
 
   @override
   void initState() {
@@ -46,6 +54,39 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
       'range=[${pos.minScrollExtent.toStringAsFixed(1)}, ${pos.maxScrollExtent.toStringAsFixed(1)}] '
       'extentAfter=${pos.extentAfter.toStringAsFixed(1)}',
     );
+    _scheduleVisibleAiRecovery();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _scheduleVisibleAiRecovery(force: true);
+    }
+  }
+
+  /// Reads the mounted Sliver children, rather than estimating item indices
+  /// from scroll pixels. Headers and divider rows therefore cannot make us
+  /// query non-visible sessions.
+  void _scheduleVisibleAiRecovery({bool force = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final view = View.of(context);
+      final viewport =
+          Offset.zero & (view.physicalSize / view.devicePixelRatio);
+      final visibleSessionIds = <String>[];
+      for (final item in _lastListItems) {
+        final session = item.session;
+        if (session == null) continue;
+        final render =
+            _sessionItemKey(session.id).currentContext?.findRenderObject();
+        if (render is! RenderBox || !render.attached) continue;
+        final bounds = render.localToGlobal(Offset.zero) & render.size;
+        if (bounds.overlaps(viewport)) visibleSessionIds.add(session.id);
+      }
+      ref
+          .read(sessionListControllerProvider)
+          .updateVisibleAiSessions(visibleSessionIds, force: force);
+    });
   }
 
   @override
@@ -80,6 +121,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
       controller.sessions,
       hasMore: controller.hasMore,
     );
+    _lastListItems = listItems;
+    _sessionItemKeys.removeWhere(
+      (id, _) => !listItems.any((item) => item.session?.id == id),
+    );
+    _scheduleVisibleAiRecovery();
     final offsetStr =
         _scrollController.hasClients
             ? _scrollController.offset.toStringAsFixed(1)
@@ -200,6 +246,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                         itemBuilder: (context, index) {
                           final item = listItems[index];
                           return SessionListItemView(
+                            key:
+                                item.session == null
+                                    ? null
+                                    : _sessionItemKey(item.session!.id),
                             item: item,
                             onTap:
                                 item.session != null
@@ -221,6 +271,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                                 index + 1 < listItems.length &&
                                 listItems[index + 1].kind ==
                                     SessionListItemKind.session,
+                            aiRunning:
+                                item.session != null &&
+                                controller.isAiRunning(item.session!.id),
                           );
                         },
                       ),
