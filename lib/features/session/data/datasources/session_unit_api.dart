@@ -88,53 +88,6 @@ class SessionUnitApi {
     });
   }
 
-  Future<Map<String, dynamic>?> getActiveAiRun({
-    required String sessionUnitId,
-  }) async {
-    final response = await _apiClient.get<Map<String, dynamic>>(
-      // The ABP conventional action exposes its Guid input as a route
-      // parameter. Keep this aligned with Swagger:
-      // GET /api/chat/ai/active/{sessionUnitId}
-      '/api/chat/ai/active/$sessionUnitId',
-    );
-    return response.isEmpty ? null : response;
-  }
-
-  /// Fetches active runs only for the conversations currently rendered by the
-  /// virtual list. The server binds repeated `SessionUnitIds` query values.
-  Future<List<Map<String, dynamic>>> getActiveAiRuns({
-    required List<String> sessionUnitIds,
-  }) async {
-    final uniqueSessionUnitIds = sessionUnitIds
-        .map((id) => id.trim())
-        .where((id) => id.isNotEmpty)
-        .toSet()
-        .toList(growable: false);
-    if (uniqueSessionUnitIds.isEmpty) return const <Map<String, dynamic>>[];
-    final response = await _apiClient.get<List<dynamic>>(
-      '/api/chat/ai/active-batch',
-      query: <String, Object?>{'SessionUnitIds': uniqueSessionUnitIds},
-    );
-    return response
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList(growable: false);
-  }
-
-  Future<List<Map<String, dynamic>>> getRecentAiRuns({
-    required String sessionUnitId,
-    int maxResultCount = 20,
-  }) async {
-    final response = await _apiClient.get<List<dynamic>>(
-      '/api/chat/ai/recent/$sessionUnitId',
-      query: <String, Object?>{'maxResultCount': maxResultCount},
-    );
-    return response
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList(growable: false);
-  }
-
   Future<PagedResultDto<SessionSummary>> getChanges({
     required int ownerId,
     required int minTicks,

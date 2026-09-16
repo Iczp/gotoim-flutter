@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../datasources/session_dao.dart';
+import '../datasources/ai_api.dart';
 import '../datasources/session_unit_api.dart';
 import '../models/session_summary.dart';
 import '../models/logged_in_device.dart';
@@ -11,13 +12,16 @@ import '../session_change_bus.dart';
 class SessionRepository {
   SessionRepository({
     required SessionUnitApi api,
+    required AiApi aiApi,
     required SessionDao dao,
     SessionChangeBus? changeBus,
   }) : _api = api,
+       _aiApi = aiApi,
        _dao = dao,
        _changeBus = changeBus;
 
   final SessionUnitApi _api;
+  final AiApi _aiApi;
   final SessionDao _dao;
   final SessionChangeBus? _changeBus;
 
@@ -61,7 +65,7 @@ class SessionRepository {
         .toSet()
         .take(30)
         .toList(growable: false);
-    return _api.getActiveAiRuns(sessionUnitIds: ids);
+    return _aiApi.getActiveAiRuns(sessionUnitIds: ids);
   }
 
   Future<ChatOwner> resolveCurrentOwner() async {
@@ -232,12 +236,12 @@ class SessionRepository {
 
   Future<Map<String, dynamic>?> loadActiveAiRun({
     required String sessionUnitId,
-  }) => _api.getActiveAiRun(sessionUnitId: sessionUnitId);
+  }) => _aiApi.getActiveAiRun(sessionUnitId: sessionUnitId);
 
   Future<List<Map<String, dynamic>>> loadRecentAiRuns({
     required String sessionUnitId,
     int maxResultCount = 20,
-  }) => _api.getRecentAiRuns(
+  }) => _aiApi.getRecentAiRuns(
     sessionUnitId: sessionUnitId,
     maxResultCount: maxResultCount,
   );

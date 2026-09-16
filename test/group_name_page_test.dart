@@ -13,6 +13,7 @@ import 'package:gotoim_flutter/features/chat_settings/data/datasources/chat_memb
 import 'package:gotoim_flutter/features/chat_settings/data/repositories/chat_settings_repository.dart';
 import 'package:gotoim_flutter/features/chat_settings/presentation/group_name_page.dart';
 import 'package:gotoim_flutter/features/session/application/session_list_controller.dart';
+import 'package:gotoim_flutter/features/session/data/datasources/ai_api.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_unit_api.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_dao.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
@@ -55,6 +56,7 @@ void main() {
     );
     final sessionRepo = SessionRepository(
       api: SessionUnitApi(client),
+      aiApi: AiApi(client),
       dao: sessionDao,
       changeBus: SessionChangeBus(),
     );

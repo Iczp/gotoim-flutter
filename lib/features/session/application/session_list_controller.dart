@@ -9,6 +9,7 @@ import '../../../core/device/client_device_context.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../chat/application/ai_stream_change_bus.dart';
+import '../data/datasources/ai_api.dart';
 import '../data/datasources/session_dao.dart';
 import '../data/datasources/session_unit_api.dart';
 import '../data/models/chat_owner.dart';
@@ -30,6 +31,7 @@ void sessionScrollTrace(String message) {
 final sessionRepositoryProvider = Provider<SessionRepository>(
   (ref) => SessionRepository(
     api: SessionUnitApi(ref.watch(apiClientProvider)),
+    aiApi: AiApi(ref.watch(apiClientProvider)),
     dao: SessionDao(ref.watch(unifiedDatabaseProvider)),
     changeBus: ref.watch(sessionChangeBusProvider),
   ),

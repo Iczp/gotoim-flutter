@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/database/unified_database.dart';
 import 'package:gotoim_flutter/core/network/api_client.dart';
+import 'package:gotoim_flutter/features/session/data/datasources/ai_api.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_dao.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_unit_api.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
@@ -50,7 +51,11 @@ void main() {
     final dao = SessionDao(database);
     await dao.upsertAll([item('a', 2), item('b', 1)]);
     final client = _FakeApiClient();
-    final repository = SessionRepository(api: SessionUnitApi(client), dao: dao);
+    final repository = SessionRepository(
+      api: SessionUnitApi(client),
+      aiApi: AiApi(client),
+      dao: dao,
+    );
 
     final result = await repository.loadFriends(ownerId: 7, limit: 2);
 
@@ -85,6 +90,7 @@ void main() {
       );
       final repository = SessionRepository(
         api: SessionUnitApi(client),
+        aiApi: AiApi(client),
         dao: dao,
       );
 
@@ -137,6 +143,7 @@ void main() {
       );
       final repository = SessionRepository(
         api: SessionUnitApi(client),
+        aiApi: AiApi(client),
         dao: dao,
       );
 
@@ -169,6 +176,7 @@ void main() {
     );
     final repository = SessionRepository(
       api: SessionUnitApi(client),
+      aiApi: AiApi(client),
       dao: SessionDao(database),
     );
 
@@ -210,7 +218,11 @@ void main() {
         },
       },
     );
-    final repository = SessionRepository(api: SessionUnitApi(client), dao: dao);
+    final repository = SessionRepository(
+      api: SessionUnitApi(client),
+      aiApi: AiApi(client),
+      dao: dao,
+    );
 
     final localPage = await repository.loadFriends(ownerId: 7, limit: 1);
     expect(localPage.items.single.id, 'local');
@@ -235,8 +247,10 @@ void main() {
     addTearDown(database.close);
     final dao = SessionDao(database);
     await dao.upsertAll([item('cached', 20)]);
+    final client = _FakeApiClient();
     final repository = SessionRepository(
-      api: SessionUnitApi(_FakeApiClient()),
+      api: SessionUnitApi(client),
+      aiApi: AiApi(client),
       dao: dao,
     );
 
@@ -252,24 +266,24 @@ void main() {
     );
     addTearDown(database.close);
     final dao = SessionDao(database);
-    final repository = SessionRepository(
-      api: SessionUnitApi(
-        _FakeApiClient(
-          responses: {
-            '/api/chat/chat-object/by-current-user': {
-              'items': [
-                {
-                  'id': 7,
-                  'displayName': '本地身份',
-                  'thumbnail': '/avatar.png',
-                  'objectTypeDescription': '个人',
-                },
-              ],
-              'totalCount': 1,
+    final client = _FakeApiClient(
+      responses: {
+        '/api/chat/chat-object/by-current-user': {
+          'items': [
+            {
+              'id': 7,
+              'displayName': '本地身份',
+              'thumbnail': '/avatar.png',
+              'objectTypeDescription': '个人',
             },
-          },
-        ),
-      ),
+          ],
+          'totalCount': 1,
+        },
+      },
+    );
+    final repository = SessionRepository(
+      api: SessionUnitApi(client),
+      aiApi: AiApi(client),
       dao: dao,
     );
 
@@ -287,20 +301,20 @@ void main() {
     );
     addTearDown(database.close);
     final dao = SessionDao(database);
+    final client = _FakeApiClient(
+      responses: {
+        '/api/chat/session-unit-cache/friend/session-1': {
+          'id': 'session-1',
+          'ownerId': 7,
+          'score': 12,
+          'ticks': 12,
+          'destination': {'displayName': '网络新标题'},
+        },
+      },
+    );
     final repository = SessionRepository(
-      api: SessionUnitApi(
-        _FakeApiClient(
-          responses: {
-            '/api/chat/session-unit-cache/friend/session-1': {
-              'id': 'session-1',
-              'ownerId': 7,
-              'score': 12,
-              'ticks': 12,
-              'destination': {'displayName': '网络新标题'},
-            },
-          },
-        ),
-      ),
+      api: SessionUnitApi(client),
+      aiApi: AiApi(client),
       dao: dao,
     );
 
@@ -321,7 +335,7 @@ void main() {
         responses: <String, Object?>{'/api/chat/ai/active-batch': <dynamic>[]},
       );
 
-      final runs = await SessionUnitApi(client).getActiveAiRuns(
+      final runs = await AiApi(client).getActiveAiRuns(
         sessionUnitIds: <String>['session-1', 'session-1', ' session-2 '],
       );
 
@@ -355,8 +369,10 @@ void main() {
           },
         }),
       ]);
+      final client = _FakeApiClient();
       final repository = SessionRepository(
-        api: SessionUnitApi(_FakeApiClient()),
+        api: SessionUnitApi(client),
+        aiApi: AiApi(client),
         dao: dao,
       );
 
