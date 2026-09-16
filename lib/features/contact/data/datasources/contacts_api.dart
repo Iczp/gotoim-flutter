@@ -21,7 +21,8 @@ class ContactsApi {
   Future<List<OnlineFriend>> getOnlineFriends({required int ownerId}) async {
     final response = await _apiClient.get<Map<String, dynamic>>(
       '/api/chat/online/online-friends',
-      query: <String, Object?>{'ownerId': ownerId, 'maxResultCount': 2000},
+      // Swagger validates MaxResultCount in the inclusive range 1–1000.
+      query: <String, Object?>{'OwnerId': ownerId, 'MaxResultCount': 1000},
     );
     return PagedResultDto<OnlineFriend>.fromJson(
       response,

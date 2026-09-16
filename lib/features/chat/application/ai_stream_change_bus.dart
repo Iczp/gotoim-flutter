@@ -184,6 +184,14 @@ class AiStreamChangeBus {
     _activeBySourceMessageId.remove(sourceMessageId);
   }
 
+  /// Removes transient snapshots when authoritative recovery says a
+  /// conversation has no active AI run (HTTP 204).
+  void removeForRequesterSessionUnit(String sessionUnitId) {
+    _activeBySourceMessageId.removeWhere(
+      (_, snapshot) => snapshot.requesterSessionUnitId == sessionUnitId,
+    );
+  }
+
   Future<void> dispose() => _controller.close();
 }
 

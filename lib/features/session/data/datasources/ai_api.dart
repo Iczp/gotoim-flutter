@@ -9,10 +9,13 @@ class AiApi {
   Future<Map<String, dynamic>?> getActiveAiRun({
     required String sessionUnitId,
   }) async {
-    final response = await _apiClient.get<Map<String, dynamic>>(
+    // A 204 response is the normal "no active run" response. Request dynamic
+    // here so null is represented as null rather than failing a Map cast.
+    final response = await _apiClient.get<dynamic>(
       '/api/chat/ai/active/$sessionUnitId',
     );
-    return response.isEmpty ? null : response;
+    if (response is! Map || response.isEmpty) return null;
+    return Map<String, dynamic>.from(response);
   }
 
   /// Returns active runs for virtual-list items the current user may access.

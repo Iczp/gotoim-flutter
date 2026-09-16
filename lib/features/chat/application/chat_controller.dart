@@ -311,6 +311,11 @@ class ChatController extends ChangeNotifier {
       );
       final event = AiStreamEvent.fromRecoveryPayload(payload);
       if (event == null || event.requesterSessionUnitId != sessionUnitId) {
+        // The endpoint returns 204 when Redis has no active run. Clear a
+        // stale SignalR snapshot so the UI cannot remain on “AI 正在思考”.
+        _aiStreamChangeBus.removeForRequesterSessionUnit(sessionUnitId);
+        _restoreAiStreamReplies();
+        notifyListeners();
         return;
       }
       _aiStreamChangeBus.restore(event);

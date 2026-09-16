@@ -9,6 +9,7 @@ import '../../auth/application/auth_controller.dart';
 import '../../chat/application/chat_controller.dart';
 import '../../chat/application/ai_stream_change_bus.dart';
 import '../../chat/data/repositories/message_repository.dart';
+import 'active_chat_registry.dart';
 import 'session_list_controller.dart';
 import '../data/repositories/session_repository.dart';
 import 'message_alert_coordinator.dart';
@@ -23,12 +24,14 @@ class RealtimeSyncCoordinator {
     required MessageRepository messageRepository,
     required AiStreamChangeBus aiStreamChangeBus,
     required MessageAlertCoordinator messageAlertCoordinator,
+    required ActiveChatRegistry activeChatRegistry,
     required Future<void> Function(String reason) onKicked,
   }) : _gateway = gateway,
        _sessionRepository = sessionRepository,
        _messageRepository = messageRepository,
        _aiStreamChangeBus = aiStreamChangeBus,
        _messageAlertCoordinator = messageAlertCoordinator,
+       _activeChatRegistry = activeChatRegistry,
        _onKicked = onKicked;
 
   final SignalRGateway _gateway;
@@ -36,6 +39,7 @@ class RealtimeSyncCoordinator {
   final MessageRepository _messageRepository;
   final AiStreamChangeBus _aiStreamChangeBus;
   final MessageAlertCoordinator _messageAlertCoordinator;
+  final ActiveChatRegistry _activeChatRegistry;
   final Future<void> Function(String reason) _onKicked;
   StreamSubscription<SignalRAppEvent>? _subscription;
   Timer? _syncTimer;
@@ -149,7 +153,9 @@ class RealtimeSyncCoordinator {
           changedOwnerIds.add(message.ownerId);
           if (event.command == SignalRCommand.messageCreated ||
               event.command == SignalRCommand.messageForwarded) {
-            final session = await _sessionRepository.loadLocalFriendDetail(sessionUnitId);
+            final session = await _sessionRepository.loadLocalFriendDetail(
+              sessionUnitId,
+            );
             await _messageAlertCoordinator.handleIncoming(
               message: message,
               session: session,
@@ -204,6 +210,15 @@ class RealtimeSyncCoordinator {
     }
     if (ownerId == null || ownerId <= 0) {
       _scheduleCurrentOwnerSync();
+      return;
+    }
+
+    // A foreground chat has already persisted its own set-read response and
+    // listens to the shared cache change bus. Its SignalR echo must not cause
+    // a second `/friend/{id}` request; the owner-wide incremental sync keeps
+    // any additional session fields current.
+    if (_activeChatRegistry.isForegroundSession(sessionUnitId)) {
+      _scheduleOwnerSync(ownerId);
       return;
     }
 
@@ -332,6 +347,7 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
     messageRepository: ref.watch(messageRepositoryProvider),
     aiStreamChangeBus: ref.watch(aiStreamChangeBusProvider),
     messageAlertCoordinator: ref.watch(messageAlertCoordinatorProvider),
+    activeChatRegistry: ref.watch(activeChatRegistryProvider),
     onKicked: (reason) async {
       debugPrint('[realtimeSync][kicked] reason=$reason');
       await ref.read(authControllerProvider.notifier).logout();
