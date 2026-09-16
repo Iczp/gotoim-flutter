@@ -84,6 +84,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// 音频播放服务（语音消息播放）
   late final AudioPlaybackService _audioPlayback;
 
+  /// 前台活跃会话注册表
+  late final ActiveChatRegistry _activeChatRegistry;
+
   /// 底部消息输入框控制器
   final input = TextEditingController();
 
@@ -112,7 +115,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       '[ChatTrace] 🚀 ChatPage.initState | session=${widget.sessionUnitId}',
     );
     WidgetsBinding.instance.addObserver(this);
-    ref.read(activeChatRegistryProvider).enterChat(widget.sessionUnitId);
+    _activeChatRegistry = ref.read(activeChatRegistryProvider);
+    _activeChatRegistry.enterChat(widget.sessionUnitId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       debugPrint(
         '[ChatTrace] 🎨 [First Frame Painted] | '
@@ -145,7 +149,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       'totalSessionDuration=${_pageStopwatch.elapsedMilliseconds}ms',
     );
     WidgetsBinding.instance.removeObserver(this);
-    ref.read(activeChatRegistryProvider).leaveChat(widget.sessionUnitId);
+    _activeChatRegistry.leaveChat(widget.sessionUnitId);
     unawaited(_audioPlayback.stop());
     controller.dispose();
     input.dispose();
