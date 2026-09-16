@@ -101,14 +101,19 @@ class SessionUnitApi {
   }
 
   /// Fetches active runs only for the conversations currently rendered by the
-  /// virtual list. GUIDs are sent in a body rather than a long query string.
+  /// virtual list. The server binds repeated `SessionUnitIds` query values.
   Future<List<Map<String, dynamic>>> getActiveAiRuns({
     required List<String> sessionUnitIds,
   }) async {
-    if (sessionUnitIds.isEmpty) return const <Map<String, dynamic>>[];
-    final response = await _apiClient.post<List<dynamic>>(
-      '/api/chat/ai/active/batch',
-      data: <String, Object?>{'sessionUnitIds': sessionUnitIds},
+    final uniqueSessionUnitIds = sessionUnitIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (uniqueSessionUnitIds.isEmpty) return const <Map<String, dynamic>>[];
+    final response = await _apiClient.get<List<dynamic>>(
+      '/api/chat/ai/active-batch',
+      query: <String, Object?>{'SessionUnitIds': uniqueSessionUnitIds},
     );
     return response
         .whereType<Map>()

@@ -315,6 +315,27 @@ void main() {
   });
 
   test(
+    'active AI runs uses the GET batch endpoint with unique session IDs',
+    () async {
+      final client = _FakeApiClient(
+        responses: <String, Object?>{'/api/chat/ai/active-batch': <dynamic>[]},
+      );
+
+      final runs = await SessionUnitApi(client).getActiveAiRuns(
+        sessionUnitIds: <String>['session-1', 'session-1', ' session-2 '],
+      );
+
+      expect(runs, isEmpty);
+      expect(client.getPaths, <String>['/api/chat/ai/active-batch']);
+      expect(client.getQueries, <Map<String, Object?>>[
+        <String, Object?>{
+          'SessionUnitIds': <String>['session-1', 'session-2'],
+        },
+      ]);
+    },
+  );
+
+  test(
     'contact index identity changes persist into offline friend cache',
     () async {
       final database = UnifiedDatabase(
@@ -363,7 +384,7 @@ void main() {
 
 class _FakeApiClient implements ApiClient {
   _FakeApiClient({this.responses = const {}});
-  final Map<String, Map<String, dynamic>> responses;
+  final Map<String, Object?> responses;
   final List<String> getPaths = [];
   final List<Map<String, Object?>> getQueries = [];
 
