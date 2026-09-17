@@ -57,7 +57,11 @@ class FriendPresenceStore extends ChangeNotifier {
 
   void start() {
     _ensureSubscription();
-    unawaited(refresh(force: true));
+    if (_gateway.connectionState == SignalRConnectionState.connected) {
+      unawaited(refresh(force: true));
+    } else {
+      _clearPresence();
+    }
   }
 
   void _ensureSubscription() {
@@ -72,9 +76,10 @@ class FriendPresenceStore extends ChangeNotifier {
     if (_activeOwnerId == ownerId) return _refreshing ?? Future.value();
     final previousOwnerId = _activeOwnerId;
     _activeOwnerId = ownerId;
-    _deviceTypesByDestination.clear();
-    _onlineDevicesByChatObject.clear();
-    notifyListeners();
+    _clearPresence();
+    if (_gateway.connectionState != SignalRConnectionState.connected) {
+      return Future.value();
+    }
     final inFlight = _refreshing;
     if (inFlight != null) {
       // Startup may still be resolving the current owner. It is the same
@@ -86,13 +91,32 @@ class FriendPresenceStore extends ChangeNotifier {
     return refresh(force: true);
   }
 
+  void _clearPresence() {
+    final hasData =
+        _deviceTypesByDestination.isNotEmpty ||
+        _onlineDevicesByChatObject.isNotEmpty;
+    _deviceTypesByDestination.clear();
+    _onlineDevicesByChatObject.clear();
+    _lastRefreshAt = null;
+    if (hasData) {
+      notifyListeners();
+    }
+  }
+
+  /// Explicitly clears all online presence data (e.g. on logout).
+  void clear() => _clearPresence();
+
   void _onSignalREvent(SignalRAppEvent event) {
-    if (event is SignalRConnectionEvent &&
-        event.state == SignalRConnectionState.connected) {
-      unawaited(refresh());
+    if (event is SignalRConnectionEvent) {
+      if (event.state == SignalRConnectionState.connected) {
+        unawaited(refresh(force: true));
+      } else {
+        _clearPresence();
+      }
       return;
     }
     if (event is! SignalRCommandEvent) return;
+    if (_gateway.connectionState != SignalRConnectionState.connected) return;
     if (event.command == SignalRCommand.onlineFriend) {
       _applyFriendEvent(event.payload, online: true);
     } else if (event.command == SignalRCommand.offlineFriend) {
@@ -138,6 +162,10 @@ class FriendPresenceStore extends ChangeNotifier {
   }
 
   Future<void> refresh({bool force = false}) {
+    if (_gateway.connectionState != SignalRConnectionState.connected) {
+      _clearPresence();
+      return Future.value();
+    }
     final now = DateTime.now();
     if (!force &&
         _lastRefreshAt != null &&
@@ -150,6 +178,10 @@ class FriendPresenceStore extends ChangeNotifier {
   }
 
   Future<void> _refreshInternal() async {
+    if (_gateway.connectionState != SignalRConnectionState.connected) {
+      _clearPresence();
+      return;
+    }
     try {
       final ownerId =
           _activeOwnerId ?? (await _sessionRepository.resolveCurrentOwner()).id;
@@ -169,6 +201,10 @@ class FriendPresenceStore extends ChangeNotifier {
         ownDevices = await ownDevicesFuture;
       } catch (error) {
         debugPrint('[friendPresence][own-devices-refresh] failed: $error');
+      }
+      if (_gateway.connectionState != SignalRConnectionState.connected) {
+        _clearPresence();
+        return;
       }
       final ownDeviceTypes = ownDevices
           .map((device) => device.deviceType)

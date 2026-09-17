@@ -77,9 +77,13 @@ class SessionListController extends ChangeNotifier {
         final wasConnected =
             _connectionState == SignalRConnectionState.connected;
         _connectionState = event.state;
+        if (event.state != SignalRConnectionState.connected) {
+          _onlineDevices = const [];
+        }
         notifyListeners();
         if (!wasConnected && event.state == SignalRConnectionState.connected) {
           refreshVisibleAiRuns();
+          _scheduleOnlineDevicesReload();
         }
       } else if (event is SignalRCommandEvent &&
           (event.command == SignalRCommand.onlineMe ||
@@ -173,6 +177,8 @@ class SessionListController extends ChangeNotifier {
     SignalRConnectionState.reconnecting => SessionRealtimeStatus.reconnecting,
     SignalRConnectionState.disconnecting => SessionRealtimeStatus.disconnecting,
   };
+  bool get isSignalRConnected =>
+      _connectionState == SignalRConnectionState.connected;
   int get focusUnreadRequest => _focusUnreadRequest;
   bool isAiRunning(String sessionUnitId) =>
       _aiRunSessionById.values.any((id) => id == sessionUnitId);

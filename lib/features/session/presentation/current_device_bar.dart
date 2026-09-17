@@ -10,12 +10,14 @@ class CurrentDeviceBar extends StatelessWidget {
     required this.deviceCount,
     required this.isLoading,
     required this.onPressed,
+    this.isConnected = true,
     super.key,
   });
 
   final String label;
   final int deviceCount;
   final bool isLoading;
+  final bool isConnected;
   final VoidCallback onPressed;
 
   @override
@@ -23,6 +25,9 @@ class CurrentDeviceBar extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final tokens = context.appTokens;
+    final title = isConnected
+        ? '当前在线：$deviceCount 台设备${label.isEmpty ? '' : ' · 本机：$label'}'
+        : '服务未连接${label.isEmpty ? '' : ' · 本机：$label'}';
 
     return GlassContainer(
       borderRadius: BorderRadius.zero,
@@ -35,14 +40,20 @@ class CurrentDeviceBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(
             children: [
-              Icon(Icons.devices_rounded, size: 20, color: colorScheme.primary),
+              Icon(
+                Icons.devices_rounded,
+                size: 20,
+                color: isConnected
+                    ? colorScheme.primary
+                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '当前在线：$deviceCount 台设备'
-                  '${label.isEmpty ? '' : ' · 本机：$label'}',
+                  title,
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w500,
+                    color: isConnected ? null : colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),

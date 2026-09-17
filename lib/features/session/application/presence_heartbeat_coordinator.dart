@@ -29,6 +29,7 @@ class PresenceHeartbeatCoordinator {
   Timer? _timer;
   bool _sending = false;
   bool _started = false;
+  int _consecutiveFailures = 0;
 
   void start() {
     if (_started) return;
@@ -44,11 +45,13 @@ class PresenceHeartbeatCoordinator {
     if (event.state == SignalRConnectionState.connected) {
       _startConnectedHeartbeat();
     } else {
+      _consecutiveFailures = 0;
       _stopTimer();
     }
   }
 
   void _startConnectedHeartbeat() {
+    _consecutiveFailures = 0;
     _stopTimer();
     unawaited(_sendHeartbeat());
     _timer = Timer.periodic(_interval, (_) => unawaited(_sendHeartbeat()));
@@ -68,6 +71,7 @@ class PresenceHeartbeatCoordinator {
     final ticks = DateTime.now().millisecondsSinceEpoch;
     try {
       await _gateway.invoke<Object>('Heartbeat', arguments: [ticks]);
+      _consecutiveFailures = 0;
       AppLogger.instance.info(
         'Presence heartbeat sent',
         category: 'presence',
@@ -75,16 +79,24 @@ class PresenceHeartbeatCoordinator {
         context: <String, Object?>{'ticks': ticks},
       );
     } catch (error, stackTrace) {
-      // A failed heartbeat must not disconnect chat or start a competing
-      // reconnect loop; SignalR owns transport recovery.
+      _consecutiveFailures++;
       AppLogger.instance.error(
-        'Presence heartbeat failed',
+        'Presence heartbeat failed (count: $_consecutiveFailures)',
         category: 'presence',
         event: 'heartbeat_failed',
         error: error,
         stackTrace: stackTrace,
       );
-      debugPrint('[presenceHeartbeat] failed: $error');
+      debugPrint('[presenceHeartbeat] failed (count: $_consecutiveFailures): $error');
+      if (_consecutiveFailures >= 2 &&
+          _gateway.connectionState == SignalRConnectionState.connected) {
+        AppLogger.instance.warning(
+          'Consecutive presence heartbeats failed, disconnecting to trigger transport recovery',
+          category: 'presence',
+          event: 'heartbeat_recovery_disconnect',
+        );
+        unawaited(_gateway.disconnect());
+      }
     } finally {
       _sending = false;
     }

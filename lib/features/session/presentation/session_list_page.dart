@@ -220,6 +220,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                         label: controller.currentDeviceLabel,
                         deviceCount: controller.onlineDevices.length,
                         isLoading: controller.isLoadingOnlineDevices,
+                        isConnected: controller.isSignalRConnected,
                         onPressed: () => context.push('/online-devices'),
                       ),
                     ),
