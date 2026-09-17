@@ -4,8 +4,11 @@ import 'app/bootstrap.dart';
 import 'app/bootstrap_error_app.dart';
 import 'app/mini_app_bootstrap.dart';
 import 'core/logging/app_logger.dart';
+import 'core/logging/console_color.dart';
 
 Future<void> main() async {
+  setupConsoleColorLogger();
+
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     AppLogger.instance.error(

@@ -140,4 +140,92 @@ void main() {
       expect(resolved.title, 'Aurora AI');
     },
   );
+
+  test('session summary parses PascalCase DTO fields from backend', () {
+    final summary = SessionSummary.fromJson(<String, dynamic>{
+      'Id': 'bd95c9bf-e3df-48ea-6f69-3a23b4fd2e58',
+      'OwnerId': 42,
+      'Score': 9876543210,
+      'Sorting': 5,
+      'Ticks': 123456789,
+      'PublicBadge': 2,
+      'Destination': <String, dynamic>{'DisplayName': 'Aurora AI'},
+      'Setting': <String, dynamic>{'IsTopping': true},
+    });
+
+    expect(summary.id, 'bd95c9bf-e3df-48ea-6f69-3a23b4fd2e58');
+    expect(summary.ownerId, 42);
+    expect(summary.score, 9876543210);
+    expect(summary.sorting, 5);
+    expect(summary.ticks, 123456789);
+    expect(summary.unreadCount, 2);
+    expect(summary.isPinned, isTrue);
+    expect(summary.title, 'Aurora AI');
+  });
+
+  test('mergeWithLocal preserves highest score, sorting, ticks and read status', () {
+    final local = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'unit-test-1',
+      'ownerId': 42,
+      'score': 100000000500,
+      'sorting': 1,
+      'ticks': 500,
+      'publicBadge': 0,
+      'readMessageId': 9999,
+      'destination': <String, dynamic>{'displayName': '好友A'},
+      'lastMessage': <String, dynamic>{
+        'id': 9999,
+        'content': <String, dynamic>{'text': '你好'},
+      },
+    });
+
+    // Remote response from /friend/{id} has no lastMessage, score=0 or lower, sorting=0
+    final remoteFriendDetail = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'unit-test-1',
+      'ownerId': 42,
+      'score': 0,
+      'sorting': 0,
+      'ticks': 0,
+      'lastMessageId': 9999,
+      'publicBadge': 5, // Stale server unread count
+      'destination': <String, dynamic>{'displayName': '好友A（最新）'},
+    });
+
+    final merged = remoteFriendDetail.mergeWithLocal(local);
+
+    // Score, ticks, sorting must not be wiped to 0!
+    expect(merged.score, 100000000500);
+    expect(merged.sorting, 1);
+    expect(merged.ticks, 500);
+    expect(merged.isPinned, isTrue);
+    expect(merged.title, '好友A（最新）');
+    expect(merged.preview, '你好');
+    // Unread count must not resurrect stale badge since local already read past 9999
+    expect(merged.unreadCount, 0);
+  });
+
+  test('session DAO persists and restores sorting and score correctly', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = SessionDao(database);
+    final summary = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'unit-sort-1',
+      'ownerId': 42,
+      'score': 5000000000,
+      'sorting': 2,
+      'ticks': 999999,
+      'destination': <String, dynamic>{'displayName': '置顶好友'},
+    });
+
+    await dao.upsertAll(<SessionSummary>[summary]);
+    final cached = await dao.readPage(ownerId: 42);
+
+    expect(cached, hasLength(1));
+    expect(cached.single.score, 5000000000);
+    expect(cached.single.sorting, 2);
+    expect(cached.single.ticks, 999999);
+    expect(cached.single.isPinned, isTrue);
+  });
 }

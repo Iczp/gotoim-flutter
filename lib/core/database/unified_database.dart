@@ -174,7 +174,7 @@ class UnifiedDatabase {
     final normalizedLimit = limit.clamp(1, 200);
     final hasCursor = cursorScore != null && cursorId != null;
     return _connection.runSelect(
-      'SELECT id, ownerId, score, ticks, raw FROM Friends '
+      'SELECT id, ownerId, score, sorting, ticks, raw FROM Friends '
       'WHERE ownerId = ? '
       '${hasCursor ? 'AND (score < ? OR (score = ? AND id < ?)) ' : ''}'
       'ORDER BY score DESC, id DESC LIMIT ?',
@@ -348,7 +348,7 @@ class UnifiedDatabase {
   Future<Map<String, Object?>?> readFriendRow(String id) async {
     await initialize();
     final rows = await _connection.runSelect(
-      'SELECT id, ownerId, score, ticks, raw FROM Friends WHERE id = ? LIMIT 1',
+      'SELECT id, ownerId, score, sorting, ticks, raw FROM Friends WHERE id = ? LIMIT 1',
       <Object?>[id],
     );
     return rows.isEmpty ? null : rows.single;

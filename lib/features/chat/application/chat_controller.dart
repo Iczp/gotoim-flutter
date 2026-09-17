@@ -118,6 +118,14 @@ class ChatController extends ChangeNotifier {
   Timer? _aiStreamElapsedTimer;
   Timer? _aiRunRecoveryTimer;
   bool _isRecoveringAfterRealtimeReconnect = false;
+  bool _isDisposed = false;
+  bool get isDisposed => _isDisposed;
+
+  @override
+  void notifyListeners() {
+    if (_isDisposed) return;
+    super.notifyListeners();
+  }
   final Map<int, AiStreamReply> _aiStreamReplies = <int, AiStreamReply>{};
   List<AiRunRecord> _recentAiRuns = const <AiRunRecord>[];
   ChatMessage? quoting;
@@ -329,21 +337,25 @@ class ChatController extends ChangeNotifier {
     // Defer background network synchronization until after the page route animation
     unawaited(
       Future.delayed(const Duration(milliseconds: 300), () async {
+        if (_isDisposed) return;
         debugPrint(
           '[ChatTrace] ⏳ [3/5] deferred network sync triggered | '
           'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
         );
         await _restoreActiveAiRun();
+        if (_isDisposed) return;
         // The friend detail supplies the authoritative remote destination
         // (AI/contact) and lastMessage. It must follow the local Friend cache
         // directly, before subsequent message/read-state synchronization.
         await _refreshFriendDetail();
+        if (_isDisposed) return;
         // SignalR may have been disconnected while the AI final message was
         // persisted.  Always run the incremental pull, including for a fresh
         // local cache (cursor = 0), so reopening a conversation cannot lose
         // an offline reply merely because SQLite has no prior message yet.
         final syncWatch = Stopwatch()..start();
         await loadLatest();
+        if (_isDisposed) return;
         debugPrint(
           '[ChatTrace] ✔ [4/5] latest messages synced | '
           'cost=${syncWatch.elapsedMilliseconds}ms | '
@@ -470,7 +482,7 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> loadMore() async {
-    if (isLoading || !hasMore) return;
+    if (_isDisposed || isLoading || !hasMore) return;
     isLoading = true;
     error = null;
     notifyListeners();
@@ -482,6 +494,7 @@ class ChatController extends ChangeNotifier {
         beforeScore: _messages.isEmpty ? null : _messages.last.score,
         limit: pageSize,
       );
+      if (_isDisposed) return;
       if (page.items.isEmpty) {
         hasMore = false;
       } else {
@@ -501,18 +514,21 @@ class ChatController extends ChangeNotifier {
         'total=${_messages.length}',
       );
     } catch (exception, stackTrace) {
+      if (_isDisposed) return;
       error = exception;
       debugPrint(
         '[loadMore][ERROR] session=$sessionUnitId error=$exception\n$stackTrace',
       );
     } finally {
       isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        notifyListeners();
+      }
     }
   }
 
   Future<void> loadLatest() async {
-    if (isLoadingLatest) return;
+    if (_isDisposed || isLoadingLatest) return;
     isLoadingLatest = true;
     // The cursor must come from Drift instead of this controller's temporary
     // page.  A new chat controller is created on re-entry, so only the local
@@ -522,11 +538,13 @@ class ChatController extends ChangeNotifier {
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
       );
+      if (_isDisposed) return;
       final latest = await _repository.loadLatest(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
         minMessageId: minMessageId,
       );
+      if (_isDisposed) return;
       final byId = <String, ChatMessage>{
         for (final item in _messages) item.localId: item,
         for (final item in latest) item.localId: item,
@@ -537,12 +555,15 @@ class ChatController extends ChangeNotifier {
       _deduplicateMessages();
       _messages.sort((a, b) => b.score.compareTo(a.score));
     } catch (exception) {
+      if (_isDisposed) return;
       debugPrint(
         '[loadMessages][latest-failed] session=$sessionUnitId error=$exception',
       );
     } finally {
       isLoadingLatest = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        notifyListeners();
+      }
     }
   }
 
@@ -967,6 +988,7 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> markLatestRead() async {
+    if (_isDisposed) return;
     final messageId = _messages
         .where((item) => !item.isMine && item.serverId != null)
         .map((item) => item.serverId!)
@@ -983,13 +1005,16 @@ class ChatController extends ChangeNotifier {
     _lastSubmittedReadMessageId = messageId;
     newMessageCount = 0;
     try {
-      friend = await _repository.setRead(
+      final updatedFriend = await _repository.setRead(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
         messageId: messageId,
       );
+      if (_isDisposed) return;
+      friend = updatedFriend;
       notifyListeners();
     } catch (exception) {
+      if (_isDisposed) return;
       debugPrint(
         '[setRead][failed] session=$sessionUnitId messageId=$messageId error=$exception',
       );
@@ -1251,17 +1276,20 @@ class ChatController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _attachmentTransferService.removeListener(_onAttachmentTransferChanged);
     unawaited(_sessionChangeSubscription?.cancel());
     unawaited(_aiStreamSubscription?.cancel());
     unawaited(_signalRSubscription?.cancel());
     _aiStreamElapsedTimer?.cancel();
+    _aiStreamElapsedTimer = null;
     _aiRunRecoveryTimer?.cancel();
+    _aiRunRecoveryTimer = null;
     super.dispose();
   }
 
   void _onAiStreamEvent(AiStreamEvent event) {
-    if (event.requesterSessionUnitId != sessionUnitId) return;
+    if (_isDisposed || event.requesterSessionUnitId != sessionUnitId) return;
     _restoreAiStreamReplies();
     _syncAiStreamElapsedTimer();
     _syncAiRunRecoveryPolling();
@@ -1269,7 +1297,7 @@ class ChatController extends ChangeNotifier {
   }
 
   void _onSignalREvent(SignalRAppEvent event) {
-    if (event is! SignalRConnectionEvent) return;
+    if (_isDisposed || event is! SignalRConnectionEvent) return;
     if (event.state == SignalRConnectionState.connected) {
       _aiRunRecoveryTimer?.cancel();
       _aiRunRecoveryTimer = null;
@@ -1283,7 +1311,7 @@ class ChatController extends ChangeNotifier {
   /// replay the durable state in the same safe order used when entering chat.
   /// This covers a reply that was persisted while the app was backgrounded.
   Future<void> _recoverAfterSignalRReconnect() async {
-    if (_isRecoveringAfterRealtimeReconnect) return;
+    if (_isDisposed || _isRecoveringAfterRealtimeReconnect) return;
     _isRecoveringAfterRealtimeReconnect = true;
     final watch = Stopwatch()..start();
     try {

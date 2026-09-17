@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import 'diagnostic_log_entry.dart';
@@ -105,6 +106,10 @@ class AppLogger {
         level: level.index * 200,
         error: error,
         stackTrace: stackTrace);
+    if (level.isError) {
+      final err = error != null ? ' error=$error' : '';
+      debugPrint('\x1B[31;1m[$category][$event] $message$err\x1B[0m');
+    }
     if (!_captureEnabled && !force) return;
     final trace = stackTrace ?? (level.isError ? StackTrace.current : null);
     final frames = trace == null
