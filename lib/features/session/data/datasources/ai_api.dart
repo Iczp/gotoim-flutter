@@ -52,4 +52,35 @@ class AiApi {
         .map((item) => Map<String, dynamic>.from(item))
         .toList(growable: false);
   }
+
+  /// Dispatches cancellation for an active AI run so the backend and LLM stop generating.
+  Future<void> cancelAiRun({
+    required String runId,
+    String? sessionUnitId,
+    int? sourceMessageId,
+  }) async {
+    final payload = <String, dynamic>{
+      'runId': runId,
+      if (sessionUnitId != null && sessionUnitId.isNotEmpty)
+        'sessionUnitId': sessionUnitId,
+      if (sourceMessageId != null) 'sourceMessageId': sourceMessageId,
+    };
+    try {
+      await _apiClient.post<dynamic>(
+        '/api/chat/ai/cancel',
+        data: payload,
+      );
+    } catch (_) {
+      // Best-effort fallback to direct ID route
+      try {
+        await _apiClient.post<dynamic>(
+          '/api/chat/ai/cancel/$runId',
+          data: payload,
+        );
+      } catch (_) {
+        // Suppress network cancellation errors
+      }
+    }
+  }
 }
+

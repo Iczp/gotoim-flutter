@@ -246,6 +246,16 @@ class SessionRepository {
     maxResultCount: maxResultCount,
   );
 
+  Future<void> cancelAiRun({
+    required String runId,
+    required String sessionUnitId,
+    int? sourceMessageId,
+  }) => _aiApi.cancelAiRun(
+    runId: runId,
+    sessionUnitId: sessionUnitId,
+    sourceMessageId: sourceMessageId,
+  );
+
   Future<List<SessionSummary>> loadChanges({required int ownerId}) async {
     final initialTicks = await _dao.readMaxTicks(ownerId);
     if (initialTicks == null || initialTicks <= 0) return const [];

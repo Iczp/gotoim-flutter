@@ -172,6 +172,26 @@ class ChatController extends ChangeNotifier {
     return List.unmodifiable(replies);
   }
 
+  bool get hasActiveAiStream => _aiStreamReplies.values.any(
+    (reply) =>
+        reply.status == AiStreamStatus.thinking ||
+        reply.status == AiStreamStatus.streaming,
+  );
+
+  AiStreamReply? get activeAiStreamReply {
+    final live =
+        _aiStreamReplies.values
+            .where(
+              (reply) =>
+                  reply.status == AiStreamStatus.thinking ||
+                  reply.status == AiStreamStatus.streaming,
+            )
+            .toList();
+    if (live.isEmpty) return null;
+    live.sort((a, b) => b.sourceMessageId.compareTo(a.sourceMessageId));
+    return live.first;
+  }
+
   List<AiRunRecord> get recentAiRuns => List.unmodifiable(_recentAiRuns);
   String get title => friend?.title ?? _title;
   String get peerDisplayName => firstNonEmpty(<Object?>[
@@ -377,6 +397,51 @@ class ChatController extends ChangeNotifier {
 
   void _onAttachmentTransferChanged() {
     notifyListeners();
+  }
+
+  /// Immediately stops the thinking/streaming state in the local UI
+  /// and notifies the backend to cancel the active AI generation task.
+  Future<void> stopAiStream(AiStreamReply reply) async {
+    _aiStreamChangeBus.removeBySourceMessageId(reply.sourceMessageId);
+    if (reply.text.isNotEmpty) {
+      _aiStreamReplies[reply.sourceMessageId] = reply.copyWith(
+        status: AiStreamStatus.completed,
+      );
+    } else {
+      _aiStreamReplies.remove(reply.sourceMessageId);
+    }
+    _syncAiStreamElapsedTimer();
+    _syncAiRunRecoveryPolling();
+    notifyListeners();
+
+    try {
+      await _sessionRepository.cancelAiRun(
+        runId: reply.runId,
+        sessionUnitId: sessionUnitId,
+        sourceMessageId: reply.sourceMessageId,
+      );
+      debugPrint(
+        '[ChatTrace] AI stream stopped and backend cancelled | '
+        'run=${reply.runId} msg=${reply.sourceMessageId}',
+      );
+    } catch (exception) {
+      debugPrint('[ChatTrace] cancelAiRun error | $exception');
+    }
+  }
+
+  /// Cancels all currently thinking or streaming AI replies.
+  Future<void> stopAllActiveAiStreams() async {
+    final active =
+        _aiStreamReplies.values
+            .where(
+              (reply) =>
+                  reply.status == AiStreamStatus.thinking ||
+                  reply.status == AiStreamStatus.streaming,
+            )
+            .toList(growable: false);
+    for (final reply in active) {
+      await stopAiStream(reply);
+    }
   }
 
   Future<void> _refreshFriendDetail() async {

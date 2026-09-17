@@ -235,6 +235,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       ),
                 ),
               ),
+              if (controller.hasActiveAiStream)
+                _buildActiveAiStreamStopBar(Theme.of(context)),
               ChatInputArea(
                 selectionMode: controller.selectionMode,
                 selectionActions: ChatSelectionBar(
@@ -260,6 +262,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Widget _buildAiStreamReply(AiStreamReply reply) {
     final theme = Theme.of(context);
+    final isThinking = reply.status == AiStreamStatus.thinking;
     final text = switch (reply.status) {
       AiStreamStatus.thinking => 'AI 正在思考…',
       AiStreamStatus.failed => reply.error,
@@ -299,9 +302,44 @@ class _ChatPageState extends ConsumerState<ChatPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    controller.peerDisplayName,
-                    style: theme.textTheme.labelSmall,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      Text(
+                        controller.peerDisplayName,
+                        style: theme.textTheme.labelSmall,
+                      ),
+                      if (showProgress)
+                        InkWell(
+                          onTap: () => controller.stopAiStream(reply),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Icon(
+                                  Icons.stop_circle_outlined,
+                                  size: 14,
+                                  color: theme.colorScheme.error,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  isThinking ? '停止思考' : '停止生成',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.error,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(text),
@@ -320,6 +358,75 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       child: LinearProgressIndicator(),
                     ),
                   ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveAiStreamStopBar(ThemeData theme) {
+    final active = controller.activeAiStreamReply;
+    final isThinking = active?.status == AiStreamStatus.thinking;
+    final label = isThinking ? 'AI 正在思考…' : 'AI 正在生成…';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.95),
+        border: Border(
+          top: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 10),
+          InkWell(
+            onTap: controller.stopAllActiveAiStreams,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    Icons.stop_rounded,
+                    size: 14,
+                    color: theme.colorScheme.error,
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    isThinking ? '停止思考' : '停止生成',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.error,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
               ),
             ),
