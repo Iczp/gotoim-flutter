@@ -376,12 +376,15 @@ class SessionListController extends ChangeNotifier {
     await loadOnlineDevices(silent: true);
   }
 
-  Future<void> loadOnlineDevices({bool silent = false}) async {
+  Future<void> loadOnlineDevices({
+    bool silent = false,
+    bool force = true,
+  }) async {
     if (_isLoadingOnlineDevices) return;
     _isLoadingOnlineDevices = true;
     if (!silent) notifyListeners();
     try {
-      await _friendPresenceStore.refresh();
+      await _friendPresenceStore.refresh(force: force);
       _syncOnlineDevicesFromPresence(notify: false);
     } catch (error) {
       debugPrint('Load online devices failed: $error');
@@ -392,9 +395,30 @@ class SessionListController extends ChangeNotifier {
   }
 
   void _syncOnlineDevicesFromPresence({bool notify = true}) {
-    final next = _friendPresenceStore.onlineDevicesForChatObjectId(
-      _currentOwner?.id,
-    );
+    var next = _friendPresenceStore.currentOnlineDevices;
+    if (next.isEmpty && _currentOwner?.id != null) {
+      next = _friendPresenceStore.onlineDevicesForChatObjectId(
+        _currentOwner!.id,
+      );
+    }
+    if (next.isEmpty && isSignalRConnected) {
+      next = [
+        LoggedInDevice(
+          connectionId: _signalRGateway.connectionInfo.connectionId ?? '',
+          deviceId: _deviceContext.deviceId,
+          deviceType: _deviceContext.deviceType,
+          brand: _deviceContext.brand,
+          model: _deviceContext.model,
+          updatedAt: DateTime.now(),
+          groups: const [],
+          ipAddress: '',
+          host: '',
+          browser: '',
+          browserInfo: '',
+          platform: _deviceContext.platform,
+        ),
+      ];
+    }
     final unchanged =
         _onlineDevices.length == next.length &&
         _onlineDevices.map((item) => item.connectionId).join('|') ==
@@ -420,8 +444,8 @@ class SessionListController extends ChangeNotifier {
   void _scheduleOnlineDevicesReload() {
     _onlineDevicesReloadTimer?.cancel();
     _onlineDevicesReloadTimer = Timer(
-      const Duration(milliseconds: 200),
-      () => unawaited(loadOnlineDevices(silent: true)),
+      const Duration(milliseconds: 150),
+      () => unawaited(loadOnlineDevices(silent: true, force: true)),
     );
   }
 

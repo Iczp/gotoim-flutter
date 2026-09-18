@@ -31,10 +31,14 @@ class FriendPresenceStore extends ChangeNotifier {
   final ContactsApi _contactsApi;
   final Duration _minimumRefreshInterval;
   final Map<int, Set<String>> _deviceTypesByDestination = {};
+  final Map<int, Map<String, int>> _deviceCountsByDestination = {};
   final Map<int, List<LoggedInDevice>> _onlineDevicesByChatObject = {};
+  List<LoggedInDevice> _currentOnlineDevices = const [];
   StreamSubscription<SignalRAppEvent>? _subscription;
   DateTime? _lastRefreshAt;
   Future<void>? _refreshing;
+  Timer? _meRefreshTimer;
+  Timer? _authoritativeSyncTimer;
   int? _activeOwnerId;
 
   List<String> deviceTypesForChatObjectId(int? destinationId) =>
@@ -45,15 +49,19 @@ class FriendPresenceStore extends ChangeNotifier {
               ) ??
               const <String>[]);
 
+  /// Returns current user's online devices across the whole account.
+  List<LoggedInDevice> get currentOnlineDevices => _currentOnlineDevices;
+
   /// Full connection/device details are available for the current chat owner
   /// from `/api/chat/online/by-current-user`, not merely its device types.
-  List<LoggedInDevice> onlineDevicesForChatObjectId(int? chatObjectId) =>
-      chatObjectId == null
-          ? const <LoggedInDevice>[]
-          : List<LoggedInDevice>.unmodifiable(
-            _onlineDevicesByChatObject[chatObjectId] ??
-                const <LoggedInDevice>[],
-          );
+  List<LoggedInDevice> onlineDevicesForChatObjectId(int? chatObjectId) {
+    if (chatObjectId == null) return _currentOnlineDevices;
+    final devices = _onlineDevicesByChatObject[chatObjectId];
+    if (devices != null && devices.isNotEmpty) {
+      return devices;
+    }
+    return _currentOnlineDevices;
+  }
 
   void start() {
     _ensureSubscription();
@@ -92,11 +100,17 @@ class FriendPresenceStore extends ChangeNotifier {
   }
 
   void _clearPresence() {
+    _authoritativeSyncTimer?.cancel();
+    _meRefreshTimer?.cancel();
     final hasData =
         _deviceTypesByDestination.isNotEmpty ||
-        _onlineDevicesByChatObject.isNotEmpty;
+        _deviceCountsByDestination.isNotEmpty ||
+        _onlineDevicesByChatObject.isNotEmpty ||
+        _currentOnlineDevices.isNotEmpty;
     _deviceTypesByDestination.clear();
+    _deviceCountsByDestination.clear();
     _onlineDevicesByChatObject.clear();
+    _currentOnlineDevices = const [];
     _lastRefreshAt = null;
     if (hasData) {
       notifyListeners();
@@ -123,8 +137,22 @@ class FriendPresenceStore extends ChangeNotifier {
       _applyFriendEvent(event.payload, online: false);
     } else if (event.command == SignalRCommand.onlineMe ||
         event.command == SignalRCommand.offlineMe) {
-      unawaited(refresh());
+      _scheduleMeRefresh();
     }
+  }
+
+  void _scheduleMeRefresh() {
+    _meRefreshTimer?.cancel();
+    _meRefreshTimer = Timer(const Duration(milliseconds: 150), () {
+      unawaited(refresh(force: true));
+    });
+  }
+
+  void _scheduleAuthoritativeSync() {
+    _authoritativeSyncTimer?.cancel();
+    _authoritativeSyncTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(refresh(force: true));
+    });
   }
 
   void _applyFriendEvent(Object? payload, {required bool online}) {
@@ -135,30 +163,56 @@ class FriendPresenceStore extends ChangeNotifier {
     final destinationIds =
         (rawIds as List? ?? const <Object?>[])
             .map((item) => item is num ? item.toInt() : int.tryParse('$item'))
-            .whereType<int>();
+            .whereType<int>()
+            .toList(growable: false);
     final deviceTypes =
         (rawTypes as List? ?? const <Object?>[])
             .map((item) => '$item')
             .where((item) => item.isNotEmpty)
             .toSet();
-    if (deviceTypes.isEmpty) return;
+    if (deviceTypes.isEmpty || destinationIds.isEmpty) return;
+
     var changed = false;
     for (final destinationId in destinationIds) {
+      final counts = _deviceCountsByDestination.putIfAbsent(
+        destinationId,
+        () => <String, int>{},
+      );
       final types = _deviceTypesByDestination.putIfAbsent(
         destinationId,
-        () => {},
+        () => <String>{},
       );
-      if (online) {
-        final before = types.length;
-        types.addAll(deviceTypes);
-        changed = types.length != before || changed;
-      } else {
-        final before = types.length;
-        types.removeAll(deviceTypes);
-        changed = types.length != before || changed;
+
+      for (final type in deviceTypes) {
+        final currentCount = counts[type] ?? (types.contains(type) ? 1 : 0);
+        if (online) {
+          counts[type] = currentCount + 1;
+          if (types.add(type)) {
+            changed = true;
+          }
+        } else {
+          final newCount = currentCount - 1;
+          if (newCount <= 0) {
+            counts.remove(type);
+            if (types.remove(type)) {
+              changed = true;
+            }
+          } else {
+            counts[type] = newCount;
+            // Still has active devices of this type!
+          }
+        }
+      }
+
+      if (types.isEmpty) {
+        _deviceTypesByDestination.remove(destinationId);
+        _deviceCountsByDestination.remove(destinationId);
       }
     }
     if (changed) notifyListeners();
+
+    // Debounce authoritative refresh from backend to ensure consistent state
+    _scheduleAuthoritativeSync();
   }
 
   Future<void> refresh({bool force = false}) {
@@ -229,29 +283,96 @@ class FriendPresenceStore extends ChangeNotifier {
     required Iterable<String> currentOwnerDeviceTypes,
     required List<LoggedInDevice> currentOwnerDevices,
   }) {
-    final nextByDestination = <int, Set<String>>{};
+    final nextCountsByDestination = <int, Map<String, int>>{};
     for (final item in online) {
-      nextByDestination
-          .putIfAbsent(item.destinationId, () => {})
-          .addAll(item.deviceTypes);
+      final map = nextCountsByDestination.putIfAbsent(
+        item.destinationId,
+        () => <String, int>{},
+      );
+      for (final type in item.deviceTypes) {
+        if (type.isNotEmpty) {
+          map[type] = (map[type] ?? 0) + 1;
+        }
+      }
     }
-    final ownTypes = currentOwnerDeviceTypes.toSet();
-    if (currentOwnerId > 0 && ownTypes.isNotEmpty) {
-      nextByDestination.putIfAbsent(currentOwnerId, () => {}).addAll(ownTypes);
+
+    final ownDevices = List<LoggedInDevice>.unmodifiable(currentOwnerDevices);
+    _currentOnlineDevices = ownDevices;
+
+    final nextOnlineDevicesByChatObject = <int, List<LoggedInDevice>>{};
+    if (currentOwnerId > 0) {
+      nextOnlineDevicesByChatObject[currentOwnerId] =
+          List<LoggedInDevice>.from(currentOwnerDevices);
     }
+
+    for (final device in currentOwnerDevices) {
+      final type = device.deviceType;
+      for (final id in device.chatObjectIdList) {
+        final list = (nextOnlineDevicesByChatObject[id] ??= <LoggedInDevice>[]);
+        if (!list.any((d) => d.connectionId == device.connectionId)) {
+          list.add(device);
+        }
+        if (type.isNotEmpty) {
+          final map = nextCountsByDestination.putIfAbsent(
+            id,
+            () => <String, int>{},
+          );
+          map[type] = (map[type] ?? 0) + 1;
+        }
+      }
+      if (currentOwnerId > 0 && type.isNotEmpty) {
+        final map = nextCountsByDestination.putIfAbsent(
+          currentOwnerId,
+          () => <String, int>{},
+        );
+        map[type] = (map[type] ?? 0) + 1;
+      }
+    }
+
+    for (final type in currentOwnerDeviceTypes) {
+      if (currentOwnerId > 0 && type.isNotEmpty) {
+        final map = nextCountsByDestination.putIfAbsent(
+          currentOwnerId,
+          () => <String, int>{},
+        );
+        if ((map[type] ?? 0) == 0) {
+          map[type] = 1;
+        }
+      }
+    }
+
+    final nextByDestination = <int, Set<String>>{};
+    for (final entry in nextCountsByDestination.entries) {
+      final activeTypes = entry.value.entries
+          .where((e) => e.value > 0)
+          .map((e) => e.key)
+          .toSet();
+      if (activeTypes.isNotEmpty) {
+        nextByDestination[entry.key] = activeTypes;
+      }
+    }
+
+    _deviceCountsByDestination
+      ..clear()
+      ..addAll(nextCountsByDestination);
     _deviceTypesByDestination
       ..clear()
       ..addAll(nextByDestination);
     _onlineDevicesByChatObject
       ..clear()
-      ..[currentOwnerId] = List<LoggedInDevice>.unmodifiable(
-        currentOwnerDevices,
+      ..addAll(
+        nextOnlineDevicesByChatObject.map(
+          (key, value) =>
+              MapEntry(key, List<LoggedInDevice>.unmodifiable(value)),
+        ),
       );
     notifyListeners();
   }
 
   @override
   void dispose() {
+    _meRefreshTimer?.cancel();
+    _authoritativeSyncTimer?.cancel();
     _subscription?.cancel();
     super.dispose();
   }

@@ -88,15 +88,6 @@ class PresenceHeartbeatCoordinator {
         stackTrace: stackTrace,
       );
       debugPrint('[presenceHeartbeat] failed (count: $_consecutiveFailures): $error');
-      if (_consecutiveFailures >= 2 &&
-          _gateway.connectionState == SignalRConnectionState.connected) {
-        AppLogger.instance.warning(
-          'Consecutive presence heartbeats failed, disconnecting to trigger transport recovery',
-          category: 'presence',
-          event: 'heartbeat_recovery_disconnect',
-        );
-        unawaited(_gateway.disconnect());
-      }
     } finally {
       _sending = false;
     }

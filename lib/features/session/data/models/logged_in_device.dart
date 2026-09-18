@@ -12,6 +12,7 @@ class LoggedInDevice {
     required this.browser,
     required this.browserInfo,
     required this.platform,
+    this.chatObjectIdList = const <int>[],
   });
 
   factory LoggedInDevice.fromJson(Map<String, dynamic> json) => LoggedInDevice(
@@ -38,6 +39,12 @@ class LoggedInDevice {
     browser: json['browser']?.toString() ?? '',
     browserInfo: json['browserInfo']?.toString() ?? '',
     platform: json['platform']?.toString() ?? '',
+    chatObjectIdList: (json['chatObjectIdList'] is List
+        ? (json['chatObjectIdList'] as List)
+            .map((e) => e is num ? e.toInt() : int.tryParse('$e'))
+            .whereType<int>()
+            .toList(growable: false)
+        : const <int>[]),
   );
 
   final String deviceId;
@@ -54,4 +61,5 @@ class LoggedInDevice {
   final String browser;
   final String browserInfo;
   final String platform;
+  final List<int> chatObjectIdList;
 }
