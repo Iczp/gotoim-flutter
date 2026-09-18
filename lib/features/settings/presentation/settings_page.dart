@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/compliance/agreement_viewer_page.dart';
+import '../../../core/compliance/privacy_service.dart';
 import '../../../core/theme/font_scale_controller.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cell_group.dart';
+import '../../app_update/application/app_update_service.dart';
 import '../../auth/application/auth_controller.dart';
 
 /// 设置总入口页面
@@ -129,13 +132,41 @@ class SettingsPage extends ConsumerWidget {
                 onTap: () => _clearCache(context),
               ),
               Cell(
-                icon: const Icon(Icons.info_outline_rounded),
-                title: '关于 Goto IM',
-                value: 'v1.0.0',
+                icon: const Icon(Icons.system_update_rounded),
+                title: '检查新版本',
+                subtitle: '获取最新版本特性与修复更新',
+                value: 'v${ref.watch(appUpdateServiceProvider).currentVersionName}',
                 showArrow: true,
-                onTap: () {
-                  showToast('Goto IM 已是最新版本', type: ToastType.info);
-                },
+                onTap: () => ref.read(appUpdateServiceProvider).checkUpdate(
+                  silent: false,
+                  context: context,
+                ),
+              ),
+              Cell(
+                icon: const Icon(Icons.description_outlined),
+                title: '用户服务协议',
+                showArrow: true,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AgreementViewerPage(
+                      title: PrivacyService.userAgreementTitle,
+                      content: PrivacyService.userAgreementContent,
+                    ),
+                  ),
+                ),
+              ),
+              Cell(
+                icon: const Icon(Icons.privacy_tip_outlined),
+                title: '隐私保护政策',
+                showArrow: true,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AgreementViewerPage(
+                      title: PrivacyService.privacyPolicyTitle,
+                      content: PrivacyService.privacyPolicyContent,
+                    ),
+                  ),
+                ),
               ),
               if (kDebugMode)
                 Cell(

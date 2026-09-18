@@ -56,6 +56,7 @@ import '../../features/search/presentation/search_page.dart';
 import '../../features/group/presentation/create_group_page.dart';
 import '../../features/contact/presentation/add_friend_page.dart';
 import '../../features/diagnostics/presentation/search_and_group_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/privacy_and_update_diagnostics_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 
@@ -278,6 +279,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/diagnostics/workbench-layout',
         builder: (context, state) => const WorkbenchLayoutDiagnosticsPage(),
+      ),
+      GoRoute(
+        path: '/diagnostics/privacy-and-update',
+        builder: (context, state) => const PrivacyAndUpdateDiagnosticsPage(),
       ),
       GoRoute(
         path: '/workbench',

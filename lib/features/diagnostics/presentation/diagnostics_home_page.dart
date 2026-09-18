@@ -73,6 +73,13 @@ class DiagnosticsHomePage extends StatelessWidget {
                 showArrow: true,
                 onTap: () => context.push('/diagnostics/database'),
               ),
+              Cell(
+                icon: const Icon(Icons.system_update_alt_rounded),
+                title: '合规授权与版本升级',
+                subtitle: '首次启动隐私授权弹窗、模拟强制升级、安装包下载进度',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/privacy-and-update'),
+              ),
             ],
           ),
 

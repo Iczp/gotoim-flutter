@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/compliance/privacy_consent_dialog.dart';
+import '../../core/compliance/privacy_service.dart';
 import '../../core/native/native.dart';
 import '../../core/theme/tab_glass_controller.dart';
 import '../../core/widgets/glass_container.dart';
+import '../../features/app_update/application/app_update_service.dart';
 import '../../features/home/presentation/home_sections.dart';
 import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/presentation/chat_owner_drawer.dart';
@@ -26,6 +29,27 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   // not recreate lists, restart requests, or reset their scroll positions.
   final Set<HomeSection> _visitedSections = <HomeSection>{HomeSection.messages};
   DateTime? _lastMessagesTabTap;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(() async {
+      final privacy = ref.read(privacyServiceProvider);
+      final hasAgreed = await privacy.initialize();
+      if (!mounted) return;
+      if (!hasAgreed) {
+        final agreed = await PrivacyConsentDialog.show(
+          context,
+          privacyService: privacy,
+        );
+        if (!agreed || !mounted) return;
+      }
+      // After privacy agreement is confirmed, perform silent app version check
+      await ref
+          .read(appUpdateServiceProvider)
+          .checkUpdate(silent: true, context: context);
+    });
+  }
 
   void _select(HomeSection section) {
     final now = DateTime.now();
