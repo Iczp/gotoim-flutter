@@ -11,6 +11,10 @@ abstract class SignalRGateway {
 
   SignalRConnectionInfo get connectionInfo;
 
+  Object? get lastError;
+
+  String? get lastErrorDescription;
+
   Future<void> connect();
 
   Future<void> disconnect();
@@ -36,6 +40,8 @@ class SignalRConnectionInfo {
     required this.keepAliveInterval,
     required this.serverTimeout,
     this.lastReceivedAt,
+    this.lastError,
+    this.lastErrorDescription,
   });
 
   final String hubUrl;
@@ -44,6 +50,37 @@ class SignalRConnectionInfo {
   final Duration keepAliveInterval;
   final Duration serverTimeout;
   final DateTime? lastReceivedAt;
+  final Object? lastError;
+  final String? lastErrorDescription;
+}
+
+String formatSignalRError(Object? error) {
+  if (error == null) return '';
+  final msg = error.toString();
+  if (msg.contains('401') || msg.contains('Unauthorized')) {
+    return '认证失败 (HTTP 401)：登录凭据或 Token 已失效，请重新登录。';
+  }
+  if (msg.contains('502') || msg.contains('Bad Gateway')) {
+    return '网关错误 (HTTP 502)：后端服务或 SignalR Hub 网关暂不可用。';
+  }
+  if (msg.contains('500') || msg.contains('Internal Server Error')) {
+    return '服务端内部错误 (HTTP 500)：服务器处理实时长连接时出现异常。';
+  }
+  if (msg.contains('Failed host lookup') ||
+      msg.contains('SocketException') ||
+      msg.contains('Network is unreachable')) {
+    return '网络异常或无法解析主机：设备未连网或无法访问该域名。';
+  }
+  if (msg.contains('Connection refused')) {
+    return '连接被拒绝：目标端口未开放或后端 SignalR 服务未启动。';
+  }
+  if (msg.contains('timed out') || msg.contains('TimeoutException')) {
+    return '连接超时：网络延时过大或服务端响应超时。';
+  }
+  if (msg.contains('Handshake') || msg.contains('handshake')) {
+    return 'SignalR 握手失败：协议版本不匹配或凭证校验异常。';
+  }
+  return msg;
 }
 
 enum SignalRCommand {

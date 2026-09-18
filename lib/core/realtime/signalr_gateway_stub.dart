@@ -17,6 +17,12 @@ class UnsupportedSignalRGateway implements SignalRGateway {
       SignalRConnectionState.disconnected;
 
   @override
+  Object? get lastError => null;
+
+  @override
+  String? get lastErrorDescription => null;
+
+  @override
   SignalRConnectionInfo get connectionInfo => const SignalRConnectionInfo(
     hubUrl: '',
     state: SignalRConnectionState.disconnected,

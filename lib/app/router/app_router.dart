@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -59,6 +60,40 @@ import '../../features/diagnostics/presentation/search_and_group_diagnostics_pag
 import '../../features/diagnostics/presentation/privacy_and_update_diagnostics_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
+import 'route_transitions.dart';
+
+GoRoute _buildAppRoute({
+  required String path,
+  required Widget Function(BuildContext context, GoRouterState state) builder,
+  bool isModal = false,
+  bool isFade = false,
+}) {
+  return GoRoute(
+    path: path,
+    pageBuilder: (context, state) {
+      final child = builder(context, state);
+      if (isModal) {
+        return AppRouteTransition.slideUp(
+          context: context,
+          state: state,
+          child: child,
+        );
+      }
+      if (isFade) {
+        return AppRouteTransition.fade(
+          context: context,
+          state: state,
+          child: child,
+        );
+      }
+      return AppRouteTransition.slideRight(
+        context: context,
+        state: state,
+        child: child,
+      );
+    },
+  );
+}
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authNotifier = ref.watch(authControllerProvider.notifier);
@@ -78,229 +113,243 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return location == '/login' ? null : '/login';
     },
     routes: [
-      GoRoute(path: '/', builder: (context, state) => const ApplicationShell()),
-      GoRoute(
+      _buildAppRoute(
+        path: '/',
+        isFade: true,
+        builder: (context, state) => const ApplicationShell(),
+      ),
+      _buildAppRoute(
         path: '/group-management/:sessionId',
         builder:
             (context, state) => GroupManagementPage(
               sessionId: state.pathParameters['sessionId']!,
             ),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/local-file-server',
         builder: (context, state) => const LocalFileServerPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/local-file-server/files',
         builder: (context, state) => const SharedFileManagerPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/local-file-server/terminal/:terminalId',
         builder:
             (context, state) => TerminalDetailsPage(
               terminalId: state.pathParameters['terminalId']!,
             ),
       ),
-      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
-      GoRoute(path: '/search', builder: (context, state) => const SearchPage()),
-      GoRoute(
+      _buildAppRoute(
+        path: '/login',
+        isFade: true,
+        builder: (context, state) => const LoginPage(),
+      ),
+      _buildAppRoute(
+        path: '/search',
+        builder: (context, state) => const SearchPage(),
+      ),
+      _buildAppRoute(
         path: '/create-group',
         builder: (context, state) => const CreateGroupPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/add-friend',
         builder:
             (context, state) => AddFriendPage(
               initialKeyword: state.uri.queryParameters['keyword'],
             ),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/search-and-group',
         builder: (context, state) => const SearchAndGroupDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/settings',
         builder: (context, state) => const SettingsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/settings/theme',
         builder: (context, state) => const ThemeSettingsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/chat/:sessionUnitId/notifications',
         builder: (context, state) => MessageAlertSettingsPage(
           sessionUnitId: state.pathParameters['sessionUnitId']!,
           title: state.uri.queryParameters['title'] ?? '聊天',
         ),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/settings/avatar',
         builder: (context, state) => const AvatarSettingsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/mine/account',
         builder: (context, state) => const AccountManagementPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/scan-login',
+        isModal: true,
         builder: (context, state) {
           final scanText = state.uri.queryParameters['scanText'] ?? '';
           return ScanLoginConfirmationPage(scanText: scanText);
         },
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/scan-login/scan',
+        isModal: true,
         builder: (context, state) => const ScanLoginScanPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/splash',
+        isFade: true,
         builder: (context, state) => const AuthLoadingPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics',
         builder: (context, state) => const DiagnosticsHomePage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/remote-devtools',
         builder: (context, state) => const RemoteDevToolsDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/auth',
         builder: (context, state) => const AuthDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/api',
         builder: (context, state) => const ConnectionTestPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/abp-configuration',
         builder: (context, state) => const AbpConfigurationDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/signalr',
         builder: (context, state) => const SignalRDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/notifications',
         builder: (context, state) => const LocalNotificationDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/scan-code',
         builder: (context, state) => const ScanCodeDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/capabilities',
         builder: (context, state) => const ClientCapabilitiesDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/js-bridge',
         builder: (context, state) => const JsBridgeDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/media',
         builder: (context, state) => const MediaDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/media-preview',
         builder: (context, state) => const MediaPreviewDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/floating-window',
         builder: (context, state) => const FloatingWindowDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/webview-session',
         builder: (context, state) => const WebViewSessionDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/database',
         builder: (context, state) => const DatabaseDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/session-list',
         builder: (context, state) => const SessionListDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/chat',
         builder: (context, state) => const ChatDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/chat-bubble',
         builder: (context, state) => const ChatBubbleDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/js-bridge-harness',
         builder: (context, state) => const JsBridgeHarnessPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/app-task',
         builder: (context, state) => const AppTaskDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/deep-link',
         builder: (context, state) => const DeepLinkDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/local-file-server',
         builder: (context, state) => const LocalFileServerPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/native',
         builder: (context, state) => const NativeDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/device-registration',
         builder: (context, state) => const DeviceRegistrationDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/theme',
         builder: (context, state) => const ThemeDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/adaptive-page',
         builder: (context, state) => const AdaptivePageDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/half-page-sheet',
         builder: (context, state) => const HalfPageSheetDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/toast',
         builder: (context, state) => const ToastDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/modal',
         builder: (context, state) => const ModalDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/target-picker',
         builder: (context, state) => const TargetPickerDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/workbench-layout',
         builder: (context, state) => const WorkbenchLayoutDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/diagnostics/privacy-and-update',
         builder: (context, state) => const PrivacyAndUpdateDiagnosticsPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/workbench',
         builder: (context, state) => const WorkbenchPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/devices',
         builder: (context, state) => const LoginDevicesPage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/online-devices',
         builder: (context, state) => const LoginDevicesPage(onlineOnly: true),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/account/profile',
         builder: (context, state) => const AccountProfilePage(),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/group-name/:sessionUnitId',
         builder:
             (context, state) => GroupNamePage(
@@ -310,7 +359,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               initialTitle: state.uri.queryParameters['title'],
             ),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/chat/:sessionUnitId/group-name',
         builder:
             (context, state) => GroupNamePage(
@@ -320,7 +369,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               initialTitle: state.uri.queryParameters['title'],
             ),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/chat/:sessionUnitId/settings',
         builder:
             (context, state) => ChatSettingsPage(
@@ -329,7 +378,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               sessionUnitId: state.pathParameters['sessionUnitId']!,
             ),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/chat/:sessionUnitId/members',
         builder:
             (context, state) => MemberListPage(
@@ -338,7 +387,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               sessionUnitId: state.pathParameters['sessionUnitId']!,
             ),
       ),
-      GoRoute(
+      _buildAppRoute(
         path: '/chat/:sessionUnitId',
         builder:
             (context, state) => ChatPage(

@@ -213,6 +213,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                         child: SignalRStatusBar(
                           state: controller.connectionState,
                           onReconnect: controller.reconnectSignalR,
+                          errorDescription: controller.signalRErrorDescription,
+                          hubUrl: controller.signalRHubUrl,
                         ),
                       ),
                     SliverToBoxAdapter(

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,7 +7,9 @@ import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../app_update/application/app_update_service.dart';
 import '../../session/application/session_list_controller.dart';
+import 'my_qr_code_dialog.dart';
 
 /// 「我的」页面（由 HomeSectionPage 调用）。
 class MinePage extends ConsumerWidget {
@@ -26,6 +28,7 @@ class MinePage extends ConsumerWidget {
     final colorScheme = theme.colorScheme;
     final sessionController = ref.watch(sessionListControllerProvider);
     final currentOwner = sessionController.currentOwner;
+    final appUpdateService = ref.watch(appUpdateServiceProvider);
 
     return ListView(
       padding: EdgeInsets.symmetric(
@@ -35,8 +38,8 @@ class MinePage extends ConsumerWidget {
       children: [
         // ── 用户信息卡 ──────────────────────────────────────────────
         GlassCard(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               InkResponse(
@@ -93,34 +96,52 @@ class MinePage extends ConsumerWidget {
                 ),
               ),
               IconButton(
-                tooltip: '凭据与认证诊断',
-                icon: const Icon(Icons.qr_code_2_rounded),
-                onPressed: () => context.push('/diagnostics/auth'),
+                tooltip: '我的二维码名片',
+                icon: const Icon(Icons.qr_code_2_rounded, size: 26),
+                onPressed: () => MyQrCodeDialog.show(context, owner: currentOwner),
               ),
             ],
           ),
         ),
 
-        // ── 我的内容 ──────────────────────────────────────────────
+        // ── 核心功能与协同工具 ──────────────────────────────────────
         CellGroup(
-          title: '我的内容',
+          title: '常用服务',
           children: [
-            Cell(
-              icon: const Icon(Icons.settings_outlined),
-              title: '设置',
-              subtitle: '账号设置、外观与主题、登录设备',
-              showArrow: true,
-              onTap: () => context.push('/settings'),
-            ),
             Cell(
               icon: const Icon(Icons.qr_code_scanner_rounded),
               title: '扫一扫',
+              subtitle: '扫码登录、加好友、加群或识别二维码',
               showArrow: true,
               onTap: () {
                 ref
                     .read(unifiedScanDispatcherProvider)
                     .openAndDispatch(context, ref);
               },
+            ),
+            Cell(
+              icon: const Icon(Icons.qr_code_rounded),
+              title: '我的二维码名片',
+              subtitle: '展示个人专属二维码，面对面扫码加好友',
+              showArrow: true,
+              onTap: () => MyQrCodeDialog.show(context, owner: currentOwner),
+            ),
+            Cell(
+              icon: const Icon(Icons.devices_other_rounded),
+              title: '登录设备管理',
+              subtitle: '查看当前在线终端及历史登录设备',
+              value: sessionController.onlineDevices.isNotEmpty
+                  ? ' 台在线'
+                  : null,
+              showArrow: true,
+              onTap: () => context.push('/devices'),
+            ),
+            Cell(
+              icon: const Icon(Icons.folder_shared_outlined),
+              title: '局域网快传 / 文件共享',
+              subtitle: '同 Wi-Fi 局域网大文件极速互传与本地文件服务',
+              showArrow: true,
+              onTap: () => context.push('/local-file-server'),
             ),
             Cell(
               icon: const Icon(Icons.bookmark_outline_rounded),
@@ -130,13 +151,51 @@ class MinePage extends ConsumerWidget {
                 showToast('收藏夹暂无内容', type: ToastType.info);
               },
             ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── 偏好与系统设置 ──────────────────────────────────────────
+        CellGroup(
+          title: '设置与关于',
+          children: [
             Cell(
-              icon: const Icon(Icons.favorite_outline_rounded),
-              title: '我关注的',
+              icon: const Icon(Icons.settings_outlined),
+              title: '通用设置',
+              subtitle: '账号管理、外观主题与系统选项',
               showArrow: true,
-              onTap: () {
-                showToast('关注列表暂无内容', type: ToastType.info);
-              },
+              onTap: () => context.push('/settings'),
+            ),
+            Cell(
+              icon: const Icon(Icons.palette_outlined),
+              title: '外观与主题',
+              subtitle: '深色模式、强调色及玻璃拟物特效',
+              showArrow: true,
+              onTap: () => context.push('/settings/theme'),
+            ),
+            Cell(
+              icon: const Icon(Icons.system_update_alt_rounded),
+              title: '检查新版本',
+              value: 'v',
+              showArrow: true,
+              onTap: () => appUpdateService.checkUpdate(context: context),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── 实验室与开发工具 ────────────────────────────────────────
+        CellGroup(
+          title: '实验室',
+          children: [
+            Cell(
+              icon: const Icon(Icons.monitor_heart_outlined),
+              title: '开发诊断中心',
+              subtitle: '网络连通性、SignalR 长连接、本地数据库及原生能力',
+              showArrow: true,
+              onTap: () => context.push('/diagnostics'),
             ),
           ],
         ),

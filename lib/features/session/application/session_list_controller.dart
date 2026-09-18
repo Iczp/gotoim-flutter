@@ -259,6 +259,11 @@ class SessionListController extends ChangeNotifier {
 
   Future<void> reconnectSignalR() => _signalRGateway.connect();
 
+  String? get signalRErrorDescription => _signalRGateway.lastErrorDescription;
+  Object? get signalRLastError => _signalRGateway.lastError;
+  String get signalRHubUrl => _signalRGateway.connectionInfo.hubUrl;
+  SignalRGateway get signalRGateway => _signalRGateway;
+
   /// Loads Drift first, then fetches remote owners and the first friend page.
   /// A failed offline attempt deliberately remains retryable: callers can run
   /// this again after connectivity returns without recreating the controller.

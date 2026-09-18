@@ -200,14 +200,22 @@ class ChatMessageRow extends StatelessWidget {
               const selectionSlotWidth = 36.0;
               const avatarSlotWidth = 44.0;
               const contentPadding = 12.0;
-              final availableWidth = constraints.maxWidth - selectionSlotWidth;
+              final selectionWidth = selectionMode ? selectionSlotWidth : 0.0;
+              final availableWidth = constraints.maxWidth - selectionWidth;
 
-              // final availableWidth = constraints.maxWidth -
-              //     (selectionMode ? selectionSlotWidth : 0.0);
               final contentMaxWidth = (availableWidth -
                       (showAvatar ? avatarSlotWidth + contentPadding : 0.0))
                   .clamp(0.0, double.infinity);
-              final bubbleWidth = contentMaxWidth * 0.68;
+
+              // 响应式拟定消息气泡的最大宽度：
+              // 1. 移动端窄屏（< 600px）：利用率提升至 78%，文本更易读且不易产生过度断行；
+              // 2. 平板与桌面宽屏（>= 600px）：限制在 68% 且设定上限 620px，保证舒适阅读视线，防止单行文字过长。
+              final double bubbleWidth;
+              if (constraints.maxWidth < 600) {
+                bubbleWidth = contentMaxWidth * 0.78;
+              } else {
+                bubbleWidth = (contentMaxWidth * 0.68).clamp(360.0, 620.0);
+              }
 
               Widget? avatarWidget;
               if (showAvatar) {

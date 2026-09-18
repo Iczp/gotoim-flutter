@@ -59,9 +59,17 @@ class SignalRNetcoreGateway implements SignalRGateway {
   final StreamController<SignalRAppEvent> _events =
       StreamController<SignalRAppEvent>.broadcast();
   DateTime? _lastReceivedAt;
+  Object? _lastError;
+  String? _lastErrorDescription;
 
   @override
   SignalRConnectionState get connectionState => _mapState(_connection.state);
+
+  @override
+  Object? get lastError => _lastError;
+
+  @override
+  String? get lastErrorDescription => _lastErrorDescription;
 
   @override
   SignalRConnectionInfo get connectionInfo => SignalRConnectionInfo(
@@ -75,6 +83,8 @@ class SignalRNetcoreGateway implements SignalRGateway {
           milliseconds: _connection.serverTimeoutInMilliseconds,
         ),
         lastReceivedAt: _lastReceivedAt,
+        lastError: _lastError,
+        lastErrorDescription: _lastErrorDescription,
       );
 
   @override
@@ -92,10 +102,14 @@ class SignalRNetcoreGateway implements SignalRGateway {
         .info('SignalR connecting', category: 'signalr', event: 'connecting');
     try {
       await _connection.start();
+      _lastError = null;
+      _lastErrorDescription = null;
       _emitConnection(SignalRConnectionState.connected);
       AppLogger.instance
           .info('SignalR connected', category: 'signalr', event: 'connected');
     } catch (error) {
+      _lastError = error;
+      _lastErrorDescription = formatSignalRError(error);
       _emitConnection(SignalRConnectionState.disconnected, error: error);
       AppLogger.instance.error('SignalR connection failed',
           category: 'signalr',
