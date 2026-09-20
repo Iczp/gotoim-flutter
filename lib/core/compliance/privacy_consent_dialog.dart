@@ -34,9 +34,16 @@ class PrivacyConsentDialog extends StatelessWidget {
   }
 
   void _openAgreement(BuildContext context, String title, String content) {
+    final url = title == PrivacyService.userAgreementTitle
+        ? PrivacyService.userAgreementUrl
+        : PrivacyService.privacyPolicyUrl;
     Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(
-        builder: (_) => AgreementViewerPage(title: title, content: content),
+        builder: (_) => AgreementViewerPage(
+          title: title,
+          content: content,
+          url: url,
+        ),
       ),
     );
   }

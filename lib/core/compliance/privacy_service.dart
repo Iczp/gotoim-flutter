@@ -70,6 +70,14 @@ class PrivacyService extends ChangeNotifier {
   static const String userAgreementTitle = '用户服务协议';
   static const String privacyPolicyTitle = '隐私保护政策';
 
+  /// 线上网络版用户服务协议 URL
+  static const String userAgreementUrl =
+      'https://im.gotoim.com/legal/user-agreement.html';
+
+  /// 线上网络版隐私保护政策 URL
+  static const String privacyPolicyUrl =
+      'https://im.gotoim.com/legal/privacy-policy.html';
+
   static const String userAgreementContent = '''
 欢迎使用 GotoIM 客户端（以下简称“本软件”）。本协议是您与 GotoIM 平台运营方之间关于您使用本软件及相关服务所订立的法律协议。请您务必审慎阅读、充分理解各条款内容。
 

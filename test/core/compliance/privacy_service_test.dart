@@ -1,4 +1,4 @@
-﻿import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/compliance/privacy_service.dart';
 
@@ -106,9 +106,11 @@ void main() {
       expect(newService.hasAgreed, isFalse);
     });
 
-    test('provides comprehensive agreement titles and legal content', () {
+    test('provides comprehensive agreement titles, URLs and legal content', () {
       expect(PrivacyService.userAgreementTitle, contains('用户服务协议'));
       expect(PrivacyService.privacyPolicyTitle, contains('隐私保护政策'));
+      expect(PrivacyService.userAgreementUrl, startsWith('https://'));
+      expect(PrivacyService.privacyPolicyUrl, startsWith('https://'));
       expect(PrivacyService.userAgreementContent, contains('用户行为准则'));
       expect(PrivacyService.privacyPolicyContent, contains('个人信息'));
     });

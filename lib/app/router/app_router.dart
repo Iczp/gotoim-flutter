@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/compliance/agreement_viewer_page.dart';
+import '../../core/compliance/privacy_service.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/presentation/auth_loading_page.dart';
 import '../../features/auth/presentation/login_page.dart';
+import '../../features/mine/presentation/my_qr_code_page.dart';
 import '../../features/scan_login/presentation/scan_login_confirmation_page.dart';
 import '../../features/scan_login/presentation/scan_login_scan_page.dart';
 import '../../features/diagnostics/presentation/connection_test_page.dart';
@@ -111,9 +114,36 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (auth.status == AuthStatus.authenticated) {
         return location == '/login' || location == '/splash' ? '/' : null;
       }
-      return location == '/login' ? null : '/login';
+      final isPublic = location == '/login' ||
+          location.startsWith('/agreement') ||
+          location.startsWith('/diagnostics');
+      return isPublic ? null : '/login';
     },
     routes: [
+      _buildAppRoute(
+        path: '/mine/qr-code',
+        builder: (context, state) => const MyQrCodePage(),
+      ),
+      _buildAppRoute(
+        path: '/agreement',
+        builder: (context, state) {
+          final title = state.uri.queryParameters['title'] ??
+              PrivacyService.userAgreementTitle;
+          final isPrivacy = title.contains('隐私') ||
+              state.uri.queryParameters['type'] == 'privacy';
+          final defaultContent = isPrivacy
+              ? PrivacyService.privacyPolicyContent
+              : PrivacyService.userAgreementContent;
+          final defaultUrl = isPrivacy
+              ? PrivacyService.privacyPolicyUrl
+              : PrivacyService.userAgreementUrl;
+          return AgreementViewerPage(
+            title: title,
+            content: state.uri.queryParameters['content'] ?? defaultContent,
+            url: state.uri.queryParameters['url'] ?? defaultUrl,
+          );
+        },
+      ),
       _buildAppRoute(
         path: '/',
         isFade: true,

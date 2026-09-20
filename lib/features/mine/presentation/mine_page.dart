@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,7 +9,6 @@ import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../app_update/application/app_update_service.dart';
 import '../../session/application/session_list_controller.dart';
-import 'my_qr_code_dialog.dart';
 
 /// 「我的」页面（由 HomeSectionPage 调用）。
 class MinePage extends ConsumerWidget {
@@ -98,7 +97,7 @@ class MinePage extends ConsumerWidget {
               IconButton(
                 tooltip: '我的二维码名片',
                 icon: const Icon(Icons.qr_code_2_rounded, size: 26),
-                onPressed: () => MyQrCodeDialog.show(context, owner: currentOwner),
+                onPressed: () => context.push('/mine/qr-code'),
               ),
             ],
           ),
@@ -124,7 +123,7 @@ class MinePage extends ConsumerWidget {
               title: '我的二维码名片',
               subtitle: '展示个人专属二维码，面对面扫码加好友',
               showArrow: true,
-              onTap: () => MyQrCodeDialog.show(context, owner: currentOwner),
+              onTap: () => context.push('/mine/qr-code'),
             ),
             Cell(
               icon: const Icon(Icons.devices_other_rounded),

@@ -151,6 +151,7 @@ class SettingsPage extends ConsumerWidget {
                     builder: (_) => const AgreementViewerPage(
                       title: PrivacyService.userAgreementTitle,
                       content: PrivacyService.userAgreementContent,
+                      url: PrivacyService.userAgreementUrl,
                     ),
                   ),
                 ),
@@ -164,6 +165,7 @@ class SettingsPage extends ConsumerWidget {
                     builder: (_) => const AgreementViewerPage(
                       title: PrivacyService.privacyPolicyTitle,
                       content: PrivacyService.privacyPolicyContent,
+                      url: PrivacyService.privacyPolicyUrl,
                     ),
                   ),
                 ),

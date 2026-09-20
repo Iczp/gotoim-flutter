@@ -1,8 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/compliance/agreement_viewer_page.dart';
+import '../../../core/compliance/privacy_service.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../scan_login/presentation/login_qr_sign_in.dart';
@@ -25,6 +28,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   );
   bool _obscurePassword = true;
   bool _isQrLogin = false;
+  bool _agreeTerms = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _agreeTerms = ref.read(privacyServiceProvider).hasAgreed;
+  }
 
   @override
   void dispose() {
@@ -33,8 +43,66 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     super.dispose();
   }
 
+  void _openUserAgreement() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AgreementViewerPage(
+          title: PrivacyService.userAgreementTitle,
+          content: PrivacyService.userAgreementContent,
+          url: PrivacyService.userAgreementUrl,
+        ),
+      ),
+    );
+  }
+
+  void _openPrivacyPolicy() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AgreementViewerPage(
+          title: PrivacyService.privacyPolicyTitle,
+          content: PrivacyService.privacyPolicyContent,
+          url: PrivacyService.privacyPolicyUrl,
+        ),
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    if (!_agreeTerms) {
+      final agreed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('服务协议与隐私保护提醒'),
+          content: const Text(
+            '请您在登录前阅读并同意《用户服务协议》与《隐私保护政策》。若同意，我们将为您建立账号会话并开启即时通讯协同服务。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('暂不同意'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('同意并登录'),
+            ),
+          ],
+        ),
+      );
+
+      if (agreed == true) {
+        setState(() {
+          _agreeTerms = true;
+        });
+        await ref.read(privacyServiceProvider).saveAgreement();
+      } else {
+        return;
+      }
+    } else {
+      await ref.read(privacyServiceProvider).saveAgreement();
+    }
+
     await ref
         .read(authControllerProvider)
         .login(
@@ -206,6 +274,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   obscurePassword: _obscurePassword,
                                   isBusy: auth.isBusy,
                                   errorMessage: auth.errorMessage,
+                                  agreeTerms: _agreeTerms,
+                                  onAgreeChanged: (val) {
+                                    setState(() {
+                                      _agreeTerms = val ?? false;
+                                    });
+                                  },
+                                  onOpenUserAgreement: _openUserAgreement,
+                                  onOpenPrivacyPolicy: _openPrivacyPolicy,
                                   onObscureChanged:
                                       () => setState(
                                         () =>
@@ -253,6 +329,10 @@ class _PasswordForm extends StatelessWidget {
     required this.obscurePassword,
     required this.isBusy,
     required this.errorMessage,
+    required this.agreeTerms,
+    required this.onAgreeChanged,
+    required this.onOpenUserAgreement,
+    required this.onOpenPrivacyPolicy,
     required this.onObscureChanged,
     required this.onSubmit,
   });
@@ -262,6 +342,10 @@ class _PasswordForm extends StatelessWidget {
   final bool obscurePassword;
   final bool isBusy;
   final String? errorMessage;
+  final bool agreeTerms;
+  final ValueChanged<bool?> onAgreeChanged;
+  final VoidCallback onOpenUserAgreement;
+  final VoidCallback onOpenPrivacyPolicy;
   final VoidCallback onObscureChanged;
   final VoidCallback onSubmit;
 
@@ -271,6 +355,7 @@ class _PasswordForm extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextFormField(
           controller: usernameController,
@@ -332,7 +417,59 @@ class _PasswordForm extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: Checkbox(
+                value: agreeTerms,
+                onChanged: onAgreeChanged,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  text: '我已阅读并同意',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                  children: [
+                    TextSpan(
+                      text: '《用户服务协议》',
+                      style: TextStyle(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = onOpenUserAgreement,
+                    ),
+                    const TextSpan(text: '与'),
+                    TextSpan(
+                      text: '《隐私保护政策》',
+                      style: TextStyle(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = onOpenPrivacyPolicy,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
         FilledButton(
           onPressed: isBusy ? null : onSubmit,
           child:
