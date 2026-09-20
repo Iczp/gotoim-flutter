@@ -106,9 +106,22 @@ class AppLogger {
         level: level.index * 200,
         error: error,
         stackTrace: stackTrace);
-    if (level.isError) {
-      final err = error != null ? ' error=$error' : '';
-      debugPrint('\x1B[31;1m[$category][$event] $message$err\x1B[0m');
+    final err = error != null ? ' error=$error' : '';
+    final logLine = '[$category][$event] $message$err';
+    switch (level) {
+      case DiagnosticLogLevel.fatal:
+      case DiagnosticLogLevel.error:
+        debugPrint('\x1B[31;1m$logLine\x1B[0m');
+        break;
+      case DiagnosticLogLevel.warning:
+        debugPrint('\x1B[33;1m$logLine\x1B[0m');
+        break;
+      case DiagnosticLogLevel.info:
+        debugPrint('\x1B[36m$logLine\x1B[0m');
+        break;
+      case DiagnosticLogLevel.debug:
+        debugPrint('\x1B[90m$logLine\x1B[0m');
+        break;
     }
     if (!_captureEnabled && !force) return;
     final trace = stackTrace ?? (level.isError ? StackTrace.current : null);

@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
-
+import '../../../../core/logging/app_logger.dart';
 import '../../../../core/network/api_client.dart';
 import '../models/app_version_dto.dart';
 
@@ -45,8 +44,14 @@ class AppUpdateApi {
         return AppVersionDto.fromJson(response);
       }
       return null;
-    } catch (error) {
-      debugPrint('[AppUpdateApi] getLatestVersion failed: $error');
+    } catch (error, stackTrace) {
+      AppLogger.instance.error(
+        '[AppUpdateApi] getLatestVersion failed',
+        category: 'app_update',
+        event: 'get_latest_version_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
       rethrow;
     }
   }

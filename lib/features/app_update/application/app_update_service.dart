@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../../app/application_providers.dart';
 import '../../../../core/config/app_environment.dart';
 import '../../../../core/device/client_device_context.dart';
+import '../../../../core/logging/app_logger.dart';
 import '../data/datasources/app_update_api.dart';
 import '../data/models/app_version_dto.dart';
 import '../presentation/app_update_dialog.dart';
@@ -103,8 +104,14 @@ class AppUpdateService extends ChangeNotifier {
         }
       }
       return latest;
-    } catch (error) {
-      debugPrint('[AppUpdateService] checkUpdate failed: $error');
+    } catch (error, stackTrace) {
+      AppLogger.instance.error(
+        '[AppUpdateService] checkUpdate failed',
+        category: 'app_update',
+        event: 'check_update_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
       _lastError = error;
       if (!silent && context != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
