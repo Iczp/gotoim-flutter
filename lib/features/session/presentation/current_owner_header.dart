@@ -13,6 +13,8 @@ class CurrentOwnerHeader extends ConsumerWidget {
     required this.hasMultiple,
     required this.isConnecting,
     required this.onPressed,
+    this.otherUnreadCount = 0,
+    this.otherImmersedCount = 0,
     super.key,
   });
 
@@ -20,6 +22,12 @@ class CurrentOwnerHeader extends ConsumerWidget {
   final bool hasMultiple;
   final bool isConnecting;
   final VoidCallback onPressed;
+
+  /// 非当前身份的未读总和：> 0 时显示数字角标。
+  final int otherUnreadCount;
+
+  /// 非当前身份的免打扰未读总和：数字为 0 但此值 > 0 时显示小红点。
+  final int otherImmersedCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -46,11 +54,11 @@ class CurrentOwnerHeader extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        ChatObjectAvatar(
-                          name: owner?.name ?? '-',
-                          imageUrl: owner?.imageUrl,
-                          radius: 18,
-                          chatObjectId: owner?.id,
+                        // 头像 + 其他身份角标
+                        _AvatarWithBadge(
+                          owner: owner,
+                          otherUnreadCount: otherUnreadCount,
+                          otherImmersedCount: otherImmersedCount,
                         ),
                         const SizedBox(width: 10),
                         Flexible(
@@ -134,6 +142,45 @@ class CurrentOwnerHeader extends ConsumerWidget {
         },
       ),
     );
+  }
+}
+
+/// 头像 + 其他身份角标的组合 widget。
+///
+/// - [otherUnreadCount] > 0 → 红色数字角标（上限 99+）
+/// - [otherUnreadCount] == 0 && [otherImmersedCount] > 0 → 小红点
+/// - 否则无角标
+class _AvatarWithBadge extends StatelessWidget {
+  const _AvatarWithBadge({
+    required this.owner,
+    required this.otherUnreadCount,
+    required this.otherImmersedCount,
+  });
+
+  final ChatOwner? owner;
+  final int otherUnreadCount;
+  final int otherImmersedCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = ChatObjectAvatar(
+      name: owner?.name ?? '-',
+      imageUrl: owner?.imageUrl,
+      radius: 18,
+      chatObjectId: owner?.id,
+    );
+
+    if (otherUnreadCount > 0) {
+      return Badge(
+        label: Text(otherUnreadCount > 99 ? '99+' : '$otherUnreadCount'),
+        child: avatar,
+      );
+    }
+    if (otherImmersedCount > 0) {
+      // 仅小红点，不显示数字
+      return Badge(child: avatar);
+    }
+    return avatar;
   }
 }
 

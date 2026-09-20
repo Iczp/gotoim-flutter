@@ -180,8 +180,24 @@ class SessionListController extends ChangeNotifier {
   bool get isSignalRConnected =>
       _connectionState == SignalRConnectionState.connected;
   int get focusUnreadRequest => _focusUnreadRequest;
+
+  /// 所有身份未读总和，用于「消息」Tab 角标。
+  int get totalUnreadCount =>
+      _owners.fold(0, (sum, o) => sum + o.unreadCount);
+
+  /// 非当前身份的未读总和，用于消息页顶部头像角标数字。
+  int get otherUnreadCount => _owners
+      .where((o) => o.id != _currentOwner?.id)
+      .fold(0, (sum, o) => sum + o.unreadCount);
+
+  /// 非当前身份的免打扰未读总和，用于消息页顶部头像小红点。
+  int get otherImmersedCount => _owners
+      .where((o) => o.id != _currentOwner?.id)
+      .fold(0, (sum, o) => sum + o.immersedCount);
+
   bool isAiRunning(String sessionUnitId) =>
       _aiRunSessionById.values.any((id) => id == sessionUnitId);
+
 
   /// Receives actual rendered rows from the virtual list. Calls are coalesced
   /// while scrolling, rather than being made from every item build.

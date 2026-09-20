@@ -132,41 +132,6 @@ class ChatOwnerDrawer extends ConsumerWidget {
                       ),
                     ),
                   const Divider(height: 16),
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    minVerticalPadding: 0,
-                    leading: const Icon(Icons.qr_code_scanner_rounded),
-                    title: const Text('扫一扫'),
-                    trailing: const Icon(Icons.chevron_right, size: 18),
-                    onTap: () {
-                      Navigator.pop(context);
-                      ref
-                          .read(unifiedScanDispatcherProvider)
-                          .openAndDispatch(context, ref);
-                    },
-                  ),
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    minVerticalPadding: 0,
-                    leading: const Icon(Icons.person_add_alt_1_outlined),
-                    title: const Text('添加朋友'),
-                    trailing: const Icon(Icons.chevron_right, size: 18),
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.push('/add-friend');
-                    },
-                  ),
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    minVerticalPadding: 0,
-                    leading: const Icon(Icons.group_add_outlined),
-                    title: const Text('新建群聊'),
-                    trailing: const Icon(Icons.chevron_right, size: 18),
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.push('/create-group');
-                    },
-                  ),
                 ],
               ),
             ),

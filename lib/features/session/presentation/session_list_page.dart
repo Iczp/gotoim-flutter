@@ -24,6 +24,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
     with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   int _handledFocusUnreadRequest = 0;
+  int _currentScrollIndex = -1;
+  int? _lastOwnerId;
   List<SessionListItem> _lastListItems = const <SessionListItem>[];
   final Map<String, GlobalKey> _sessionItemKeys = <String, GlobalKey>{};
 
@@ -139,6 +141,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
       'listItems=${listItems.length} focusReq=${controller.focusUnreadRequest} '
       'scrollOffset=$offsetStr maxScrollExtent=$maxStr',
     );
+    if (_lastOwnerId != controller.currentOwner?.id) {
+      _lastOwnerId = controller.currentOwner?.id;
+      _currentScrollIndex = -1;
+    }
     if (_handledFocusUnreadRequest != controller.focusUnreadRequest) {
       _handledFocusUnreadRequest = controller.focusUnreadRequest;
       WidgetsBinding.instance.addPostFrameCallback(
@@ -153,6 +159,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
             owner: controller.currentOwner,
             hasMultiple: controller.owners.length > 1,
             isConnecting: controller.isRefreshing,
+            otherUnreadCount: controller.otherUnreadCount,
+            otherImmersedCount: controller.otherImmersedCount,
             onPressed: widget.onOpenOwnerDrawer,
           ),
           Expanded(
@@ -359,13 +367,30 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
     List<SessionListItem> listItems,
   ) async {
     if (!mounted || !_scrollController.hasClients) return;
+
+    // 从上次位置之后找下一个有未读的 session
+    final startIndex = (_currentScrollIndex + 1).clamp(0, listItems.length);
     final targetIndex = listItems.indexWhere(
       (item) =>
           item.kind == SessionListItemKind.session &&
           item.session!.unreadCount > 0,
+      startIndex,
     );
-    if (targetIndex < 0) return;
 
+    if (targetIndex < 0) {
+      // 后面没有更多未读了（或全部遍历完）-> 滚动到最顶部，并重置游标以便下次重新开始
+      _currentScrollIndex = -1;
+      final position = _scrollController.position;
+      sessionScrollTrace('🎯 _scrollToFirstUnread | reset to top');
+      await _scrollController.animateTo(
+        position.minScrollExtent,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+
+    _currentScrollIndex = targetIndex;
     var estimatedOffset = 0.0;
     for (var index = 0; index < targetIndex; index++) {
       estimatedOffset +=

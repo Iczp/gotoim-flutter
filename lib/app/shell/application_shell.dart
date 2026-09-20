@@ -230,6 +230,8 @@ class _HomeNavigationBar extends ConsumerWidget {
     final isGlass = ref.watch(tabGlassProvider);
     final theme = Theme.of(context);
     final dividerColor = theme.dividerColor.withValues(alpha: .55);
+    final totalUnread =
+        ref.watch(sessionListControllerProvider).totalUnreadCount;
     return GlassContainer(
       borderRadius: BorderRadius.zero,
       borderWidth: 0,
@@ -246,15 +248,34 @@ class _HomeNavigationBar extends ConsumerWidget {
           onDestinationSelected:
               (index) => onSelected(HomeSection.values[index]),
           destinations:
-              HomeSection.values
-                  .map(
-                    (section) => NavigationDestination(
-                      icon: Icon(section.icon),
-                      selectedIcon: Icon(section.selectedIcon),
-                      label: section.label,
-                    ),
-                  )
-                  .toList(),
+              HomeSection.values.map((section) {
+                final icon = Icon(section.icon);
+                final selectedIcon = Icon(section.selectedIcon);
+                // 「消息」Tab 在有未读时显示数字角标
+                final badgedIcon =
+                    section == HomeSection.messages && totalUnread > 0
+                        ? Badge(
+                          label: Text(
+                            totalUnread > 99 ? '99+' : '$totalUnread',
+                          ),
+                          child: icon,
+                        )
+                        : icon;
+                final badgedSelected =
+                    section == HomeSection.messages && totalUnread > 0
+                        ? Badge(
+                          label: Text(
+                            totalUnread > 99 ? '99+' : '$totalUnread',
+                          ),
+                          child: selectedIcon,
+                        )
+                        : selectedIcon;
+                return NavigationDestination(
+                  icon: badgedIcon,
+                  selectedIcon: badgedSelected,
+                  label: section.label,
+                );
+              }).toList(),
         ),
       ),
     );
@@ -276,6 +297,8 @@ class _HomeNavigationRail extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isGlass = ref.watch(tabGlassProvider);
     final theme = Theme.of(context);
+    final totalUnread =
+        ref.watch(sessionListControllerProvider).totalUnreadCount;
     return GlassContainer(
       borderRadius: BorderRadius.zero,
       borderWidth: 0,
@@ -289,15 +312,33 @@ class _HomeNavigationRail extends ConsumerWidget {
         onDestinationSelected: (index) => onSelected(HomeSection.values[index]),
         labelType: extended ? null : NavigationRailLabelType.all,
         destinations:
-            HomeSection.values
-                .map(
-                  (section) => NavigationRailDestination(
-                    icon: Icon(section.icon),
-                    selectedIcon: Icon(section.selectedIcon),
-                    label: Text(section.label),
-                  ),
-                )
-                .toList(),
+            HomeSection.values.map((section) {
+              final icon = Icon(section.icon);
+              final selectedIcon = Icon(section.selectedIcon);
+              final badgedIcon =
+                  section == HomeSection.messages && totalUnread > 0
+                      ? Badge(
+                        label: Text(
+                          totalUnread > 99 ? '99+' : '$totalUnread',
+                        ),
+                        child: icon,
+                      )
+                      : icon;
+              final badgedSelected =
+                  section == HomeSection.messages && totalUnread > 0
+                      ? Badge(
+                        label: Text(
+                          totalUnread > 99 ? '99+' : '$totalUnread',
+                        ),
+                        child: selectedIcon,
+                      )
+                      : selectedIcon;
+              return NavigationRailDestination(
+                icon: badgedIcon,
+                selectedIcon: badgedSelected,
+                label: Text(section.label),
+              );
+            }).toList(),
       ),
     );
   }
