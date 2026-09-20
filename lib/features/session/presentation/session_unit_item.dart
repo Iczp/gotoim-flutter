@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme_tokens.dart';
+import '../../../core/widgets/app_badge.dart';
 import '../data/models/session_summary.dart';
 import 'chat_object_avatar.dart';
 import 'relative_time_text.dart';
@@ -151,33 +152,18 @@ class SessionUnitItem extends StatelessWidget {
                               if (badge > 0)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 8),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    constraints: const BoxConstraints(
-                                      minWidth: 18,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          immersed
-                                              ? colorScheme.outlineVariant
-                                              : tokens.unreadBadgeColor,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      badge > 99 ? '99+' : '$badge',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color:
-                                            immersed
-                                                ? colorScheme.onSurfaceVariant
-                                                : Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                  child: AppBadge(
+                                    count: badge,
+                                    color:
+                                        immersed
+                                            ? colorScheme.outlineVariant
+                                            : tokens.unreadBadgeColor,
+                                    textColor:
+                                        immersed
+                                            ? colorScheme.onSurfaceVariant
+                                            : Colors.white,
+                                    size: AppBadgeSize.small,
+                                    borderWidth: 0,
                                   ),
                                 ),
                             ],

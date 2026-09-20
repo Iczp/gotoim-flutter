@@ -7,6 +7,7 @@ import '../../../core/network/abp/abp_current_user.dart';
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/app_avatar.dart';
+import '../../../core/widgets/app_badge.dart';
 import '../../auth/application/auth_controller.dart';
 import '../application/session_list_controller.dart';
 
@@ -94,29 +95,15 @@ class ChatOwnerDrawer extends ConsumerWidget {
                                   Icons.check_circle_rounded,
                                   color: colorScheme.primary,
                                 )
-                                : owner.unreadCount > 0
-                                ? Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.error,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    owner.unreadCount > 99
-                                        ? '99+'
-                                        : '${owner.unreadCount}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
+                                : (owner.unreadCount > 0 ||
+                                        owner.immersedCount > 0)
+                                ? AppBadge(
+                                  count: owner.unreadCount,
+                                  dot:
+                                      owner.unreadCount == 0 &&
+                                      owner.immersedCount > 0,
+                                  size: AppBadgeSize.small,
                                 )
-                                : owner.immersedCount > 0
-                                ? const Badge()
                                 : const Icon(
                                   Icons.chevron_right,
                                   size: 18,

@@ -6,6 +6,7 @@ import '../../core/compliance/privacy_consent_dialog.dart';
 import '../../core/compliance/privacy_service.dart';
 import '../../core/native/native.dart';
 import '../../core/theme/tab_glass_controller.dart';
+import '../../core/widgets/app_badge.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../features/app_update/application/app_update_service.dart';
 import '../../features/home/presentation/home_sections.dart';
@@ -251,28 +252,21 @@ class _HomeNavigationBar extends ConsumerWidget {
               HomeSection.values.map((section) {
                 final icon = Icon(section.icon);
                 final selectedIcon = Icon(section.selectedIcon);
-                // 「消息」Tab 在有未读时显示数字角标
-                final badgedIcon =
-                    section == HomeSection.messages && totalUnread > 0
-                        ? Badge(
-                          label: Text(
-                            totalUnread > 99 ? '99+' : '$totalUnread',
-                          ),
-                          child: icon,
-                        )
-                        : icon;
-                final badgedSelected =
-                    section == HomeSection.messages && totalUnread > 0
-                        ? Badge(
-                          label: Text(
-                            totalUnread > 99 ? '99+' : '$totalUnread',
-                          ),
-                          child: selectedIcon,
-                        )
-                        : selectedIcon;
+                final unreadCount =
+                    section == HomeSection.messages ? totalUnread : 0;
                 return NavigationDestination(
-                  icon: badgedIcon,
-                  selectedIcon: badgedSelected,
+                  icon: AppBadge(
+                    count: unreadCount,
+                    size: AppBadgeSize.small,
+                    offset: const Offset(4, -4),
+                    child: icon,
+                  ),
+                  selectedIcon: AppBadge(
+                    count: unreadCount,
+                    size: AppBadgeSize.small,
+                    offset: const Offset(4, -4),
+                    child: selectedIcon,
+                  ),
                   label: section.label,
                 );
               }).toList(),
@@ -315,27 +309,21 @@ class _HomeNavigationRail extends ConsumerWidget {
             HomeSection.values.map((section) {
               final icon = Icon(section.icon);
               final selectedIcon = Icon(section.selectedIcon);
-              final badgedIcon =
-                  section == HomeSection.messages && totalUnread > 0
-                      ? Badge(
-                        label: Text(
-                          totalUnread > 99 ? '99+' : '$totalUnread',
-                        ),
-                        child: icon,
-                      )
-                      : icon;
-              final badgedSelected =
-                  section == HomeSection.messages && totalUnread > 0
-                      ? Badge(
-                        label: Text(
-                          totalUnread > 99 ? '99+' : '$totalUnread',
-                        ),
-                        child: selectedIcon,
-                      )
-                      : selectedIcon;
+              final unreadCount =
+                  section == HomeSection.messages ? totalUnread : 0;
               return NavigationRailDestination(
-                icon: badgedIcon,
-                selectedIcon: badgedSelected,
+                icon: AppBadge(
+                  count: unreadCount,
+                  size: AppBadgeSize.small,
+                  offset: const Offset(4, -4),
+                  child: icon,
+                ),
+                selectedIcon: AppBadge(
+                  count: unreadCount,
+                  size: AppBadgeSize.small,
+                  offset: const Offset(4, -4),
+                  child: selectedIcon,
+                ),
                 label: Text(section.label),
               );
             }).toList(),

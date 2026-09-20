@@ -3,8 +3,19 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/config/app_environment.dart';
+import 'package:gotoim_flutter/core/device/client_device_context.dart';
+import 'package:gotoim_flutter/features/session/application/friend_presence_store.dart';
 import 'package:gotoim_flutter/features/session/data/models/chat_owner.dart';
 import 'package:gotoim_flutter/features/session/presentation/current_owner_header.dart';
+
+class _FakeFriendPresenceStore extends ChangeNotifier
+    implements FriendPresenceStore {
+  @override
+  List<String> deviceTypesForChatObjectId(int? chatObjectId) => const [];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   setUpAll(() => dotenv.loadFromString(envString: 'APP_NAME=Test'));
@@ -16,6 +27,18 @@ void main() {
       imageUrl: null,
       typeDescription: '个人',
     );
+    const fakeDevice = ClientDeviceContext(
+      appId: 'test-app',
+      appName: 'GotoIM',
+      appVersion: '1.0.0',
+      deviceId: 'device-test-1',
+      deviceType: '1',
+      platform: 'Android',
+      brand: 'Google',
+      model: 'Test Pixel',
+      browser: '',
+      pushClientId: '',
+    );
     var openDrawerCalled = false;
 
     await tester.pumpWidget(
@@ -23,6 +46,10 @@ void main() {
         overrides: [
           appEnvironmentProvider.overrideWithValue(
             AppEnvironment.fromDotEnv(AppFlavor.development),
+          ),
+          clientDeviceContextProvider.overrideWithValue(fakeDevice),
+          friendPresenceStoreProvider.overrideWith(
+            (ref) => _FakeFriendPresenceStore(),
           ),
         ],
         child: MaterialApp(

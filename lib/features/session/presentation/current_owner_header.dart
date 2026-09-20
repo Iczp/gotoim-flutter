@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
+import '../../../core/widgets/app_badge.dart';
 import '../data/models/chat_owner.dart';
 import 'chat_object_avatar.dart';
 
@@ -170,17 +171,18 @@ class _AvatarWithBadge extends StatelessWidget {
       chatObjectId: owner?.id,
     );
 
-    if (otherUnreadCount > 0) {
-      return Badge(
-        label: Text(otherUnreadCount > 99 ? '99+' : '$otherUnreadCount'),
-        child: avatar,
-      );
+    final isDotOnly = otherUnreadCount == 0 && otherImmersedCount > 0;
+    if (otherUnreadCount <= 0 && !isDotOnly) {
+      return avatar;
     }
-    if (otherImmersedCount > 0) {
-      // 仅小红点，不显示数字
-      return Badge(child: avatar);
-    }
-    return avatar;
+
+    return AppBadge(
+      count: otherUnreadCount,
+      dot: isDotOnly,
+      size: AppBadgeSize.small,
+      offset: const Offset(4, -4),
+      child: avatar,
+    );
   }
 }
 

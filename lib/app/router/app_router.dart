@@ -58,6 +58,7 @@ import '../../features/group/presentation/create_group_page.dart';
 import '../../features/contact/presentation/add_friend_page.dart';
 import '../../features/diagnostics/presentation/search_and_group_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/privacy_and_update_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/badge_diagnostics_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 import 'route_transitions.dart';
@@ -332,6 +333,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       _buildAppRoute(
         path: '/diagnostics/privacy-and-update',
         builder: (context, state) => const PrivacyAndUpdateDiagnosticsPage(),
+      ),
+      _buildAppRoute(
+        path: '/diagnostics/badge',
+        builder: (context, state) => const BadgeDiagnosticsPage(),
       ),
       _buildAppRoute(
         path: '/workbench',

@@ -269,6 +269,13 @@ class DiagnosticsHomePage extends StatelessWidget {
                 showArrow: true,
                 onTap: () => context.push('/diagnostics/workbench-layout'),
               ),
+              Cell(
+                icon: const Icon(Icons.mark_chat_unread_outlined),
+                title: 'AppBadge 动效角标',
+                subtitle: 'Antdv Next 风格滚轮数字动画、19→20独立位翻滚、弹性进退场动效',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/badge'),
+              ),
             ],
           ),
 
