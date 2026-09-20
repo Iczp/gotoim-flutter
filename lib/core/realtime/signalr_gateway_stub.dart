@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../config/app_environment.dart';
 import '../device/client_device_context.dart';
 import 'signalr_access_token_reader.dart';
@@ -7,6 +9,8 @@ SignalRGateway createPlatformSignalRGateway({
   required AppEnvironment environment,
   required SignalRAccessTokenReader readAccessToken,
   required ClientDeviceContext deviceContext,
+  Future<String?> Function()? refreshToken,
+  FutureOr<void> Function()? onSessionInvalidated,
 }) => UnsupportedSignalRGateway();
 
 class UnsupportedSignalRGateway implements SignalRGateway {
@@ -38,6 +42,9 @@ class UnsupportedSignalRGateway implements SignalRGateway {
 
   @override
   Future<void> disconnect() async {}
+
+  @override
+  Future<void> restart({bool fast = true}) async {}
 
   @override
   Future<void> dispose() async {}

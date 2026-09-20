@@ -29,7 +29,7 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   final TokenStorage _tokenStorage;
   final ClientCredentialsTokenStorage _clientCredentialsTokenStorage;
   final ClientDeviceContext _deviceContext;
-  Future<AuthSession>? _refreshInFlight;
+  static Future<AuthSession>? _globalRefreshInFlight;
   final Map<String, Future<String>> _clientCredentialsInFlight = {};
 
   static Dio createDio(
@@ -207,8 +207,8 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
 
   @override
   Future<AuthSession> refreshSession() {
-    return _refreshInFlight ??= _refresh().whenComplete(() {
-      _refreshInFlight = null;
+    return _globalRefreshInFlight ??= _refresh().whenComplete(() {
+      _globalRefreshInFlight = null;
     });
   }
 

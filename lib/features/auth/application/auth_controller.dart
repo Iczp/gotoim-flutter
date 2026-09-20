@@ -237,6 +237,17 @@ final signalRGatewayProvider = Provider<SignalRGateway>((ref) {
     environment: ref.watch(appEnvironmentProvider),
     readAccessToken: ref.watch(tokenStorageProvider).readAccessToken,
     deviceContext: ref.watch(clientDeviceContextProvider),
+    refreshToken: () async {
+      final repo = ref.read(authRepositoryProvider);
+      if (repo is OpenIdConnectAuthRepository) {
+        await repo.refreshAccessToken();
+        return ref.read(tokenStorageProvider).readAccessToken();
+      }
+      return null;
+    },
+    onSessionInvalidated: () async {
+      await ref.read(authControllerProvider.notifier).logout();
+    },
   );
   ref.onDispose(gateway.dispose);
   return gateway;

@@ -19,6 +19,9 @@ abstract class SignalRGateway {
 
   Future<void> disconnect();
 
+  /// 快速重连（例如网络切换或强制重置连接时调用，避免等待旧 Socket 超时）。
+  Future<void> restart({bool fast = true});
+
   Future<T?> invoke<T>(String method, {List<Object>? arguments});
 
   Future<void> dispose();

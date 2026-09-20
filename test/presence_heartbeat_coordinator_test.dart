@@ -56,7 +56,16 @@ class _FakeSignalRGateway implements SignalRGateway {
   }
 
   @override
+  Object? get lastError => null;
+
+  @override
+  String? get lastErrorDescription => null;
+
+  @override
   Future<void> connect() async => emit(SignalRConnectionState.connected);
+
+  @override
+  Future<void> restart({bool fast = true}) async => connect();
 
   @override
   Future<void> disconnect() async => emit(SignalRConnectionState.disconnected);

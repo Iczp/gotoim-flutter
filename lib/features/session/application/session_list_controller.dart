@@ -274,7 +274,7 @@ class SessionListController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> reconnectSignalR() => _signalRGateway.connect();
+  Future<void> reconnectSignalR() => _signalRGateway.restart(fast: true);
 
   String? get signalRErrorDescription => _signalRGateway.lastErrorDescription;
   Object? get signalRLastError => _signalRGateway.lastError;

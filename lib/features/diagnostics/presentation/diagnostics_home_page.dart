@@ -67,6 +67,13 @@ class DiagnosticsHomePage extends StatelessWidget {
                 onTap: () => context.push('/diagnostics/signalr'),
               ),
               Cell(
+                icon: const Icon(Icons.network_check_outlined),
+                title: '网络与服务连通探测',
+                subtitle: '公网延时、IM服务端连通性、自定义网址测试与排查',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/connection'),
+              ),
+              Cell(
                 icon: const Icon(Icons.storage_outlined),
                 title: '统一数据库测试',
                 subtitle: 'SQLite schema 迁移、表信息、CRUD、创建/删除测试表',

@@ -151,7 +151,7 @@ class _SignalRTroubleshootSheetState extends State<_SignalRTroubleshootSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('重连失败: ')),
+          SnackBar(content: Text('重连失败: $e')),
         );
       }
     } finally {
@@ -175,7 +175,7 @@ class _SignalRTroubleshootSheetState extends State<_SignalRTroubleshootSheet> {
       if (lookup.isNotEmpty) {
         setState(() {
           _networkTestResult =
-              '网络正常，DNS 解析目标 () 成功，耗时  ms。\nIP: ';
+              '网络正常，DNS 解析目标 ($targetHost) 成功，耗时 ${stopwatch.elapsedMilliseconds} ms。\nIP: ${lookup.map((e) => e.address).join(", ")}';
         });
       } else {
         setState(() {
@@ -185,7 +185,7 @@ class _SignalRTroubleshootSheetState extends State<_SignalRTroubleshootSheet> {
     } catch (e) {
       stopwatch.stop();
       setState(() {
-        _networkTestResult = '网络测试失败：无法连通外网或目标域名无法解析 ()';
+        _networkTestResult = '网络测试失败：无法连通外网或目标域名无法解析 ($e)';
       });
     } finally {
       setState(() => _isTestingNetwork = false);
@@ -220,7 +220,7 @@ class _SignalRTroubleshootSheetState extends State<_SignalRTroubleshootSheet> {
     } catch (e) {
       stopwatch.stop();
       setState(() {
-        _serverTestResult = '服务端探测失败：';
+        _serverTestResult = '服务端探测失败：$e';
       });
     } finally {
       setState(() => _isTestingServer = false);
@@ -411,10 +411,18 @@ class _SignalRTroubleshootSheetState extends State<_SignalRTroubleshootSheet> {
                   TextButton.icon(
                     onPressed: () {
                       Navigator.of(context).pop();
+                      context.push('/diagnostics/connection');
+                    },
+                    icon: const Icon(Icons.network_check_outlined, size: 18),
+                    label: const Text('全面探测'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
                       context.push('/diagnostics/signalr');
                     },
                     icon: const Icon(Icons.analytics_outlined, size: 18),
-                    label: const Text('高级诊断'),
+                    label: const Text('SignalR日志'),
                   ),
                 ],
               ),

@@ -217,8 +217,7 @@ class ConnectionTestController extends ChangeNotifier {
     _signalRError = null;
     notifyListeners();
     try {
-      await _signalRGateway.disconnect();
-      await _signalRGateway.connect();
+      await _signalRGateway.restart(fast: true);
       _connectionState = _signalRGateway.connectionState;
       _signalRStatus = ConnectionTestStatus.success;
     } catch (error) {

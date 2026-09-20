@@ -9,6 +9,7 @@ import '../core/theme/overscroll_style_controller.dart';
 import '../core/theme/theme_mode_controller.dart';
 import '../core/floating_window/floating_window.dart';
 import '../core/widgets/app_scroll_behavior.dart';
+import '../core/realtime/network_connectivity_coordinator.dart';
 import '../features/session/application/realtime_sync_coordinator.dart';
 import '../features/session/application/presence_heartbeat_coordinator.dart';
 import '../features/session/application/friend_presence_store.dart';
@@ -35,6 +36,7 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
     ref.read(realtimeSyncCoordinatorProvider).start();
     ref.read(presenceHeartbeatCoordinatorProvider).start();
     ref.read(friendPresenceStoreProvider).start();
+    ref.read(networkConnectivityCoordinatorProvider).start();
     // Device registration is independent of user login and uses a dedicated
     // client-credentials token. A failed registration must never block startup.
     Future<void>.microtask(() async {
@@ -51,8 +53,10 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) =>
-      ref.read(activeChatRegistryProvider).updateLifecycle(state);
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    ref.read(activeChatRegistryProvider).updateLifecycle(state);
+    ref.read(networkConnectivityCoordinatorProvider).handleAppLifecycleState(state);
+  }
 
   @override
   Widget build(BuildContext context) {
