@@ -142,6 +142,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
 
             return Scaffold(
               key: _scaffoldKey,
+              extendBody: true,
               resizeToAvoidBottomInset: false,
               drawer: ChatOwnerDrawer(
                 controller: ref.watch(sessionListControllerProvider),
@@ -230,46 +231,79 @@ class _HomeNavigationBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isGlass = ref.watch(tabGlassProvider);
     final theme = Theme.of(context);
-    final dividerColor = theme.dividerColor.withValues(alpha: .55);
+    final isDark = theme.brightness == Brightness.dark;
+    final bottomSafe = MediaQuery.paddingOf(context).bottom;
     final totalUnread =
         ref.watch(sessionListControllerProvider).totalUnreadCount;
+
+    // 微信风格毛玻璃背景：浅色微乳灰白透光，深色暗黑微透光
+    final glassColor = isGlass
+        ? (isDark ? const Color(0xE6191919) : const Color(0xE6F7F7F7))
+        : (isDark ? theme.colorScheme.surface : const Color(0xFFF7F7F7));
+
+    final dividerColor = isDark
+        ? const Color(0x26FFFFFF)
+        : const Color(0x26000000);
+
+    final unselectedColor = isDark
+        ? const Color(0xFFA0A0A0)
+        : const Color(0xFF262626);
+
     return GlassContainer(
       borderRadius: BorderRadius.zero,
       borderWidth: 0,
-      blurSigma: isGlass ? null : 0.0,
-      backgroundColor: isGlass ? null : theme.colorScheme.surface,
+      blurSigma: isGlass ? 20.0 : 0.0,
+      backgroundColor: glassColor,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: dividerColor, width: .8)),
+          border: Border(top: BorderSide(color: dividerColor, width: 0.5)),
         ),
-        child: NavigationBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          selectedIndex: HomeSection.values.indexOf(selected),
-          onDestinationSelected:
-              (index) => onSelected(HomeSection.values[index]),
-          destinations:
-              HomeSection.values.map((section) {
-                final icon = Icon(section.icon);
-                final selectedIcon = Icon(section.selectedIcon);
+        child: Padding(
+          padding: EdgeInsets.only(bottom: bottomSafe),
+          child: SizedBox(
+            height: kHomeBottomBarHeight,
+            child: Row(
+              children: HomeSection.values.map((section) {
+                final isSelected = section == selected;
                 final unreadCount =
                     section == HomeSection.messages ? totalUnread : 0;
-                return NavigationDestination(
-                  icon: AppBadge(
-                    count: unreadCount,
-                    size: AppBadgeSize.small,
-                    offset: const Offset(4, -4),
-                    child: icon,
+                final activeColor = theme.colorScheme.primary;
+
+                return Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onSelected(section),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AppBadge(
+                          count: unreadCount,
+                          size: AppBadgeSize.small,
+                          offset: const Offset(4, -3),
+                          child: Icon(
+                            isSelected ? section.selectedIcon : section.icon,
+                            size: 24,
+                            color: isSelected ? activeColor : unselectedColor,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          section.label,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            height: 1.1,
+                            fontWeight:
+                                isSelected ? FontWeight.w600 : FontWeight.w400,
+                            color: isSelected ? activeColor : unselectedColor,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  selectedIcon: AppBadge(
-                    count: unreadCount,
-                    size: AppBadgeSize.small,
-                    offset: const Offset(4, -4),
-                    child: selectedIcon,
-                  ),
-                  label: section.label,
                 );
-              }).toList(),
+              }).toList(growable: false),
+            ),
+          ),
         ),
       ),
     );

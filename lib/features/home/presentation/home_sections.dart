@@ -119,3 +119,12 @@ class _HomeSectionWithTitle extends StatelessWidget {
     );
   }
 }
+
+/// 微信风格底部导航栏标准高度（不含系统底部安全区）
+const double kHomeBottomBarHeight = 54.0;
+
+/// 获取包含系统底部安全区的底部导航栏总高度（用于列表底部避让与滚动垫高）
+double getHomeBottomPadding(BuildContext context, {bool isCompact = true}) {
+  if (!isCompact) return 0.0;
+  return kHomeBottomBarHeight + MediaQuery.paddingOf(context).bottom;
+}

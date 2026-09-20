@@ -9,6 +9,7 @@ import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../app_update/application/app_update_service.dart';
 import '../../session/application/session_list_controller.dart';
+import '../../home/presentation/home_sections.dart';
 
 /// 「我的」页面（由 HomeSectionPage 调用）。
 class MinePage extends ConsumerWidget {
@@ -30,9 +31,11 @@ class MinePage extends ConsumerWidget {
     final appUpdateService = ref.watch(appUpdateServiceProvider);
 
     return ListView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isCompact ? 16 : 32,
-        vertical: 16,
+      padding: EdgeInsets.fromLTRB(
+        isCompact ? 16 : 32,
+        16,
+        isCompact ? 16 : 32,
+        16 + getHomeBottomPadding(context, isCompact: isCompact),
       ),
       children: [
         // ── 用户信息卡 ──────────────────────────────────────────────

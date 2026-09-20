@@ -6,6 +6,7 @@ import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../session/application/session_list_controller.dart';
+import '../../home/presentation/home_sections.dart';
 
 class ExplorePage extends ConsumerStatefulWidget {
   const ExplorePage({required this.isCompact, super.key});
@@ -137,6 +138,12 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
                   ),
             ),
           ),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height:
+                getHomeBottomPadding(context, isCompact: widget.isCompact) + 8,
+          ),
+        ),
       ],
     );
   }

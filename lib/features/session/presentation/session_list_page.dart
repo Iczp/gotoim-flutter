@@ -10,6 +10,7 @@ import 'current_owner_header.dart';
 import 'session_list_item.dart';
 import 'session_menu.dart';
 import 'signalr_status_bar.dart';
+import '../../home/presentation/home_sections.dart';
 
 class SessionListPage extends ConsumerStatefulWidget {
   const SessionListPage({required this.onOpenOwnerDrawer, super.key});
@@ -290,6 +291,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                       ),
                     SliverToBoxAdapter(
                       child: _LoadMoreFooter(controller: controller),
+                    ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: getHomeBottomPadding(context) + 8,
+                      ),
                     ),
                   ],
                 ),

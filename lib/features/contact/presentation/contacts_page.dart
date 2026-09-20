@@ -12,6 +12,7 @@ import 'widgets/contact_group_header.dart';
 import 'widgets/contact_row.dart';
 import 'widgets/contacts_page_chrome.dart';
 import 'widgets/dragging_index_indicator.dart';
+import '../../home/presentation/home_sections.dart';
 
 class ContactsPage extends ConsumerStatefulWidget {
   const ContactsPage({super.key});
@@ -146,6 +147,11 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                                 ),
                               ),
                             ),
+                          SliverToBoxAdapter(
+                            child: SizedBox(
+                              height: getHomeBottomPadding(context) + 8,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -183,7 +189,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                       Positioned(
                         top: 8,
                         right: 2,
-                        bottom: 8,
+                        bottom: 8 + getHomeBottomPadding(context),
                         child: ValueListenableBuilder<String>(
                           valueListenable: _activeGroupIndex,
                           builder:

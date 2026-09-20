@@ -11,6 +11,7 @@ import 'items/app_grid_widget.dart';
 import 'items/banner_grid_widget.dart';
 import 'items/card_grid_widget.dart';
 import 'items/folder_grid_widget.dart';
+import '../../../home/presentation/home_sections.dart';
 
 /// Interactive 2D 4-column workbench grid canvas with fluid layout animations,
 /// drag-and-drop reflow, and edge-to-edge widget support.
@@ -110,11 +111,13 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
         final cellHeight = cellWidth * 1.34;
 
         final totalRows = notifier.engine.calculateTotalRows(state.items);
+        final bottomBarPadding = getHomeBottomPadding(context);
         final contentHeight =
             (padding * 2) +
             (totalRows * cellHeight) +
             (totalRows > 0 ? (totalRows - 1) * spacing : 0.0) +
-            80.0; // Extra breathing room at bottom
+            80.0 +
+            bottomBarPadding; // Extra breathing room and bottom bar padding
 
         return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
