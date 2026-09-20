@@ -4,21 +4,21 @@ import '../../features/session/data/models/session_summary.dart';
 import '../widgets/app_avatar.dart';
 import '../widgets/avatar_preferences.dart';
 
-/// 微信转发确认弹窗返回结果。
-class WeChatForwardConfirmResult {
-  const WeChatForwardConfirmResult({required this.comment});
+/// 网页转发确认弹窗返回结果。
+class ForwardLinkConfirmResult {
+  const ForwardLinkConfirmResult({required this.comment});
   final String comment;
 }
 
-/// 微信同款「发送给朋友」高保真确认弹窗。
+/// 发送网页链接给好友的高保真确认弹窗（微信风格）。
 ///
 /// 包含：
 /// - 发送目标头像与昵称；
 /// - 网页链接卡片缩略预览；
 /// - 「给朋友留言」输入框；
 /// - 取消与微信绿「发送」按钮。
-class WeChatForwardConfirmDialog extends StatefulWidget {
-  const WeChatForwardConfirmDialog({
+class ForwardLinkConfirmDialog extends StatefulWidget {
+  const ForwardLinkConfirmDialog({
     required this.targets,
     required this.url,
     this.title,
@@ -29,16 +29,16 @@ class WeChatForwardConfirmDialog extends StatefulWidget {
   final String url;
   final String? title;
 
-  static Future<WeChatForwardConfirmResult?> show(
+  static Future<ForwardLinkConfirmResult?> show(
     BuildContext context, {
     required List<SessionSummary> targets,
     required String url,
     String? title,
   }) {
-    return showDialog<WeChatForwardConfirmResult>(
+    return showDialog<ForwardLinkConfirmResult>(
       context: context,
       barrierDismissible: true,
-      builder: (_) => WeChatForwardConfirmDialog(
+      builder: (_) => ForwardLinkConfirmDialog(
         targets: targets,
         url: url,
         title: title,
@@ -47,12 +47,12 @@ class WeChatForwardConfirmDialog extends StatefulWidget {
   }
 
   @override
-  State<WeChatForwardConfirmDialog> createState() =>
-      _WeChatForwardConfirmDialogState();
+  State<ForwardLinkConfirmDialog> createState() =>
+      _ForwardLinkConfirmDialogState();
 }
 
-class _WeChatForwardConfirmDialogState
-    extends State<WeChatForwardConfirmDialog> {
+class _ForwardLinkConfirmDialogState
+    extends State<ForwardLinkConfirmDialog> {
   final TextEditingController _commentController = TextEditingController();
 
   String get _domain {
@@ -273,7 +273,7 @@ class _WeChatForwardConfirmDialogState
                     onPressed: () {
                       final comment = _commentController.text.trim();
                       Navigator.of(context).pop(
-                        WeChatForwardConfirmResult(comment: comment),
+                        ForwardLinkConfirmResult(comment: comment),
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -305,3 +305,7 @@ class _WeChatForwardConfirmDialogState
     );
   }
 }
+
+// 别名以保持兼容
+typedef WeChatForwardConfirmDialog = ForwardLinkConfirmDialog;
+typedef WeChatForwardConfirmResult = ForwardLinkConfirmResult;

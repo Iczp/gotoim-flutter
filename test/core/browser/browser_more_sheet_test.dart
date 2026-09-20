@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gotoim_flutter/core/browser/wechat_browser_more_sheet.dart';
+import 'package:gotoim_flutter/core/browser/browser_more_sheet.dart';
 import 'package:gotoim_flutter/core/config/app_environment.dart';
 import 'package:gotoim_flutter/core/device/client_device_context.dart';
 import 'package:gotoim_flutter/features/session/application/session_list_controller.dart';
@@ -43,7 +43,7 @@ void main() {
     pushClientId: '',
   );
 
-  group('WeChatBrowserMoreSheet', () {
+  group('BrowserMoreSheet', () {
     testWidgets('renders header, actions in two rows, and cancel button', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -63,7 +63,7 @@ void main() {
                   body: Center(
                     child: ElevatedButton(
                       onPressed: () {
-                        showWeChatBrowserMoreSheet(
+                        showBrowserMoreSheet(
                           context,
                           url: 'https://im.gotoim.com/test-page.html',
                           title: '测试网页',
@@ -125,7 +125,7 @@ void main() {
                   body: Center(
                     child: ElevatedButton(
                       onPressed: () {
-                        showWeChatBrowserMoreSheet(
+                        showBrowserMoreSheet(
                           context,
                           url: 'https://im.gotoim.com/hello',
                           title: '你好',

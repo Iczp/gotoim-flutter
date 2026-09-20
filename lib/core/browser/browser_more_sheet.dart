@@ -10,12 +10,12 @@ import '../widgets/app_avatar.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/avatar_preferences.dart';
 import '../widgets/target_picker/forward_target_picker.dart';
+import 'forward_link_confirm_dialog.dart';
 import 'recent_forward_service.dart';
-import 'wechat_forward_confirm_dialog.dart';
 
-/// 微信风格的内置浏览器「更多」操作项定义。
-class WeChatBrowserAction {
-  const WeChatBrowserAction({
+/// 内置浏览器「更多」操作项定义（微信风格）。
+class BrowserMoreAction {
+  const BrowserMoreAction({
     required this.icon,
     required this.label,
     required this.onTap,
@@ -30,15 +30,15 @@ class WeChatBrowserAction {
   final Widget? badge;
 }
 
-/// 弹出高仿微信网页右上角「···」（更多）点击后的底部操作抽屉。
+/// 弹出网页右上角「···」（更多）点击后的高保真操作底栏（仿微信设计）。
 ///
 /// 特性：
 /// - 顶部：来源标识（Favicon + 网页来源 + `>`）；
 /// - 第一栏：「转发给」横向最近会话列表，点击弹出确认发送弹窗；
 /// - 第一排：转发给朋友（调起统一选择器）、分享到朋友圈、微信收藏、搜一搜、用电脑打开、在浏览器打开；
 /// - 第二排：浮窗（真实贴边气泡）、听全文、稍后听、保存为图片、投诉、复制链接；
-/// - 底部：微信同款深蓝色「取消」按钮。
-Future<void> showWeChatBrowserMoreSheet(
+/// - 底部：经典深蓝色「取消」按钮。
+Future<void> showBrowserMoreSheet(
   BuildContext context, {
   required String url,
   String? title,
@@ -48,15 +48,16 @@ Future<void> showWeChatBrowserMoreSheet(
   IconData? toggleModeIcon,
   VoidCallback? onAdjustFontSize,
   VoidCallback? onMinimizeToFloat,
-  List<WeChatBrowserAction>? customActions,
+  List<BrowserMoreAction>? customActions,
 }) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (sheetContext) => _WeChatBrowserMoreSheetContent(
+    builder: (sheetContext) => _BrowserMoreSheetContent(
       url: url,
       title: title,
+      parentContext: context,
       onRefresh: onRefresh,
       onToggleMode: onToggleMode,
       toggleModeLabel: toggleModeLabel,
@@ -68,10 +69,11 @@ Future<void> showWeChatBrowserMoreSheet(
   );
 }
 
-class _WeChatBrowserMoreSheetContent extends ConsumerWidget {
-  const _WeChatBrowserMoreSheetContent({
+class _BrowserMoreSheetContent extends ConsumerStatefulWidget {
+  const _BrowserMoreSheetContent({
     required this.url,
     this.title,
+    this.parentContext,
     this.onRefresh,
     this.onToggleMode,
     this.toggleModeLabel,
@@ -83,17 +85,57 @@ class _WeChatBrowserMoreSheetContent extends ConsumerWidget {
 
   final String url;
   final String? title;
+  final BuildContext? parentContext;
   final VoidCallback? onRefresh;
   final VoidCallback? onToggleMode;
   final String? toggleModeLabel;
   final IconData? toggleModeIcon;
   final VoidCallback? onAdjustFontSize;
   final VoidCallback? onMinimizeToFloat;
-  final List<WeChatBrowserAction>? customActions;
+  final List<BrowserMoreAction>? customActions;
+
+  @override
+  ConsumerState<_BrowserMoreSheetContent> createState() =>
+      _BrowserMoreSheetContentState();
+}
+
+class _BrowserMoreSheetContentState
+    extends ConsumerState<_BrowserMoreSheetContent> {
+  List<SessionSummary> _fallbackSessions = const <SessionSummary>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndLoadSessions();
+  }
+
+  Future<void> _checkAndLoadSessions() async {
+    final activeSessions =
+        ref.read(sessionListControllerProvider.select((c) => c.sessions));
+    if (activeSessions.isEmpty) {
+      debugPrint('[BrowserMoreSheet] activeSessions is empty, loading from repository...');
+      try {
+        final currentOwnerId =
+            ref.read(sessionListControllerProvider.select((c) => c.currentOwnerId)) ?? 0;
+        final res = await ref.read(sessionRepositoryProvider).loadFriends(
+              ownerId: currentOwnerId,
+              limit: 100,
+            );
+        if (mounted && res.items.isNotEmpty) {
+          setState(() {
+            _fallbackSessions = res.items;
+          });
+          debugPrint('[BrowserMoreSheet] Loaded ${_fallbackSessions.length} fallback sessions');
+        }
+      } catch (e) {
+        debugPrint('[BrowserMoreSheet] Fallback load sessions error: $e');
+      }
+    }
+  }
 
   String get _domain {
     try {
-      final uri = Uri.parse(url);
+      final uri = Uri.parse(widget.url);
       return uri.host.isNotEmpty ? uri.host : '网页';
     } catch (_) {
       return '网页';
@@ -101,23 +143,23 @@ class _WeChatBrowserMoreSheetContent extends ConsumerWidget {
   }
 
   String get _sourceName {
-    if (title != null && title!.isNotEmpty) {
-      if (title!.length <= 10) return title!;
-      return title!.substring(0, 10);
+    if (widget.title != null && widget.title!.isNotEmpty) {
+      if (widget.title!.length <= 10) return widget.title!;
+      return widget.title!.substring(0, 10);
     }
     return _domain;
   }
 
   void _copyLink(BuildContext context) {
     Navigator.of(context).pop();
-    Clipboard.setData(ClipboardData(text: url));
+    Clipboard.setData(ClipboardData(text: widget.url));
     showToast('链接已复制到剪贴板', type: ToastType.success);
   }
 
   Future<void> _openInExternalBrowser(BuildContext context) async {
     Navigator.of(context).pop();
     try {
-      final uri = WebUri(url);
+      final uri = WebUri(widget.url);
       await InAppBrowser.openWithSystemBrowser(url: uri);
     } catch (e) {
       showToast('无法打开外部浏览器: $e', type: ToastType.error);
@@ -136,8 +178,8 @@ class _WeChatBrowserMoreSheetContent extends ConsumerWidget {
 
   void _minimize(BuildContext context) {
     Navigator.of(context).pop();
-    if (onMinimizeToFloat != null) {
-      onMinimizeToFloat!();
+    if (widget.onMinimizeToFloat != null) {
+      widget.onMinimizeToFloat!();
     } else {
       showToast('已添加为浮窗', type: ToastType.info);
     }
@@ -175,74 +217,157 @@ class _WeChatBrowserMoreSheetContent extends ConsumerWidget {
 
   /// 唤起统一转发目标选择器
   Future<void> _handleForwardPicker(
-    BuildContext context,
-    WidgetRef ref,
+    BuildContext sheetContext,
     List<SessionSummary> allSessions,
   ) async {
-    Navigator.of(context).pop();
+    debugPrint('[BrowserMoreSheet] 「转发给朋友」被点击. 候选会话数: ${allSessions.length}');
+    Navigator.of(sheetContext).pop();
+
+    final targetContext = (widget.parentContext != null && widget.parentContext!.mounted)
+        ? widget.parentContext!
+        : sheetContext;
+
+    if (!targetContext.mounted) {
+      debugPrint('[BrowserMoreSheet] targetContext is not mounted, aborted forward');
+      return;
+    }
+
+    var sessionsToPick = allSessions;
+    if (sessionsToPick.isEmpty) {
+      debugPrint('[BrowserMoreSheet] sessionsToPick is empty, loading from session repository...');
+      try {
+        final currentOwnerId =
+            ref.read(sessionListControllerProvider.select((c) => c.currentOwnerId)) ?? 0;
+        final res = await ref.read(sessionRepositoryProvider).loadFriends(
+              ownerId: currentOwnerId,
+              limit: 100,
+            );
+        sessionsToPick = res.items;
+        debugPrint('[BrowserMoreSheet] Loaded ${sessionsToPick.length} sessions from repository');
+      } catch (e) {
+        debugPrint('[BrowserMoreSheet] Failed to load sessions from repository: $e');
+      }
+    }
+
+    if (sessionsToPick.isEmpty) {
+      debugPrint('[BrowserMoreSheet] No sessions found to forward to');
+      showToast('暂无可选联系人', type: ToastType.warning);
+      return;
+    }
+
+    if (!targetContext.mounted) return;
+
+    debugPrint('[BrowserMoreSheet] 唤起 ForwardTargetPicker, 候选数: ${sessionsToPick.length}');
     final selected = await ForwardTargetPicker.pickTargets(
-      context: context,
-      sessions: allSessions,
+      context: targetContext,
+      sessions: sessionsToPick,
       title: '选择转发目标',
       multiple: true,
       maxCount: 9,
     );
-    if (selected == null || selected.isEmpty || !context.mounted) return;
+
+    if (selected == null || selected.isEmpty) {
+      debugPrint('[BrowserMoreSheet] TargetPicker cancelled or empty selection');
+      return;
+    }
+
+    if (!targetContext.mounted) return;
+
+    debugPrint('[BrowserMoreSheet] TargetPicker 选中 ${selected.length} 个目标: ${selected.map((s) => '${s.title}(${s.id})').join(', ')}');
 
     await _confirmAndSendLink(
-      context,
-      ref,
+      targetContext,
       targets: selected,
-      url: url,
-      title: title,
+      url: widget.url,
+      title: widget.title,
     );
   }
 
   /// 呼出确认发送弹窗并执行 sendLink 发送
   Future<void> _confirmAndSendLink(
-    BuildContext context,
-    WidgetRef ref, {
+    BuildContext callerContext, {
     required List<SessionSummary> targets,
     required String url,
     String? title,
   }) async {
-    final result = await WeChatForwardConfirmDialog.show(
-      context,
+    if (!callerContext.mounted) {
+      debugPrint('[BrowserMoreSheet] callerContext is not mounted when showing confirm dialog');
+      return;
+    }
+
+    debugPrint('[BrowserMoreSheet] 弹出发送确认卡片, 目标数: ${targets.length}, url: $url, title: $title');
+    final result = await ForwardLinkConfirmDialog.show(
+      callerContext,
       targets: targets,
       url: url,
       title: title,
     );
-    if (result == null || !context.mounted) return;
+    if (result == null) {
+      debugPrint('[BrowserMoreSheet] 用户在确认卡片中取消发送');
+      return;
+    }
+
+    debugPrint('[BrowserMoreSheet] 用户确认发送! 留言内容: "${result.comment}"');
 
     final repo = ref.read(messageRepositoryProvider);
-    final ownerId =
+    final fallbackOwnerId =
         ref.read(sessionListControllerProvider.select((c) => c.currentOwnerId)) ?? 0;
 
+    var successCount = 0;
+    var failCount = 0;
+    String? lastErrorMsg;
+
     for (final target in targets) {
+      final effectiveOwnerId =
+          (target.ownerId != null && target.ownerId! > 0)
+              ? target.ownerId!
+              : fallbackOwnerId;
+      debugPrint(
+        '[BrowserMoreSheet] 开始发送链接消息 -> 目标: ${target.title}, '
+        'sessionUnitId: ${target.id}, ownerId: $effectiveOwnerId, url: $url, title: $title',
+      );
       try {
-        await repo.sendLink(
-          ownerId: ownerId,
+        final sentMessage = await repo.sendLink(
+          ownerId: effectiveOwnerId,
           sessionUnitId: target.id,
           url: url,
           title: title,
         );
-        if (result.comment.isNotEmpty) {
-          await repo.sendText(
-            ownerId: ownerId,
+        if (sentMessage.state == 'failed') {
+          throw Exception('接口返回失败状态 (state=failed)');
+        }
+        debugPrint('[BrowserMoreSheet] 发送链接消息成功: target=${target.title}, msgId=${sentMessage.localId}, serverId=${sentMessage.serverId}');
+
+        if (result.comment.trim().isNotEmpty) {
+          debugPrint('[BrowserMoreSheet] 开始发送附带留言 -> 目标: ${target.title}, text: "${result.comment.trim()}"');
+          final sentComment = await repo.sendText(
+            ownerId: effectiveOwnerId,
             sessionUnitId: target.id,
-            text: result.comment,
+            text: result.comment.trim(),
           );
+          debugPrint('[BrowserMoreSheet] 发送留言成功: target=${target.title}, msgId=${sentComment.localId}');
         }
         await RecentForwardService.instance.record(target.id);
-      } catch (e) {
-        debugPrint('[WeChatBrowserMoreSheet] send link error: $e');
+        successCount++;
+      } catch (e, st) {
+        failCount++;
+        lastErrorMsg = e.toString();
+        debugPrint('[BrowserMoreSheet] 发送链接消息失败 -> target=${target.title}(${target.id}): $e\n$st');
       }
     }
-    showToast('已发送', type: ToastType.success);
+
+    debugPrint('[BrowserMoreSheet] 转发流程结束: 成功 $successCount 个, 失败 $failCount 个');
+    if (failCount == 0 && successCount > 0) {
+      showToast('已发送', type: ToastType.success);
+    } else if (successCount > 0) {
+      showToast('部分发送失败 ($failCount/$successCount)', type: ToastType.warning);
+    } else {
+      showToast('发送失败: ${lastErrorMsg ?? "网络异常"}', type: ToastType.error);
+    }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final backgroundColor = isDark ? const Color(0xFF242424) : const Color(0xFFF7F7F7);
@@ -252,103 +377,104 @@ class _WeChatBrowserMoreSheetContent extends ConsumerWidget {
     // 获取当前会话列表与最近转发记录
     final allSessions =
         ref.watch(sessionListControllerProvider.select((c) => c.sessions));
+    final effectiveSessions = allSessions.isNotEmpty ? allSessions : _fallbackSessions;
     final recentTargets = RecentForwardService.instance.getRecentTargets(
-      allSessions: allSessions,
+      allSessions: effectiveSessions,
       limit: 8,
     );
 
     // ── 第一排：高仿微信第一排操作项 ───────────────────────────────────────────
-    final firstRowActions = <WeChatBrowserAction>[
-      WeChatBrowserAction(
+    final firstRowActions = <BrowserMoreAction>[
+      BrowserMoreAction(
         icon: const Icon(Icons.reply_all_rounded, color: Color(0xFF07C160), size: 28),
         label: '转发给朋友',
-        onTap: () => _handleForwardPicker(context, ref, allSessions),
+        onTap: () => _handleForwardPicker(context, effectiveSessions),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.motion_photos_on_rounded, color: Color(0xFFE88A1A), size: 28),
         label: '分享到朋友圈',
         onTap: () => _shareToMoments(context),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.bookmark_border_rounded, color: Color(0xFF3B82F6), size: 28),
         label: '收藏',
         onTap: () => _addToFavorites(context),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.search_rounded, color: Color(0xFFEF4444), size: 28),
         label: '搜一搜',
         onTap: () => _searchPage(context),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.desktop_windows_outlined, color: Color(0xFF0EA5E9), size: 27),
         label: '用电脑打开',
         onTap: () => _openOnComputer(context),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.open_in_browser_rounded, color: Color(0xFF374151), size: 28),
         label: '在浏览器打开',
         onTap: () => _openInExternalBrowser(context),
       ),
-      if (customActions != null) ...customActions!,
+      if (widget.customActions != null) ...widget.customActions!,
     ];
 
     // ── 第二排：高仿微信第二排工具项 ───────────────────────────────────────────
-    final secondRowActions = <WeChatBrowserAction>[
-      WeChatBrowserAction(
+    final secondRowActions = <BrowserMoreAction>[
+      BrowserMoreAction(
         icon: const _DoubleDotIcon(),
         label: '浮窗',
         onTap: () => _minimize(context),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.headphones_outlined, color: Color(0xFF374151), size: 26),
         label: '听全文',
         onTap: () => _listenFullText(context),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.playlist_add_rounded, color: Color(0xFF374151), size: 28),
         label: '稍后听',
         onTap: () => _listenLater(context),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.download_rounded, color: Color(0xFF374151), size: 26),
         label: '保存为图片',
         onTap: () => _saveAsImage(context),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.warning_amber_rounded, color: Color(0xFF374151), size: 26),
         label: '投诉',
         onTap: () => _showReport(context),
       ),
-      WeChatBrowserAction(
+      BrowserMoreAction(
         icon: const Icon(Icons.link_rounded, color: Color(0xFF374151), size: 27),
         label: '复制链接',
         onTap: () => _copyLink(context),
       ),
-      if (onRefresh != null)
-        WeChatBrowserAction(
+      if (widget.onRefresh != null)
+        BrowserMoreAction(
           icon: const Icon(Icons.refresh_rounded, color: Color(0xFF374151), size: 26),
           label: '刷新',
           onTap: () {
             Navigator.of(context).pop();
-            onRefresh!();
+            widget.onRefresh!();
           },
         ),
-      if (onToggleMode != null)
-        WeChatBrowserAction(
-          icon: Icon(toggleModeIcon ?? Icons.article_outlined, color: const Color(0xFF374151), size: 26),
-          label: toggleModeLabel ?? '切换视图',
+      if (widget.onToggleMode != null)
+        BrowserMoreAction(
+          icon: Icon(widget.toggleModeIcon ?? Icons.article_outlined, color: const Color(0xFF374151), size: 26),
+          label: widget.toggleModeLabel ?? '切换视图',
           onTap: () {
             Navigator.of(context).pop();
-            onToggleMode!();
+            widget.onToggleMode!();
           },
         ),
-      if (onAdjustFontSize != null)
-        WeChatBrowserAction(
+      if (widget.onAdjustFontSize != null)
+        BrowserMoreAction(
           icon: const Icon(Icons.format_size_rounded, color: Color(0xFF374151), size: 26),
           label: '调整字体',
           onTap: () {
             Navigator.of(context).pop();
-            onAdjustFontSize!();
+            widget.onAdjustFontSize!();
           },
         ),
     ];
@@ -426,18 +552,25 @@ class _WeChatBrowserMoreSheetContent extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: recentTargets.length,
                   separatorBuilder: (_, _) => const SizedBox(width: 14),
-                  itemBuilder: (context, index) {
+                  itemBuilder: (itemContext, index) {
                     final target = recentTargets[index];
                     return InkWell(
                       borderRadius: BorderRadius.circular(10),
                       onTap: () {
-                        Navigator.of(context).pop();
+                        debugPrint('[BrowserMoreSheet] 点击最近联系人: ${target.title} (id: ${target.id}, ownerId: ${target.ownerId})');
+                        Navigator.of(itemContext).pop();
+                        final targetContext = (widget.parentContext != null && widget.parentContext!.mounted)
+                            ? widget.parentContext!
+                            : itemContext;
+                        if (!targetContext.mounted) {
+                          debugPrint('[BrowserMoreSheet] targetContext is not mounted, aborted recent forward');
+                          return;
+                        }
                         _confirmAndSendLink(
-                          context,
-                          ref,
+                          targetContext,
                           targets: [target],
-                          url: url,
-                          title: title,
+                          url: widget.url,
+                          title: widget.title,
                         );
                       },
                       child: SizedBox(
@@ -512,7 +645,7 @@ class _WeChatBrowserMoreSheetContent extends ConsumerWidget {
   }
 
   Widget _buildActionRow(
-    List<WeChatBrowserAction> actions,
+    List<BrowserMoreAction> actions,
     Color itemBgColor,
     Color textColor,
   ) {
@@ -573,7 +706,7 @@ class _WeChatBrowserMoreSheetContent extends ConsumerWidget {
   }
 }
 
-/// 微信浮窗图标（两个并排圆点 ● ●）
+/// 浮窗图标（两个并排圆点 ● ●）
 class _DoubleDotIcon extends StatelessWidget {
   const _DoubleDotIcon();
 
@@ -604,3 +737,7 @@ class _DoubleDotIcon extends StatelessWidget {
     );
   }
 }
+
+// 别名以保持兼容
+typedef WeChatBrowserAction = BrowserMoreAction;
+const showWeChatBrowserMoreSheet = showBrowserMoreSheet;

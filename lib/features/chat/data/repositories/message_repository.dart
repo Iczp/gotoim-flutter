@@ -233,6 +233,10 @@ class MessageRepository {
     await _dao.upsertAll(<ChatMessage>[localMessage]);
 
     var result = localMessage;
+    debugPrint(
+      '[MessageRepository.sendLink] 发送链接消息请求 -> sessionUnitId: $sessionUnitId, '
+      'ownerId: $ownerId, clientMessageId: $clientMessageId, url: $url, title: $title',
+    );
     try {
       final response = await _api.sendLink(
         sessionUnitId: sessionUnitId,
@@ -251,7 +255,9 @@ class MessageRepository {
         state: 'sent',
         raw: <String, dynamic>{...result.raw, ...response},
       );
-    } catch (_) {
+      debugPrint('[MessageRepository.sendLink] 链接消息发送成功 -> sessionUnitId: $sessionUnitId, serverId: $serverId');
+    } catch (e, st) {
+      debugPrint('[MessageRepository.sendLink] 链接消息发送失败 -> sessionUnitId: $sessionUnitId, error: $e\n$st');
       result = result.copyWith(state: 'failed');
     }
     await _dao.upsertAll(<ChatMessage>[result]);

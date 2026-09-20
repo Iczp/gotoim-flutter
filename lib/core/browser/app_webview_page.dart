@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../floating_window/floating_window.dart';
 import '../widgets/app_toast.dart';
 import 'floating_web_bubble.dart';
-import 'wechat_browser_more_sheet.dart';
+import 'browser_more_sheet.dart';
 
 /// 类似微信内置浏览器的通用全屏 WebView 页面。
 ///
@@ -116,7 +116,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
   }
 
   void _showMoreMenu() {
-    showWeChatBrowserMoreSheet(
+    showBrowserMoreSheet(
       context,
       url: _currentUrl,
       title: _pageTitle.isNotEmpty ? _pageTitle : widget.title,

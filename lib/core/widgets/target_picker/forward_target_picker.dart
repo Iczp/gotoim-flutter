@@ -43,11 +43,17 @@ abstract final class ForwardTargetPicker {
           .toList(growable: false);
     }
 
+    debugPrint(
+      '[ForwardTargetPicker] pickTargets 唤起 -> 候选数: ${candidateSessions.length}, '
+      'multiple: $multiple, maxCount: $maxCount, context.mounted: ${context.mounted}',
+    );
+
     if (candidateSessions.isEmpty || !context.mounted) {
+      debugPrint('[ForwardTargetPicker] pickTargets 取消或无候选/context未挂载 (sessionsEmpty: ${candidateSessions.isEmpty}, mounted: ${context.mounted})');
       return null;
     }
 
-    return TargetPicker.pickSessionUnits(
+    final result = await TargetPicker.pickSessionUnits(
       context: context,
       sessions: candidateSessions,
       title: title,
@@ -58,6 +64,8 @@ abstract final class ForwardTargetPicker {
       minCount: minCount,
       disabledIds: disabledIds,
     );
+    debugPrint('[ForwardTargetPicker] pickTargets 结果 -> 选中数: ${result?.length ?? 0}');
+    return result;
   }
 
   /// 单选模式快捷方法，直接返回选中的单个 [SessionSummary]，若未选返回 `null`。

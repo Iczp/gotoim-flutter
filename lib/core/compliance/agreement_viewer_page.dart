@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import '../browser/wechat_browser_more_sheet.dart';
+import '../browser/browser_more_sheet.dart';
 
 /// Fullscreen document reader for User Agreements and Privacy Policies.
 ///
@@ -122,7 +122,7 @@ class _AgreementViewerPageState extends State<AgreementViewerPage> {
             icon: const Icon(Icons.more_horiz_rounded, size: 24),
             tooltip: '更多',
             onPressed: () {
-              showWeChatBrowserMoreSheet(
+              showBrowserMoreSheet(
                 context,
                 url: widget.url ?? '',
                 title: widget.title,
