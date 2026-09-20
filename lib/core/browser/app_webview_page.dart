@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +7,137 @@ import '../floating_window/floating_window.dart';
 import '../widgets/app_toast.dart';
 import 'floating_web_bubble.dart';
 import 'browser_more_sheet.dart';
+
+/// 解析 CSS 颜色值（支持 hex、rgb、rgba、hsl、hsla 及常见命名颜色）
+Color? parseCssColor(String? raw) {
+  if (raw == null) return null;
+  final str = raw.trim().toLowerCase();
+  if (str.isEmpty || str == 'transparent' || str == 'inherit' || str == 'initial') {
+    return null;
+  }
+  if (str == 'black') return Colors.black;
+  if (str == 'white') return Colors.white;
+
+  if (str.startsWith('#')) {
+    final hex = str.substring(1);
+    if (hex.length == 3) {
+      final r = hex[0] * 2;
+      final g = hex[1] * 2;
+      final b = hex[2] * 2;
+      final val = int.tryParse('FF$r$g$b', radix: 16);
+      return val != null ? Color(val) : null;
+    } else if (hex.length == 4) {
+      final r = hex[0] * 2;
+      final g = hex[1] * 2;
+      final b = hex[2] * 2;
+      final a = hex[3] * 2;
+      final val = int.tryParse('$a$r$g$b', radix: 16);
+      return val != null ? Color(val) : null;
+    } else if (hex.length == 6) {
+      final val = int.tryParse('FF$hex', radix: 16);
+      return val != null ? Color(val) : null;
+    } else if (hex.length == 8) {
+      final rrggbb = hex.substring(0, 6);
+      final aa = hex.substring(6, 8);
+      final val = int.tryParse('$aa$rrggbb', radix: 16);
+      return val != null ? Color(val) : null;
+    }
+  }
+
+  final rgbMatch = RegExp(
+    r'rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)',
+  ).firstMatch(str);
+  if (rgbMatch != null) {
+    final r = int.tryParse(rgbMatch.group(1)!) ?? 0;
+    final g = int.tryParse(rgbMatch.group(2)!) ?? 0;
+    final b = int.tryParse(rgbMatch.group(3)!) ?? 0;
+    final aStr = rgbMatch.group(4);
+    final a = aStr != null ? ((double.tryParse(aStr) ?? 1.0) * 255).round().clamp(0, 255) : 255;
+    return Color.fromARGB(a, r, g, b);
+  }
+
+  final hslMatch = RegExp(
+    r'hsla?\s*\(\s*([\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*,\s*([\d.]+))?\s*\)',
+  ).firstMatch(str);
+  if (hslMatch != null) {
+    final h = (double.tryParse(hslMatch.group(1)!) ?? 0.0) % 360.0;
+    final s = ((double.tryParse(hslMatch.group(2)!) ?? 0.0) / 100.0).clamp(0.0, 1.0);
+    final l = ((double.tryParse(hslMatch.group(3)!) ?? 0.0) / 100.0).clamp(0.0, 1.0);
+    final aStr = hslMatch.group(4);
+    final a = aStr != null ? (double.tryParse(aStr) ?? 1.0).clamp(0.0, 1.0) : 1.0;
+    return HSLColor.fromAHSL(a, h, s, l).toColor();
+  }
+
+  return null;
+}
+
+const String _kThemeDetectJs = r'''
+(function() {
+  function getThemeColor() {
+    const metas = document.querySelectorAll('meta[name="theme-color"]');
+    for (let i = 0; i < metas.length; i++) {
+      const meta = metas[i];
+      const media = meta.getAttribute('media');
+      if (media) {
+        if (window.matchMedia && window.matchMedia(media).matches) {
+          const c = meta.getAttribute('content');
+          if (c) return c;
+        }
+      } else {
+        const c = meta.getAttribute('content');
+        if (c) return c;
+      }
+    }
+    const colorScheme = document.querySelector('meta[name="color-scheme"]');
+    if (colorScheme) {
+      const val = (colorScheme.getAttribute('content') || '').toLowerCase();
+      if (val.includes('dark') && !val.includes('light')) return '#121212';
+    }
+    const docEl = document.documentElement;
+    const body = document.body;
+    const isDark = (docEl && (docEl.classList.contains('dark') || docEl.getAttribute('data-theme') === 'dark')) ||
+                   (body && (body.classList.contains('dark') || body.getAttribute('data-theme') === 'dark'));
+    if (isDark) {
+      if (body) {
+        const bg = window.getComputedStyle(body).backgroundColor;
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg;
+      }
+      return '#121212';
+    }
+    if (body) {
+      const bg = window.getComputedStyle(body).backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg;
+    }
+    if (docEl) {
+      const bg = window.getComputedStyle(docEl).backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg;
+    }
+    return null;
+  }
+
+  if (!window.__gotoim_theme_observer_installed) {
+    window.__gotoim_theme_observer_installed = true;
+    function notify() {
+      try {
+        const c = getThemeColor();
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+          window.flutter_inappwebview.callHandler('onHtmlThemeChanged', c);
+        }
+      } catch (_) {}
+    }
+    const obs = new MutationObserver(function() { notify(); });
+    if (document.head) obs.observe(document.head, { childList: true, subtree: true, attributes: true });
+    if (document.documentElement) obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    if (window.matchMedia) {
+      try {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', notify);
+      } catch (_) {}
+    }
+  }
+
+  return getThemeColor();
+})();
+''';
 
 /// 类似微信内置浏览器的通用全屏 WebView 页面。
 ///
@@ -64,6 +196,27 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
   bool _canGoBack = false;
   String? _errorMessage;
   bool _showPureText = false;
+  Color? _htmlThemeColor;
+
+  void _applyThemeColor(String? colorStr) {
+    if (!mounted) return;
+    final color = parseCssColor(colorStr);
+    if (_htmlThemeColor != color) {
+      setState(() {
+        _htmlThemeColor = color;
+      });
+    }
+  }
+
+  Future<void> _detectHtmlTheme() async {
+    if (_controller == null || !mounted) return;
+    try {
+      final res = await _controller!.evaluateJavascript(source: _kThemeDetectJs);
+      if (res != null && mounted) {
+        _applyThemeColor(res.toString());
+      }
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -170,6 +323,13 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    // 优先响应 HTML meta theme-color / dark 样式，未声明时平滑回退至 App 深浅色
+    final Color effectiveBarColor = _htmlThemeColor ?? (isDark ? const Color(0xFF1E1E1E) : Colors.white);
+    final bool isBarDark = effectiveBarColor.computeLuminance() < 0.5;
+    final Color foregroundColor = isBarDark ? Colors.white : Colors.black87;
+    final Color subtitleColor = isBarDark ? Colors.white54 : Colors.black38;
+
     final displayTitle = _pageTitle.isNotEmpty
         ? _pageTitle
         : (widget.title?.isNotEmpty == true ? widget.title! : '网页');
@@ -182,8 +342,21 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
         }
       },
       child: Scaffold(
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: effectiveBarColor,
         appBar: AppBar(
+          backgroundColor: effectiveBarColor,
+          foregroundColor: foregroundColor,
+          iconTheme: IconThemeData(color: foregroundColor),
+          actionsIconTheme: IconThemeData(color: foregroundColor),
+          systemOverlayStyle: isBarDark
+              ? SystemUiOverlayStyle.light.copyWith(
+                  statusBarColor: Colors.transparent,
+                  systemNavigationBarColor: effectiveBarColor,
+                )
+              : SystemUiOverlayStyle.dark.copyWith(
+                  statusBarColor: Colors.transparent,
+                  systemNavigationBarColor: effectiveBarColor,
+                ),
           elevation: 0.5,
           scrolledUnderElevation: 1,
           leading: Row(
@@ -192,19 +365,21 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
               IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                 tooltip: '返回',
+                padding: const EdgeInsets.only(left: 8, right: 2),
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
                 onPressed: _handleBack,
               ),
               if (_canGoBack)
                 IconButton(
                   icon: const Icon(Icons.close_rounded, size: 22),
                   tooltip: '关闭',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28),
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  constraints: const BoxConstraints(minWidth: 34, minHeight: 40),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
             ],
           ),
-          leadingWidth: _canGoBack ? 78 : 56,
+          leadingWidth: _canGoBack ? 84 : 48,
           title: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -212,7 +387,11 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
                 displayTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: foregroundColor,
+                ),
               ),
               if (_domain.isNotEmpty)
                 Text(
@@ -221,7 +400,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 10.5,
-                    color: isDark ? Colors.white38 : Colors.black38,
+                    color: subtitleColor,
                     fontWeight: FontWeight.normal,
                   ),
                 ),
@@ -354,18 +533,38 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
     return InAppWebView(
       initialUrlRequest: URLRequest(url: WebUri(_currentUrl)),
       initialSettings: InAppWebViewSettings(
-        useShouldOverrideUrlLoading: true,
+        javaScriptEnabled: true,
+        domStorageEnabled: true,
+        databaseEnabled: true,
+        cacheEnabled: true,
         allowsInlineMediaPlayback: true,
-        transparentBackground: true,
+        mediaPlaybackRequiresUserGesture: false,
+        mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+        useShouldOverrideUrlLoading: false,
         supportZoom: true,
+        builtInZoomControls: true,
+        displayZoomControls: false,
+        javaScriptCanOpenWindowsAutomatically: true,
+        safeBrowsingEnabled: false,
       ),
       onWebViewCreated: (controller) {
         _controller = controller;
+        controller.addJavaScriptHandler(
+          handlerName: 'onHtmlThemeChanged',
+          callback: (args) {
+            if (args.isNotEmpty && args[0] != null) {
+              _applyThemeColor(args[0].toString());
+            } else {
+              _applyThemeColor(null);
+            }
+          },
+        );
       },
       onLoadStart: (controller, url) {
         if (!mounted) return;
         setState(() {
           _isLoading = true;
+          _htmlThemeColor = null;
           if (url != null) {
             _currentUrl = url.toString();
           }
@@ -384,6 +583,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
             _pageTitle = title;
           });
         }
+        _detectHtmlTheme();
       },
       onLoadStop: (controller, url) async {
         if (!mounted) return;
@@ -395,21 +595,25 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
             _currentUrl = url.toString();
           }
         });
+        _detectHtmlTheme();
       },
       onReceivedError: (controller, request, error) {
         if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _errorMessage = error.description;
-        });
+        // 仅主框架错误才阻断显示错误页，避免第三方统计/埋点或子资源 404 导致整屏阻断
+        if (request.isForMainFrame ?? true) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = error.description;
+          });
+        }
       },
       onConsoleMessage: (controller, consoleMessage) {
         final level = consoleMessage.messageLevel;
         final msg = consoleMessage.message;
         if (level == ConsoleMessageLevel.ERROR) {
-          debugPrint('[H5:ERROR] $msg');
+          debugPrint('\x1B[31m[H5:ERROR] $msg\x1B[0m');
         } else if (level == ConsoleMessageLevel.WARNING) {
-          debugPrint('[H5:WARN] $msg');
+          debugPrint('\x1B[33m[H5:WARN] $msg\x1B[0m');
         } else {
           debugPrint('[H5:LOG] $msg');
         }
