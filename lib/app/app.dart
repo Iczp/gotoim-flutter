@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
@@ -32,6 +33,9 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
     unawaited(ref.read(messageAlertSettingsProvider).initialize());
     ref.read(realtimeSyncCoordinatorProvider).start();
     ref.read(presenceHeartbeatCoordinatorProvider).start();

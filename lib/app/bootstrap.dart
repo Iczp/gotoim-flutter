@@ -27,6 +27,8 @@ import '../core/services/task/app_task_manager_stub.dart';
 import '../features/session/application/session_list_controller.dart';
 import '../features/workbench/data/workbench_repository.dart';
 import 'app.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+
 import 'app_navigation.dart';
 import 'application_providers.dart';
 import 'bootstrap_error_app.dart';
@@ -36,7 +38,8 @@ Future<void> bootstrap() async {
   // 注册账号切换时需要 invalidate 的 Provider 清理回调。
   ensureSessionInvalidatorRegistered();
 
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Color(0x00000000),

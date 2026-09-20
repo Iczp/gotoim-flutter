@@ -27,13 +27,13 @@ abstract class SplashCommand extends Command {
     final override = flavors[flavor] as Map?;
     if (override == null) return base;
     // Deep merge – simple recursive implementation.
-    Map<String, dynamic> result = Map.from(base);
-    void deepMerge(Map<String, dynamic> target, Map<String, dynamic> source) {
+    final result = Map<String, dynamic>.from(base);
+    void deepMerge(Map target, Map source) {
       source.forEach((key, value) {
         if (value is Map && target[key] is Map) {
           deepMerge(
-            target[key] as Map<String, dynamic>,
-            value as Map<String, dynamic>,
+            target[key] as Map,
+            value,
           );
         } else {
           target[key] = value;
