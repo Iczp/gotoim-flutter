@@ -1074,7 +1074,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ).showSnackBar(const SnackBar(content: Text('没有可转发的会话')));
       return;
     }
-    final selectedSessions = await TargetPicker.pickSessionUnits(
+    final selectedSessions = await ForwardTargetPicker.pickTargets(
       context: context,
       sessions: targets,
       title: '选择转发目标',
@@ -1104,13 +1104,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ).showSnackBar(const SnackBar(content: Text('没有可转发的会话')));
       return;
     }
-    final selectedSessions = await TargetPicker.pickSessionUnits(
+    final selectedSessions = await ForwardTargetPicker.pickTargets(
       context: context,
       sessions: targets,
       title: '合并转发',
       subtitle: '将 $count 条消息作为一张聊天记录发送',
       multiple: false,
-      showConfirmButton: false,
     );
     if (selectedSessions == null || selectedSessions.isEmpty) return;
 

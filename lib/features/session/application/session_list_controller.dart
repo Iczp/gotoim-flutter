@@ -154,6 +154,7 @@ class SessionListController extends ChangeNotifier {
   List<SessionSummary> get sessions => List.unmodifiable(_sessions);
   List<ChatOwner> get owners => _owners;
   ChatOwner? get currentOwner => _currentOwner;
+  int? get currentOwnerId => _currentOwner?.id;
   bool get isLoading => _isLoading;
   bool get isRefreshing => _isRefreshing;
   bool get isRemoteInitialized => _remoteInitialized;

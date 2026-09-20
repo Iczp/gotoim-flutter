@@ -241,6 +241,18 @@ class SessionSummary {
           asMap(raw['destination'] ?? raw['Destination'])['Id']) ??
       asInt(raw['destinationId'] ?? raw['DestinationId']);
 
+  /// 会话目标对象的头像链接。
+  String? get avatarUrl {
+    final destination = asMap(raw['destination'] ?? raw['Destination']);
+    final value = destination['thumbnail'] ??
+        destination['Thumbnail'] ??
+        destination['portrait'] ??
+        destination['Portrait'] ??
+        raw['thumbnail'] ??
+        raw['portrait'];
+    return value?.toString();
+  }
+
   /// The original client shows the transfer control for shopkeeper/waiter
   /// identities (7/8), not just when the chat destination is a shop account.
   bool get isShopkeeperOrWaiter => ownerObjectType == 7 || ownerObjectType == 8;

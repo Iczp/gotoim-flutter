@@ -70,6 +70,30 @@ class MessageApi {
     },
   );
 
+  Future<Map<String, dynamic>> sendLink({
+    required String sessionUnitId,
+    required String clientMessageId,
+    required String url,
+    String? title,
+    String? description,
+    String? image,
+    int? quoteMessageId,
+    List<String>? remindList,
+  }) => _client.post<Map<String, dynamic>>(
+    '/api/chat/message-sender/send-link/$sessionUnitId',
+    data: <String, Object?>{
+      'clientMessageId': clientMessageId,
+      if (quoteMessageId != null) 'quoteMessageId': quoteMessageId,
+      if (remindList != null && remindList.isNotEmpty) 'remindList': remindList,
+      'content': <String, Object?>{
+        'url': url,
+        if (title != null && title.isNotEmpty) 'title': title,
+        if (description != null && description.isNotEmpty) 'description': description,
+        if (image != null && image.isNotEmpty) 'image': image,
+      },
+    },
+  );
+
   Future<Map<String, dynamic>> sendUploadFile({
     required String sessionUnitId,
     required String fileName,

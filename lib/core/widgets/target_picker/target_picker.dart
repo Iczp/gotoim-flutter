@@ -5,6 +5,7 @@ import '../half_page_sheet.dart';
 import 'target_picker_models.dart';
 import 'target_picker_view.dart';
 
+export 'forward_target_picker.dart';
 export 'target_picker_models.dart';
 export 'target_picker_view.dart';
 

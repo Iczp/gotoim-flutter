@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../floating_window/floating_window.dart';
 import '../widgets/app_toast.dart';
+import 'floating_web_bubble.dart';
 import 'wechat_browser_more_sheet.dart';
 
 /// 类似微信内置浏览器的通用全屏 WebView 页面。
@@ -11,8 +14,9 @@ import 'wechat_browser_more_sheet.dart';
 /// 2. 顶部 WeChat Green (0xFF07C160) 细进度条，加载完成后自动淡出；
 /// 3. 右上角「···」（更多）操作菜单，唤起全套微信同款两排底部操作面板；
 /// 4. 离线/加载失败友好状态与离线纯文本无缝切换（可用于合规协议等场景）；
-/// 5. 提供 [AppWebViewPage.open] 快捷调起方法。
-class AppWebViewPage extends StatefulWidget {
+/// 5. 网页浮窗能力：可将网页最小化为屏幕贴边浮窗气泡，点击无缝恢复；
+/// 6. 提供 [AppWebViewPage.open] 快捷调起方法。
+class AppWebViewPage extends ConsumerStatefulWidget {
   const AppWebViewPage({
     required this.initialUrl,
     this.title,
@@ -23,10 +27,10 @@ class AppWebViewPage extends StatefulWidget {
   /// 初始打开的网页链接
   final String initialUrl;
 
-  /// 页面初始标题（网页加载完成后将动态更新为 document.title）
+  /// 可选的标题（未加载完成时占位使用）
   final String? title;
 
-  /// 离线降级备用纯文本（可供网络不可用时查看，例如协议文本）
+  /// 降级/离线查看的纯文本（若网络加载失败时可供用户阅读）
   final String? fallbackContent;
 
   /// 静态调起工具方法
@@ -48,10 +52,10 @@ class AppWebViewPage extends StatefulWidget {
   }
 
   @override
-  State<AppWebViewPage> createState() => _AppWebViewPageState();
+  ConsumerState<AppWebViewPage> createState() => _AppWebViewPageState();
 }
 
-class _AppWebViewPageState extends State<AppWebViewPage> {
+class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
   InAppWebViewController? _controller;
   late String _currentUrl;
   String _pageTitle = '';
@@ -69,6 +73,14 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
     if (InAppWebViewPlatform.instance == null) {
       _isLoading = false;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final manager = ref.read(floatingWindowManagerProvider);
+      final floatId = 'web_${widget.initialUrl.hashCode}';
+      if (manager.contains(floatId)) {
+        manager.close(floatId);
+      }
+    });
   }
 
   String get _domain {
@@ -119,7 +131,37 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
       toggleModeLabel: _showPureText ? '切换网页版' : '查看纯文本',
       toggleModeIcon: _showPureText ? Icons.language_rounded : Icons.article_outlined,
       onMinimizeToFloat: () {
-        showToast('已将网页放入浮窗', type: ToastType.info);
+        final nav = Navigator.of(context);
+        final manager = ref.read(floatingWindowManagerProvider);
+        final targetUrl = _currentUrl;
+        final targetTitle = _pageTitle.isNotEmpty ? _pageTitle : widget.title;
+        final targetFallback = widget.fallbackContent;
+        final floatId = 'web_${targetUrl.hashCode}';
+
+        void restorePage() {
+          manager.close(floatId);
+          AppWebViewPage.open(
+            nav.context,
+            url: targetUrl,
+            title: targetTitle,
+            fallbackContent: targetFallback,
+          );
+        }
+
+        manager.show(
+          id: floatId,
+          type: FloatingWindowType.webView,
+          options: FloatingWindowOptions.webView(),
+          onRestore: restorePage,
+          child: FloatingWebBubble(
+            url: targetUrl,
+            title: targetTitle,
+            onRestore: restorePage,
+            onClose: () => manager.close(floatId),
+          ),
+        );
+        nav.pop();
+        showToast('已缩为浮窗', type: ToastType.success);
       },
     );
   }

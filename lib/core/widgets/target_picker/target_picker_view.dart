@@ -326,7 +326,7 @@ class _TargetPickerViewState<T> extends State<TargetPickerView<T>> {
               controller: _chipScrollController,
               scrollDirection: Axis.horizontal,
               itemCount: selected.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final item = selected[index];
                 return Tooltip(

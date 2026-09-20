@@ -192,6 +192,73 @@ class MessageRepository {
     );
   }
 
+  Future<ChatMessage> sendLink({
+    required int ownerId,
+    required String sessionUnitId,
+    required String url,
+    String? title,
+    String? description,
+    String? image,
+    int? quoteMessageId,
+    List<String>? remindList,
+  }) async {
+    final clientMessageId = '${DateTime.now().microsecondsSinceEpoch}';
+    final maxScore = await _dao.maxScore(ownerId, sessionUnitId);
+    final now = DateTime.now();
+    final localMessage = ChatMessage(
+      localId: clientMessageId,
+      serverId: null,
+      clientMessageId: clientMessageId,
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      senderSessionUnitId: sessionUnitId,
+      messageType: 6,
+      state: 'sending',
+      score: maxScore + 1,
+      createdAt: now,
+      raw: <String, dynamic>{
+        'messageType': 6,
+        'creationTime': now.toIso8601String(),
+        'content': <String, dynamic>{
+          'url': url,
+          if (title != null && title.isNotEmpty) 'title': title,
+          if (description != null && description.isNotEmpty)
+            'description': description,
+          if (image != null && image.isNotEmpty) 'image': image,
+        },
+        if (quoteMessageId != null) 'quoteMessageId': quoteMessageId,
+        if (remindList != null && remindList.isNotEmpty) 'remindList': remindList,
+      },
+    );
+    await _dao.upsertAll(<ChatMessage>[localMessage]);
+
+    var result = localMessage;
+    try {
+      final response = await _api.sendLink(
+        sessionUnitId: sessionUnitId,
+        clientMessageId: clientMessageId,
+        url: url,
+        title: title,
+        description: description,
+        image: image,
+        quoteMessageId: quoteMessageId,
+        remindList: remindList,
+      );
+      final serverId = asInt(response['id']);
+      result = result.copyWith(
+        serverId: serverId,
+        score: serverId == null ? result.score : serverId * 1000000,
+        state: 'sent',
+        raw: <String, dynamic>{...result.raw, ...response},
+      );
+    } catch (_) {
+      result = result.copyWith(state: 'failed');
+    }
+    await _dao.upsertAll(<ChatMessage>[result]);
+    if (result.state == 'sent') await _updateSessionSummary(result);
+    return result;
+  }
+
   Future<MessagePage> loadInitialLocal({
     required int ownerId,
     required String sessionUnitId,

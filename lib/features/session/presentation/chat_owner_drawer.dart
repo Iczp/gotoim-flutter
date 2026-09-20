@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/network/abp/abp_current_user.dart';
-import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_badge.dart';

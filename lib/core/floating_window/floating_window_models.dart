@@ -38,6 +38,15 @@ class FloatingWindowOptions {
 
   factory FloatingWindowOptions.custom() => const FloatingWindowOptions();
 
+  factory FloatingWindowOptions.webView() => const FloatingWindowOptions(
+    draggable: true,
+    snapToEdge: true,
+    resizable: false,
+    keepAspectRatio: false,
+    initialSize: Size(184, 52),
+    minSize: Size(140, 44),
+  );
+
   final bool draggable;
   final bool snapToEdge;
   final bool resizable;

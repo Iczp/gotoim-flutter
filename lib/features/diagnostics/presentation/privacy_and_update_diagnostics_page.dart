@@ -121,7 +121,11 @@ class _PrivacyAndUpdateDiagnosticsPageState
       });
     });
 
-    AppUpdateDialog.show(context, version: simulated, updateService: updateService);
+    AppUpdateDialog.show(
+      context,
+      version: simulated,
+      updateService: updateService,
+    );
   }
 
   @override
@@ -132,10 +136,7 @@ class _PrivacyAndUpdateDiagnosticsPageState
     final updateService = ref.watch(appUpdateServiceProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('合规授权与版本升级诊断'),
-        elevation: 0.5,
-      ),
+      appBar: AppBar(title: const Text('合规授权与版本升级诊断'), elevation: 0.5),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -179,17 +180,19 @@ class _PrivacyAndUpdateDiagnosticsPageState
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: privacy.hasAgreed
-                              ? colorScheme.primaryContainer
-                              : colorScheme.errorContainer,
+                          color:
+                              privacy.hasAgreed
+                                  ? colorScheme.primaryContainer
+                                  : colorScheme.errorContainer,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           privacy.hasAgreed ? '已授权 (已同意)' : '未授权 (首次启动)',
                           style: TextStyle(
-                            color: privacy.hasAgreed
-                                ? colorScheme.onPrimaryContainer
-                                : colorScheme.onErrorContainer,
+                            color:
+                                privacy.hasAgreed
+                                    ? colorScheme.onPrimaryContainer
+                                    : colorScheme.onErrorContainer,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -228,9 +231,7 @@ class _PrivacyAndUpdateDiagnosticsPageState
                           await privacy.resetAgreement();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('隐私授权状态已重置为未同意'),
-                              ),
+                              const SnackBar(content: Text('隐私授权状态已重置为未同意')),
                             );
                           }
                         },
@@ -241,11 +242,13 @@ class _PrivacyAndUpdateDiagnosticsPageState
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => const AgreementViewerPage(
-                                title: PrivacyService.userAgreementTitle,
-                                content: PrivacyService.userAgreementContent,
-                                url: PrivacyService.userAgreementUrl,
-                              ),
+                              builder:
+                                  (_) => const AgreementViewerPage(
+                                    title: PrivacyService.userAgreementTitle,
+                                    content:
+                                        PrivacyService.userAgreementContent,
+                                    url: PrivacyService.userAgreementUrl,
+                                  ),
                             ),
                           );
                         },
@@ -256,11 +259,13 @@ class _PrivacyAndUpdateDiagnosticsPageState
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => const AgreementViewerPage(
-                                title: PrivacyService.privacyPolicyTitle,
-                                content: PrivacyService.privacyPolicyContent,
-                                url: PrivacyService.privacyPolicyUrl,
-                              ),
+                              builder:
+                                  (_) => const AgreementViewerPage(
+                                    title: PrivacyService.privacyPolicyTitle,
+                                    content:
+                                        PrivacyService.privacyPolicyContent,
+                                    url: PrivacyService.privacyPolicyUrl,
+                                  ),
                             ),
                           );
                         },
@@ -273,7 +278,8 @@ class _PrivacyAndUpdateDiagnosticsPageState
                             context,
                             url: PrivacyService.userAgreementUrl,
                             title: '用户协议(内置浏览器)',
-                            fallbackContent: PrivacyService.userAgreementContent,
+                            fallbackContent:
+                                PrivacyService.userAgreementContent,
                           );
                         },
                       ),
@@ -395,7 +401,10 @@ class _PrivacyAndUpdateDiagnosticsPageState
                         onPressed: _runServerCheck,
                       ),
                       FilledButton.tonalIcon(
-                        icon: const Icon(Icons.notification_important_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.notification_important_rounded,
+                          size: 16,
+                        ),
                         label: const Text('模拟普通升级弹窗'),
                         onPressed: () => _simulateUpdateDialog(isForce: false),
                       ),
@@ -439,21 +448,22 @@ class _PrivacyAndUpdateDiagnosticsPageState
                       IconButton(
                         icon: const Icon(Icons.copy_rounded, size: 18),
                         tooltip: '复制输出',
-                        onPressed: _outputJson.isEmpty
-                            ? null
-                            : () async {
-                                await Clipboard.setData(
-                                  ClipboardData(text: _outputJson),
-                                );
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('已复制诊断结果到剪贴板'),
-                                      duration: Duration(seconds: 1),
-                                    ),
+                        onPressed:
+                            _outputJson.isEmpty
+                                ? null
+                                : () async {
+                                  await Clipboard.setData(
+                                    ClipboardData(text: _outputJson),
                                   );
-                                }
-                              },
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('已复制诊断结果到剪贴板'),
+                                        duration: Duration(seconds: 1),
+                                      ),
+                                    );
+                                  }
+                                },
                       ),
                     ],
                   ),
@@ -461,19 +471,25 @@ class _PrivacyAndUpdateDiagnosticsPageState
                   Text(
                     '执行状态: $_executionStatus · 耗时: $_durationMs ms',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: _executionStatus == '执行失败'
-                          ? colorScheme.error
-                          : colorScheme.primary,
+                      color:
+                          _executionStatus == '执行失败'
+                              ? colorScheme.error
+                              : colorScheme.primary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 10),
                   Container(
                     width: double.infinity,
-                    constraints: const BoxConstraints(minHeight: 80, maxHeight: 220),
+                    constraints: const BoxConstraints(
+                      minHeight: 80,
+                      maxHeight: 220,
+                    ),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      color: colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.5,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: SingleChildScrollView(
@@ -491,7 +507,10 @@ class _PrivacyAndUpdateDiagnosticsPageState
                     ExpansionTile(
                       title: Text(
                         '异常调用栈',
-                        style: TextStyle(color: colorScheme.error, fontSize: 13),
+                        style: TextStyle(
+                          color: colorScheme.error,
+                          fontSize: 13,
+                        ),
                       ),
                       children: [
                         SelectableText(
@@ -521,11 +540,15 @@ class _PlatformSupportCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: const Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        alignment: WrapAlignment.spaceAround,
         children: [
           _PlatformItem(name: 'Android', supported: true),
           _PlatformItem(name: 'iOS', supported: true),

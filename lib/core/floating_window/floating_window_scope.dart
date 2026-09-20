@@ -15,6 +15,11 @@ class FloatingWindowScope extends InheritedWidget {
           .dependOnInheritedWidgetOfExactType<FloatingWindowScope>()!
           .manager;
 
+  static FloatingWindowManager? maybeOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<FloatingWindowScope>()
+          ?.manager;
+
   @override
   bool updateShouldNotify(FloatingWindowScope oldWidget) =>
       manager != oldWidget.manager;
