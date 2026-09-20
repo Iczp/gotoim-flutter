@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../session/application/active_chat_registry.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/browser/app_webview_page.dart';
+
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
 
@@ -516,7 +518,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       onUserTap: () => _showSenderProfile(message),
       onSessionUnitTap: _showSessionUnitProfile,
       onVoiceOpened: () => controller.markVoiceOpened(message),
-      onLinkTap: () => _copyLink(message),
+      onLinkTap: () => _openLink(message),
       mediaItems: mediaItems,
       mediaInitialIndex: mediaItems.indexWhere(
         (item) => item.id == message.localId,
@@ -744,18 +746,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     mediaInitialIndex: mediaItems.indexWhere(
       (item) => item.id == quote.localId,
     ),
-    onLinkTap: () => _copyLink(quote),
+    onLinkTap: () => _openLink(quote),
     presentation: ChatMessagePresentation.quote,
   );
 
-  Future<void> _copyLink(ChatMessage message) async {
+  Future<void> _openLink(ChatMessage message) async {
     if (message.linkUrl.isEmpty) return;
-    await controller.copyLink(message);
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('链接已复制')));
-    }
+    await AppWebViewPage.open(
+      context,
+      url: message.linkUrl,
+      title: message.linkTitle.isNotEmpty ? message.linkTitle : null,
+    );
   }
 
   GlobalKey _messageKeyFor(String localId) =>

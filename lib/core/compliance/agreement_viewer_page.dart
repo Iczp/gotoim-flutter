@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import '../browser/wechat_browser_more_sheet.dart';
+
 /// Fullscreen document reader for User Agreements and Privacy Policies.
 ///
 /// Supports online network WebView browsing with progress bar and
@@ -114,6 +116,30 @@ class _AgreementViewerPageState extends State<AgreementViewerPage> {
                   ),
                 );
               }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.more_horiz_rounded, size: 24),
+            tooltip: '更多',
+            onPressed: () {
+              showWeChatBrowserMoreSheet(
+                context,
+                url: widget.url ?? '',
+                title: widget.title,
+                onRefresh: _mode == AgreementViewMode.webView && hasValidUrl
+                    ? () {
+                        setState(() => _loadError = null);
+                        _webController?.reload();
+                      }
+                    : null,
+                onToggleMode: hasValidUrl && !kIsWeb ? _toggleMode : null,
+                toggleModeLabel: _mode == AgreementViewMode.webView
+                    ? '查看纯文本'
+                    : '查看网页版',
+                toggleModeIcon: _mode == AgreementViewMode.webView
+                    ? Icons.article_outlined
+                    : Icons.language_rounded,
+              );
             },
           ),
         ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/browser/app_webview_page.dart';
 import '../../../core/compliance/agreement_viewer_page.dart';
 import '../../../core/compliance/privacy_consent_dialog.dart';
 import '../../../core/compliance/privacy_service.dart';
@@ -261,6 +262,18 @@ class _PrivacyAndUpdateDiagnosticsPageState
                                 url: PrivacyService.privacyPolicyUrl,
                               ),
                             ),
+                          );
+                        },
+                      ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.language_rounded, size: 16),
+                        label: const Text('内置浏览器(微信更多菜单)'),
+                        onPressed: () {
+                          AppWebViewPage.open(
+                            context,
+                            url: PrivacyService.userAgreementUrl,
+                            title: '用户协议(内置浏览器)',
+                            fallbackContent: PrivacyService.userAgreementContent,
                           );
                         },
                       ),

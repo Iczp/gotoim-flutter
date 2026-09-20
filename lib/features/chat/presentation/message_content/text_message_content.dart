@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import '../../../../core/browser/app_webview_page.dart';
+
 import '../../../../core/native/native.dart';
 import '../../../../core/widgets/app_modal.dart';
 import '../../../../core/widgets/app_toast.dart';
@@ -74,16 +76,7 @@ class TextMessageContent extends StatelessWidget {
     }
 
     if (link.startsWith('http://') || link.startsWith('https://')) {
-      final confirmed = await showConfirmModal(
-        context: context,
-        title: '访问外部网页',
-        message: '即将访问：\n$link\n\n是否复制该网址？',
-        confirmText: '复制网址',
-      );
-      if (confirmed && context.mounted) {
-        await Clipboard.setData(ClipboardData(text: link));
-        showToast('链接已复制到剪贴板', type: ToastType.success);
-      }
+      await AppWebViewPage.open(context, url: link);
       return;
     }
 

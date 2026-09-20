@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/browser/app_webview_page.dart';
 import '../../core/compliance/agreement_viewer_page.dart';
 import '../../core/compliance/privacy_service.dart';
 import '../../features/auth/application/auth_controller.dart';
@@ -141,6 +142,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             title: title,
             content: state.uri.queryParameters['content'] ?? defaultContent,
             url: state.uri.queryParameters['url'] ?? defaultUrl,
+          );
+        },
+      ),
+      _buildAppRoute(
+        path: '/webview',
+        builder: (context, state) {
+          final url = state.uri.queryParameters['url'] ?? '';
+          final title = state.uri.queryParameters['title'];
+          return AppWebViewPage(
+            initialUrl: url,
+            title: title,
           );
         },
       ),
