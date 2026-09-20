@@ -403,6 +403,17 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           _errorMessage = error.description;
         });
       },
+      onConsoleMessage: (controller, consoleMessage) {
+        final level = consoleMessage.messageLevel;
+        final msg = consoleMessage.message;
+        if (level == ConsoleMessageLevel.ERROR) {
+          debugPrint('[H5:ERROR] $msg');
+        } else if (level == ConsoleMessageLevel.WARNING) {
+          debugPrint('[H5:WARN] $msg');
+        } else {
+          debugPrint('[H5:LOG] $msg');
+        }
+      },
     );
   }
 

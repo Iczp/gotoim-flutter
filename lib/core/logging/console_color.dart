@@ -42,6 +42,15 @@ bool isConsoleSuccessMessage(String message) {
       lower.contains('成功');
 }
 
+/// Formats a message with ANSI colors based on detected keywords if not already colored.
+String colorizeMessage(String message) {
+  if (message.contains('\x1B[')) return message;
+  if (isConsoleErrorMessage(message)) return '$ansiRed$message$ansiReset';
+  if (isConsoleWarningMessage(message)) return '$ansiYellow$message$ansiReset';
+  if (isConsoleSuccessMessage(message)) return '$ansiGreen$message$ansiReset';
+  return message;
+}
+
 /// Sets up ANSI colored debugPrint output so:
 /// - Errors/failures appear in bold red
 /// - Warnings appear in yellow
@@ -50,16 +59,6 @@ void setupConsoleColorLogger() {
   final originalDebugPrint = debugPrint;
   debugPrint = (String? message, {int? wrapWidth}) {
     if (message == null) return;
-    if (message.contains('\x1B[')) {
-      originalDebugPrint(message, wrapWidth: wrapWidth);
-    } else if (isConsoleErrorMessage(message)) {
-      originalDebugPrint('$ansiRed$message$ansiReset', wrapWidth: wrapWidth);
-    } else if (isConsoleWarningMessage(message)) {
-      originalDebugPrint('$ansiYellow$message$ansiReset', wrapWidth: wrapWidth);
-    } else if (isConsoleSuccessMessage(message)) {
-      originalDebugPrint('$ansiGreen$message$ansiReset', wrapWidth: wrapWidth);
-    } else {
-      originalDebugPrint(message, wrapWidth: wrapWidth);
-    }
+    originalDebugPrint(colorizeMessage(message), wrapWidth: wrapWidth);
   };
 }

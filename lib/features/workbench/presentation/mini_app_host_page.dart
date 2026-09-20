@@ -310,6 +310,17 @@ class _MiniAppHostPageState extends ConsumerState<MiniAppHostPage> {
                       setState(() => _title = title);
                     }
                   },
+                  onConsoleMessage: (controller, consoleMessage) {
+                    final level = consoleMessage.messageLevel;
+                    final msg = consoleMessage.message;
+                    if (level == ConsoleMessageLevel.ERROR) {
+                      debugPrint('[MiniApp:ERROR] $msg');
+                    } else if (level == ConsoleMessageLevel.WARNING) {
+                      debugPrint('[MiniApp:WARN] $msg');
+                    } else {
+                      debugPrint('[MiniApp:LOG] $msg');
+                    }
+                  },
                   onUpdateVisitedHistory: (controller, url, isReload) async {
                     await _session.didVisit(controller, url);
                     if (!mounted) return;

@@ -34,7 +34,7 @@ import com.example.gotoim_flutter.GotoIMApplication
  */
 class MiniAppActivity : FlutterActivity() {
 
-    override fun getRenderMode(): RenderMode = RenderMode.texture
+    override fun getRenderMode(): RenderMode = RenderMode.surface
 
     override fun shouldDestroyEngineWithHost(): Boolean = true
 

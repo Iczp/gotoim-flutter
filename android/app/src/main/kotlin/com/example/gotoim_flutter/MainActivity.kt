@@ -16,7 +16,7 @@ import com.example.gotoim_flutter.task.MiniAppActivity
 
 class MainActivity : FlutterActivity() {
 
-    override fun getRenderMode(): RenderMode = RenderMode.texture
+    override fun getRenderMode(): RenderMode = RenderMode.surface
 
     companion object {
         private const val TAG = "MainActivity"
