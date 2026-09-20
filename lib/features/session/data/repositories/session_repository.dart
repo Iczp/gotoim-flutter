@@ -36,6 +36,9 @@ class SessionRepository {
     return owners;
   }
 
+  Future<Map<int, ({int unread, int immersed})>> loadOverviewBadges() =>
+      _api.getOverviewBadges();
+
   Future<void> saveOwner(ChatOwner owner) => _dao.upsertOwners([owner]);
 
   Future<int?> readCurrentOwnerId() => _dao.readCurrentOwnerId();

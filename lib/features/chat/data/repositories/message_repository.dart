@@ -363,6 +363,9 @@ class MessageRepository {
     int limit = 99,
     int maxPages = 10,
   }) async {
+    if (minMessageId <= 0) {
+      return const <ChatMessage>[];
+    }
     var cursor = minMessageId;
     final collected = <String, ChatMessage>{};
     for (var pageIndex = 0; pageIndex < maxPages; pageIndex++) {

@@ -54,11 +54,10 @@ class ChatMessageList extends StatelessWidget {
           FloatingPopover.hideAll();
         }
         onViewingLatestChanged(notification.metrics.pixels <= 32);
-        final isUserPaging =
-            (notification is ScrollUpdateNotification &&
-                notification.dragDetails != null) ||
-            notification is OverscrollNotification;
-        if (isUserPaging && notification.metrics.extentAfter < 180) {
+        // In reverse: true ListView, older history is at maxScrollExtent (extentAfter -> 0).
+        // Trigger loading earlier (300px threshold) without requiring active finger drag
+        // so fling/momentum scrolling loads smoothly.
+        if (hasMore && !isLoading && error == null && notification.metrics.extentAfter < 300) {
           onLoadMore();
         }
         return false;
@@ -139,7 +138,7 @@ class _EmptyMessagesState extends StatelessWidget {
   }
 }
 
-class _ChatHistoryFooter extends StatelessWidget {
+class _ChatHistoryFooter extends StatefulWidget {
   const _ChatHistoryFooter({
     required this.isLoading,
     required this.hasMore,
@@ -153,25 +152,68 @@ class _ChatHistoryFooter extends StatelessWidget {
   final Future<void> Function() onLoadMore;
 
   @override
+  State<_ChatHistoryFooter> createState() => _ChatHistoryFooterState();
+}
+
+class _ChatHistoryFooterState extends State<_ChatHistoryFooter> {
+  @override
+  void initState() {
+    super.initState();
+    _checkAutoLoad();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatHistoryFooter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _checkAutoLoad();
+  }
+
+  void _checkAutoLoad() {
+    if (widget.hasMore && !widget.isLoading && widget.error == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            widget.hasMore &&
+            !widget.isLoading &&
+            widget.error == null) {
+          widget.onLoadMore();
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (isLoading) {
+    if (widget.isLoading || (widget.hasMore && widget.error == null)) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(16),
-          child: CircularProgressIndicator(),
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       );
     }
-    if (error != null) {
-      return TextButton(onPressed: onLoadMore, child: Text('加载失败，点击重试：$error'));
+    if (widget.error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextButton.icon(
+            onPressed: widget.onLoadMore,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: Text('加载失败，点击重试：${widget.error}'),
+          ),
+        ),
+      );
     }
-    return Center(
+    return const Center(
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child:
-            hasMore
-                ? TextButton(onPressed: onLoadMore, child: const Text('加载更多消息'))
-                : const Text('美好生活从这里开始'),
+        padding: EdgeInsets.all(16),
+        child: Text(
+          '美好生活从这里开始',
+          style: TextStyle(color: Colors.grey, fontSize: 12),
+        ),
       ),
     );
   }

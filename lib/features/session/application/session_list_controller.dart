@@ -182,16 +182,40 @@ class SessionListController extends ChangeNotifier {
       _connectionState == SignalRConnectionState.connected;
   int get focusUnreadRequest => _focusUnreadRequest;
 
-  /// 所有身份未读总和，用于「消息」Tab 角标。
-  int get totalUnreadCount =>
-      _owners.fold(0, (sum, o) => sum + o.unreadCount);
+  /// 当前身份的实时未读数（来自会话列表非免打扰会话）。
+  int get currentOwnerUnreadCount => _sessions
+      .where((s) => !s.isImmersed)
+      .fold(0, (sum, s) => sum + s.unreadCount);
 
-  /// 非当前身份的未读总和，用于消息页顶部头像角标数字。
+  /// 当前身份的实时免打扰未读数。
+  int get currentOwnerImmersedCount => _sessions
+      .where((s) => s.isImmersed)
+      .fold(0, (sum, s) => sum + s.unreadCount);
+
+  /// 所有身份未读总和，用于「消息」Tab 角标。
+  /// 当前身份使用活跃会话列表的实时未读数，其他身份使用各自身份的未读数。
+  int get totalUnreadCount {
+    final currentId = _currentOwner?.id;
+    var total = 0;
+    for (final owner in _owners) {
+      if (owner.id == currentId) {
+        total += currentOwnerUnreadCount;
+      } else {
+        total += owner.unreadCount;
+      }
+    }
+    if (_owners.isEmpty) {
+      total = currentOwnerUnreadCount;
+    }
+    return total;
+  }
+
+  /// 非当前身份的未读总和，用于消息页顶部身份下拉图标角标数字。
   int get otherUnreadCount => _owners
       .where((o) => o.id != _currentOwner?.id)
       .fold(0, (sum, o) => sum + o.unreadCount);
 
-  /// 非当前身份的免打扰未读总和，用于消息页顶部头像小红点。
+  /// 非当前身份的免打扰未读总和，用于消息页顶部身份下拉图标小红点。
   int get otherImmersedCount => _owners
       .where((o) => o.id != _currentOwner?.id)
       .fold(0, (sum, o) => sum + o.immersedCount);
@@ -311,6 +335,7 @@ class SessionListController extends ChangeNotifier {
         _sessions
           ..clear()
           ..addAll(cached);
+        _syncCurrentOwnerUnread();
         _hasMore = true;
         debugPrint(
           '[sessionInitialize][local] ownerId=${_currentOwner!.id} '
@@ -333,6 +358,7 @@ class SessionListController extends ChangeNotifier {
         await _repository.saveCurrentOwnerId(_currentOwner!.id);
         unawaited(_friendPresenceStore.activateOwner(_currentOwner!.id));
         await _loadNextPageInternal(reset: true);
+        _syncCurrentOwnerUnread();
         _remoteInitialized = true;
       }
       unawaited(loadDevices(silent: true));
@@ -497,9 +523,69 @@ class SessionListController extends ChangeNotifier {
       );
       if (changed) {
         _mergeLocalSessions(local);
+        _syncCurrentOwnerUnread();
         notifyListeners();
       }
     });
+  }
+
+  /// 实时同步当前身份的未读数与免打扰未读数至 _owners 与 _currentOwner。
+  void _syncCurrentOwnerUnread() {
+    final currentId = _currentOwner?.id;
+    if (currentId == null || _owners.isEmpty) return;
+    final liveUnread = currentOwnerUnreadCount;
+    final liveImmersed = currentOwnerImmersedCount;
+
+    var changed = false;
+    final nextOwners = _owners.map((owner) {
+      if (owner.id == currentId) {
+        if (owner.unreadCount != liveUnread ||
+            owner.immersedCount != liveImmersed) {
+          changed = true;
+          final updated = owner.withOverview(
+            unread: liveUnread,
+            immersed: liveImmersed,
+          );
+          _currentOwner = updated;
+          return updated;
+        }
+      }
+      return owner;
+    }).toList(growable: false);
+
+    if (changed) {
+      _owners = nextOwners;
+    }
+  }
+
+  /// 刷新服务端 Overview 角标概况（更新包括其他身份在内的未读数）。
+  Future<void> refreshOverview() async {
+    if (_owners.isEmpty) return;
+    try {
+      final badges = await _repository.loadOverviewBadges();
+      if (_owners.isEmpty) return;
+      final currentId = _currentOwner?.id;
+      final liveUnread = currentOwnerUnreadCount;
+      final liveImmersed = currentOwnerImmersedCount;
+
+      _owners = _owners.map((owner) {
+        final badge = badges[owner.id];
+        final unread = owner.id == currentId
+            ? liveUnread
+            : (badge?.unread ?? owner.unreadCount);
+        final immersed = owner.id == currentId
+            ? liveImmersed
+            : (badge?.immersed ?? owner.immersedCount);
+        final updated = owner.withOverview(unread: unread, immersed: immersed);
+        if (owner.id == currentId) {
+          _currentOwner = updated;
+        }
+        return updated;
+      }).toList(growable: false);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[refreshOverview] failed: $e');
+    }
   }
 
   void _mergeLocalSessions(List<SessionSummary> updated) {
@@ -585,6 +671,7 @@ class SessionListController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
+      unawaited(refreshOverview());
       final changedItems = await _repository.loadChanges(ownerId: owner.id);
       if (changedItems.isNotEmpty) {
         sessionScrollTrace(
@@ -593,6 +680,7 @@ class SessionListController extends ChangeNotifier {
         );
         _mergeLocalSessions(changedItems);
       }
+      _syncCurrentOwnerUnread();
     } catch (error) {
       _error = error;
       rethrow;
@@ -618,6 +706,7 @@ class SessionListController extends ChangeNotifier {
     );
     if (changed) {
       _mergeLocalSessions(local);
+      _syncCurrentOwnerUnread();
       notifyListeners();
     }
   }
@@ -673,6 +762,7 @@ class SessionListController extends ChangeNotifier {
     if (result.totalCount != null) {
       _totalCount = result.totalCount;
     }
+    _syncCurrentOwnerUnread();
   }
 }
 

@@ -55,11 +55,12 @@ class CurrentOwnerHeader extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        // 头像 + 其他身份角标
-                        _AvatarWithBadge(
-                          owner: owner,
-                          otherUnreadCount: otherUnreadCount,
-                          otherImmersedCount: otherImmersedCount,
+                        // 当前身份头像（无角标）
+                        ChatObjectAvatar(
+                          name: owner?.name ?? '-',
+                          imageUrl: owner?.imageUrl,
+                          radius: 18,
+                          chatObjectId: owner?.id,
                         ),
                         const SizedBox(width: 10),
                         Flexible(
@@ -75,8 +76,9 @@ class CurrentOwnerHeader extends ConsumerWidget {
                         if (hasMultiple)
                           Padding(
                             padding: const EdgeInsets.only(left: 4),
-                            child: Icon(
-                              Icons.keyboard_arrow_down_rounded,
+                            child: _DropdownWithBadge(
+                              otherUnreadCount: otherUnreadCount,
+                              otherImmersedCount: otherImmersedCount,
                               color: colorScheme.onSurfaceVariant,
                             ),
                           ),
@@ -146,42 +148,40 @@ class CurrentOwnerHeader extends ConsumerWidget {
   }
 }
 
-/// 头像 + 其他身份角标的组合 widget。
+/// 下拉箭头 + 其他身份角标的组合 widget。
 ///
 /// - [otherUnreadCount] > 0 → 红色数字角标（上限 99+）
 /// - [otherUnreadCount] == 0 && [otherImmersedCount] > 0 → 小红点
-/// - 否则无角标
-class _AvatarWithBadge extends StatelessWidget {
-  const _AvatarWithBadge({
-    required this.owner,
+/// - 否则仅展示下拉箭头
+class _DropdownWithBadge extends StatelessWidget {
+  const _DropdownWithBadge({
     required this.otherUnreadCount,
     required this.otherImmersedCount,
+    required this.color,
   });
 
-  final ChatOwner? owner;
   final int otherUnreadCount;
   final int otherImmersedCount;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final avatar = ChatObjectAvatar(
-      name: owner?.name ?? '-',
-      imageUrl: owner?.imageUrl,
-      radius: 18,
-      chatObjectId: owner?.id,
+    final icon = Icon(
+      Icons.keyboard_arrow_down_rounded,
+      color: color,
     );
 
     final isDotOnly = otherUnreadCount == 0 && otherImmersedCount > 0;
     if (otherUnreadCount <= 0 && !isDotOnly) {
-      return avatar;
+      return icon;
     }
 
     return AppBadge(
       count: otherUnreadCount,
       dot: isDotOnly,
       size: AppBadgeSize.small,
-      offset: const Offset(4, -4),
-      child: avatar,
+      offset: const Offset(8, -6),
+      child: icon,
     );
   }
 }

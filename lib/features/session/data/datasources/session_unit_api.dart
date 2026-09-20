@@ -18,6 +18,19 @@ class SessionUnitApi {
       response,
       ChatOwner.fromJson,
     );
+    final badges = await getOverviewBadges();
+    return page.items
+        .map((owner) {
+          final badge = badges[owner.id];
+          return owner.withOverview(
+            unread: badge?.unread ?? 0,
+            immersed: badge?.immersed ?? 0,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  Future<Map<int, ({int unread, int immersed})>> getOverviewBadges() async {
     final badges = <int, ({int unread, int immersed})>{};
     try {
       final overview = await _apiClient.get<Map<String, dynamic>>(
@@ -40,15 +53,7 @@ class SessionUnitApi {
     } on Object {
       // Overview badges are supplementary; owner switching must remain usable.
     }
-    return page.items
-        .map((owner) {
-          final badge = badges[owner.id];
-          return owner.withOverview(
-            unread: badge?.unread ?? 0,
-            immersed: badge?.immersed ?? 0,
-          );
-        })
-        .toList(growable: false);
+    return badges;
   }
 
   Future<PagedResultDto<SessionSummary>> getFriends({

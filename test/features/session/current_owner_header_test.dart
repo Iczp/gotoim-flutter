@@ -93,4 +93,62 @@ void main() {
     expect(find.text('添加好友'), findsOneWidget);
     expect(find.text('创建群聊'), findsOneWidget);
   });
+
+  testWidgets('CurrentOwnerHeader displays otherUnreadCount on dropdown arrow and not on avatar', (tester) async {
+    const owner = ChatOwner(
+      id: 1,
+      name: '管理员身份',
+      imageUrl: null,
+      typeDescription: '个人',
+    );
+    const fakeDevice = ClientDeviceContext(
+      appId: 'test-app',
+      appName: 'GotoIM',
+      appVersion: '1.0.0',
+      deviceId: 'device-test-1',
+      deviceType: '1',
+      platform: 'Android',
+      brand: 'Google',
+      model: 'Test Pixel',
+      browser: '',
+      pushClientId: '',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appEnvironmentProvider.overrideWithValue(
+            AppEnvironment.fromDotEnv(AppFlavor.development),
+          ),
+          clientDeviceContextProvider.overrideWithValue(fakeDevice),
+          friendPresenceStoreProvider.overrideWith(
+            (ref) => _FakeFriendPresenceStore(),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SafeArea(
+              child: Column(
+                children: [
+                  CurrentOwnerHeader(
+                    owner: owner,
+                    hasMultiple: true,
+                    isConnecting: false,
+                    otherUnreadCount: 5,
+                    otherImmersedCount: 0,
+                    onPressed: () {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // 验证数字角标 5 显示在界面上（下拉箭头角标）
+    expect(find.text('5'), findsOneWidget);
+    // 验证下拉图标存在
+    expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsOneWidget);
+  });
 }

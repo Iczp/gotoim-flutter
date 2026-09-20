@@ -539,6 +539,9 @@ class ChatController extends ChangeNotifier {
         sessionUnitId: sessionUnitId,
       );
       if (_isDisposed) return;
+      if (minMessageId <= 0) {
+        return;
+      }
       final latest = await _repository.loadLatest(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
