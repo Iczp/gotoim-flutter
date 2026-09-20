@@ -61,6 +61,10 @@ class SessionLastMessagePreview extends StatelessWidget {
       ),
     );
 
+    final messageState = (lastMessage['state'] ?? '').toString();
+    final isSending = messageState == 'sending' || messageState == 'pending';
+    final isFailed = messageState == 'failed';
+
     // 清洗特定标签（如 <a>user</a>、<a uid="...">name</a>、换行符）
     final cleanedPreview = stripMessageTags(item.preview);
     final displayText = cleanedPreview.isEmpty ? '-' : cleanedPreview;
@@ -68,6 +72,22 @@ class SessionLastMessagePreview extends StatelessWidget {
     return Text.rich(
       TextSpan(
         children: [
+          if (isSending)
+            TextSpan(
+              text: '[发送中...] ',
+              style: TextStyle(
+                color: colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          if (isFailed)
+            TextSpan(
+              text: '[发送失败] ',
+              style: TextStyle(
+                color: colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           if (immersed && badge > 0)
             TextSpan(
               text: '[$badge条] ',

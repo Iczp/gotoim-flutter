@@ -97,6 +97,7 @@ class ToastOptions {
     this.onAction,
     this.icon,
     this.closePrevious = true,
+    this.isLoading = false,
   });
 
   /// 提示语义。成功、失败、警告和普通信息分别有默认图标与主题颜色。
@@ -134,6 +135,9 @@ class ToastOptions {
 
   /// 显示前是否先移除上一条提示，避免高频事件堆积。
   final bool closePrevious;
+
+  /// 是否为异步加载/转圈状态。为 true 时左侧渲染 CircularProgressIndicator。
+  final bool isLoading;
 }
 
 // ── 全局 OverlayEntry 状态管理 ──────────────────────────────────────────────
@@ -204,6 +208,7 @@ bool showToast(
     onAction: effectiveOnAction,
     icon: effectiveIcon,
     closePrevious: effectiveClosePrevious,
+    isLoading: options.isLoading,
   );
 
   // 1. 触觉振动反馈
@@ -388,6 +393,43 @@ bool showInfoToast(
   closePrevious: closePrevious && options.closePrevious,
   options: options,
 );
+
+/// 展示全局 Loading 提示，返回一个可主动关闭该 Loading 的回调。
+///
+/// 采用全局独立 Overlay 渲染，不依赖任何页面 BuildContext。
+/// 即使弹窗关闭或页面销毁，也能持续展示并在后台任务完成时自动或手动销毁。
+VoidCallback showLoadingToast(
+  String message, {
+  ToastPosition? position,
+  Offset? offset,
+  double? opacity,
+  int? maxLines,
+  Duration? fallbackTimeout,
+}) {
+  showToast(
+    message,
+    type: ToastType.info,
+    position: position ?? ToastPosition.top,
+    offset: offset,
+    opacity: opacity,
+    maxLines: maxLines,
+    duration: fallbackTimeout ?? const Duration(seconds: 60),
+    closePrevious: true,
+    options: const ToastOptions(
+      type: ToastType.info,
+      isLoading: true,
+    ),
+  );
+  return dismissActiveToast;
+}
+
+/// 手动关闭当前正在展示的全局 Toast / Loading。
+void dismissActiveToast() {
+  if (_activeToast != null) {
+    _activeToast!.dismiss();
+    _activeToast = null;
+  }
+}
 
 // ── Overlay 宿主组件与动画 ───────────────────────────────────────────────────
 
@@ -581,11 +623,23 @@ class _ToastOverlayHostState extends State<_ToastOverlayHost>
                             children: <Widget>[
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
-                                child: Icon(
-                                  widget.options.icon ?? style.icon,
-                                  color: style.foregroundColor,
-                                  size: 20,
-                                ),
+                                child: widget.options.isLoading
+                                    ? SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                style.foregroundColor,
+                                              ),
+                                        ),
+                                      )
+                                    : Icon(
+                                        widget.options.icon ?? style.icon,
+                                        color: style.foregroundColor,
+                                        size: 20,
+                                      ),
                               ),
                               const SizedBox(width: 10),
                               Flexible(

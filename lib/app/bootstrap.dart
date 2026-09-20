@@ -135,25 +135,30 @@ Future<void> bootstrap() async {
       debugPrint('Warning: Deep link service initialization failed: $e');
     }
 
+    final container = ProviderContainer(
+      overrides: [
+        appEnvironmentProvider.overrideWithValue(environment),
+        platformFacadeProvider.overrideWithValue(platformFacade),
+        clientDeviceContextProvider.overrideWithValue(deviceContext),
+        localNotificationServiceProvider.overrideWithValue(
+          localNotificationService,
+        ),
+        clientCapabilityServiceProvider.overrideWithValue(capabilities),
+        jsApiDispatcherProvider.overrideWithValue(jsApiDispatcher),
+        unifiedDatabaseProvider.overrideWithValue(database),
+        mediaServiceProvider.overrideWithValue(mediaService),
+        appTaskManagerProvider.overrideWithValue(appTaskManager),
+        workbenchRepositoryProvider.overrideWithValue(workbenchRepository),
+        deepLinkServiceProvider.overrideWith((ref) => deepLinkService),
+        remoteDevServerProvider.overrideWithValue(remoteDevServer),
+        floatingWindowManagerProvider.overrideWithValue(floatingWindowManager),
+      ],
+    );
+    rootProviderContainer = container;
+
     runApp(
-      ProviderScope(
-        overrides: [
-          appEnvironmentProvider.overrideWithValue(environment),
-          platformFacadeProvider.overrideWithValue(platformFacade),
-          clientDeviceContextProvider.overrideWithValue(deviceContext),
-          localNotificationServiceProvider.overrideWithValue(
-            localNotificationService,
-          ),
-          clientCapabilityServiceProvider.overrideWithValue(capabilities),
-          jsApiDispatcherProvider.overrideWithValue(jsApiDispatcher),
-          unifiedDatabaseProvider.overrideWithValue(database),
-          mediaServiceProvider.overrideWithValue(mediaService),
-          appTaskManagerProvider.overrideWithValue(appTaskManager),
-          workbenchRepositoryProvider.overrideWithValue(workbenchRepository),
-          deepLinkServiceProvider.overrideWith((ref) => deepLinkService),
-          remoteDevServerProvider.overrideWithValue(remoteDevServer),
-          floatingWindowManagerProvider.overrideWithValue(floatingWindowManager),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: const GotoImApp(),
       ),
     );

@@ -72,7 +72,7 @@ String messageContentText(Map<String, dynamic> message) {
     ),
     3 => content['time']?.toString() ?? '',
     5 => content['fileName']?.toString() ?? '',
-    6 => content['url']?.toString() ?? '',
+    6 => firstNonEmpty([content['title'], content['url']]),
     10 || 12 => content['title']?.toString() ?? '',
     null => stripMessageTags(messagePreview(message['content'])),
     _ => '',

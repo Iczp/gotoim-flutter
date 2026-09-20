@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/chat/application/chat_controller.dart';
+import '../../app/app_navigation.dart';
 import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/data/models/session_summary.dart';
 import '../widgets/app_avatar.dart';
@@ -11,6 +13,7 @@ import '../widgets/app_toast.dart';
 import '../widgets/avatar_preferences.dart';
 import '../widgets/target_picker/forward_target_picker.dart';
 import 'forward_link_confirm_dialog.dart';
+import 'link_forward_service.dart';
 import 'recent_forward_service.dart';
 
 /// 内置浏览器「更多」操作项定义（微信风格）。
@@ -236,14 +239,18 @@ class _BrowserMoreSheetContentState
     if (sessionsToPick.isEmpty) {
       debugPrint('[BrowserMoreSheet] sessionsToPick is empty, loading from session repository...');
       try {
+        final container = globalProviderContainer;
         final currentOwnerId =
-            ref.read(sessionListControllerProvider.select((c) => c.currentOwnerId)) ?? 0;
-        final res = await ref.read(sessionRepositoryProvider).loadFriends(
-              ownerId: currentOwnerId,
-              limit: 100,
-            );
-        sessionsToPick = res.items;
-        debugPrint('[BrowserMoreSheet] Loaded ${sessionsToPick.length} sessions from repository');
+            container?.read(sessionListControllerProvider).currentOwnerId ?? 0;
+        final sessionRepo = container?.read(sessionRepositoryProvider);
+        if (sessionRepo != null) {
+          final res = await sessionRepo.loadFriends(
+            ownerId: currentOwnerId,
+            limit: 100,
+          );
+          sessionsToPick = res.items;
+          debugPrint('[BrowserMoreSheet] Loaded ${sessionsToPick.length} sessions from repository');
+        }
       } catch (e) {
         debugPrint('[BrowserMoreSheet] Failed to load sessions from repository: $e');
       }
@@ -283,7 +290,7 @@ class _BrowserMoreSheetContentState
     );
   }
 
-  /// 呼出确认发送弹窗并执行 sendLink 发送
+  /// 呼出确认发送弹窗，并在用户确认后转入全局后台静默转发（含 Loading 与 Toast 反馈）
   Future<void> _confirmAndSendLink(
     BuildContext callerContext, {
     required List<SessionSummary> targets,
@@ -309,61 +316,15 @@ class _BrowserMoreSheetContentState
 
     debugPrint('[BrowserMoreSheet] 用户确认发送! 留言内容: "${result.comment}"');
 
-    final repo = ref.read(messageRepositoryProvider);
-    final fallbackOwnerId =
-        ref.read(sessionListControllerProvider.select((c) => c.currentOwnerId)) ?? 0;
-
-    var successCount = 0;
-    var failCount = 0;
-    String? lastErrorMsg;
-
-    for (final target in targets) {
-      final effectiveOwnerId =
-          (target.ownerId != null && target.ownerId! > 0)
-              ? target.ownerId!
-              : fallbackOwnerId;
-      debugPrint(
-        '[BrowserMoreSheet] 开始发送链接消息 -> 目标: ${target.title}, '
-        'sessionUnitId: ${target.id}, ownerId: $effectiveOwnerId, url: $url, title: $title',
-      );
-      try {
-        final sentMessage = await repo.sendLink(
-          ownerId: effectiveOwnerId,
-          sessionUnitId: target.id,
-          url: url,
-          title: title,
-        );
-        if (sentMessage.state == 'failed') {
-          throw Exception('接口返回失败状态 (state=failed)');
-        }
-        debugPrint('[BrowserMoreSheet] 发送链接消息成功: target=${target.title}, msgId=${sentMessage.localId}, serverId=${sentMessage.serverId}');
-
-        if (result.comment.trim().isNotEmpty) {
-          debugPrint('[BrowserMoreSheet] 开始发送附带留言 -> 目标: ${target.title}, text: "${result.comment.trim()}"');
-          final sentComment = await repo.sendText(
-            ownerId: effectiveOwnerId,
-            sessionUnitId: target.id,
-            text: result.comment.trim(),
-          );
-          debugPrint('[BrowserMoreSheet] 发送留言成功: target=${target.title}, msgId=${sentComment.localId}');
-        }
-        await RecentForwardService.instance.record(target.id);
-        successCount++;
-      } catch (e, st) {
-        failCount++;
-        lastErrorMsg = e.toString();
-        debugPrint('[BrowserMoreSheet] 发送链接消息失败 -> target=${target.title}(${target.id}): $e\n$st');
-      }
-    }
-
-    debugPrint('[BrowserMoreSheet] 转发流程结束: 成功 $successCount 个, 失败 $failCount 个');
-    if (failCount == 0 && successCount > 0) {
-      showToast('已发送', type: ToastType.success);
-    } else if (successCount > 0) {
-      showToast('部分发送失败 ($failCount/$successCount)', type: ToastType.warning);
-    } else {
-      showToast('发送失败: ${lastErrorMsg ?? "网络异常"}', type: ToastType.error);
-    }
+    // 无论此时底栏或页面是否已被 Pop 销毁，交由全局 LinkForwardService 在后台平稳执行
+    unawaited(
+      LinkForwardService.instance.forwardLink(
+        targets: targets,
+        url: url,
+        title: title,
+        comment: result.comment,
+      ),
+    );
   }
 
   @override

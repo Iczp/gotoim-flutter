@@ -608,18 +608,31 @@ class ChatController extends ChangeNotifier {
     );
     _replaceMessage(pending);
     notifyListeners();
-    final sent = await _repository.sendText(
-      ownerId: ownerId,
-      sessionUnitId: sessionUnitId,
-      text: value,
-      quote: quote,
-      remindList: remindList,
-      clientMessageId: clientMessageId,
+
+    // 后台异步发送：即便用户立即返回或关闭聊天页，发送流程依然在后台完成；同时避免在 disposed 时触发 notifyListeners
+    unawaited(
+      () async {
+        try {
+          final sent = await _repository.sendText(
+            ownerId: ownerId,
+            sessionUnitId: sessionUnitId,
+            text: value,
+            quote: quote,
+            remindList: remindList,
+            clientMessageId: clientMessageId,
+          );
+          if (_isDisposed) return;
+          _replaceMessage(sent);
+          isSending = false;
+          notifyListeners();
+          _playSentEffect(sent);
+        } catch (_) {
+          if (_isDisposed) return;
+          isSending = false;
+          notifyListeners();
+        }
+      }(),
     );
-    _replaceMessage(sent);
-    isSending = false;
-    notifyListeners();
-    _playSentEffect(sent);
   }
 
   void updateMentionInput(String text) {
@@ -789,25 +802,41 @@ class ChatController extends ChangeNotifier {
         _pendingFiles[local.localId] = image;
         _imagePreviews[local.localId] = await image.readBytes();
         _replaceMessage(local);
-        notifyListeners();
+        if (!_isDisposed) notifyListeners();
         uploadProgress[local.localId] = 0;
-        final sent = await _repository.sendLocalImage(
-          local: local,
-          file: image,
-          onProgress: (sent, total) {
-            uploadProgress[local.localId] = total <= 0 ? 0 : sent / total;
-            notifyListeners();
-          },
+
+        unawaited(
+          () async {
+            try {
+              final sent = await _repository.sendLocalImage(
+                local: local,
+                file: image,
+                onProgress: (sent, total) {
+                  if (_isDisposed) return;
+                  uploadProgress[local.localId] =
+                      total <= 0 ? 0 : sent / total;
+                  notifyListeners();
+                },
+              );
+              if (_isDisposed) return;
+              _replaceMessage(sent);
+              if (sent.state == 'sent') _pendingFiles.remove(local.localId);
+              uploadProgress.remove(local.localId);
+              notifyListeners();
+              _playSentEffect(sent);
+            } catch (_) {
+              if (_isDisposed) return;
+              uploadProgress.remove(local.localId);
+              notifyListeners();
+            }
+          }(),
         );
-        _replaceMessage(sent);
-        if (sent.state == 'sent') _pendingFiles.remove(local.localId);
-        uploadProgress.remove(local.localId);
-        notifyListeners();
-        _playSentEffect(sent);
       }
     } catch (exception) {
-      error = exception;
-      notifyListeners();
+      if (!_isDisposed) {
+        error = exception;
+        notifyListeners();
+      }
     }
   }
 
@@ -839,21 +868,34 @@ class ChatController extends ChangeNotifier {
     _pendingFiles[local.localId] = image;
     _imagePreviews[local.localId] = await image.readBytes();
     _replaceMessage(local);
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
     uploadProgress[local.localId] = 0;
-    final sent = await _repository.sendLocalImage(
-      local: local,
-      file: image,
-      onProgress: (sent, total) {
-        uploadProgress[local.localId] = total <= 0 ? 0 : sent / total;
-        notifyListeners();
-      },
+
+    unawaited(
+      () async {
+        try {
+          final sent = await _repository.sendLocalImage(
+            local: local,
+            file: image,
+            onProgress: (sent, total) {
+              if (_isDisposed) return;
+              uploadProgress[local.localId] = total <= 0 ? 0 : sent / total;
+              notifyListeners();
+            },
+          );
+          if (_isDisposed) return;
+          _replaceMessage(sent);
+          uploadProgress.remove(local.localId);
+          if (sent.state == 'sent') _pendingFiles.remove(local.localId);
+          notifyListeners();
+          _playSentEffect(sent);
+        } catch (_) {
+          if (_isDisposed) return;
+          uploadProgress.remove(local.localId);
+          notifyListeners();
+        }
+      }(),
     );
-    _replaceMessage(sent);
-    uploadProgress.remove(local.localId);
-    if (sent.state == 'sent') _pendingFiles.remove(local.localId);
-    notifyListeners();
-    _playSentEffect(sent);
   }
 
   Future<void> _sendVideo(SelectedFile video) async {
@@ -865,20 +907,33 @@ class ChatController extends ChangeNotifier {
     _pendingFiles[local.localId] = video;
     _replaceMessage(local);
     uploadProgress[local.localId] = 0;
-    notifyListeners();
-    final sent = await _repository.sendLocalVideo(
-      local: local,
-      file: video,
-      onProgress: (sent, total) {
-        uploadProgress[local.localId] = total <= 0 ? 0 : sent / total;
-        notifyListeners();
-      },
+    if (!_isDisposed) notifyListeners();
+
+    unawaited(
+      () async {
+        try {
+          final sent = await _repository.sendLocalVideo(
+            local: local,
+            file: video,
+            onProgress: (sent, total) {
+              if (_isDisposed) return;
+              uploadProgress[local.localId] = total <= 0 ? 0 : sent / total;
+              notifyListeners();
+            },
+          );
+          if (_isDisposed) return;
+          _replaceMessage(sent);
+          uploadProgress.remove(local.localId);
+          if (sent.state == 'sent') _pendingFiles.remove(local.localId);
+          notifyListeners();
+          _playSentEffect(sent);
+        } catch (_) {
+          if (_isDisposed) return;
+          uploadProgress.remove(local.localId);
+          notifyListeners();
+        }
+      }(),
     );
-    _replaceMessage(sent);
-    uploadProgress.remove(local.localId);
-    if (sent.state == 'sent') _pendingFiles.remove(local.localId);
-    notifyListeners();
-    _playSentEffect(sent);
   }
 
   void quoteMessage(ChatMessage message) {
@@ -1088,16 +1143,26 @@ class ChatController extends ChangeNotifier {
     );
     _pendingFiles[local.localId] = file;
     _replaceMessage(local);
-    notifyListeners();
-    final sent = await _repository.sendLocalVoice(
-      local: local,
-      file: file,
-      duration: duration,
+    if (!_isDisposed) notifyListeners();
+
+    unawaited(
+      () async {
+        try {
+          final sent = await _repository.sendLocalVoice(
+            local: local,
+            file: file,
+            duration: duration,
+          );
+          if (_isDisposed) return;
+          _replaceMessage(sent);
+          if (sent.state == 'sent') _pendingFiles.remove(local.localId);
+          notifyListeners();
+          _playSentEffect(sent);
+        } catch (_) {
+          if (!_isDisposed) notifyListeners();
+        }
+      }(),
     );
-    _replaceMessage(sent);
-    if (sent.state == 'sent') _pendingFiles.remove(local.localId);
-    notifyListeners();
-    _playSentEffect(sent);
   }
 
   Future<void> _sendFile(SelectedFile file) async {
@@ -1108,13 +1173,22 @@ class ChatController extends ChangeNotifier {
     );
     _pendingFiles[local.localId] = file;
     _replaceMessage(local);
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
-    final sent = await _repository.sendLocalFile(local: local, file: file);
-    _replaceMessage(sent);
-    if (sent.state == 'sent') _pendingFiles.remove(local.localId);
-    notifyListeners();
-    _playSentEffect(sent);
+    unawaited(
+      () async {
+        try {
+          final sent = await _repository.sendLocalFile(local: local, file: file);
+          if (_isDisposed) return;
+          _replaceMessage(sent);
+          if (sent.state == 'sent') _pendingFiles.remove(local.localId);
+          notifyListeners();
+          _playSentEffect(sent);
+        } catch (_) {
+          if (!_isDisposed) notifyListeners();
+        }
+      }(),
+    );
   }
 
   Future<void> retryFile(ChatMessage message) async {
@@ -1122,19 +1196,29 @@ class ChatController extends ChangeNotifier {
     if (file == null || message.state == 'sending') return;
     final sending = message.copyWith(state: 'sending');
     _replaceMessage(sending);
-    notifyListeners();
-    final sent =
-        message.messageType == 3
-            ? await _repository.sendLocalVoice(local: sending, file: file)
-            : message.messageType == 2
-            ? await _repository.sendLocalImage(local: sending, file: file)
-            : message.messageType == 4
-            ? await _repository.sendLocalVideo(local: sending, file: file)
-            : await _repository.sendLocalFile(local: sending, file: file);
-    _replaceMessage(sent);
-    if (sent.state == 'sent') _pendingFiles.remove(message.localId);
-    notifyListeners();
-    _playSentEffect(sent);
+    if (!_isDisposed) notifyListeners();
+
+    unawaited(
+      () async {
+        try {
+          final sent =
+              message.messageType == 3
+                  ? await _repository.sendLocalVoice(local: sending, file: file)
+                  : message.messageType == 2
+                  ? await _repository.sendLocalImage(local: sending, file: file)
+                  : message.messageType == 4
+                  ? await _repository.sendLocalVideo(local: sending, file: file)
+                  : await _repository.sendLocalFile(local: sending, file: file);
+          if (_isDisposed) return;
+          _replaceMessage(sent);
+          if (sent.state == 'sent') _pendingFiles.remove(message.localId);
+          notifyListeners();
+          _playSentEffect(sent);
+        } catch (_) {
+          if (!_isDisposed) notifyListeners();
+        }
+      }(),
+    );
   }
 
   Future<void> retryMessage(ChatMessage message) async {
@@ -1143,10 +1227,19 @@ class ChatController extends ChangeNotifier {
       await retryFile(message);
       return;
     }
-    final retried = await _repository.retryText(message);
-    _replaceMessage(retried);
-    notifyListeners();
-    _playSentEffect(retried);
+    unawaited(
+      () async {
+        try {
+          final retried = await _repository.retryText(message);
+          if (_isDisposed) return;
+          _replaceMessage(retried);
+          notifyListeners();
+          _playSentEffect(retried);
+        } catch (_) {
+          if (!_isDisposed) notifyListeners();
+        }
+      }(),
+    );
   }
 
   bool canRetryMessage(ChatMessage message) =>

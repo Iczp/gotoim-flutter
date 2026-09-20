@@ -59,6 +59,7 @@ class MessageRepository {
     if (message.messageType != 0 || message.state == 'sending') return message;
     var result = message.copyWith(state: 'sending');
     await _dao.upsertAll(<ChatMessage>[result]);
+    await _updateSessionSummary(result);
     try {
       final response = await _api.sendText(
         sessionUnitId: message.sessionUnitId,
@@ -77,7 +78,7 @@ class MessageRepository {
       result = result.copyWith(state: 'failed');
     }
     await _dao.upsertAll(<ChatMessage>[result]);
-    if (result.state == 'sent') await _updateSessionSummary(result);
+    await _updateSessionSummary(result);
     return result;
   }
 
@@ -231,6 +232,8 @@ class MessageRepository {
       },
     );
     await _dao.upsertAll(<ChatMessage>[localMessage]);
+    // 立即通知会话列表更新为发送中状态
+    await _updateSessionSummary(localMessage);
 
     var result = localMessage;
     debugPrint(
@@ -261,7 +264,7 @@ class MessageRepository {
       result = result.copyWith(state: 'failed');
     }
     await _dao.upsertAll(<ChatMessage>[result]);
-    if (result.state == 'sent') await _updateSessionSummary(result);
+    await _updateSessionSummary(result);
     return result;
   }
 
@@ -436,6 +439,8 @@ class MessageRepository {
       },
     );
     await _dao.upsertAll(<ChatMessage>[local]);
+    // 立即通知会话列表更新为发送中状态
+    await _updateSessionSummary(local);
     try {
       final response = await _api.sendText(
         sessionUnitId: sessionUnitId,
@@ -463,7 +468,7 @@ class MessageRepository {
       local = local.copyWith(state: 'failed');
     }
     await _dao.upsertAll(<ChatMessage>[local]);
-    if (local.state == 'sent') await _updateSessionSummary(local);
+    await _updateSessionSummary(local);
     return local;
   }
 
@@ -561,6 +566,7 @@ class MessageRepository {
       },
     );
     await _dao.upsertAll(<ChatMessage>[message]);
+    await _updateSessionSummary(message);
     return message;
   }
 
@@ -597,6 +603,7 @@ class MessageRepository {
       },
     );
     await _dao.upsertAll(<ChatMessage>[message]);
+    await _updateSessionSummary(message);
     return message;
   }
 
@@ -659,7 +666,7 @@ class MessageRepository {
       );
     }
     await _dao.upsertAll(<ChatMessage>[result]);
-    if (result.state == 'sent') await _updateSessionSummary(result);
+    await _updateSessionSummary(result);
     return result;
   }
 
@@ -695,6 +702,7 @@ class MessageRepository {
       },
     );
     await _dao.upsertAll(<ChatMessage>[message]);
+    await _updateSessionSummary(message);
     debugPrint(
       '[sendFile][local] session=$sessionUnitId localId=$clientId '
       'name=${file.name} size=${file.size} state=sending',
@@ -736,6 +744,7 @@ class MessageRepository {
       },
     );
     await _dao.upsertAll(<ChatMessage>[message]);
+    await _updateSessionSummary(message);
     debugPrint(
       '[sendVoice][local] session=$sessionUnitId localId=$clientId '
       'durationMs=${duration.inMilliseconds} state=sending',
@@ -797,7 +806,7 @@ class MessageRepository {
       );
     }
     await _dao.upsertAll(<ChatMessage>[result]);
-    if (result.state == 'sent') await _updateSessionSummary(result);
+    await _updateSessionSummary(result);
     return result;
   }
 
@@ -838,7 +847,7 @@ class MessageRepository {
       );
     }
     await _dao.upsertAll(<ChatMessage>[result]);
-    if (result.state == 'sent') await _updateSessionSummary(result);
+    await _updateSessionSummary(result);
     return result;
   }
 
@@ -846,11 +855,15 @@ class MessageRepository {
     ChatMessage message, {
     bool incrementUnreadBadge = false,
   }) async {
+    final rawMessage = Map<String, dynamic>.from(message.raw);
+    rawMessage['state'] = message.state;
+    rawMessage['clientMessageId'] = message.clientMessageId;
+    rawMessage['messageType'] = message.messageType;
     await _sessionDao?.updateLastMessage(
       ownerId: message.ownerId,
       sessionUnitId: message.sessionUnitId,
       score: message.score,
-      message: message.raw,
+      message: rawMessage,
       incrementUnreadBadge: incrementUnreadBadge,
     );
     _sessionChangeBus?.publish(
