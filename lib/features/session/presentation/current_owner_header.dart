@@ -36,7 +36,7 @@ class CurrentOwnerHeader extends ConsumerWidget {
     final colorScheme = theme.colorScheme;
 
     return SizedBox(
-      height: 56,
+      height: 48,
       child: Material(
         color: Colors.transparent,
         child: Padding(

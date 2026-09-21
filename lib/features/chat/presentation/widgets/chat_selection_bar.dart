@@ -23,7 +23,7 @@ class ChatSelectionBar extends StatelessWidget {
     child: Material(
       elevation: 8,
       child: SizedBox(
-        height: 58,
+        height: 56,
         child: Row(
           children: <Widget>[
             IconButton(

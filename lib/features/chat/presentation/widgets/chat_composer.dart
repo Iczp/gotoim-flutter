@@ -390,7 +390,7 @@ class ChatComposerState extends State<ChatComposer>
     _recordingOverlay = OverlayEntry(
       builder:
           (context) => Positioned(
-            top: MediaQuery.paddingOf(context).top + kToolbarHeight + 18,
+            top: MediaQuery.paddingOf(context).top + 48 + 18,
             left: 42,
             right: 42,
             child: IgnorePointer(
@@ -484,7 +484,7 @@ class ChatComposerState extends State<ChatComposer>
               )
             else ...[
               Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: <Widget>[

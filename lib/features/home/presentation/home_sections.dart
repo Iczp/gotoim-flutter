@@ -97,7 +97,7 @@ class _HomeSectionWithTitle extends StatelessWidget {
           Material(
             color: _homeSectionHeaderBackground(context),
             child: SizedBox(
-              height: kToolbarHeight,
+              height: kAppHeaderHeight,
               width: double.infinity,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -120,8 +120,11 @@ class _HomeSectionWithTitle extends StatelessWidget {
   }
 }
 
+/// 统一标题栏 / AppBar 高度（含首页标题栏、聊天标题栏、各 Tab 页标题栏）
+const double kAppHeaderHeight = 48.0;
+
 /// 微信风格底部导航栏标准高度（不含系统底部安全区）
-const double kHomeBottomBarHeight = 54.0;
+const double kHomeBottomBarHeight = 56.0;
 
 /// 获取包含系统底部安全区的底部导航栏总高度（用于列表底部避让与滚动垫高）
 double getHomeBottomPadding(BuildContext context, {bool isCompact = true}) {

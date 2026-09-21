@@ -25,7 +25,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onCancelSelection;
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(48);
 
   @override
   Widget build(BuildContext context) => AppBar(

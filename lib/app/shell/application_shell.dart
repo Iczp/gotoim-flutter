@@ -235,15 +235,15 @@ class _HomeNavigationBar extends ConsumerWidget {
     final bottomSafe = MediaQuery.paddingOf(context).bottom;
     final totalUnread =
         ref.watch(sessionListControllerProvider).totalUnreadCount;
-
-    // 微信风格毛玻璃背景：浅色微乳灰白透光，深色暗黑微透光
+    // 微信风格毛玻璃背景：半透明底色让 BackdropFilter 模糊效果可见
+    // alpha ≈ 0xA8 (66%) — 足够透光看到滑过内容的模糊，又不至于完全透明
     final glassColor = isGlass
-        ? (isDark ? const Color(0xE6191919) : const Color(0xE6F7F7F7))
+        ? (isDark ? const Color(0xA8181818) : const Color(0xA8F7F7F7))
         : (isDark ? theme.colorScheme.surface : const Color(0xFFF7F7F7));
 
     final dividerColor = isDark
-        ? const Color(0x26FFFFFF)
-        : const Color(0x26000000);
+        ? const Color(0x33FFFFFF)
+        : const Color(0x1A000000);
 
     final unselectedColor = isDark
         ? const Color(0xFFA0A0A0)
