@@ -96,4 +96,32 @@ void main() {
       isNot(contains(UnifiedDatabase.diagnosticsScratchTable)),
     );
   });
+
+  test(
+    'clearing all local data preserves schema and reports deleted rows',
+    () async {
+      final database = createDatabase();
+      await database.writeSettingValue(
+        id: 'test-setting',
+        group: 'test',
+        value: '1',
+      );
+      await database.insertDiagnosticRecord(
+        id: 'clear-all-record',
+        title: 'clear all',
+        payload: const <String, Object?>{},
+      );
+
+      final deleted = await database.clearAllLocalData();
+      final overview = await database.inspect();
+
+      expect(deleted['Settings'], 1);
+      expect(deleted[UnifiedDatabase.diagnosticsTable], 1);
+      expect(
+        overview.tables.map((table) => table.name),
+        containsAll(<String>['Settings', 'Messages', 'Friends']),
+      );
+      expect(overview.tables.every((table) => table.rowCount == 0), isTrue);
+    },
+  );
 }

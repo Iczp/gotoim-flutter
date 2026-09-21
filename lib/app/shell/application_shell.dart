@@ -118,7 +118,6 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
     final isDark = theme.brightness == Brightness.dark;
 
     return PopScope(
-
       canPop: false,
       onPopInvokedWithResult: (didPop, _) => _handlePopScope(didPop),
       child: AnnotatedRegion<SystemUiOverlayStyle>(
@@ -129,7 +128,6 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
           systemNavigationBarColor: Colors.transparent,
         ),
         child: LayoutBuilder(
-
           builder: (context, constraints) {
             final layout = AppBreakpoints.resolve(constraints.maxWidth);
             final isCompact = layout == WindowLayout.mobile;
@@ -237,17 +235,16 @@ class _HomeNavigationBar extends ConsumerWidget {
         ref.watch(sessionListControllerProvider).totalUnreadCount;
     // 微信风格毛玻璃背景：半透明底色让 BackdropFilter 模糊效果可见
     // alpha ≈ 0xA8 (66%) — 足够透光看到滑过内容的模糊，又不至于完全透明
-    final glassColor = isGlass
-        ? (isDark ? const Color(0xA8181818) : const Color(0xA8F7F7F7))
-        : (isDark ? theme.colorScheme.surface : const Color(0xFFF7F7F7));
+    final glassColor =
+        isGlass
+            ? (isDark ? const Color(0xA8181818) : const Color(0xA8F7F7F7))
+            : (isDark ? theme.colorScheme.surface : const Color(0xFFF7F7F7));
 
-    final dividerColor = isDark
-        ? const Color(0x33FFFFFF)
-        : const Color(0x1A000000);
+    final dividerColor =
+        isDark ? const Color(0x33FFFFFF) : const Color(0x1A000000);
 
-    final unselectedColor = isDark
-        ? const Color(0xFFA0A0A0)
-        : const Color(0xFF262626);
+    final unselectedColor =
+        isDark ? const Color(0xFFA0A0A0) : const Color(0xFF262626);
 
     return GlassContainer(
       borderRadius: BorderRadius.zero,
@@ -263,45 +260,53 @@ class _HomeNavigationBar extends ConsumerWidget {
           child: SizedBox(
             height: kHomeBottomBarHeight,
             child: Row(
-              children: HomeSection.values.map((section) {
-                final isSelected = section == selected;
-                final unreadCount =
-                    section == HomeSection.messages ? totalUnread : 0;
-                final activeColor = theme.colorScheme.primary;
+              children: HomeSection.values
+                  .map((section) {
+                    final isSelected = section == selected;
+                    final unreadCount =
+                        section == HomeSection.messages ? totalUnread : 0;
+                    final activeColor = theme.colorScheme.primary;
 
-                return Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => onSelected(section),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        AppBadge(
-                          count: unreadCount,
-                          size: AppBadgeSize.small,
-                          offset: const Offset(4, -3),
-                          child: Icon(
-                            isSelected ? section.selectedIcon : section.icon,
-                            size: 24,
-                            color: isSelected ? activeColor : unselectedColor,
-                          ),
+                    return Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onSelected(section),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            AppBadge(
+                              count: unreadCount,
+                              size: AppBadgeSize.small,
+                              offset: const Offset(4, -3),
+                              child: Icon(
+                                isSelected
+                                    ? section.selectedIcon
+                                    : section.icon,
+                                size: 24,
+                                color:
+                                    isSelected ? activeColor : unselectedColor,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              section.label,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                height: 1.1,
+                                fontWeight:
+                                    isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                color:
+                                    isSelected ? activeColor : unselectedColor,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          section.label,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            height: 1.1,
-                            fontWeight:
-                                isSelected ? FontWeight.w600 : FontWeight.w400,
-                            color: isSelected ? activeColor : unselectedColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(growable: false),
+                      ),
+                    );
+                  })
+                  .toList(growable: false),
             ),
           ),
         ),
@@ -335,6 +340,9 @@ class _HomeNavigationRail extends ConsumerWidget {
       child: NavigationRail(
         backgroundColor: Colors.transparent,
         extended: extended,
+        // A phone in landscape can provide less than the five destinations'
+        // natural height. Let the rail scroll instead of overflowing.
+        scrollable: true,
         minExtendedWidth: 180,
         selectedIndex: HomeSection.values.indexOf(selected),
         onDestinationSelected: (index) => onSelected(HomeSection.values[index]),

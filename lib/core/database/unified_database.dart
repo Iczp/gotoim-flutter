@@ -765,6 +765,31 @@ class UnifiedDatabase {
     return _connection.runDelete('DELETE FROM ${_quote(table)}', const []);
   }
 
+  /// Clears every persisted application table while preserving the SQLite
+  /// schema and indexes. This is deliberately an explicit diagnostics action,
+  /// useful for validating first-load, offline-cache, and sync flows.
+  Future<Map<String, int>> clearAllLocalData() async {
+    await initialize();
+    const clearOrder = <String>[
+      'Messages',
+      'Members',
+      'Friends',
+      'ChatObjects',
+      'Owners',
+      'LoginUsers',
+      'Settings',
+      diagnosticsTable,
+    ];
+    final deletedRows = <String, int>{};
+    for (final table in clearOrder) {
+      deletedRows[table] = await _connection.runDelete(
+        'DELETE FROM ${_quote(table)}',
+        const [],
+      );
+    }
+    return deletedRows;
+  }
+
   /// A deliberately temporary table used to verify CREATE TABLE support in
   /// the diagnostics centre. It is not part of the application schema.
   Future<void> createDiagnosticsScratchTable() async {

@@ -142,6 +142,48 @@ class _DatabaseDiagnosticsPageState
     };
   });
 
+  Future<void> _clearAllLocalData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('清除全部本地数据库？'),
+            content: const Text(
+              '将清空本机的好友、消息、会话、账号缓存、设置和诊断记录。SQLite 表结构会保留，但数据不可恢复；之后请返回首页重新加载或重新登录。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('确认清除'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await _run(() async {
+      final stopwatch = Stopwatch()..start();
+      final deletedRows = await _database.clearAllLocalData();
+      stopwatch.stop();
+      _lastRecordId = null;
+      return <String, Object?>{
+        'operation': 'clear_all_local_data',
+        'success': true,
+        'deletedRows': deletedRows,
+        'totalDeleted': deletedRows.values.fold<int>(
+          0,
+          (sum, count) => sum + count,
+        ),
+        'elapsedMs': stopwatch.elapsedMilliseconds,
+        'nextStep': '数据库已清空；返回首页将重新加载本地/网络数据。',
+      };
+    });
+  }
+
   Future<void> _createScratch() => _run(() async {
     await _database.createDiagnosticsScratchTable();
     return <String, Object?>{
@@ -166,7 +208,9 @@ class _DatabaseDiagnosticsPageState
     final sessionUnitId = _sessionUnitIdCtrl.text.trim();
     if (sessionUnitId.isEmpty) throw ArgumentError('请填写 SessionUnit ID');
     final stats = await _database.queryMessageStatsBySession(sessionUnitId);
-    final loadedAll = await _database.readFriendMessagesLoadedAll(sessionUnitId);
+    final loadedAll = await _database.readFriendMessagesLoadedAll(
+      sessionUnitId,
+    );
     return <String, Object?>{
       'operation': 'message_stats',
       'sessionUnitId': sessionUnitId,
@@ -194,12 +238,18 @@ class _DatabaseDiagnosticsPageState
         'ownerId': ownerId,
         'limit': limit,
         'returned': rows.length,
-        'rows': rows.map((r) => <String, Object?>{
-          ...r,
-          'raw': r['raw']?.toString().substring(
-            0, (r['raw']!.toString().length).clamp(0, 300),
-          ),
-        }).toList(),
+        'rows':
+            rows
+                .map(
+                  (r) => <String, Object?>{
+                    ...r,
+                    'raw': r['raw']?.toString().substring(
+                      0,
+                      (r['raw']!.toString().length).clamp(0, 300),
+                    ),
+                  },
+                )
+                .toList(),
       };
     }
 
@@ -242,11 +292,13 @@ class _DatabaseDiagnosticsPageState
           const SizedBox(height: 16),
           _Section(
             title: 'Schema 与表操作',
-            description: '查看数据库版本、实际表、行数与 CREATE TABLE SQL；可创建/删除隔离的诊断测试表。',
+            description:
+                '查看数据库版本、实际表、行数与 CREATE TABLE SQL；可创建/删除隔离的诊断测试表。清除全部本地数据会保留表结构，并要求二次确认。',
             children: [
               _button('检查 schema 与表', _inspect),
               _button('CREATE TABLE diagnostic_scratch', _createScratch),
               _button('DROP TABLE diagnostic_scratch', _dropScratch),
+              _button('清除全部本地数据库（测试用）', _clearAllLocalData),
             ],
           ),
           _Section(
