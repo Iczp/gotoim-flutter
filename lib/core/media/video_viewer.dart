@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../app/app_navigation.dart';
@@ -57,6 +58,7 @@ class _VideoViewerState extends State<VideoViewer>
   double _sliderValue = 0.0;
   bool _isMuted = false;
   bool _hasShownErrorToast = false;
+  bool _autoPlayRequested = false;
 
   @override
   void initState() {
@@ -64,9 +66,17 @@ class _VideoViewerState extends State<VideoViewer>
     _session = VideoPlaybackSessionRegistry.obtain(
       _sessionId,
       widget.item.source,
-    )..initialize();
+    );
     _session.addListener(_onSessionChanged);
+    unawaited(_initializeAndAutoPlay());
     _startHideTimer();
+  }
+
+  Future<void> _initializeAndAutoPlay() async {
+    await _session.initialize();
+    if (!mounted || _autoPlayRequested || !_session.isReady) return;
+    _autoPlayRequested = true;
+    await _session.controller?.play();
   }
 
   @override
@@ -99,17 +109,31 @@ class _VideoViewerState extends State<VideoViewer>
       if (_session.error != null && !_hasShownErrorToast) {
         _hasShownErrorToast = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          showToast('视频加载失败: ${_formatErrorMessage(_session.error)}', type: ToastType.error);
+          showToast(
+            '视频加载失败: ${_formatErrorMessage(_session.error)}',
+            type: ToastType.error,
+          );
         });
       }
-      setState(() {});
+      // video_player may notify while a gesture's build is in progress.
+      // Scheduling avoids markNeedsBuild during that framework phase.
+      if (SchedulerBinding.instance.schedulerPhase ==
+          SchedulerPhase.persistentCallbacks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      } else {
+        setState(() {});
+      }
     }
   }
 
   void _startHideTimer() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(milliseconds: 3500), () {
-      if (mounted && _session.controller?.value.isPlaying == true && !_isDraggingSlider) {
+      if (mounted &&
+          _session.controller?.value.isPlaying == true &&
+          !_isDraggingSlider) {
         setState(() => _showControls = false);
       }
     });
@@ -198,10 +222,7 @@ class _VideoViewerState extends State<VideoViewer>
       if (widget.heroTag != null) {
         loading = Hero(tag: widget.heroTag!, child: loading);
       }
-      return Material(
-        type: MaterialType.transparency,
-        child: loading,
-      );
+      return Material(type: MaterialType.transparency, child: loading);
     }
 
     final value = controller.value;
@@ -209,9 +230,13 @@ class _VideoViewerState extends State<VideoViewer>
     final position = value.position;
     final isCompleted = position >= duration && duration > Duration.zero;
 
-    final progress = duration.inMilliseconds > 0
-        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
-        : 0.0;
+    final progress =
+        duration.inMilliseconds > 0
+            ? (position.inMilliseconds / duration.inMilliseconds).clamp(
+              0.0,
+              1.0,
+            )
+            : 0.0;
 
     final content = Material(
       type: MaterialType.transparency,
@@ -227,10 +252,7 @@ class _VideoViewerState extends State<VideoViewer>
                 aspectRatio: value.aspectRatio,
                 child: Stack(
                   fit: StackFit.expand,
-                  children: [
-                    buildCover(),
-                    VideoPlayer(controller),
-                  ],
+                  children: [buildCover(), VideoPlayer(controller)],
                 ),
               ),
             ),
@@ -250,8 +272,8 @@ class _VideoViewerState extends State<VideoViewer>
                       isCompleted
                           ? Icons.replay_circle_filled
                           : value.isPlaying
-                              ? Icons.pause_circle_filled
-                              : Icons.play_circle_fill,
+                          ? Icons.pause_circle_filled
+                          : Icons.play_circle_fill,
                       color: Colors.white.withValues(alpha: 0.9),
                       shadows: const [
                         Shadow(blurRadius: 8, color: Colors.black54),
@@ -268,7 +290,10 @@ class _VideoViewerState extends State<VideoViewer>
                 child: Opacity(
                   opacity: 0.8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
@@ -307,12 +332,14 @@ class _VideoViewerState extends State<VideoViewer>
                               overlayShape: const RoundSliderOverlayShape(
                                 overlayRadius: 14,
                               ),
-                              activeTrackColor: Theme.of(context).colorScheme.primary,
+                              activeTrackColor:
+                                  Theme.of(context).colorScheme.primary,
                               inactiveTrackColor: Colors.white24,
                               thumbColor: Colors.white,
                             ),
                             child: Slider(
-                              value: _isDraggingSlider ? _sliderValue : progress,
+                              value:
+                                  _isDraggingSlider ? _sliderValue : progress,
                               onChangeStart: (val) {
                                 _isDraggingSlider = true;
                                 _sliderValue = val;
@@ -325,8 +352,11 @@ class _VideoViewerState extends State<VideoViewer>
                               },
                               onChangeEnd: (val) async {
                                 _isDraggingSlider = false;
-                                final targetMs = (val * duration.inMilliseconds).toInt();
-                                await controller.seekTo(Duration(milliseconds: targetMs));
+                                final targetMs =
+                                    (val * duration.inMilliseconds).toInt();
+                                await controller.seekTo(
+                                  Duration(milliseconds: targetMs),
+                                );
                                 _startHideTimer();
                               },
                             ),
@@ -380,12 +410,14 @@ void openFloatingVideoWindow(
   // 若小窗口已经存在，直接激活并置顶
   if (manager.restore(id)) return;
 
-  final session = VideoPlaybackSessionRegistry.obtain(id, item.source)..initialize();
+  final session = VideoPlaybackSessionRegistry.obtain(id, item.source)
+    ..initialize();
 
   void restoreToFullscreen() {
     manager.close(id);
     if (items != null && items.isNotEmpty) {
-      final nav = rootNavigatorKey.currentState ??
+      final nav =
+          rootNavigatorKey.currentState ??
           Navigator.maybeOf(context, rootNavigator: true) ??
           Navigator.maybeOf(context);
       if (nav != null) {
@@ -434,13 +466,12 @@ class FloatingVideoContent extends StatefulWidget {
 }
 
 class _FloatingVideoContentState extends State<FloatingVideoContent> {
+  bool _autoPlayScheduled = false;
   @override
   void initState() {
     super.initState();
     widget.session.addListener(_refresh);
-    if (widget.autoPlay && widget.session.isReady) {
-      widget.session.controller?.play();
-    }
+    _requestAutoPlay();
   }
 
   @override
@@ -450,14 +481,21 @@ class _FloatingVideoContentState extends State<FloatingVideoContent> {
   }
 
   void _refresh() {
-    if (mounted) {
-      if (widget.autoPlay &&
-          widget.session.isReady &&
-          widget.session.controller?.value.isPlaying == false) {
-        widget.session.controller?.play();
-      }
-      setState(() {});
-    }
+    if (!mounted) return;
+    _requestAutoPlay();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _requestAutoPlay() {
+    if (!widget.autoPlay || _autoPlayScheduled || !widget.session.isReady)
+      return;
+    _autoPlayScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await widget.session.controller?.play();
+    });
   }
 
   @override
@@ -494,9 +532,7 @@ class _FloatingVideoContentState extends State<FloatingVideoContent> {
                     : Icons.play_circle_fill,
                 size: 44,
                 color: Colors.white.withValues(alpha: 0.9),
-                shadows: const [
-                  Shadow(blurRadius: 6, color: Colors.black54),
-                ],
+                shadows: const [Shadow(blurRadius: 6, color: Colors.black54)],
               ),
             ),
           ),
@@ -533,7 +569,10 @@ class _FloatingVideoContentState extends State<FloatingVideoContent> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [

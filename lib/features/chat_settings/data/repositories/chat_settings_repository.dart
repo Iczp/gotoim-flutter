@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/network/api_client.dart';
 import '../datasources/chat_member_api.dart';
 import '../datasources/chat_member_dao.dart';
 import '../models/chat_member.dart';
@@ -94,8 +95,8 @@ class ChatSettingsRepository {
     await _api.setRename(id, rename);
   }
 
-  Future<void> setBackgroundImage(String id, String? imageUrl) async {
-    await _api.setBackgroundImage(id, imageUrl);
+  Future<void> setBackgroundImage(String id, MultipartUploadFile file) async {
+    await _api.setBackgroundImage(id: id, file: file);
   }
 
   Future<void> setRoomTitle(String roomId, String title) async {

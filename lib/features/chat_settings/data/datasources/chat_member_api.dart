@@ -49,12 +49,14 @@ class ChatMemberApi {
         query: <String, Object?>{'rename': rename},
       );
 
-  Future<Map<String, dynamic>> setBackgroundImage(
-    String id,
-    String? imageUrl,
-  ) => _client.post<Map<String, dynamic>>(
+  Future<Map<String, dynamic>> setBackgroundImage({
+    required String id,
+    required MultipartUploadFile file,
+    void Function(int sent, int total)? onProgress,
+  }) => _client.postMultipart<Map<String, dynamic>>(
     '/api/chat/session-unit-setting/set-background-image/$id',
-    query: <String, Object?>{if (imageUrl != null) 'backgroundImage': imageUrl},
+    file: file,
+    onProgress: onProgress,
   );
 
   Future<Map<String, dynamic>> setRoomTitle(String roomId, String title) =>

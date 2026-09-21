@@ -79,12 +79,27 @@ class VideoPlaybackSession extends ChangeNotifier {
 abstract final class VideoPlaybackSessionRegistry {
   static final Map<String, VideoPlaybackSession> _sessions =
       <String, VideoPlaybackSession>{};
+  static final Map<String, int> _references = <String, int>{};
 
-  static VideoPlaybackSession obtain(String id, String source) =>
-      _sessions.putIfAbsent(id, () => VideoPlaybackSession(source));
+  /// Each visual host (full screen or floating window) owns one reference.
+  /// This lets a controller survive the handoff between those two surfaces.
+  static VideoPlaybackSession obtain(String id, String source) {
+    final session = _sessions.putIfAbsent(
+      id,
+      () => VideoPlaybackSession(source),
+    );
+    _references[id] = (_references[id] ?? 0) + 1;
+    return session;
+  }
 
   static void release(String id, VideoPlaybackSession session) {
     if (!identical(_sessions[id], session)) return;
+    final remaining = (_references[id] ?? 1) - 1;
+    if (remaining > 0) {
+      _references[id] = remaining;
+      return;
+    }
+    _references.remove(id);
     _sessions.remove(id);
     session.dispose();
   }

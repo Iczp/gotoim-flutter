@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/network/api_client.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/presentation/chat_object_avatar.dart';
@@ -264,7 +265,13 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked != null && mounted) {
       try {
-        await controller.setBackgroundImage(picked.path);
+        await controller.setBackgroundImage(
+          MultipartUploadFile(
+            name: picked.name,
+            length: await picked.length(),
+            openRead: picked.openRead,
+          ),
+        );
         showToast('聊天背景已设置', type: ToastType.success);
       } catch (e) {
         showToast('设置背景失败：$e', type: ToastType.error);

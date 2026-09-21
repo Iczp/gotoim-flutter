@@ -35,6 +35,7 @@ class ChatMessageRow extends StatelessWidget {
     required this.uploadProgress,
     required this.apiBaseUrl,
     required this.selected,
+    this.highlighted = false,
     required this.selectionMode,
     required this.onQuoteTap,
     this.quoteContent,
@@ -132,6 +133,9 @@ class ChatMessageRow extends StatelessWidget {
   /// 多选模式下当前消息是否已被选中
   final bool selected;
 
+  /// A short-lived target state shown after jumping from a quote preview.
+  final bool highlighted;
+
   /// 是否处于多选模式
   final bool selectionMode;
 
@@ -171,228 +175,242 @@ class ChatMessageRow extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Column(
-        children: <Widget>[
-          if (showUnreadDivider)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: <Widget>[
-                  Expanded(child: Divider()),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: Text('以下为新消息'),
-                  ),
-                  Expanded(child: Divider()),
-                ],
-              ),
-            ),
-          if (showTime)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Text(
-                _time(message.createdAt),
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              const selectionSlotWidth = 36.0;
-              const avatarSlotWidth = 44.0;
-              const contentPadding = 12.0;
-              final selectionWidth = selectionMode ? selectionSlotWidth : 0.0;
-              final availableWidth = constraints.maxWidth - selectionWidth;
-
-              final contentMaxWidth = (availableWidth -
-                      (showAvatar ? avatarSlotWidth + contentPadding : 0.0))
-                  .clamp(0.0, double.infinity);
-
-              // 响应式拟定消息气泡的最大宽度：
-              // 1. 移动端窄屏（< 600px）：利用率提升至 78%，文本更易读且不易产生过度断行；
-              // 2. 平板与桌面宽屏（>= 600px）：限制在 68% 且设定上限 620px，保证舒适阅读视线，防止单行文字过长。
-              final double bubbleWidth;
-              if (constraints.maxWidth < 600) {
-                bubbleWidth = contentMaxWidth * 0.78;
-              } else {
-                bubbleWidth = (contentMaxWidth * 0.68).clamp(360.0, 620.0);
-              }
-
-              Widget? avatarWidget;
-              if (showAvatar) {
-                Widget av = ChatObjectAvatar(
-                  name: message.senderName,
-                  imageUrl: message.senderAvatarUrl,
-                  size: 44,
-                  radius: 22,
-                  chatObjectId: message.senderChatObjectId,
-                );
-                av = GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onUserTap,
-                  onLongPress:
-                      onUserLongPress ??
-                      () {
-                        avatarMenuController?.show();
-                      },
-                  child: av,
-                );
-                if (avatarMenuBuilder != null) {
-                  av = FloatingPopover(
-                    controller: avatarMenuController,
-                    contentBuilder: avatarMenuBuilder!,
-                    placement: FloatingPlacement.avatar,
-                    offset: avatarMenuOffset,
-                    vibrateCount: 1,
-                    child: av,
-                  );
-                }
-                avatarWidget = av;
-              }
-
-              Widget messageContentWidget = ChatMessageContentRenderer(
-                message: message,
-                attachmentState: attachmentState,
-                onVoiceOpened: onVoiceOpened,
-                onAttachmentDownload: onAttachmentDownload,
-                onAttachmentCancel: onAttachmentCancel,
-                onAttachmentOpen: onAttachmentOpen,
-                onAttachmentSaveAs: onAttachmentSaveAs,
-                imageBytes: imageBytes,
-                uploadProgress: uploadProgress,
-                apiBaseUrl: apiBaseUrl,
-                mediaItems: mediaItems,
-                mediaInitialIndex: mediaInitialIndex,
-                onLinkTap: onLinkTap,
-                onRetry: onRetry,
-                maxWidth: bubbleWidth,
-              );
-
-              if (contentMenuBuilder != null) {
-                messageContentWidget = FloatingPopover(
-                  controller: contentMenuController,
-                  contentBuilder: contentMenuBuilder!,
-                  placement: FloatingPlacement.auto,
-                  offset: contentMenuOffset,
-                  child: messageContentWidget,
-                );
-              }
-
-              final messageBody = Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      message.isMine
-                          ? CrossAxisAlignment.end
-                          : CrossAxisAlignment.start,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        color:
+            selected
+                ? Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withValues(alpha: .42)
+                : highlighted
+                ? Theme.of(
+                  context,
+                ).colorScheme.tertiaryContainer.withValues(alpha: .52)
+                : Colors.transparent,
+        child: Column(
+          children: <Widget>[
+            if (showUnreadDivider)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Row(
                   children: <Widget>[
-                    // 发送人名称 (各自加 padding: 12)
-                    if (!message.isMine && _senderLabel.isNotEmpty)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: contentPadding,
-                          ).copyWith(bottom: 4),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(4),
-                            onTap: onUserTap,
-                            child: Text(
-                              _senderLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelSmall,
-                            ),
-                          ),
-                        ),
-                      ),
-                    // 各种消息（自个约束，不加 padding，气泡尾巴宽度 12）
-                    Align(
-                      alignment:
-                          message.isMine
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                      child: messageContentWidget,
+                    Expanded(child: Divider()),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('以下为新消息'),
                     ),
-                    // 引用消息 (各自加 padding: 12)
-                    if (renderedQuote != null)
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          left: contentPadding,
-                          right: contentPadding,
-                          top: 6,
-                        ),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: bubbleWidth),
-                          child: ChatQuotePreview(
-                            senderName: message.quoteSenderName,
-                            content: renderedQuote,
-                            onTap: onQuoteTap,
-                          ),
-                        ),
-                      ),
+                    Expanded(child: Divider()),
                   ],
                 ),
-              );
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  // - 复选框（编辑模式下才显示）
-                  if (selectionMode)
-                    SizedBox(
-                      width: selectionSlotWidth,
-                      child: Center(
-                        child: Checkbox(
-                          value: selected,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                          onChanged: (_) => onTap?.call(),
-                        ),
-                      ),
-                    ),
-                  // - 消息（占满）
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children:
-                          message.isMine
-                              ? <Widget>[
-                                // 消息内容（占满）
-                                messageBody,
-                                if (showAvatar &&
-                                    avatarWidget != null) ...<Widget>[
-                                  const SizedBox(width: contentPadding),
-                                  avatarWidget,
-                                ],
-                              ]
-                              : <Widget>[
-                                if (showAvatar &&
-                                    avatarWidget != null) ...<Widget>[
-                                  avatarWidget,
-                                  const SizedBox(width: contentPadding),
-                                ],
-                                // 消息内容（占满）
-                                messageBody,
-                              ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          if (showPeerRead)
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 47, bottom: 3),
+              ),
+            if (showTime)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Text(
-                  '已读',
+                  _time(message.createdAt),
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
               ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const selectionSlotWidth = 36.0;
+                const avatarSlotWidth = 44.0;
+                const contentPadding = 12.0;
+                final selectionWidth = selectionMode ? selectionSlotWidth : 0.0;
+                final availableWidth = constraints.maxWidth - selectionWidth;
+
+                final contentMaxWidth = (availableWidth -
+                        (showAvatar ? avatarSlotWidth + contentPadding : 0.0))
+                    .clamp(0.0, double.infinity);
+
+                // 响应式拟定消息气泡的最大宽度：
+                // 1. 移动端窄屏（< 600px）：利用率提升至 78%，文本更易读且不易产生过度断行；
+                // 2. 平板与桌面宽屏（>= 600px）：限制在 68% 且设定上限 620px，保证舒适阅读视线，防止单行文字过长。
+                final double bubbleWidth;
+                if (constraints.maxWidth < 600) {
+                  bubbleWidth = contentMaxWidth * 0.78;
+                } else {
+                  bubbleWidth = (contentMaxWidth * 0.68).clamp(360.0, 620.0);
+                }
+
+                Widget? avatarWidget;
+                if (showAvatar) {
+                  Widget av = ChatObjectAvatar(
+                    name: message.senderName,
+                    imageUrl: message.senderAvatarUrl,
+                    size: 44,
+                    radius: 22,
+                    chatObjectId: message.senderChatObjectId,
+                  );
+                  av = GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onUserTap,
+                    onLongPress:
+                        onUserLongPress ??
+                        () {
+                          avatarMenuController?.show();
+                        },
+                    child: av,
+                  );
+                  if (avatarMenuBuilder != null) {
+                    av = FloatingPopover(
+                      controller: avatarMenuController,
+                      contentBuilder: avatarMenuBuilder!,
+                      placement: FloatingPlacement.avatar,
+                      offset: avatarMenuOffset,
+                      vibrateCount: 1,
+                      child: av,
+                    );
+                  }
+                  avatarWidget = av;
+                }
+
+                Widget messageContentWidget = ChatMessageContentRenderer(
+                  message: message,
+                  attachmentState: attachmentState,
+                  onVoiceOpened: onVoiceOpened,
+                  onAttachmentDownload: onAttachmentDownload,
+                  onAttachmentCancel: onAttachmentCancel,
+                  onAttachmentOpen: onAttachmentOpen,
+                  onAttachmentSaveAs: onAttachmentSaveAs,
+                  imageBytes: imageBytes,
+                  uploadProgress: uploadProgress,
+                  apiBaseUrl: apiBaseUrl,
+                  mediaItems: mediaItems,
+                  mediaInitialIndex: mediaInitialIndex,
+                  onLinkTap: onLinkTap,
+                  onRetry: onRetry,
+                  maxWidth: bubbleWidth,
+                );
+
+                if (contentMenuBuilder != null) {
+                  messageContentWidget = FloatingPopover(
+                    controller: contentMenuController,
+                    contentBuilder: contentMenuBuilder!,
+                    placement: FloatingPlacement.auto,
+                    offset: contentMenuOffset,
+                    child: messageContentWidget,
+                  );
+                }
+
+                final messageBody = Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        message.isMine
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                    children: <Widget>[
+                      // 发送人名称 (各自加 padding: 12)
+                      if (!message.isMine && _senderLabel.isNotEmpty)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: contentPadding,
+                            ).copyWith(bottom: 4),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(4),
+                              onTap: onUserTap,
+                              child: Text(
+                                _senderLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
+                            ),
+                          ),
+                        ),
+                      // 各种消息（自个约束，不加 padding，气泡尾巴宽度 12）
+                      Align(
+                        alignment:
+                            message.isMine
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                        child: messageContentWidget,
+                      ),
+                      // 引用消息 (各自加 padding: 12)
+                      if (renderedQuote != null)
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            left: contentPadding,
+                            right: contentPadding,
+                            top: 6,
+                          ),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: bubbleWidth),
+                            child: ChatQuotePreview(
+                              senderName: message.quoteSenderName,
+                              content: renderedQuote,
+                              onTap: onQuoteTap,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    // - 复选框（编辑模式下才显示）
+                    if (selectionMode)
+                      SizedBox(
+                        width: selectionSlotWidth,
+                        child: Center(
+                          child: Checkbox(
+                            value: selected,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                            onChanged: (_) => onTap?.call(),
+                          ),
+                        ),
+                      ),
+                    // - 消息（占满）
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children:
+                            message.isMine
+                                ? <Widget>[
+                                  // 消息内容（占满）
+                                  messageBody,
+                                  if (showAvatar &&
+                                      avatarWidget != null) ...<Widget>[
+                                    const SizedBox(width: contentPadding),
+                                    avatarWidget,
+                                  ],
+                                ]
+                                : <Widget>[
+                                  if (showAvatar &&
+                                      avatarWidget != null) ...<Widget>[
+                                    avatarWidget,
+                                    const SizedBox(width: contentPadding),
+                                  ],
+                                  // 消息内容（占满）
+                                  messageBody,
+                                ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
-        ],
+            const SizedBox(height: 8),
+            if (showPeerRead)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 47, bottom: 3),
+                  child: Text(
+                    '已读',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

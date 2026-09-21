@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -107,6 +108,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   List<MediaPreviewItem> _mediaItems = const <MediaPreviewItem>[];
   String _mediaItemsFingerprint = '';
   int _timeVisibilityResetMarker = 0;
+  String? _highlightedMessageLocalId;
+  Timer? _quoteHighlightTimer;
   final Stopwatch _pageStopwatch = Stopwatch();
 
   @override
@@ -154,6 +157,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _activeChatRegistry.leaveChat(widget.sessionUnitId);
     unawaited(_audioPlayback.stop());
     controller.dispose();
+    _quoteHighlightTimer?.cancel();
     input.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -376,7 +380,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.95),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.95,
+        ),
         border: Border(
           top: BorderSide(
             color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
@@ -545,6 +551,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       uploadProgress: controller.uploadProgress[message.localId],
       apiBaseUrl: ref.read(appEnvironmentProvider).apiBaseUrl,
       selected: controller.selectedLocalIds.contains(message.localId),
+      highlighted: _highlightedMessageLocalId == message.localId,
       selectionMode: controller.selectionMode,
       onTap:
           controller.selectionMode
@@ -1151,6 +1158,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
             curve: Curves.easeOutCubic,
             alignment: .35,
           );
+          _quoteHighlightTimer?.cancel();
+          if (mounted)
+            setState(() => _highlightedMessageLocalId = target.localId);
+          _quoteHighlightTimer = Timer(const Duration(milliseconds: 1300), () {
+            if (mounted) setState(() => _highlightedMessageLocalId = null);
+          });
           return;
         }
       }

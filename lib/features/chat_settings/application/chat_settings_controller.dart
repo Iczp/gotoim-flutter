@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
+import '../../../core/network/api_client.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/data/models/session_summary_helpers.dart';
 import '../../session/data/repositories/session_repository.dart';
@@ -161,8 +162,8 @@ class ChatSettingsController extends ChangeNotifier {
   Future<void> setRename(String value) =>
       _updateSetting(() => _repository.setRename(sessionUnitId, value));
 
-  Future<void> setBackgroundImage(String? imageUrl) =>
-      _updateSetting(() => _repository.setBackgroundImage(sessionUnitId, imageUrl));
+  Future<void> setBackgroundImage(MultipartUploadFile file) =>
+      _updateSetting(() => _repository.setBackgroundImage(sessionUnitId, file));
 
   Future<void> setGroupName(String name) {
     if (sessionId == null) return Future.value();
