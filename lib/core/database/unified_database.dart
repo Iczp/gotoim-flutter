@@ -188,6 +188,49 @@ class UnifiedDatabase {
     );
   }
 
+  /// Repairs cache rows written by older clients which mistakenly stored a
+  /// message score in Friends.score. FriendScore is defined by the backend as
+  /// Sorting * 1e13 + Ticks, so this can be recovered from persisted fields
+  /// without waiting for another network sync.
+  Future<int> repairFriendScores(int ownerId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT id, score, sorting, ticks, raw FROM Friends WHERE ownerId = ?',
+      <Object?>[ownerId],
+    );
+    var repaired = 0;
+    for (final row in rows) {
+      final sorting = (row['sorting'] as num?)?.toInt() ?? 0;
+      final ticks = (row['ticks'] as num?)?.toInt() ?? 0;
+      final expectedScore = sorting * 10000000000000 + ticks;
+      final actualScore = (row['score'] as num?)?.toInt();
+      if (actualScore == expectedScore) continue;
+
+      String? updatedRaw;
+      if (row['raw'] case final String rawJson) {
+        try {
+          final decoded = jsonDecode(rawJson);
+          if (decoded is Map) {
+            final raw = Map<String, dynamic>.from(decoded);
+            raw['sorting'] = sorting;
+            raw['ticks'] = ticks;
+            raw['score'] = expectedScore;
+            updatedRaw = jsonEncode(raw);
+          }
+        } on FormatException {
+          // Keep the cache record readable even if its raw payload is stale.
+        }
+      }
+      await _connection.runUpdate(
+        'UPDATE Friends SET score = ?, raw = COALESCE(?, raw) WHERE id = ? '
+        'AND ownerId = ?',
+        <Object?>[expectedScore, updatedRaw, row['id'], ownerId],
+      );
+      repaired++;
+    }
+    return repaired;
+  }
+
   Future<List<Map<String, Object?>>> readMemberRows({
     required int ownerId,
     required String sessionUnitId,
@@ -312,13 +355,12 @@ class UnifiedDatabase {
   Future<void> updateFriendLastMessage({
     required int ownerId,
     required String sessionUnitId,
-    required int score,
     required Map<String, dynamic> message,
     bool incrementUnreadBadge = false,
   }) async {
     await initialize();
     final rows = await _connection.runSelect(
-      'SELECT raw FROM Friends WHERE id = ? AND ownerId = ? LIMIT 1',
+      'SELECT raw, sorting FROM Friends WHERE id = ? AND ownerId = ? LIMIT 1',
       <Object?>[sessionUnitId, ownerId],
     );
     if (rows.isEmpty || rows.single['raw'] is! String) return;
@@ -328,10 +370,22 @@ class UnifiedDatabase {
     final messageTime =
         DateTime.tryParse('${message['creationTime'] ?? ''}') ?? DateTime.now();
     final ticks = messageTime.millisecondsSinceEpoch;
+    final rawSorting =
+        raw['sorting'] ?? raw['Sorting'] ?? rows.single['sorting'];
+    final sorting =
+        rawSorting is num
+            ? rawSorting.toInt()
+            : int.tryParse('$rawSorting') ?? 0;
+    // Friends.score is a FriendScore, not a message score.  A message score
+    // (serverMessageId * 1e6) corrupts global session ordering when stored in
+    // this column. Keep the backend's contract here for locally-arriving
+    // messages: Sorting * 1e13 + Ticks.
+    final friendScore = sorting * 10000000000000 + ticks;
     raw['lastMessage'] = message;
     raw['lastMessageTime'] = messageTime.toIso8601String();
     raw['ticks'] = ticks;
-    raw['score'] = score;
+    raw['sorting'] = sorting;
+    raw['score'] = friendScore;
     if (incrementUnreadBadge) {
       final current = raw['publicBadge'];
       final currentBadge =
@@ -341,7 +395,14 @@ class UnifiedDatabase {
     await _connection.runUpdate(
       'UPDATE Friends SET score = ?, ticks = ?, updateTime = ?, raw = ? '
       'WHERE id = ? AND ownerId = ?',
-      <Object?>[score, ticks, ticks, jsonEncode(raw), sessionUnitId, ownerId],
+      <Object?>[
+        friendScore,
+        ticks,
+        ticks,
+        jsonEncode(raw),
+        sessionUnitId,
+        ownerId,
+      ],
     );
   }
 

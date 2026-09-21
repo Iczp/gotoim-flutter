@@ -45,6 +45,9 @@ class SessionDao {
   Future<int?> readMaxTicks(int ownerId) =>
       _database.readMaxFriendTicks(ownerId);
 
+  Future<int> repairScores(int ownerId) =>
+      _database.repairFriendScores(ownerId);
+
   Future<int> count(int ownerId) => _database.countFriendRows(ownerId);
 
   Future<List<ChatOwner>> readOwners() async =>
@@ -85,13 +88,11 @@ class SessionDao {
   Future<void> updateLastMessage({
     required int ownerId,
     required String sessionUnitId,
-    required int score,
     required Map<String, dynamic> message,
     bool incrementUnreadBadge = false,
   }) => _database.updateFriendLastMessage(
     ownerId: ownerId,
     sessionUnitId: sessionUnitId,
-    score: score,
     message: message,
     incrementUnreadBadge: incrementUnreadBadge,
   );

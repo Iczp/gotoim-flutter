@@ -171,7 +171,13 @@ class SessionRepository {
     required int ownerId,
     SessionCursor? cursor,
     int limit = 50,
-  }) => _dao.readPage(ownerId: ownerId, cursor: cursor, limit: limit);
+  }) async {
+    // Older builds stored message scores in Friends.score. Normalize once on
+    // every local load (a no-op after repair) before using it as a cursor or
+    // display order, so an upgrade immediately fixes the offline list too.
+    await _dao.repairScores(ownerId);
+    return _dao.readPage(ownerId: ownerId, cursor: cursor, limit: limit);
+  }
 
   /// Persists identity fields returned by the contacts index into the same
   /// Friends rows used by the session list and offline chat headers.

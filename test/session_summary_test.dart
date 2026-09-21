@@ -252,4 +252,62 @@ void main() {
       expect(cached.single.isPinned, isTrue);
     },
   );
+
+  test('message updates retain the FriendScore contract', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = SessionDao(database);
+    await dao.upsertAll(<SessionSummary>[
+      SessionSummary.fromJson(<String, dynamic>{
+        'id': 'pinned-session',
+        'ownerId': 42,
+        'score': 90000000000000,
+        'sorting': 9,
+        'ticks': 1,
+      }),
+    ]);
+
+    await dao.updateLastMessage(
+      ownerId: 42,
+      sessionUnitId: 'pinned-session',
+      message: <String, dynamic>{
+        'id': 7297803,
+        'creationTime': '2026-09-21T01:00:00Z',
+      },
+    );
+
+    final cached = await dao.readById('pinned-session');
+    final ticks =
+        DateTime.parse('2026-09-21T01:00:00Z').toLocal().millisecondsSinceEpoch;
+    expect(cached?.ticks, ticks);
+    expect(cached?.score, 9 * 10000000000000 + ticks);
+    expect(cached?.isPinned, isTrue);
+  });
+
+  test('repairs legacy message scores before local session ordering', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = SessionDao(database);
+    await dao.upsertAll(<SessionSummary>[
+      SessionSummary.fromJson(<String, dynamic>{
+        'id': 'legacy-pinned-session',
+        'ownerId': 42,
+        // The legacy bug persisted a message score here.
+        'score': 7297803000000,
+        'sorting': 9,
+        'ticks': 1789894167339,
+      }),
+    ]);
+
+    final repaired = await dao.repairScores(42);
+    final cached = await dao.readById('legacy-pinned-session');
+
+    expect(repaired, 1);
+    expect(cached?.score, 9 * 10000000000000 + 1789894167339);
+    expect(cached?.isPinned, isTrue);
+  });
 }
