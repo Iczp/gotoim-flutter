@@ -13,6 +13,9 @@ class SessionSummary {
     required this.unreadCount,
     required this.isPinned,
     required this.raw,
+    this.hasAuthoritativeScore = false,
+    this.hasAuthoritativeSorting = false,
+    this.hasAuthoritativeTicks = false,
   });
 
   factory SessionSummary.fromJson(Map<String, dynamic> json) {
@@ -29,14 +32,22 @@ class SessionSummary {
       json['title'] ?? json['Title'],
     ]);
 
-    final rawSorting = asInt(json['sorting'] ?? json['Sorting']) ??
+    final hasAuthoritativeSorting =
+        json.containsKey('sorting') || json.containsKey('Sorting');
+    final hasAuthoritativeTicks =
+        json.containsKey('ticks') || json.containsKey('Ticks');
+    final hasAuthoritativeScore =
+        json.containsKey('score') || json.containsKey('Score');
+    final rawSorting =
+        asInt(json['sorting'] ?? json['Sorting']) ??
         (setting['isTopping'] == true ||
                 setting['isTop'] == true ||
                 setting['IsTopping'] == true ||
                 setting['IsTop'] == true
             ? 1
             : 0);
-    final isPinned = rawSorting > 0 ||
+    final isPinned =
+        rawSorting > 0 ||
         setting['isTopping'] == true ||
         setting['isTop'] == true ||
         setting['IsTopping'] == true ||
@@ -45,9 +56,12 @@ class SessionSummary {
 
     var ticks = asInt(json['ticks'] ?? json['Ticks']) ?? 0;
     if (ticks <= 0) {
-      final date = asDate(json['lastMessageTime'] ?? json['LastMessageTime']) ??
+      final date =
+          asDate(json['lastMessageTime'] ?? json['LastMessageTime']) ??
           asDate(lastMessage['creationTime'] ?? lastMessage['CreationTime']) ??
-          asDate(json['lastModificationTime'] ?? json['LastModificationTime']) ??
+          asDate(
+            json['lastModificationTime'] ?? json['LastModificationTime'],
+          ) ??
           asDate(json['creationTime'] ?? json['CreationTime']);
       if (date != null) {
         ticks = date.millisecondsSinceEpoch;
@@ -55,9 +69,10 @@ class SessionSummary {
     }
 
     final rawScore = asInt(json['score'] ?? json['Score']);
-    final score = (rawScore != null && rawScore > 0)
-        ? rawScore
-        : (sorting > 0 ? (sorting * 10000000000000 + ticks) : ticks);
+    final score =
+        (rawScore != null && rawScore > 0)
+            ? rawScore
+            : (sorting > 0 ? (sorting * 10000000000000 + ticks) : ticks);
 
     final normalizedRaw = <String, dynamic>{
       ...json,
@@ -77,11 +92,16 @@ class SessionSummary {
       updatedAt:
           asDate(json['lastMessageTime'] ?? json['LastMessageTime']) ??
           asDate(lastMessage['creationTime'] ?? lastMessage['CreationTime']) ??
-          asDate(json['lastModificationTime'] ?? json['LastModificationTime']) ??
+          asDate(
+            json['lastModificationTime'] ?? json['LastModificationTime'],
+          ) ??
           (ticks > 0 ? DateTime.fromMillisecondsSinceEpoch(ticks) : null),
       unreadCount: asInt(json['publicBadge'] ?? json['PublicBadge']) ?? 0,
       isPinned: isPinned,
       raw: Map<String, dynamic>.unmodifiable(normalizedRaw),
+      hasAuthoritativeScore: hasAuthoritativeScore,
+      hasAuthoritativeSorting: hasAuthoritativeSorting,
+      hasAuthoritativeTicks: hasAuthoritativeTicks,
     );
   }
 
@@ -90,11 +110,13 @@ class SessionSummary {
   SessionSummary mergeWithLocal(SessionSummary? local) {
     if (local == null) return this;
     final remoteLastMessage = asMap(raw['lastMessage'] ?? raw['LastMessage']);
-    final localLastMessage =
-        asMap(local.raw['lastMessage'] ?? local.raw['LastMessage']);
+    final localLastMessage = asMap(
+      local.raw['lastMessage'] ?? local.raw['LastMessage'],
+    );
     final remoteDestination = asMap(raw['destination'] ?? raw['Destination']);
-    final localDestination =
-        asMap(local.raw['destination'] ?? local.raw['Destination']);
+    final localDestination = asMap(
+      local.raw['destination'] ?? local.raw['Destination'],
+    );
     final remoteOwner = asMap(raw['owner'] ?? raw['Owner']);
     final localOwner = asMap(local.raw['owner'] ?? local.raw['Owner']);
 
@@ -128,21 +150,19 @@ class SessionSummary {
       }
     }
 
-    // 2. Score: preserve whichever is greater to prevent dropping session order
-    final mergedScore = (score > 0 && local.score > 0)
-        ? (score >= local.score ? score : local.score)
-        : (score > 0 ? score : local.score);
+    // The list/detail endpoints own the complete FriendScore tuple.  A lower
+    // server score is meaningful (for example, after cancelling a pin), so do
+    // not retain a larger stale local value.  Partial state acknowledgements
+    // such as set-read omit these fields and retain the local tuple instead.
+    final mergedScore = hasAuthoritativeScore ? score : local.score;
     mergedRaw['score'] = mergedScore;
 
-    // 3. Ticks: preserve whichever is greater to avoid collapsing into "很久以前"
-    final mergedTicks = (ticks > 0 && local.ticks > 0)
-        ? (ticks >= local.ticks ? ticks : local.ticks)
-        : (ticks > 0 ? ticks : local.ticks);
+    // 3. Ticks and sorting are the inputs to the server-owned score.
+    final mergedTicks = hasAuthoritativeTicks ? ticks : local.ticks;
     mergedRaw['ticks'] = mergedTicks;
 
-    // 4. Sorting / Topping: preserve pin status
-    final mergedSorting =
-        sorting > 0 ? sorting : (local.sorting > 0 ? local.sorting : 0);
+    // 4. An explicit zero is authoritative: it means a pin was removed.
+    final mergedSorting = hasAuthoritativeSorting ? sorting : local.sorting;
     mergedRaw['sorting'] = mergedSorting;
 
     // 5. Destination & Owner
@@ -223,28 +243,37 @@ class SessionSummary {
   final int unreadCount;
   final bool isPinned;
   final Map<String, dynamic> raw;
+  final bool hasAuthoritativeScore;
+  final bool hasAuthoritativeSorting;
+  final bool hasAuthoritativeTicks;
 
   int? get lastMessageId =>
-      asInt(asMap(raw['lastMessage'] ?? raw['LastMessage'])['id'] ??
-          asMap(raw['lastMessage'] ?? raw['LastMessage'])['Id']) ??
+      asInt(
+        asMap(raw['lastMessage'] ?? raw['LastMessage'])['id'] ??
+            asMap(raw['lastMessage'] ?? raw['LastMessage'])['Id'],
+      ) ??
       asInt(raw['lastMessageId'] ?? raw['LastMessageId']);
-  int? get readMessageId =>
-      asInt(raw['readMessageId'] ?? raw['ReadMessageId']);
+  int? get readMessageId => asInt(raw['readMessageId'] ?? raw['ReadMessageId']);
   int? get peerReadMessageId =>
       asInt(raw['peerReadMessageId'] ?? raw['PeerReadMessageId']);
   int? get ownerObjectType =>
       asInt(raw['ownerObjectType'] ?? raw['OwnerObjectType']) ??
-      asInt(asMap(raw['owner'] ?? raw['Owner'])['objectType'] ??
-          asMap(raw['owner'] ?? raw['Owner'])['ObjectType']);
+      asInt(
+        asMap(raw['owner'] ?? raw['Owner'])['objectType'] ??
+            asMap(raw['owner'] ?? raw['Owner'])['ObjectType'],
+      );
   int? get destinationId =>
-      asInt(asMap(raw['destination'] ?? raw['Destination'])['id'] ??
-          asMap(raw['destination'] ?? raw['Destination'])['Id']) ??
+      asInt(
+        asMap(raw['destination'] ?? raw['Destination'])['id'] ??
+            asMap(raw['destination'] ?? raw['Destination'])['Id'],
+      ) ??
       asInt(raw['destinationId'] ?? raw['DestinationId']);
 
   /// 会话目标对象的头像链接。
   String? get avatarUrl {
     final destination = asMap(raw['destination'] ?? raw['Destination']);
-    final value = destination['thumbnail'] ??
+    final value =
+        destination['thumbnail'] ??
         destination['Thumbnail'] ??
         destination['portrait'] ??
         destination['Portrait'] ??
@@ -256,9 +285,10 @@ class SessionSummary {
   /// The original client shows the transfer control for shopkeeper/waiter
   /// identities (7/8), not just when the chat destination is a shop account.
   bool get isShopkeeperOrWaiter => ownerObjectType == 7 || ownerObjectType == 8;
-  int? get ownerParentId =>
-      asInt(asMap(raw['owner'] ?? raw['Owner'])['parentId'] ??
-          asMap(raw['owner'] ?? raw['Owner'])['ParentId']);
+  int? get ownerParentId => asInt(
+    asMap(raw['owner'] ?? raw['Owner'])['parentId'] ??
+        asMap(raw['owner'] ?? raw['Owner'])['ParentId'],
+  );
 
   /// Shop waiter accounts are children of a shopkeeper. The transfer list is
   /// scoped to that shopkeeper so a waiter can only hand over within its shop.
@@ -266,7 +296,8 @@ class SessionSummary {
       ownerObjectType == 8 ? ownerParentId ?? ownerId : ownerId;
 
   bool get isImmersed {
-    final value = asMap(raw['setting'] ?? raw['Setting'])['isImmersed'] ??
+    final value =
+        asMap(raw['setting'] ?? raw['Setting'])['isImmersed'] ??
         asMap(raw['setting'] ?? raw['Setting'])['IsImmersed'];
     return value == true || asInt(value) == 1;
   }

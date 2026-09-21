@@ -163,7 +163,7 @@ void main() {
     expect(summary.title, 'Aurora AI');
   });
 
-  test('mergeWithLocal preserves highest score, sorting, ticks and read status', () {
+  test('mergeWithLocal retains score fields for a partial state response', () {
     final local = SessionSummary.fromJson(<String, dynamic>{
       'id': 'unit-test-1',
       'ownerId': 42,
@@ -179,13 +179,10 @@ void main() {
       },
     });
 
-    // Remote response from /friend/{id} has no lastMessage, score=0 or lower, sorting=0
+    // A state acknowledgement omits the FriendScore tuple.
     final remoteFriendDetail = SessionSummary.fromJson(<String, dynamic>{
       'id': 'unit-test-1',
       'ownerId': 42,
-      'score': 0,
-      'sorting': 0,
-      'ticks': 0,
       'lastMessageId': 9999,
       'publicBadge': 5, // Stale server unread count
       'destination': <String, dynamic>{'displayName': '好友A（最新）'},
@@ -193,7 +190,7 @@ void main() {
 
     final merged = remoteFriendDetail.mergeWithLocal(local);
 
-    // Score, ticks, sorting must not be wiped to 0!
+    // Missing score fields must not wipe the local tuple.
     expect(merged.score, 100000000500);
     expect(merged.sorting, 1);
     expect(merged.ticks, 500);
@@ -204,28 +201,55 @@ void main() {
     expect(merged.unreadCount, 0);
   });
 
-  test('session DAO persists and restores sorting and score correctly', () async {
-    final database = UnifiedDatabase(
-      DatabaseConnection(NativeDatabase.memory()),
-    );
-    addTearDown(database.close);
-    final dao = SessionDao(database);
-    final summary = SessionSummary.fromJson(<String, dynamic>{
-      'id': 'unit-sort-1',
+  test('mergeWithLocal accepts a lower authoritative FriendScore tuple', () {
+    final local = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'unit-test-1',
       'ownerId': 42,
-      'score': 5000000000,
-      'sorting': 2,
-      'ticks': 999999,
-      'destination': <String, dynamic>{'displayName': '置顶好友'},
+      'score': 100000000500,
+      'sorting': 1,
+      'ticks': 500,
+    });
+    final remoteDetail = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'unit-test-1',
+      'ownerId': 42,
+      'score': 600,
+      'sorting': 0,
+      'ticks': 600,
     });
 
-    await dao.upsertAll(<SessionSummary>[summary]);
-    final cached = await dao.readPage(ownerId: 42);
+    final merged = remoteDetail.mergeWithLocal(local);
 
-    expect(cached, hasLength(1));
-    expect(cached.single.score, 5000000000);
-    expect(cached.single.sorting, 2);
-    expect(cached.single.ticks, 999999);
-    expect(cached.single.isPinned, isTrue);
+    expect(merged.score, 600);
+    expect(merged.sorting, 0);
+    expect(merged.ticks, 600);
+    expect(merged.isPinned, isFalse);
   });
+
+  test(
+    'session DAO persists and restores sorting and score correctly',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = SessionDao(database);
+      final summary = SessionSummary.fromJson(<String, dynamic>{
+        'id': 'unit-sort-1',
+        'ownerId': 42,
+        'score': 5000000000,
+        'sorting': 2,
+        'ticks': 999999,
+        'destination': <String, dynamic>{'displayName': '置顶好友'},
+      });
+
+      await dao.upsertAll(<SessionSummary>[summary]);
+      final cached = await dao.readPage(ownerId: 42);
+
+      expect(cached, hasLength(1));
+      expect(cached.single.score, 5000000000);
+      expect(cached.single.sorting, 2);
+      expect(cached.single.ticks, 999999);
+      expect(cached.single.isPinned, isTrue);
+    },
+  );
 }

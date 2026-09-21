@@ -26,7 +26,7 @@ void main() {
     'destination': {'name': id},
   });
 
-  test('sessions are ordered by score inside their pinned group', () {
+  test('sessions are ordered globally by server score', () {
     final items = buildSessionListItems(
       [
         session(id: 'newer-time', ticks: 200, score: 10),
@@ -68,48 +68,42 @@ void main() {
     expect(items[2].title, '今天');
   });
 
-  test(
-    'each time group is emitted once when score order interleaves groups',
-    () {
-      final items = buildSessionListItems(
-        [
-          session(
-            id: 'month-low-score',
-            ticks:
-                now.subtract(const Duration(days: 20)).millisecondsSinceEpoch,
-            score: 10,
-          ),
-          session(
-            id: 'year',
-            ticks:
-                now.subtract(const Duration(days: 200)).millisecondsSinceEpoch,
-            score: 30,
-          ),
-          session(
-            id: 'month-high-score',
-            ticks:
-                now.subtract(const Duration(days: 25)).millisecondsSinceEpoch,
-            score: 20,
-          ),
-        ],
-        hasMore: false,
-        now: now,
-      );
+  test('time dividers preserve the global server score order', () {
+    final items = buildSessionListItems(
+      [
+        session(
+          id: 'month-low-score',
+          ticks: now.subtract(const Duration(days: 20)).millisecondsSinceEpoch,
+          score: 10,
+        ),
+        session(
+          id: 'year',
+          ticks: now.subtract(const Duration(days: 200)).millisecondsSinceEpoch,
+          score: 30,
+        ),
+        session(
+          id: 'month-high-score',
+          ticks: now.subtract(const Duration(days: 25)).millisecondsSinceEpoch,
+          score: 20,
+        ),
+      ],
+      hasMore: false,
+      now: now,
+    );
 
-      final dividers =
-          items
-              .where((item) => item.kind == SessionListItemKind.timeDivider)
-              .map((item) => item.title)
-              .toList();
-      expect(dividers, <String>['一个月前', '1年前']);
-      expect(
+    final dividers =
         items
-            .where((item) => item.kind == SessionListItemKind.session)
-            .map((item) => item.session!.id),
-        <String>['month-high-score', 'month-low-score', 'year'],
-      );
-    },
-  );
+            .where((item) => item.kind == SessionListItemKind.timeDivider)
+            .map((item) => item.title)
+            .toList();
+    expect(dividers, <String>['1年前', '一个月前']);
+    expect(
+      items
+          .where((item) => item.kind == SessionListItemKind.session)
+          .map((item) => item.session!.id),
+      <String>['year', 'month-high-score', 'month-low-score'],
+    );
+  });
 
   test('time groups match UniApp boundaries', () {
     expect(sessionTimeGroup(now.millisecondsSinceEpoch, now: now), '今天');
@@ -214,9 +208,7 @@ void main() {
         child: MaterialApp(
           theme: darkTheme,
           home: Scaffold(
-            body: SessionListItemView(
-              item: SessionListItem.session(s),
-            ),
+            body: SessionListItemView(item: SessionListItem.session(s)),
           ),
         ),
       ),
@@ -247,8 +239,7 @@ void main() {
         'lastMessage': {
           'messageType': 2,
           'senderSessionUnit': {'displayName': '非常非常长的发送者姓名'},
-          'content':
-              '这是一条非常长非常长非常长非常长非常长非常长非常长非常长非常长非常长非常长的消息预览文本',
+          'content': '这是一条非常长非常长非常长非常长非常长非常长非常长非常长非常长非常长非常长的消息预览文本',
         },
         'publicBadge': 999,
         'remindMeCount': 10,
@@ -267,14 +258,10 @@ void main() {
             theme: AppTheme.lightTheme(),
             home: Scaffold(
               body: MediaQuery(
-                data: const MediaQueryData(
-                  textScaler: TextScaler.linear(1.8),
-                ),
+                data: const MediaQueryData(textScaler: TextScaler.linear(1.8)),
                 child: SizedBox(
                   width: 220,
-                  child: SessionListItemView(
-                    item: SessionListItem.session(s),
-                  ),
+                  child: SessionListItemView(item: SessionListItem.session(s)),
                 ),
               ),
             ),
@@ -287,42 +274,41 @@ void main() {
     },
   );
 
-  testWidgets(
-    'SessionUnitItem divider sits on the bottom and right boundary',
-    (tester) async {
-      final s = session(
-        id: 'divider-boundary-test',
-        ticks: now.millisecondsSinceEpoch,
-      );
+  testWidgets('SessionUnitItem divider sits on the bottom and right boundary', (
+    tester,
+  ) async {
+    final s = session(
+      id: 'divider-boundary-test',
+      ticks: now.millisecondsSinceEpoch,
+    );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            appEnvironmentProvider.overrideWithValue(
-              AppEnvironment.fromDotEnv(AppFlavor.development),
-            ),
-          ],
-          child: MaterialApp(
-            theme: AppTheme.lightTheme(),
-            home: Scaffold(
-              body: SessionUnitItem(
-                item: s,
-                showDivider: true,
-                dividerIndent: 74,
-                dividerEndIndent: 0,
-              ),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appEnvironmentProvider.overrideWithValue(
+            AppEnvironment.fromDotEnv(AppFlavor.development),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.lightTheme(),
+          home: Scaffold(
+            body: SessionUnitItem(
+              item: s,
+              showDivider: true,
+              dividerIndent: 74,
+              dividerEndIndent: 0,
             ),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      final positionedFinder = find.byType(PositionedDirectional);
-      expect(positionedFinder, findsOneWidget);
-      final positioned = tester.widget<PositionedDirectional>(positionedFinder);
-      expect(positioned.bottom, 0.0);
-      expect(positioned.end, 0.0);
-      expect(positioned.start, 74.0);
-    },
-  );
+    final positionedFinder = find.byType(PositionedDirectional);
+    expect(positionedFinder, findsOneWidget);
+    final positioned = tester.widget<PositionedDirectional>(positionedFinder);
+    expect(positioned.bottom, 0.0);
+    expect(positioned.end, 0.0);
+    expect(positioned.start, 74.0);
+  });
 }
