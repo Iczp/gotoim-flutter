@@ -692,6 +692,7 @@ class ChatComposerState extends State<ChatComposer>
                                 items: _functions,
                                 pageController: _pageController,
                                 page: _page,
+                                useGlass: widget.useGlass,
                                 onPageChanged:
                                     (value) => setState(() => _page = value),
                                 onSelected: _selectFunction,

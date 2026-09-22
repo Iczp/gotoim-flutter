@@ -43,84 +43,93 @@ class ChatMessageList extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Listener(
       behavior: HitTestBehavior.translucent,
-      // A listener observes pointer input without joining Flutter's gesture
-      // arena. This keeps the surrounding chat region from competing with the
-      // ListView's vertical-drag recognizer.
       onPointerDown: (_) {
         FloatingPopover.hideAll();
-        onTapOutside();
       },
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          if (notification is ScrollUpdateNotification ||
-              notification is UserScrollNotification ||
-              notification is OverscrollNotification) {
-            FloatingPopover.hideAll();
-          }
-          onViewingLatestChanged(notification.metrics.pixels <= 32);
-          // In reverse: true ListView, older history is at maxScrollExtent (extentAfter -> 0).
-          // Trigger loading earlier (300px threshold) without requiring active finger drag
-          // so fling/momentum scrolling loads smoothly.
-          if (hasMore && !isLoading && error == null && notification.metrics.extentAfter < 300) {
-            onLoadMore();
-          }
-          return false;
-        },
-        child:
-            messages.isEmpty && transientItems.isEmpty
-                ? _EmptyMessagesState(
-                  isLoading: isLoading,
-                  error: error,
-                  onRetry: onLoadMore,
-                )
-                : Align(
-                  alignment: Alignment.topCenter,
-                  child: RawScrollbar(
-                    controller: scrollController,
-                    thumbVisibility: false, // 仅在手指拖拽/滑动时显现，停止后自动淡出
-                    thumbColor: isDark
-                        ? Colors.white.withValues(alpha: 0.28)
-                        : Colors.black.withValues(alpha: 0.22),
-                    thickness: 3.0, // 极细 3px
-                    radius: const Radius.circular(2),
-                    fadeDuration: const Duration(milliseconds: 250),
-                    timeToFade: const Duration(milliseconds: 800),
-                    interactive: false, // 纯指示条，不干扰气泡长按或手势
-                    child: ListView.builder(
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: onTapOutside,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollUpdateNotification ||
+                notification is UserScrollNotification ||
+                notification is OverscrollNotification) {
+              FloatingPopover.hideAll();
+            }
+            onViewingLatestChanged(notification.metrics.pixels <= 32);
+            // In reverse: true ListView, older history is at maxScrollExtent (extentAfter -> 0).
+            // Trigger loading earlier (300px threshold) without requiring active finger drag
+            // so fling/momentum scrolling loads smoothly.
+            if (hasMore &&
+                !isLoading &&
+                error == null &&
+                notification.metrics.extentAfter < 300) {
+              onLoadMore();
+            }
+            return false;
+          },
+          child:
+              messages.isEmpty && transientItems.isEmpty
+                  ? _EmptyMessagesState(
+                    isLoading: isLoading,
+                    error: error,
+                    onRetry: onLoadMore,
+                  )
+                  : Align(
+                    alignment: Alignment.topCenter,
+                    child: RawScrollbar(
                       controller: scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      reverse: true,
-                      shrinkWrap: true,
-                      findChildIndexCallback: (key) {
-                        if (key is! ValueKey<String>) return null;
-                        final index = messages.indexWhere(
-                          (message) => message.localId == key.value,
-                        );
-                        return index < 0 ? null : transientItems.length + index;
-                      },
-                      padding: padding,
-                      itemCount: transientItems.length + messages.length + 1,
-                      itemBuilder: (context, index) {
-                        if (index < transientItems.length) {
-                          return transientItems[index];
-                        }
-                        final messageIndex = index - transientItems.length;
-                        if (messageIndex == messages.length) {
-                          return _ChatHistoryFooter(
-                            isLoading: isLoading,
-                            hasMore: hasMore,
-                            error: error,
-                            onLoadMore: onLoadMore,
+                      thumbVisibility: false, // 仅在手指拖拽/滑动时显现，停止后自动淡出
+                      thumbColor:
+                          isDark
+                              ? Colors.white.withValues(alpha: 0.28)
+                              : Colors.black.withValues(alpha: 0.22),
+                      thickness: 3.0, // 极细 3px
+                      radius: const Radius.circular(2),
+                      fadeDuration: const Duration(milliseconds: 250),
+                      timeToFade: const Duration(milliseconds: 800),
+                      interactive: false, // 纯指示条，不干扰气泡长按或手势
+                      child: ListView.builder(
+                        controller: scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.manual,
+                        reverse: true,
+                        shrinkWrap: true,
+                        findChildIndexCallback: (key) {
+                          if (key is! ValueKey<String>) return null;
+                          final index = messages.indexWhere(
+                            (message) => message.localId == key.value,
                           );
-                        }
-                        final message = messages[messageIndex];
-                        return itemBuilder(context, message, messageIndex);
-                      },
+                          return index < 0
+                              ? null
+                              : transientItems.length + index;
+                        },
+                        padding: padding,
+                        itemCount: transientItems.length + messages.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index < transientItems.length) {
+                            return transientItems[index];
+                          }
+                          final messageIndex = index - transientItems.length;
+                          if (messageIndex == messages.length) {
+                            return _ChatHistoryFooter(
+                              isLoading: isLoading,
+                              hasMore: hasMore,
+                              error: error,
+                              onLoadMore: onLoadMore,
+                            );
+                          }
+                          final message = messages[messageIndex];
+                          return _MessageEntryTransition(
+                            key: ValueKey<String>(message.localId),
+                            child: itemBuilder(context, message, messageIndex),
+                          );
+                        },
+                      ),
                     ),
                   ),
-                ),
+        ),
       ),
     );
   }
@@ -231,4 +240,38 @@ class _ChatHistoryFooterState extends State<_ChatHistoryFooter> {
       ),
     );
   }
+}
+
+class _MessageEntryTransition extends StatefulWidget {
+  const _MessageEntryTransition({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<_MessageEntryTransition> createState() =>
+      _MessageEntryTransitionState();
+}
+
+class _MessageEntryTransitionState extends State<_MessageEntryTransition> {
+  var _entered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _entered = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedSlide(
+    offset: _entered ? Offset.zero : const Offset(0, 0.12),
+    duration: const Duration(milliseconds: 220),
+    curve: Curves.easeOutCubic,
+    child: AnimatedOpacity(
+      opacity: _entered ? 1 : 0,
+      duration: const Duration(milliseconds: 180),
+      child: widget.child,
+    ),
+  );
 }

@@ -256,31 +256,38 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        ChatMessageList(
-          messages: controller.messages,
-          transientItems: controller.aiStreamReplies
-              .map((reply) => _buildAiStreamReply(reply))
-              .toList(growable: false),
-          scrollController: _scrollController,
-          isLoading: controller.isLoading,
-          hasMore: controller.hasMore,
-          error: controller.error,
-          onViewingLatestChanged: controller.setViewingLatest,
-          onLoadMore: controller.loadMore,
-          onTapOutside: _closeInputArea,
-          padding: EdgeInsets.fromLTRB(
-            12,
-            safeArea.top +
-                ChatTitleBar.toolbarHeight +
-                tokens.chatGlassContentPadding,
-            12,
-            tokens.chatComposerHeight +
-                safeArea.bottom +
-                tokens.chatGlassContentPadding,
+        AnimatedPadding(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
           ),
-          itemBuilder:
-              (context, message, index) =>
-                  _buildMessageItem(context, message, index, mediaItems),
+          child: ChatMessageList(
+            messages: controller.messages,
+            transientItems: controller.aiStreamReplies
+                .map((reply) => _buildAiStreamReply(reply))
+                .toList(growable: false),
+            scrollController: _scrollController,
+            isLoading: controller.isLoading,
+            hasMore: controller.hasMore,
+            error: controller.error,
+            onViewingLatestChanged: controller.setViewingLatest,
+            onLoadMore: controller.loadMore,
+            onTapOutside: _closeInputArea,
+            padding: EdgeInsets.fromLTRB(
+              12,
+              safeArea.top +
+                  ChatTitleBar.toolbarHeight +
+                  tokens.chatGlassContentPadding,
+              12,
+              tokens.chatComposerHeight +
+                  safeArea.bottom +
+                  tokens.chatGlassContentPadding,
+            ),
+            itemBuilder:
+                (context, message, index) =>
+                    _buildMessageItem(context, message, index, mediaItems),
+          ),
         ),
         Align(
           alignment: Alignment.bottomCenter,

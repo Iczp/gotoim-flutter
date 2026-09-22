@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme_tokens.dart';
+
 /// 底部功能项描述（相册、拍照、视频、文件、位置等）
 class ChatFunctionItem {
   const ChatFunctionItem(this.label, this.icon, {this.enabled = false});
@@ -27,6 +29,7 @@ class ChatFunctionPanel extends StatelessWidget {
     required this.page,
     required this.onPageChanged,
     required this.onSelected,
+    this.useGlass = false,
     super.key,
   });
 
@@ -44,16 +47,33 @@ class ChatFunctionPanel extends StatelessWidget {
 
   /// 点击功能项回调
   final ValueChanged<ChatFunctionItem> onSelected;
-
+  final bool useGlass;
 
   @override
   Widget build(BuildContext context) {
     final pageCount = (items.length / 8).ceil();
+    final tokens = context.appTokens;
+    final theme = Theme.of(context);
+    final panelColor =
+        useGlass
+            ? tokens.glassSecondarySurface.withValues(
+              alpha: tokens.chatInputGlassOpacity,
+            )
+            : theme.colorScheme.surfaceContainerLowest;
+    final panelBorder =
+        useGlass
+            ? tokens.glassBorderColor.withValues(
+              alpha: tokens.chatGlassBorderOpacity,
+            )
+            : theme.dividerColor;
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        color: panelColor,
         border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
+          top: BorderSide(
+            color: panelBorder,
+            width: tokens.chatGlassBorderWidth,
+          ),
         ),
       ),
       child: Column(
@@ -94,10 +114,8 @@ class ChatFunctionPanel extends StatelessWidget {
                                 width: iconSize,
                                 height: iconSize,
                                 decoration: BoxDecoration(
-                                  color:
-                                      Theme.of(
-                                        context,
-                                      ).colorScheme.surfaceContainerHigh,
+                                  color: theme.colorScheme.surfaceContainerHigh
+                                      .withValues(alpha: useGlass ? 0.56 : 1),
                                   borderRadius: BorderRadius.circular(11),
                                 ),
                                 child: Icon(
