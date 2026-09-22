@@ -33,21 +33,21 @@ import 'app_navigation.dart';
 import 'application_providers.dart';
 import 'bootstrap_error_app.dart';
 
-
 Future<void> bootstrap() async {
   // 注册账号切换时需要 invalidate 的 Provider 清理回调。
   ensureSessionInvalidatorRegistered();
 
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Color(0x00000000),
       systemNavigationBarColor: Color(0x00000000),
+      systemNavigationBarDividerColor: Color(0x00000000),
     ),
   );
   try {
-
     const flavorName = String.fromEnvironment(
       'APP_ENV',
       defaultValue: 'development',
@@ -110,11 +110,14 @@ Future<void> bootstrap() async {
       uploadService: fileUploadService,
     );
     final floatingWindowManager = FloatingWindowManager();
-    final appTaskManager = platformFacade.kind == PlatformKind.android
-        ? AndroidAppTaskManager(floatingWindowManager: floatingWindowManager)
-        : StubAppTaskManager(
-            navigatorProvider: () => rootNavigatorKey.currentState,
-          );
+    final appTaskManager =
+        platformFacade.kind == PlatformKind.android
+            ? AndroidAppTaskManager(
+              floatingWindowManager: floatingWindowManager,
+            )
+            : StubAppTaskManager(
+              navigatorProvider: () => rootNavigatorKey.currentState,
+            );
     final workbenchRepository = MockWorkbenchRepository();
     final deepLinkParser = DeepLinkParser(
       allowedCustomSchemes: environment.deepLinkCustomSchemes,
@@ -157,12 +160,8 @@ Future<void> bootstrap() async {
     rootProviderContainer = container;
 
     runApp(
-      UncontrolledProviderScope(
-        container: container,
-        child: const GotoImApp(),
-      ),
+      UncontrolledProviderScope(container: container, child: const GotoImApp()),
     );
-
   } catch (error, stackTrace) {
     AppLogger.instance.fatal(
       'Application bootstrap error',

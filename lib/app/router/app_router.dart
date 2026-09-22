@@ -43,6 +43,7 @@ import '../../features/diagnostics/presentation/modal_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/target_picker_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/remote_devtools_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/workbench_layout_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/splash_and_logo_diagnostics_page.dart';
 import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/local_file_server/pages/terminal_details_page.dart';
 import '../../features/local_file_server/pages/shared_file_manager_page.dart';
@@ -115,7 +116,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (auth.status == AuthStatus.authenticated) {
         return location == '/login' || location == '/splash' ? '/' : null;
       }
-      final isPublic = location == '/login' ||
+      final isPublic =
+          location == '/login' ||
           location.startsWith('/agreement') ||
           location.startsWith('/diagnostics');
       return isPublic ? null : '/login';
@@ -128,16 +130,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       _buildAppRoute(
         path: '/agreement',
         builder: (context, state) {
-          final title = state.uri.queryParameters['title'] ??
+          final title =
+              state.uri.queryParameters['title'] ??
               PrivacyService.userAgreementTitle;
-          final isPrivacy = title.contains('隐私') ||
+          final isPrivacy =
+              title.contains('隐私') ||
               state.uri.queryParameters['type'] == 'privacy';
-          final defaultContent = isPrivacy
-              ? PrivacyService.privacyPolicyContent
-              : PrivacyService.userAgreementContent;
-          final defaultUrl = isPrivacy
-              ? PrivacyService.privacyPolicyUrl
-              : PrivacyService.userAgreementUrl;
+          final defaultContent =
+              isPrivacy
+                  ? PrivacyService.privacyPolicyContent
+                  : PrivacyService.userAgreementContent;
+          final defaultUrl =
+              isPrivacy
+                  ? PrivacyService.privacyPolicyUrl
+                  : PrivacyService.userAgreementUrl;
           return AgreementViewerPage(
             title: title,
             content: state.uri.queryParameters['content'] ?? defaultContent,
@@ -150,10 +156,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final url = state.uri.queryParameters['url'] ?? '';
           final title = state.uri.queryParameters['title'];
-          return AppWebViewPage(
-            initialUrl: url,
-            title: title,
-          );
+          return AppWebViewPage(initialUrl: url, title: title);
         },
       ),
       _buildAppRoute(
@@ -217,10 +220,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       _buildAppRoute(
         path: '/chat/:sessionUnitId/notifications',
-        builder: (context, state) => MessageAlertSettingsPage(
-          sessionUnitId: state.pathParameters['sessionUnitId']!,
-          title: state.uri.queryParameters['title'] ?? '聊天',
-        ),
+        builder:
+            (context, state) => MessageAlertSettingsPage(
+              sessionUnitId: state.pathParameters['sessionUnitId']!,
+              title: state.uri.queryParameters['title'] ?? '聊天',
+            ),
       ),
       _buildAppRoute(
         path: '/settings/avatar',
@@ -251,6 +255,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       _buildAppRoute(
         path: '/diagnostics',
         builder: (context, state) => const DiagnosticsHomePage(),
+      ),
+      _buildAppRoute(
+        path: '/diagnostics/splash-logo',
+        builder: (context, state) => const SplashAndLogoDiagnosticsPage(),
       ),
       _buildAppRoute(
         path: '/diagnostics/remote-devtools',

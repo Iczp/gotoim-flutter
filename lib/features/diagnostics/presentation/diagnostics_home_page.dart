@@ -221,6 +221,13 @@ class DiagnosticsHomePage extends StatelessWidget {
             title: 'UI 组件与交互动效',
             children: [
               Cell(
+                icon: const Icon(Icons.rocket_launch_outlined),
+                title: '启动页与 Logo 体验中心',
+                subtitle: '全屏穿透(edgeToEdge)、量子星轨 Logo、自发光呼吸微动与启动状态机',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/splash-logo'),
+              ),
+              Cell(
                 icon: const Icon(Icons.fullscreen_outlined),
                 title: 'AdaptivePage 半屏 / 普通页',
                 subtitle: '半屏/完整页转换、状态保留、拖拽长列表与键盘避让',

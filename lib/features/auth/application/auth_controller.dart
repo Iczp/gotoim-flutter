@@ -123,6 +123,7 @@ class AuthController extends ChangeNotifier {
   VoidCallback? _onAccountChanged;
 
   Future<void> _restore() async {
+    final startTime = DateTime.now();
     try {
       // 1. 离线优先：优先载入本地持久化缓存中的应用配置与当前账号
       final cachedConfig =
@@ -136,6 +137,15 @@ class AuthController extends ChangeNotifier {
       }
 
       final hasSession = await _repository.restoreSession();
+
+      // 保证启动页品牌体验（至少停留 1.5 秒），避免 20ms 闪退导致用户无法感知科技启动屏与全屏沉浸效果
+      final elapsed = DateTime.now().difference(startTime);
+      if (elapsed < const Duration(milliseconds: 1500)) {
+        await Future<void>.delayed(
+          const Duration(milliseconds: 1500) - elapsed,
+        );
+      }
+
       _status =
           hasSession ? AuthStatus.authenticated : AuthStatus.unauthenticated;
       if (hasSession) {
@@ -145,6 +155,12 @@ class AuthController extends ChangeNotifier {
         unawaited(_loadUserInfoSafely());
       }
     } catch (_) {
+      final elapsed = DateTime.now().difference(startTime);
+      if (elapsed < const Duration(milliseconds: 1500)) {
+        await Future<void>.delayed(
+          const Duration(milliseconds: 1500) - elapsed,
+        );
+      }
       _status = AuthStatus.unauthenticated;
     }
     notifyListeners();
@@ -181,7 +197,8 @@ class AuthController extends ChangeNotifier {
     try {
       final info = await _repository.getUserInfo();
       _userInfo = info;
-      final name = info['email']?.toString() ??
+      final name =
+          info['email']?.toString() ??
           info['unique_name']?.toString() ??
           info['preferred_username']?.toString() ??
           info['name']?.toString();
@@ -278,12 +295,14 @@ void _runAccountChangedCallbacks(Ref ref) {
 
 final ChangeNotifierProvider<AuthController> authControllerProvider =
     ChangeNotifierProvider<AuthController>((ref) {
-  final controller = AuthController(
-    ref.watch(authRepositoryProvider),
-    ref.watch(signalRGatewayProvider),
-    abpConfigurationRepository: ref.watch(abpConfigurationRepositoryProvider),
-  );
-  // 账号切换时 invalidate 所有已注册的账号级 Provider，确保新账号获得干净状态。
-  controller._onAccountChanged = () => _runAccountChangedCallbacks(ref);
-  return controller;
-});
+      final controller = AuthController(
+        ref.watch(authRepositoryProvider),
+        ref.watch(signalRGatewayProvider),
+        abpConfigurationRepository: ref.watch(
+          abpConfigurationRepositoryProvider,
+        ),
+      );
+      // 账号切换时 invalidate 所有已注册的账号级 Provider，确保新账号获得干净状态。
+      controller._onAccountChanged = () => _runAccountChangedCallbacks(ref);
+      return controller;
+    });

@@ -8,6 +8,7 @@ import '../../../core/compliance/agreement_viewer_page.dart';
 import '../../../core/compliance/privacy_service.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../../core/widgets/gotoim_logo.dart';
 import '../../scan_login/presentation/login_qr_sign_in.dart';
 import '../application/auth_controller.dart';
 
@@ -46,11 +47,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void _openUserAgreement() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const AgreementViewerPage(
-          title: PrivacyService.userAgreementTitle,
-          content: PrivacyService.userAgreementContent,
-          url: PrivacyService.userAgreementUrl,
-        ),
+        builder:
+            (_) => const AgreementViewerPage(
+              title: PrivacyService.userAgreementTitle,
+              content: PrivacyService.userAgreementContent,
+              url: PrivacyService.userAgreementUrl,
+            ),
       ),
     );
   }
@@ -58,11 +60,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void _openPrivacyPolicy() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const AgreementViewerPage(
-          title: PrivacyService.privacyPolicyTitle,
-          content: PrivacyService.privacyPolicyContent,
-          url: PrivacyService.privacyPolicyUrl,
-        ),
+        builder:
+            (_) => const AgreementViewerPage(
+              title: PrivacyService.privacyPolicyTitle,
+              content: PrivacyService.privacyPolicyContent,
+              url: PrivacyService.privacyPolicyUrl,
+            ),
       ),
     );
   }
@@ -73,22 +76,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!_agreeTerms) {
       final agreed = await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('服务协议与隐私保护提醒'),
-          content: const Text(
-            '请您在登录前阅读并同意《用户服务协议》与《隐私保护政策》。若同意，我们将为您建立账号会话并开启即时通讯协同服务。',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('暂不同意'),
+        builder:
+            (ctx) => AlertDialog(
+              title: const Text('服务协议与隐私保护提醒'),
+              content: const Text(
+                '请您在登录前阅读并同意《用户服务协议》与《隐私保护政策》。若同意，我们将为您建立账号会话并开启即时通讯协同服务。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('暂不同意'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('同意并登录'),
+                ),
+              ],
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('同意并登录'),
-            ),
-          ],
-        ),
       );
 
       if (agreed == true) {
@@ -216,35 +220,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Center(
-                                child: Container(
-                                  width: 68,
-                                  height: 68,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        colorScheme.primary,
-                                        colorScheme.tertiary,
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(18),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: colorScheme.primary.withValues(
-                                          alpha: 0.35,
-                                        ),
-                                        blurRadius: 16,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Icon(
-                                    Icons.forum_rounded,
-                                    size: 36,
-                                    color: Colors.white,
-                                  ),
+                              const Center(
+                                child: GotoImLogo(
+                                  size: 78,
+                                  enableBreathing: true,
+                                  heroTag: 'app_brand_logo',
                                 ),
                               ),
                               const SizedBox(height: 20),
@@ -450,8 +430,8 @@ class _PasswordForm extends StatelessWidget {
                         color: colorScheme.primary,
                         fontWeight: FontWeight.w600,
                       ),
-                      recognizer: TapGestureRecognizer()
-                        ..onTap = onOpenUserAgreement,
+                      recognizer:
+                          TapGestureRecognizer()..onTap = onOpenUserAgreement,
                     ),
                     const TextSpan(text: '与'),
                     TextSpan(
@@ -460,8 +440,8 @@ class _PasswordForm extends StatelessWidget {
                         color: colorScheme.primary,
                         fontWeight: FontWeight.w600,
                       ),
-                      recognizer: TapGestureRecognizer()
-                        ..onTap = onOpenPrivacyPolicy,
+                      recognizer:
+                          TapGestureRecognizer()..onTap = onOpenPrivacyPolicy,
                     ),
                   ],
                 ),
