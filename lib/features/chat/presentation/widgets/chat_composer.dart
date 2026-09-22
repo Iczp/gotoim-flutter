@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme_tokens.dart';
@@ -70,6 +72,7 @@ class ChatComposerState extends State<ChatComposer>
   int _page = 0;
   bool _mentionSheetOpen = false;
   bool _menuMode = false;
+  String? _lastDockMetrics;
 
   static const _functions = <ChatFunctionItem>[
     ChatFunctionItem('相册', Icons.photo_outlined),
@@ -97,6 +100,7 @@ class ChatComposerState extends State<ChatComposer>
     super.initState();
     _menuMode = widget.controller.isOfficialAccount;
     WidgetsBinding.instance.addObserver(this);
+    _focusNode.addListener(() => _logDockMetrics('focus'));
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _captureKeyboardHeight(),
     );
@@ -121,16 +125,22 @@ class ChatComposerState extends State<ChatComposer>
     final bottomSafeArea = MediaQuery.viewPaddingOf(context).bottom;
     final keyboardSlotHeight =
         (bottomInset - bottomSafeArea).clamp(0.0, double.infinity).toDouble();
-    if (keyboardSlotHeight > _minValidKeyboardHeight) {
-      final clampedHeight = keyboardSlotHeight.clamp(240.0, 420.0);
-      if ((clampedHeight - _keyboardTrayHeight).abs() >= 1) {
-        setState(() => _keyboardTrayHeight = clampedHeight);
+    if (_isSwitchingToKeyboard) {
+      // 功能区切回键盘时，先维持切换瞬间冻结的真实 Dock 高度。只有
+      // 系统键盘回到同一锚点后才交还给实时 Insets，避免任意设备在
+      // 键盘动画期间因导航栏/手势区 Insets 变化而让输入栏短暂下沉。
+      if (keyboardSlotHeight >= _keyboardTrayHeight - 1) {
+        setState(() => _isSwitchingToKeyboard = false);
+      }
+      _logDockMetrics('metrics');
+      return;
+    }
+    if (!_showFunctions && keyboardSlotHeight > _minValidKeyboardHeight) {
+      if ((keyboardSlotHeight - _keyboardTrayHeight).abs() >= 1) {
+        setState(() => _keyboardTrayHeight = keyboardSlotHeight);
       }
     }
-    if (_isSwitchingToKeyboard &&
-        keyboardSlotHeight > _minValidKeyboardHeight) {
-      setState(() => _isSwitchingToKeyboard = false);
-    }
+    _logDockMetrics('metrics');
   }
 
   @override
@@ -158,13 +168,16 @@ class ChatComposerState extends State<ChatComposer>
               .clamp(0.0, double.infinity)
               .toDouble();
       if (keyboardSlotHeight > _minValidKeyboardHeight) {
-        _keyboardTrayHeight = keyboardSlotHeight.clamp(240.0, 420.0);
+        _keyboardTrayHeight = keyboardSlotHeight;
       }
       _focusNode.unfocus();
       setState(() {
         _showFunctions = true;
         _isSwitchingToKeyboard = false;
       });
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _logDockMetrics('open-functions'),
+      );
     }
   }
 
@@ -175,6 +188,9 @@ class ChatComposerState extends State<ChatComposer>
       _isSwitchingToKeyboard = true;
     });
     _focusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _logDockMetrics('switch-to-keyboard'),
+    );
   }
 
   void _closeFunctions() {
@@ -183,6 +199,27 @@ class ChatComposerState extends State<ChatComposer>
       _showFunctions = false;
       _isSwitchingToKeyboard = false;
     });
+  }
+
+  void _logDockMetrics(String reason) {
+    if (!kDebugMode || !mounted) return;
+    final mediaQuery = MediaQuery.of(context);
+    final viewInsets = mediaQuery.viewInsets.bottom;
+    final viewPadding = mediaQuery.viewPadding.bottom;
+    final padding = mediaQuery.padding.bottom;
+    final keyboardSlot =
+        (viewInsets - viewPadding).clamp(0.0, double.infinity).toDouble();
+    final signature =
+        '$reason/$viewInsets/$viewPadding/$padding/$keyboardSlot/'
+        '$_keyboardTrayHeight/$_showFunctions/$_isSwitchingToKeyboard';
+    if (signature == _lastDockMetrics) return;
+    _lastDockMetrics = signature;
+    debugPrint(
+      '[chatDock] reason=$reason '
+      'viewInsets=$viewInsets viewPadding=$viewPadding padding=$padding '
+      'keyboardSlot=$keyboardSlot tray=$_keyboardTrayHeight '
+      'functions=$_showFunctions switching=$_isSwitchingToKeyboard',
+    );
   }
 
   void _onInputChanged(String value) {
@@ -631,6 +668,22 @@ class ChatComposerState extends State<ChatComposer>
                         minimumSize: Size(56, inputControlHeight),
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor:
+                            widget.useGlass
+                                ? Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: 0.72)
+                                : null,
+                        foregroundColor:
+                            widget.useGlass
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : null,
+                        disabledBackgroundColor:
+                            widget.useGlass
+                                ? Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.12)
+                                : null,
                       ),
                       onPressed:
                           widget.controller.isSending ||
