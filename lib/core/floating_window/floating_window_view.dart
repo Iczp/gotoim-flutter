@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'floating_window_manager.dart';
@@ -43,6 +45,27 @@ class FloatingWindowView extends StatefulWidget {
 
 class _FloatingWindowViewState extends State<FloatingWindowView> {
   bool _dragging = false;
+  final ValueNotifier<bool> _interacting = ValueNotifier<bool>(false);
+  Timer? _idleTimer;
+
+  @override
+  void dispose() {
+    _idleTimer?.cancel();
+    _interacting.dispose();
+    super.dispose();
+  }
+
+  void _activate() {
+    _idleTimer?.cancel();
+    _interacting.value = true;
+  }
+
+  void _scheduleIdle() {
+    _idleTimer?.cancel();
+    _idleTimer = Timer(const Duration(milliseconds: 850), () {
+      if (mounted) _interacting.value = false;
+    });
+  }
 
   void _start(DragStartDetails details) {
     if (!widget.entry.options.draggable) return;
@@ -130,43 +153,65 @@ class _FloatingWindowViewState extends State<FloatingWindowView> {
         color: Colors.transparent,
         child: GestureDetector(
           onTap: () => widget.manager.bringToFront(entry.id),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(color: Colors.black38, blurRadius: 12),
-              ],
-            ),
-            child: TooltipVisibility(
-              // FloatingWindowLayer is a sibling of the app Navigator rather
-              // than a descendant of its Overlay. Tooltips therefore cannot
-              // create their overlay entries here; keep the touch controls
-              // usable without triggering debugCheckHasOverlay.
-              visible: false,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  children: [
-                    Positioned.fill(child: content),
-                    if (entry.options.resizable)
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: GestureDetector(
-                          onPanStart:
-                              (_) => widget.manager.bringToFront(entry.id),
-                          onPanUpdate: _resize,
-                          child: const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: Icon(Icons.drag_handle, size: 18),
+          child: Listener(
+            onPointerDown:
+                entry.options.transparentBackground ? (_) => _activate() : null,
+            onPointerUp:
+                entry.options.transparentBackground
+                    ? (_) => _scheduleIdle()
+                    : null,
+            onPointerCancel:
+                entry.options.transparentBackground
+                    ? (_) => _scheduleIdle()
+                    : null,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _interacting,
+              child: TooltipVisibility(
+                // FloatingWindowLayer is a sibling of the app Navigator rather
+                // than a descendant of its Overlay. Tooltips therefore cannot
+                // create their overlay entries here; keep the touch controls
+                // usable without triggering debugCheckHasOverlay.
+                visible: false,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: content),
+                      if (entry.options.resizable)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: GestureDetector(
+                            onPanStart:
+                                (_) => widget.manager.bringToFront(entry.id),
+                            onPanUpdate: _resize,
+                            child: const SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: Icon(Icons.drag_handle, size: 18),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
+              builder:
+                  (_, interacting, child) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    decoration: BoxDecoration(
+                      color:
+                          entry.options.transparentBackground
+                              ? Theme.of(context).colorScheme.surface
+                                  .withValues(alpha: interacting ? .8 : .5)
+                              : Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black38, blurRadius: 12),
+                      ],
+                    ),
+                    child: child,
+                  ),
             ),
           ),
         ),
@@ -182,7 +227,7 @@ class _PlatformHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ColoredBox(
-    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    color: Colors.transparent,
     child: SizedBox(
       height: 34,
       child: Row(
@@ -191,7 +236,11 @@ class _PlatformHeader extends StatelessWidget {
           const Icon(Icons.drag_indicator, size: 18),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(entry.id, maxLines: 1, overflow: TextOverflow.ellipsis),
+            child: Text(
+              entry.options.title ?? entry.id,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           IconButton(
             tooltip: '关闭浮窗',

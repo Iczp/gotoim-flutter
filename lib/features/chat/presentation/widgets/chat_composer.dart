@@ -28,6 +28,7 @@ class ChatComposer extends StatefulWidget {
     required this.controller,
     required this.input,
     required this.quoteContentBuilder,
+    this.onOpenAppearancePanel,
     this.useGlass = false,
     super.key,
   });
@@ -40,6 +41,7 @@ class ChatComposer extends StatefulWidget {
 
   /// 引用消息内容构建器
   final Widget Function(ChatMessage quote) quoteContentBuilder;
+  final Future<void> Function()? onOpenAppearancePanel;
   final bool useGlass;
 
   @override
@@ -79,6 +81,7 @@ class ChatComposerState extends State<ChatComposer>
     ChatFunctionItem('拍摄', Icons.camera_alt_outlined),
     ChatFunctionItem('视频', Icons.videocam_outlined),
     ChatFunctionItem('文件', Icons.insert_drive_file_outlined, enabled: true),
+    ChatFunctionItem('设置背景', Icons.wallpaper_rounded, enabled: true),
     ChatFunctionItem('位置', Icons.location_on_outlined),
     ChatFunctionItem('名片', Icons.contact_page_outlined),
     ChatFunctionItem('语音通话', Icons.call_outlined),
@@ -461,6 +464,11 @@ class ChatComposerState extends State<ChatComposer>
   }
 
   Future<void> _selectFunction(ChatFunctionItem item) async {
+    if (item.label == '设置背景') {
+      _closeFunctions();
+      await widget.onOpenAppearancePanel?.call();
+      return;
+    }
     if (item.label == '相册') {
       await widget.controller.chooseAndSendImages();
       return;

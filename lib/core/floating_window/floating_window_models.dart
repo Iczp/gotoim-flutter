@@ -22,6 +22,8 @@ class FloatingWindowOptions {
     this.keepAspectRatio = false,
     this.avoidKeyboard = true,
     this.avoidSafeArea = true,
+    this.transparentBackground = false,
+    this.title,
     this.margin = const EdgeInsets.all(12),
     this.initialSize = const Size(180, 120),
     this.minSize = const Size(120, 72),
@@ -53,6 +55,10 @@ class FloatingWindowOptions {
   final bool keepAspectRatio;
   final bool avoidKeyboard;
   final bool avoidSafeArea;
+
+  /// 由窗口内容自行绘制背景，适用于可动态调整透明度的工具浮窗。
+  final bool transparentBackground;
+  final String? title;
   final EdgeInsets margin;
   final Size initialSize;
   final Size minSize;

@@ -7,6 +7,7 @@ import '../../session/application/active_chat_registry.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/browser/app_webview_page.dart';
+import '../../../core/floating_window/floating_window.dart';
 
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
@@ -17,6 +18,7 @@ import '../../../core/config/app_environment.dart';
 import '../../../core/media/media_preview.dart';
 import '../../../core/media/image_provider_factory.dart';
 import '../../../core/theme/app_theme_tokens.dart';
+import '../../../core/theme/chat_appearance_controller.dart';
 import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/half_page_sheet.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -39,6 +41,7 @@ import 'message_content/chat_message_presentation.dart';
 import 'message_menu/chat_avatar_menu.dart';
 import 'message_menu/chat_message_menu.dart';
 import 'widgets/chat_composer.dart';
+import 'widgets/chat_appearance_sheet.dart';
 import 'widgets/chat_input_area.dart';
 import 'widgets/chat_message_list.dart';
 import 'widgets/chat_message_row.dart';
@@ -114,6 +117,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Timer? _quoteHighlightTimer;
   final Stopwatch _pageStopwatch = Stopwatch();
 
+  String get _appearanceWindowId => 'chat-appearance:${widget.sessionUnitId}';
+
   @override
   void initState() {
     super.initState();
@@ -156,6 +161,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       'totalSessionDuration=${_pageStopwatch.elapsedMilliseconds}ms',
     );
     WidgetsBinding.instance.removeObserver(this);
+    ref.read(floatingWindowManagerProvider).close(_appearanceWindowId);
     _activeChatRegistry.leaveChat(widget.sessionUnitId);
     unawaited(_audioPlayback.stop());
     controller.dispose();
@@ -179,6 +185,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) {
+      // The global Theme also consumes this value; watch here as well so the
+      // active chat page repaints immediately while a floating slider changes.
+      ref.watch(chatAppearanceProvider);
       final mediaItems = _mediaItemsFor(controller.messages);
       final backgroundImageUrl = resolveApiUrl(
         controller.backgroundImage,
@@ -306,8 +315,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
       input: input,
       useGlass: useGlass,
       quoteContentBuilder: (quote) => _buildQuotedContent(quote, _mediaItems),
+      onOpenAppearancePanel: _openAppearancePanel,
     ),
   );
+
+  Future<void> _openAppearancePanel() async {
+    ref
+        .read(floatingWindowManagerProvider)
+        .show(
+          id: _appearanceWindowId,
+          contentMode: FloatingWindowContentMode.platformView,
+          options: const FloatingWindowOptions(
+            title: '聊天背景与外观',
+            initialSize: Size(340, 460),
+            minSize: Size(280, 280),
+            maxSize: Size(480, 680),
+            initialPosition: Offset(18, 88),
+            resizable: true,
+            snapToEdge: false,
+            transparentBackground: true,
+          ),
+          child: ChatAppearanceSheet(
+            ownerId: widget.ownerId,
+            sessionUnitId: widget.sessionUnitId,
+            onBackgroundChanged: controller.refreshSessionDetail,
+          ),
+        );
+  }
 
   Widget _buildAiStreamReply(AiStreamReply reply) {
     final theme = Theme.of(context);
