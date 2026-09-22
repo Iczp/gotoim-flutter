@@ -144,6 +144,19 @@ class ToastOptions {
 
 _ToastOverlayHandle? _activeToast;
 
+/// 将其他全局浮层插入到当前 Toast 下方。
+///
+/// 聊天功能面板等全屏底部浮层是在 Toast 出现后才插入的；若直接插入
+/// Overlay 顶层，会遮住位于底部的 Toast。
+void insertOverlayBelowActiveToast(OverlayState overlay, OverlayEntry entry) {
+  final activeToast = _activeToast?.entry;
+  if (activeToast?.mounted ?? false) {
+    overlay.insert(entry, below: activeToast);
+    return;
+  }
+  overlay.insert(entry);
+}
+
 class _ToastOverlayHandle {
   _ToastOverlayHandle(this.entry, this.dismiss);
   final OverlayEntry entry;
@@ -415,10 +428,7 @@ VoidCallback showLoadingToast(
     maxLines: maxLines,
     duration: fallbackTimeout ?? const Duration(seconds: 60),
     closePrevious: true,
-    options: const ToastOptions(
-      type: ToastType.info,
-      isLoading: true,
-    ),
+    options: const ToastOptions(type: ToastType.info, isLoading: true),
   );
   return dismissActiveToast;
 }
@@ -623,23 +633,24 @@ class _ToastOverlayHostState extends State<_ToastOverlayHost>
                             children: <Widget>[
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
-                                child: widget.options.isLoading
-                                    ? SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.2,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                style.foregroundColor,
-                                              ),
+                                child:
+                                    widget.options.isLoading
+                                        ? SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  style.foregroundColor,
+                                                ),
+                                          ),
+                                        )
+                                        : Icon(
+                                          widget.options.icon ?? style.icon,
+                                          color: style.foregroundColor,
+                                          size: 20,
                                         ),
-                                      )
-                                    : Icon(
-                                        widget.options.icon ?? style.icon,
-                                        color: style.foregroundColor,
-                                        size: 20,
-                                      ),
                               ),
                               const SizedBox(width: 10),
                               Flexible(

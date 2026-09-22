@@ -50,7 +50,6 @@ class ChatComposerState extends State<ChatComposer>
   final PageController _pageController = PageController();
   bool _showFunctions = false;
   bool _isSwitchingToKeyboard = false;
-  Timer? _switchKeyboardTimeout;
   bool _voiceMode = false;
   bool _startingRecording = false;
   bool _recording = false;
@@ -125,6 +124,9 @@ class ChatComposerState extends State<ChatComposer>
         setState(() => _keyboardTrayHeight = clampedHeight);
       }
     }
+    if (_isSwitchingToKeyboard && bottomInset > _minValidKeyboardHeight) {
+      setState(() => _isSwitchingToKeyboard = false);
+    }
   }
 
   @override
@@ -132,7 +134,6 @@ class ChatComposerState extends State<ChatComposer>
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_levelSubscription?.cancel());
     _durationTimer?.cancel();
-    _switchKeyboardTimeout?.cancel();
     _hideRecordingOverlay();
     if (_recording || _startingRecording) {
       unawaited(widget.controller.cancelVoiceRecording());
@@ -142,33 +143,37 @@ class ChatComposerState extends State<ChatComposer>
     super.dispose();
   }
 
-  void _startSwitchingToKeyboard() {
-    _switchKeyboardTimeout?.cancel();
-    _isSwitchingToKeyboard = true;
-    _switchKeyboardTimeout = Timer(const Duration(milliseconds: 500), () {
-      if (mounted && _isSwitchingToKeyboard) {
-        setState(() {
-          _isSwitchingToKeyboard = false;
-          _showFunctions = false;
-        });
-      }
-    });
-  }
-
   void _toggleFunctions() {
-    _switchKeyboardTimeout?.cancel();
     if (_showFunctions) {
-      setState(() {
-        _showFunctions = false;
-        _isSwitchingToKeyboard = false;
-      });
+      _switchToKeyboard();
     } else {
+      final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+      if (keyboardInset > _minValidKeyboardHeight) {
+        _keyboardTrayHeight = keyboardInset.clamp(240.0, 420.0);
+      }
       _focusNode.unfocus();
       setState(() {
         _showFunctions = true;
         _isSwitchingToKeyboard = false;
       });
     }
+  }
+
+  void _switchToKeyboard() {
+    if (!_showFunctions) return;
+    setState(() {
+      _showFunctions = false;
+      _isSwitchingToKeyboard = true;
+    });
+    _focusNode.requestFocus();
+  }
+
+  void _closeFunctions() {
+    if (!_showFunctions && !_isSwitchingToKeyboard) return;
+    setState(() {
+      _showFunctions = false;
+      _isSwitchingToKeyboard = false;
+    });
   }
 
   void _onInputChanged(String value) {
@@ -195,20 +200,14 @@ class ChatComposerState extends State<ChatComposer>
   }
 
   void closeInputArea() {
-    _switchKeyboardTimeout?.cancel();
     _focusNode.unfocus();
-    if (_showFunctions || _isSwitchingToKeyboard) {
-      setState(() {
-        _showFunctions = false;
-        _isSwitchingToKeyboard = false;
-      });
-    }
+    _closeFunctions();
   }
 
   void focusText() {
     if (_voiceMode || _showFunctions) {
       if (_showFunctions) {
-        _startSwitchingToKeyboard();
+        _switchToKeyboard();
       }
       setState(() {
         _voiceMode = false;
@@ -251,8 +250,8 @@ class ChatComposerState extends State<ChatComposer>
 
   void _toggleVoiceMode() {
     _focusNode.unfocus();
+    _closeFunctions();
     setState(() {
-      _showFunctions = false;
       _voiceMode = !_voiceMode;
     });
   }
@@ -457,34 +456,14 @@ class ChatComposerState extends State<ChatComposer>
       ),
     );
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    if (bottomInset > _minValidKeyboardHeight) {
-      final clamped = bottomInset.clamp(240.0, 420.0);
-      if ((clamped - _keyboardTrayHeight).abs() >= 1) {
-        _keyboardTrayHeight = clamped;
-      }
-      if (_isSwitchingToKeyboard) {
-        _switchKeyboardTimeout?.cancel();
-        _switchKeyboardTimeout = null;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _isSwitchingToKeyboard) {
-            setState(() {
-              _isSwitchingToKeyboard = false;
-              _showFunctions = false;
-            });
-          }
-        });
-      }
-    }
-
-    final effectiveBottomHeight =
-        (_showFunctions || _isSwitchingToKeyboard)
+    final dockSlotHeight =
+        _showFunctions || _isSwitchingToKeyboard
             ? (_keyboardTrayHeight > bottomInset
                 ? _keyboardTrayHeight
                 : bottomInset)
             : bottomInset;
-
-    final isKeyboardActive = bottomInset > 0 || _isSwitchingToKeyboard;
-    final needBottomSafeArea = effectiveBottomHeight == 0;
+    final isKeyboardActive = bottomInset > 0;
+    final needBottomSafeArea = dockSlotHeight == 0;
 
     final composer = Material(
       color: widget.useGlass ? Colors.transparent : null,
@@ -583,7 +562,7 @@ class ChatComposerState extends State<ChatComposer>
                                   focusNode: _focusNode,
                                   onTap: () {
                                     if (_showFunctions) {
-                                      _startSwitchingToKeyboard();
+                                      _switchToKeyboard();
                                     }
                                   },
                                   onChanged: _onInputChanged,
@@ -672,35 +651,25 @@ class ChatComposerState extends State<ChatComposer>
                     onClear: widget.controller.cancelQuote,
                   ),
                 ),
-              ClipRect(
-                child: AnimatedContainer(
-                  duration:
-                      isKeyboardActive
-                          ? Duration.zero
-                          : const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  height: effectiveBottomHeight,
-                  child: OverflowBox(
-                    minHeight: _keyboardTrayHeight,
-                    maxHeight: _keyboardTrayHeight,
-                    alignment: Alignment.topCenter,
-                    child:
-                        _showFunctions
-                            ? SizedBox(
-                              height: _keyboardTrayHeight,
-                              child: ChatFunctionPanel(
-                                items: _functions,
-                                pageController: _pageController,
-                                page: _page,
-                                useGlass: widget.useGlass,
-                                onPageChanged:
-                                    (value) => setState(() => _page = value),
-                                onSelected: _selectFunction,
-                              ),
-                            )
-                            : const SizedBox.shrink(),
-                  ),
-                ),
+              AnimatedContainer(
+                duration:
+                    isKeyboardActive || _isSwitchingToKeyboard
+                        ? Duration.zero
+                        : const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                height: dockSlotHeight,
+                child:
+                    _showFunctions
+                        ? ChatFunctionPanel(
+                          items: _functions,
+                          pageController: _pageController,
+                          page: _page,
+                          useGlass: widget.useGlass,
+                          onPageChanged:
+                              (value) => setState(() => _page = value),
+                          onSelected: _selectFunction,
+                        )
+                        : const SizedBox.shrink(),
               ),
             ],
           ],
@@ -708,17 +677,20 @@ class ChatComposerState extends State<ChatComposer>
       ),
     );
 
-    if (!widget.useGlass) return composer;
+    final glassComposer =
+        widget.useGlass
+            ? GlassContainer(
+              borderRadius: BorderRadius.zero,
+              borderWidth: tokens.chatGlassBorderWidth,
+              blurSigma: tokens.chatGlassBlurSigma,
+              backgroundColor: tokens.glassSurfaceColor.withValues(
+                alpha: tokens.chatInputGlassOpacity,
+              ),
+              borderColor: glassBorderColor,
+              child: composer,
+            )
+            : composer;
 
-    return GlassContainer(
-      borderRadius: BorderRadius.zero,
-      borderWidth: tokens.chatGlassBorderWidth,
-      blurSigma: tokens.chatGlassBlurSigma,
-      backgroundColor: tokens.glassSurfaceColor.withValues(
-        alpha: tokens.chatInputGlassOpacity,
-      ),
-      borderColor: glassBorderColor,
-      child: composer,
-    );
+    return glassComposer;
   }
 }

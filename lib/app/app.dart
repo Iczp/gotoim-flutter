@@ -5,6 +5,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/theme/chat_appearance_controller.dart';
 import '../core/theme/font_scale_controller.dart';
 import '../core/theme/overscroll_style_controller.dart';
 import '../core/theme/theme_mode_controller.dart';
@@ -59,7 +60,9 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     ref.read(activeChatRegistryProvider).updateLifecycle(state);
-    ref.read(networkConnectivityCoordinatorProvider).handleAppLifecycleState(state);
+    ref
+        .read(networkConnectivityCoordinatorProvider)
+        .handleAppLifecycleState(state);
   }
 
   @override
@@ -67,12 +70,13 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
     final themeMode = ref.watch(themeModeProvider);
     final overscrollStyle = ref.watch(overscrollStyleProvider);
     final fontScale = ref.watch(fontScaleProvider);
+    final chatAppearance = ref.watch(chatAppearanceProvider);
 
     return MaterialApp.router(
       title: 'Goto IM',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(),
-      darkTheme: AppTheme.darkTheme(),
+      theme: AppTheme.lightTheme(chatAppearance: chatAppearance),
+      darkTheme: AppTheme.darkTheme(chatAppearance: chatAppearance),
       themeMode: themeMode,
       scrollBehavior: AppScrollBehavior(style: overscrollStyle),
       scaffoldMessengerKey: rootScaffoldMessengerKey,

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import 'chat_appearance_controller.dart';
 import 'app_theme_tokens.dart';
 import 'app_typography.dart';
 
 /// Central theme factory providing unified Light and Dark [ThemeData].
 abstract final class AppTheme {
   /// Build the unified Material 3 Light Theme.
-  static ThemeData lightTheme() {
+  static ThemeData lightTheme({ChatAppearanceSettings? chatAppearance}) {
     final colorScheme = const ColorScheme.light(
       primary: AppColors.lightPrimary,
       onPrimary: AppColors.lightOnPrimary,
@@ -39,7 +40,9 @@ abstract final class AppTheme {
     );
 
     final textTheme = AppTypography.createTextTheme(colorScheme.onSurface);
-    final tokens = AppThemeTokens.light();
+    final tokens = (chatAppearance ?? const ChatAppearanceSettings()).applyTo(
+      AppThemeTokens.light(),
+    );
 
     return _buildTheme(
       colorScheme: colorScheme,
@@ -50,7 +53,7 @@ abstract final class AppTheme {
   }
 
   /// Build the unified Material 3 Dark Theme.
-  static ThemeData darkTheme() {
+  static ThemeData darkTheme({ChatAppearanceSettings? chatAppearance}) {
     final colorScheme = const ColorScheme.dark(
       primary: AppColors.darkPrimary,
       onPrimary: AppColors.darkOnPrimary,
@@ -82,7 +85,9 @@ abstract final class AppTheme {
     );
 
     final textTheme = AppTypography.createTextTheme(colorScheme.onSurface);
-    final tokens = AppThemeTokens.dark();
+    final tokens = (chatAppearance ?? const ChatAppearanceSettings()).applyTo(
+      AppThemeTokens.dark(),
+    );
 
     return _buildTheme(
       colorScheme: colorScheme,

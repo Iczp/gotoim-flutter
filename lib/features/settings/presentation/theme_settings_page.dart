@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/font_scale_controller.dart';
+import '../../../core/theme/app_theme_tokens.dart';
+import '../../../core/theme/chat_appearance_controller.dart';
 import '../../../core/theme/overscroll_style_controller.dart';
 import '../../../core/theme/tab_glass_controller.dart';
 import '../../../core/theme/theme_mode_controller.dart';
@@ -19,13 +21,13 @@ class ThemeSettingsPage extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final fontScale = ref.watch(fontScaleProvider);
     final overscrollStyle = ref.watch(overscrollStyleProvider);
+    final chatAppearance = ref.watch(chatAppearanceProvider);
+    final chatTokens = context.appTokens;
     final currentLevel = FontScaleLevel.fromScale(fontScale);
     final levelIndex = FontScaleLevel.values.indexOf(currentLevel);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('外观与主题'),
-      ),
+      appBar: AppBar(title: const Text('外观与主题')),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
@@ -210,7 +212,9 @@ class ThemeSettingsPage extends ConsumerWidget {
                     if (currentLevel != FontScaleLevel.standard)
                       TextButton(
                         onPressed: () {
-                          ref.read(fontScaleControllerProvider.notifier).reset();
+                          ref
+                              .read(fontScaleControllerProvider.notifier)
+                              .reset();
                         },
                         child: const Text('恢复默认'),
                       ),
@@ -256,29 +260,33 @@ class ThemeSettingsPage extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: FontScaleLevel.values.map((level) {
-                      final isSelected = level == currentLevel;
-                      return GestureDetector(
-                        onTap: () {
-                          ref
-                              .read(fontScaleControllerProvider.notifier)
-                              .setLevel(level);
-                        },
-                        child: Text(
-                          level.label,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected
-                                ? colorScheme.primary
-                                : colorScheme.onSurfaceVariant.withValues(
-                                    alpha: 0.6,
-                                  ),
-                          ),
-                        ),
-                      );
-                    }).toList(growable: false),
+                    children: FontScaleLevel.values
+                        .map((level) {
+                          final isSelected = level == currentLevel;
+                          return GestureDetector(
+                            onTap: () {
+                              ref
+                                  .read(fontScaleControllerProvider.notifier)
+                                  .setLevel(level);
+                            },
+                            child: Text(
+                              level.label,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                color:
+                                    isSelected
+                                        ? colorScheme.primary
+                                        : colorScheme.onSurfaceVariant
+                                            .withValues(alpha: 0.6),
+                              ),
+                            ),
+                          );
+                        })
+                        .toList(growable: false),
                   ),
                 ),
               ],
@@ -339,8 +347,204 @@ class ThemeSettingsPage extends ConsumerWidget {
               ],
             ),
           ),
+          CellGroup(
+            title: '聊天窗口外观',
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Icon(Icons.chat_bubble_outline, color: colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '聊天毛玻璃与消息样式',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed:
+                          () =>
+                              ref.read(chatAppearanceProvider.notifier).reset(),
+                      child: const Text('恢复默认'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '调整后立即应用并保存在本机；标题栏、输入栏与功能区共用玻璃参数。',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                  ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '模糊强度',
+                  value: chatTokens.chatGlassBlurSigma,
+                  min: 0,
+                  max: 24,
+                  divisions: 24,
+                  onChanged:
+                      (value) => ref
+                          .read(chatAppearanceProvider.notifier)
+                          .update(
+                            chatAppearance.copyWith(glassBlurSigma: value),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '标题栏透明度',
+                  value: chatTokens.chatTitleGlassOpacity,
+                  min: .05,
+                  max: .9,
+                  divisions: 17,
+                  onChanged:
+                      (value) => ref
+                          .read(chatAppearanceProvider.notifier)
+                          .update(
+                            chatAppearance.copyWith(titleGlassOpacity: value),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '输入栏与功能区透明度',
+                  value: chatTokens.chatInputGlassOpacity,
+                  min: .05,
+                  max: .9,
+                  divisions: 17,
+                  onChanged:
+                      (value) => ref
+                          .read(chatAppearanceProvider.notifier)
+                          .update(
+                            chatAppearance.copyWith(inputGlassOpacity: value),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '玻璃边框透明度',
+                  value: chatTokens.chatGlassBorderOpacity,
+                  min: .05,
+                  max: .8,
+                  divisions: 15,
+                  onChanged:
+                      (value) => ref
+                          .read(chatAppearanceProvider.notifier)
+                          .update(
+                            chatAppearance.copyWith(glassBorderOpacity: value),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '玻璃边框线宽',
+                  value: chatTokens.chatGlassBorderWidth,
+                  min: .1,
+                  max: 1,
+                  divisions: 9,
+                  onChanged:
+                      (value) => ref
+                          .read(chatAppearanceProvider.notifier)
+                          .update(
+                            chatAppearance.copyWith(glassBorderWidth: value),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '消息气泡透明度',
+                  value: chatTokens.chatBubbleOpacity,
+                  min: .3,
+                  max: 1,
+                  divisions: 14,
+                  onChanged:
+                      (value) => ref
+                          .read(chatAppearanceProvider.notifier)
+                          .update(
+                            chatAppearance.copyWith(bubbleOpacity: value),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '底部工具栏高度',
+                  value: chatTokens.chatComposerHeight,
+                  min: 48,
+                  max: 72,
+                  divisions: 12,
+                  onChanged:
+                      (value) => ref
+                          .read(chatAppearanceProvider.notifier)
+                          .update(
+                            chatAppearance.copyWith(composerHeight: value),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '消息与头像最小尺寸',
+                  value: chatTokens.chatMessageMinHeight,
+                  min: 36,
+                  max: 56,
+                  divisions: 10,
+                  onChanged:
+                      (value) => ref
+                          .read(chatAppearanceProvider.notifier)
+                          .update(
+                            chatAppearance.copyWith(messageMinHeight: value),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '消息区安全留白',
+                  value: chatTokens.chatGlassContentPadding,
+                  min: 0,
+                  max: 32,
+                  divisions: 16,
+                  onChanged:
+                      (value) => ref
+                          .read(chatAppearanceProvider.notifier)
+                          .update(
+                            chatAppearance.copyWith(glassContentPadding: value),
+                          ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+class _ChatAppearanceSlider extends StatelessWidget {
+  const _ChatAppearanceSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 10),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Text(label),
+            Text(value.toStringAsFixed(value < 2 ? 2 : 0)),
+          ],
+        ),
+        Slider(
+          value: value.clamp(min, max).toDouble(),
+          min: min,
+          max: max,
+          divisions: divisions,
+          label: value.toStringAsFixed(value < 2 ? 2 : 0),
+          onChanged: onChanged,
+        ),
+      ],
+    ),
+  );
 }

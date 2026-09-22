@@ -15,6 +15,7 @@ import '../../../core/services/media/audio_playback_service.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/media/media_preview.dart';
+import '../../../core/media/image_provider_factory.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/half_page_sheet.dart';
@@ -230,8 +231,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             children: <Widget>[
               ColoredBox(color: Theme.of(context).colorScheme.surface),
               if (hasChatBackground)
-                Image.network(
-                  backgroundImageUrl,
+                Image(
+                  image: createImageProvider(backgroundImageUrl),
                   fit: BoxFit.cover,
                   gaplessPlayback: true,
                   errorBuilder: (_, _, _) => const SizedBox.shrink(),
@@ -253,15 +254,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final tokens = context.appTokens;
     final composer = _buildChatInputArea(controller, useGlass: true);
 
-    return Stack(
-      fit: StackFit.expand,
+    return Column(
       children: <Widget>[
-        AnimatedPadding(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(context).bottom,
-          ),
+        Expanded(
           child: ChatMessageList(
             messages: controller.messages,
             transientItems: controller.aiStreamReplies
@@ -280,26 +275,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   ChatTitleBar.toolbarHeight +
                   tokens.chatGlassContentPadding,
               12,
-              tokens.chatComposerHeight +
-                  safeArea.bottom +
-                  tokens.chatGlassContentPadding,
+              tokens.chatGlassContentPadding,
             ),
             itemBuilder:
                 (context, message, index) =>
                     _buildMessageItem(context, message, index, mediaItems),
           ),
         ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (controller.hasActiveAiStream)
-                _buildActiveAiStreamStopBar(Theme.of(context)),
-              composer,
-            ],
-          ),
-        ),
+        if (controller.hasActiveAiStream)
+          _buildActiveAiStreamStopBar(Theme.of(context)),
+        composer,
       ],
     );
   }
