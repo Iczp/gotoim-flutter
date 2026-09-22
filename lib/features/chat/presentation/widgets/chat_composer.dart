@@ -443,6 +443,13 @@ class ChatComposerState extends State<ChatComposer>
     final tokens = context.appTokens;
     const verticalPadding = 6.0;
     final inputControlHeight = tokens.chatComposerHeight - verticalPadding * 2;
+    final glassBorderColor = tokens.glassBorderColor.withValues(
+      alpha: tokens.chatGlassBorderOpacity,
+    );
+    final glassInputBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: glassBorderColor, width: 0.8),
+    );
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     if (bottomInset > _minValidKeyboardHeight) {
       final clamped = bottomInset.clamp(240.0, 420.0);
@@ -560,11 +567,8 @@ class ChatComposerState extends State<ChatComposer>
                                   ),
                                 ),
                               )
-                              : ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  minHeight: inputControlHeight,
-                                  maxHeight: 132,
-                                ),
+                              : SizedBox(
+                                height: inputControlHeight,
                                 child: TextField(
                                   controller: widget.input,
                                   focusNode: _focusNode,
@@ -576,14 +580,17 @@ class ChatComposerState extends State<ChatComposer>
                                   onChanged: _onInputChanged,
                                   enabled: !widget.controller.isMuted,
                                   minLines: 1,
-                                  maxLines: 5,
-                                  textInputAction: TextInputAction.newline,
+                                  maxLines: 1,
+                                  textInputAction: TextInputAction.send,
                                   decoration: InputDecoration(
                                     hintText:
                                         widget.controller.isMuted
                                             ? '你已被禁言，暂不能发言'
                                             : '输入消息',
                                     isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
                                     filled: widget.useGlass,
                                     fillColor:
                                         widget.useGlass
@@ -594,7 +601,18 @@ class ChatComposerState extends State<ChatComposer>
                                                           .chatInputGlassOpacity,
                                                 )
                                             : null,
-                                    border: const OutlineInputBorder(),
+                                    border:
+                                        widget.useGlass
+                                            ? glassInputBorder
+                                            : const OutlineInputBorder(),
+                                    enabledBorder:
+                                        widget.useGlass
+                                            ? glassInputBorder
+                                            : null,
+                                    focusedBorder:
+                                        widget.useGlass
+                                            ? glassInputBorder
+                                            : null,
                                   ),
                                 ),
                               ),
@@ -683,11 +701,12 @@ class ChatComposerState extends State<ChatComposer>
 
     return GlassContainer(
       borderRadius: BorderRadius.zero,
-      borderWidth: 0,
+      borderWidth: 0.8,
       blurSigma: tokens.chatGlassBlurSigma,
       backgroundColor: tokens.glassSurfaceColor.withValues(
         alpha: tokens.chatInputGlassOpacity,
       ),
+      borderColor: glassBorderColor,
       child: composer,
     );
   }

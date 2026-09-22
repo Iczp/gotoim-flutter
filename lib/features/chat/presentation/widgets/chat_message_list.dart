@@ -22,6 +22,7 @@ class ChatMessageList extends StatelessWidget {
     required this.onLoadMore,
     required this.onTapOutside,
     required this.itemBuilder,
+    this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
     super.key,
   });
 
@@ -35,6 +36,7 @@ class ChatMessageList extends StatelessWidget {
   final Future<void> Function() onLoadMore;
   final VoidCallback onTapOutside;
   final ChatMessageItemBuilder itemBuilder;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
@@ -98,10 +100,7 @@ class ChatMessageList extends StatelessWidget {
                         );
                         return index < 0 ? null : transientItems.length + index;
                       },
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 16,
-                      ),
+                      padding: padding,
                       itemCount: transientItems.length + messages.length + 1,
                       itemBuilder: (context, index) {
                         if (index < transientItems.length) {

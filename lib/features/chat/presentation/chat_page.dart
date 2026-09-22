@@ -15,6 +15,7 @@ import '../../../core/services/media/audio_playback_service.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/media/media_preview.dart';
+import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/half_page_sheet.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -235,65 +236,118 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   gaplessPlayback: true,
                   errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
-              Padding(
-                padding: EdgeInsets.only(
-                  top:
-                      hasChatBackground
-                          ? MediaQuery.paddingOf(context).top +
-                              ChatTitleBar.toolbarHeight
-                          : 0,
-                ),
-                child: Column(
-                  children: <Widget>[
-                    Expanded(
-                      child: ChatMessageList(
-                        messages: controller.messages,
-                        transientItems: controller.aiStreamReplies
-                            .map((reply) => _buildAiStreamReply(reply))
-                            .toList(growable: false),
-                        scrollController: _scrollController,
-                        isLoading: controller.isLoading,
-                        hasMore: controller.hasMore,
-                        error: controller.error,
-                        onViewingLatestChanged: controller.setViewingLatest,
-                        onLoadMore: controller.loadMore,
-                        onTapOutside: _closeInputArea,
-                        itemBuilder:
-                            (context, message, index) => _buildMessageItem(
-                              context,
-                              message,
-                              index,
-                              mediaItems,
-                            ),
-                      ),
-                    ),
-                    if (controller.hasActiveAiStream)
-                      _buildActiveAiStreamStopBar(Theme.of(context)),
-                    ChatInputArea(
-                      selectionMode: controller.selectionMode,
-                      selectionActions: ChatSelectionBar(
-                        count: controller.selectedLocalIds.length,
-                        onCancel: controller.cancelSelection,
-                        onDelete: _deleteSelectedMessages,
-                        onMergeForward: _showMergeForwardTargets,
-                      ),
-                      composer: ChatComposer(
-                        key: _composerKey,
-                        controller: controller,
-                        input: input,
-                        useGlass: hasChatBackground,
-                        quoteContentBuilder:
-                            (quote) => _buildQuotedContent(quote, _mediaItems),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              if (hasChatBackground)
+                _buildGlassChatContent(context, controller, mediaItems)
+              else
+                _buildStandardChatContent(context, controller, mediaItems),
             ],
           ),
         ),
       );
     },
+  );
+
+  Widget _buildGlassChatContent(
+    BuildContext context,
+    ChatController controller,
+    List<MediaPreviewItem> mediaItems,
+  ) {
+    final safeArea = MediaQuery.paddingOf(context);
+    final tokens = context.appTokens;
+    final composer = _buildChatInputArea(controller, useGlass: true);
+
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        ChatMessageList(
+          messages: controller.messages,
+          transientItems: controller.aiStreamReplies
+              .map((reply) => _buildAiStreamReply(reply))
+              .toList(growable: false),
+          scrollController: _scrollController,
+          isLoading: controller.isLoading,
+          hasMore: controller.hasMore,
+          error: controller.error,
+          onViewingLatestChanged: controller.setViewingLatest,
+          onLoadMore: controller.loadMore,
+          onTapOutside: _closeInputArea,
+          padding: EdgeInsets.fromLTRB(
+            12,
+            safeArea.top +
+                ChatTitleBar.toolbarHeight +
+                tokens.chatGlassContentPadding,
+            12,
+            tokens.chatComposerHeight +
+                safeArea.bottom +
+                tokens.chatGlassContentPadding,
+          ),
+          itemBuilder:
+              (context, message, index) =>
+                  _buildMessageItem(context, message, index, mediaItems),
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              if (controller.hasActiveAiStream)
+                _buildActiveAiStreamStopBar(Theme.of(context)),
+              composer,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStandardChatContent(
+    BuildContext context,
+    ChatController controller,
+    List<MediaPreviewItem> mediaItems,
+  ) => Column(
+    children: <Widget>[
+      Expanded(
+        child: ChatMessageList(
+          messages: controller.messages,
+          transientItems: controller.aiStreamReplies
+              .map((reply) => _buildAiStreamReply(reply))
+              .toList(growable: false),
+          scrollController: _scrollController,
+          isLoading: controller.isLoading,
+          hasMore: controller.hasMore,
+          error: controller.error,
+          onViewingLatestChanged: controller.setViewingLatest,
+          onLoadMore: controller.loadMore,
+          onTapOutside: _closeInputArea,
+          itemBuilder:
+              (context, message, index) =>
+                  _buildMessageItem(context, message, index, mediaItems),
+        ),
+      ),
+      if (controller.hasActiveAiStream)
+        _buildActiveAiStreamStopBar(Theme.of(context)),
+      _buildChatInputArea(controller),
+    ],
+  );
+
+  Widget _buildChatInputArea(
+    ChatController controller, {
+    bool useGlass = false,
+  }) => ChatInputArea(
+    selectionMode: controller.selectionMode,
+    selectionActions: ChatSelectionBar(
+      count: controller.selectedLocalIds.length,
+      onCancel: controller.cancelSelection,
+      onDelete: _deleteSelectedMessages,
+      onMergeForward: _showMergeForwardTargets,
+    ),
+    composer: ChatComposer(
+      key: _composerKey,
+      controller: controller,
+      input: input,
+      useGlass: useGlass,
+      quoteContentBuilder: (quote) => _buildQuotedContent(quote, _mediaItems),
+    ),
   );
 
   Widget _buildAiStreamReply(AiStreamReply reply) {

@@ -76,6 +76,9 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
         backgroundColor: tokens.glassSurfaceColor.withValues(
           alpha: tokens.chatTitleGlassOpacity,
         ),
+        borderColor: tokens.glassBorderColor.withValues(
+          alpha: tokens.chatGlassBorderOpacity,
+        ),
         centerTitle: false,
       );
     }

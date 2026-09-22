@@ -32,6 +32,8 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     required this.chatGlassBlurSigma,
     required this.chatInputGlassOpacity,
     required this.chatTitleGlassOpacity,
+    required this.chatGlassContentPadding,
+    required this.chatGlassBorderOpacity,
     required this.avatarGradients,
   });
 
@@ -58,6 +60,8 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
   final double chatGlassBlurSigma;
   final double chatInputGlassOpacity;
   final double chatTitleGlassOpacity;
+  final double chatGlassContentPadding;
+  final double chatGlassBorderOpacity;
   final List<List<Color>> avatarGradients;
 
   /// Light theme token preset.
@@ -86,6 +90,8 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       chatGlassBlurSigma: 3.0,
       chatInputGlassOpacity: 0.22,
       chatTitleGlassOpacity: 0.22,
+      chatGlassContentPadding: 16.0,
+      chatGlassBorderOpacity: 0.33,
       avatarGradients: AppColors.avatarGradients,
     );
   }
@@ -116,6 +122,8 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       chatGlassBlurSigma: 18.0,
       chatInputGlassOpacity: 0.48,
       chatTitleGlassOpacity: 0.48,
+      chatGlassContentPadding: 16.0,
+      chatGlassBorderOpacity: 0.33,
       avatarGradients: AppColors.avatarGradients,
     );
   }
@@ -153,6 +161,8 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     double? chatGlassBlurSigma,
     double? chatInputGlassOpacity,
     double? chatTitleGlassOpacity,
+    double? chatGlassContentPadding,
+    double? chatGlassBorderOpacity,
     List<List<Color>>? avatarGradients,
   }) {
     return AppThemeTokens(
@@ -184,6 +194,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
           chatInputGlassOpacity ?? this.chatInputGlassOpacity,
       chatTitleGlassOpacity:
           chatTitleGlassOpacity ?? this.chatTitleGlassOpacity,
+      chatGlassContentPadding:
+          chatGlassContentPadding ?? this.chatGlassContentPadding,
+      chatGlassBorderOpacity:
+          chatGlassBorderOpacity ?? this.chatGlassBorderOpacity,
       avatarGradients: avatarGradients ?? this.avatarGradients,
     );
   }
@@ -244,6 +258,12 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       chatTitleGlassOpacity:
           chatTitleGlassOpacity +
           (other.chatTitleGlassOpacity - chatTitleGlassOpacity) * t,
+      chatGlassContentPadding:
+          chatGlassContentPadding +
+          (other.chatGlassContentPadding - chatGlassContentPadding) * t,
+      chatGlassBorderOpacity:
+          chatGlassBorderOpacity +
+          (other.chatGlassBorderOpacity - chatGlassBorderOpacity) * t,
       avatarGradients: t < 0.5 ? avatarGradients : other.avatarGradients,
     );
   }
