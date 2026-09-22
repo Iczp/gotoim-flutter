@@ -486,6 +486,16 @@ class ChatComposerState extends State<ChatComposer>
   @override
   Widget build(BuildContext context) {
     final tokens = context.appTokens;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final sendButtonBackground =
+        isDark
+            ? colorScheme.primaryContainer.withValues(alpha: 0.72)
+            : colorScheme.primary.withValues(alpha: 0.72);
+    final sendButtonForeground =
+        isDark ? colorScheme.onPrimaryContainer : colorScheme.onPrimary;
+    final disabledSendButtonBackground = tokens.glassSecondarySurface
+        .withValues(alpha: isDark ? 0.48 : 0.38);
     final inputControlHeight = tokens.chatMessageMinHeight;
     final verticalPadding =
         ((tokens.chatComposerHeight - inputControlHeight) / 2)
@@ -669,20 +679,12 @@ class ChatComposerState extends State<ChatComposer>
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         backgroundColor:
-                            widget.useGlass
-                                ? Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.72)
-                                : null,
+                            widget.useGlass ? sendButtonBackground : null,
                         foregroundColor:
-                            widget.useGlass
-                                ? Theme.of(context).colorScheme.onPrimary
-                                : null,
+                            widget.useGlass ? sendButtonForeground : null,
                         disabledBackgroundColor:
                             widget.useGlass
-                                ? Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.12)
+                                ? disabledSendButtonBackground
                                 : null,
                       ),
                       onPressed:
