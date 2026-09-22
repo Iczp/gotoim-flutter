@@ -225,6 +225,45 @@ void main() {
     expect(merged.isPinned, isFalse);
   });
 
+  test('mergeWithLocal rejects an inconsistent FriendScore tuple', () {
+    final local = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'friend-1',
+      'ownerId': 42,
+      'score': 91789894167339,
+      'sorting': 9,
+      'ticks': 1789894167339,
+    });
+    final invalidDetail = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'friend-1',
+      'ownerId': 42,
+      'score': 7297803000000,
+      'sorting': 9,
+      'ticks': 1789894167339,
+    });
+
+    final merged = invalidDetail.mergeWithLocal(local);
+
+    expect(invalidDetail.hasConsistentAuthoritativeScoreTuple, isFalse);
+    expect(merged.score, local.score);
+    expect(merged.sorting, local.sorting);
+    expect(merged.ticks, local.ticks);
+  });
+
+  test('normalizes inconsistent list ticks from the global FriendScore', () {
+    final summary = SessionSummary.fromJson(<String, dynamic>{
+      'id': 'friend-1',
+      'ownerId': 42,
+      'score': 1789894167339,
+      'sorting': 0,
+      // getFriends incorrectly returned an older last-message tick here.
+      'ticks': 1786182502870,
+    });
+
+    expect(summary.score, 1789894167339);
+    expect(summary.ticks, 1789894167339);
+    expect(summary.hasConsistentAuthoritativeScoreTuple, isTrue);
+  });
+
   test(
     'session DAO persists and restores sorting and score correctly',
     () async {

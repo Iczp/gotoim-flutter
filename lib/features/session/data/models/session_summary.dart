@@ -69,6 +69,16 @@ class SessionSummary {
     }
 
     final rawScore = asInt(json['score'] ?? json['Score']);
+    // Score is the server's global ordering key. Some list responses have
+    // returned a newer Score with an older Ticks value. Derive Ticks from the
+    // documented FriendScore contract so display-time grouping cannot disagree
+    // with the global list order: Score = Sorting * 1e13 + Ticks.
+    if (rawScore != null && rawScore > 0) {
+      final scoreTicks = rawScore - sorting * 10000000000000;
+      if (scoreTicks >= 0 && scoreTicks != ticks) {
+        ticks = scoreTicks;
+      }
+    }
     final score =
         (rawScore != null && rawScore > 0)
             ? rawScore
@@ -154,15 +164,16 @@ class SessionSummary {
     // server score is meaningful (for example, after cancelling a pin), so do
     // not retain a larger stale local value.  Partial state acknowledgements
     // such as set-read omit these fields and retain the local tuple instead.
-    final mergedScore = hasAuthoritativeScore ? score : local.score;
+    final useRemoteScoreTuple = hasConsistentAuthoritativeScoreTuple;
+    final mergedScore = useRemoteScoreTuple ? score : local.score;
     mergedRaw['score'] = mergedScore;
 
     // 3. Ticks and sorting are the inputs to the server-owned score.
-    final mergedTicks = hasAuthoritativeTicks ? ticks : local.ticks;
+    final mergedTicks = useRemoteScoreTuple ? ticks : local.ticks;
     mergedRaw['ticks'] = mergedTicks;
 
     // 4. An explicit zero is authoritative: it means a pin was removed.
-    final mergedSorting = hasAuthoritativeSorting ? sorting : local.sorting;
+    final mergedSorting = useRemoteScoreTuple ? sorting : local.sorting;
     mergedRaw['sorting'] = mergedSorting;
 
     // 5. Destination & Owner
@@ -246,6 +257,13 @@ class SessionSummary {
   final bool hasAuthoritativeScore;
   final bool hasAuthoritativeSorting;
   final bool hasAuthoritativeTicks;
+
+  /// Friend list/detail responses must obey Score = Sorting * 1e13 + Ticks.
+  bool get hasConsistentAuthoritativeScoreTuple =>
+      hasAuthoritativeScore &&
+      hasAuthoritativeSorting &&
+      hasAuthoritativeTicks &&
+      score == sorting * 10000000000000 + ticks;
 
   int? get lastMessageId =>
       asInt(

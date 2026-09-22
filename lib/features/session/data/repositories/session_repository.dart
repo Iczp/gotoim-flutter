@@ -234,12 +234,21 @@ class SessionRepository {
       sessionUnitId: sessionUnitId,
     );
     final local = await _dao.readById(sessionUnitId);
+    debugPrint(
+      '[loadFriendDetail][tuple] session=$sessionUnitId '
+      'remote(score=${remote.score},sorting=${remote.sorting},ticks=${remote.ticks},'
+      'valid=${remote.hasConsistentAuthoritativeScoreTuple}) '
+      'local(score=${local?.score},sorting=${local?.sorting},ticks=${local?.ticks})',
+    );
     final merged = (remote.mergeWithLocal(
       local,
     )).withCurrentOwnerFallback(await _currentOwnerSnapshot(ownerId));
     await _dao.upsertAll(<SessionSummary>[merged]);
     _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
-    debugPrint('[loadFriendDetail][remote] session=$sessionUnitId persisted=1');
+    debugPrint(
+      '[loadFriendDetail][remote] session=$sessionUnitId persisted=1 '
+      'merged(score=${merged.score},sorting=${merged.sorting},ticks=${merged.ticks})',
+    );
     return merged;
   }
 

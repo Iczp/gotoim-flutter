@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/session_summary.dart';
 import 'current_device_bar.dart';
@@ -343,6 +344,22 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
       'offset=$returnOffset maxExtent=$returnMax',
     );
     if (!mounted) return;
+
+    // TEMP: Keep this return-path delay while diagnosing the race between the
+    // chat-page detail sync and the list's local-cache reload. Remove after
+    // the backend/cache consistency issue is verified as resolved.
+    AppLogger.instance.warning(
+      'waiting 1000ms before reloadVisibleLocal | session=${session.id}',
+      category: 'SessionListTemp',
+      event: 'return_delay_started',
+    );
+    // await Future<void>.delayed(const Duration(milliseconds: 1000));
+    if (!mounted) return;
+    AppLogger.instance.warning(
+      'wait completed; reloading local list | session=${session.id}',
+      category: 'SessionListTemp',
+      event: 'return_delay_completed',
+    );
     await controller.reloadVisibleLocal();
     final afterReloadOffset =
         _scrollController.hasClients
