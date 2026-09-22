@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/media/media_preview.dart';
 import '../../../../core/services/file/attachment_transfer_service.dart';
+import '../../../../core/theme/app_theme_tokens.dart';
 import '../../../../core/utils/message_text_formatter.dart';
 import '../../../../core/utils/message_time_formatter.dart';
 import '../../../../core/widgets/floating_popover.dart';
@@ -215,7 +216,8 @@ class ChatMessageRow extends StatelessWidget {
             LayoutBuilder(
               builder: (context, constraints) {
                 const selectionSlotWidth = 36.0;
-                const avatarSlotWidth = 44.0;
+                final avatarSize = context.appTokens.chatMessageMinHeight;
+                final avatarSlotWidth = avatarSize;
                 const contentPadding = 12.0;
                 final selectionWidth = selectionMode ? selectionSlotWidth : 0.0;
                 final availableWidth = constraints.maxWidth - selectionWidth;
@@ -239,8 +241,8 @@ class ChatMessageRow extends StatelessWidget {
                   Widget av = ChatObjectAvatar(
                     name: message.senderName,
                     imageUrl: message.senderAvatarUrl,
-                    size: 44,
-                    radius: 22,
+                    size: avatarSize,
+                    radius: avatarSize / 2,
                     chatObjectId: message.senderChatObjectId,
                   );
                   av = GestureDetector(

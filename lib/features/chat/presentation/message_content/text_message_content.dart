@@ -5,6 +5,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../../../../core/browser/app_webview_page.dart';
 
 import '../../../../core/native/native.dart';
+import '../../../../core/theme/app_theme_tokens.dart';
 import '../../../../core/widgets/app_modal.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../data/models/chat_message.dart';
@@ -32,12 +33,8 @@ class TextMessageContent extends StatelessWidget {
     r'(?<!\]\()(https?:\/\/[^\s\)\>]+)',
     caseSensitive: false,
   );
-  static final _phoneRegex = RegExp(
-    r'(?<![\d\w])(1[3-9]\d{9})(?![\d\w])',
-  );
-  static final _mentionRegex = RegExp(
-    r'(?<!\w)@([^\s@#]+)',
-  );
+  static final _phoneRegex = RegExp(r'(?<![\d\w])(1[3-9]\d{9})(?![\d\w])');
+  static final _mentionRegex = RegExp(r'(?<!\w)@([^\s@#]+)');
 
   String _formatRichText(String text) {
     if (text.isEmpty) return text;
@@ -110,13 +107,10 @@ class TextMessageContent extends StatelessWidget {
     final bubble = ConstrainedBox(
       constraints: BoxConstraints(
         minWidth: 22,
-        minHeight: 44,
+        minHeight: context.appTokens.chatMessageMinHeight,
         maxWidth: maxWidth ?? double.infinity,
       ),
-      child: MessageBubble(
-        message: message,
-        child: content,
-      ),
+      child: MessageBubble(message: message, child: content),
     );
 
     if (message.isMine &&

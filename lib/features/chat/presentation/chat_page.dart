@@ -217,14 +217,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
           appBar: ChatTitleBar(
             title: controller.title,
             showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
-            useGlass: hasChatBackground,
+            useGlass: true,
             selectionMode: controller.selectionMode,
             onCancelSelection: controller.cancelSelection,
             onTransfer: _openTransferSheet,
             onOpenSettings: _openChatSettings,
             onOpenAiRuns: _openAiRunTimeline,
           ),
-          extendBodyBehindAppBar: hasChatBackground,
+          extendBodyBehindAppBar: true,
           body: Stack(
             fit: StackFit.expand,
             children: <Widget>[
@@ -236,10 +236,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   gaplessPlayback: true,
                   errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
-              if (hasChatBackground)
-                _buildGlassChatContent(context, controller, mediaItems)
-              else
-                _buildStandardChatContent(context, controller, mediaItems),
+              _buildGlassChatContent(context, controller, mediaItems),
             ],
           ),
         ),
@@ -299,36 +296,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ],
     );
   }
-
-  Widget _buildStandardChatContent(
-    BuildContext context,
-    ChatController controller,
-    List<MediaPreviewItem> mediaItems,
-  ) => Column(
-    children: <Widget>[
-      Expanded(
-        child: ChatMessageList(
-          messages: controller.messages,
-          transientItems: controller.aiStreamReplies
-              .map((reply) => _buildAiStreamReply(reply))
-              .toList(growable: false),
-          scrollController: _scrollController,
-          isLoading: controller.isLoading,
-          hasMore: controller.hasMore,
-          error: controller.error,
-          onViewingLatestChanged: controller.setViewingLatest,
-          onLoadMore: controller.loadMore,
-          onTapOutside: _closeInputArea,
-          itemBuilder:
-              (context, message, index) =>
-                  _buildMessageItem(context, message, index, mediaItems),
-        ),
-      ),
-      if (controller.hasActiveAiStream)
-        _buildActiveAiStreamStopBar(Theme.of(context)),
-      _buildChatInputArea(controller),
-    ],
-  );
 
   Widget _buildChatInputArea(
     ChatController controller, {

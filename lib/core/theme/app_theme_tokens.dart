@@ -29,11 +29,13 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     required this.glassBlurSigma,
     required this.chatBubbleOpacity,
     required this.chatComposerHeight,
+    required this.chatMessageMinHeight,
     required this.chatGlassBlurSigma,
     required this.chatInputGlassOpacity,
     required this.chatTitleGlassOpacity,
     required this.chatGlassContentPadding,
     required this.chatGlassBorderOpacity,
+    required this.chatGlassBorderWidth,
     required this.avatarGradients,
   });
 
@@ -57,11 +59,13 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
   final double glassBlurSigma;
   final double chatBubbleOpacity;
   final double chatComposerHeight;
+  final double chatMessageMinHeight;
   final double chatGlassBlurSigma;
   final double chatInputGlassOpacity;
   final double chatTitleGlassOpacity;
   final double chatGlassContentPadding;
   final double chatGlassBorderOpacity;
+  final double chatGlassBorderWidth;
   final List<List<Color>> avatarGradients;
 
   /// Light theme token preset.
@@ -86,12 +90,14 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       glassSecondarySurface: Color(0xB3F1F5F9),
       chatBubbleOpacity: 0.72,
       chatComposerHeight: 56.0,
+      chatMessageMinHeight: 44.0,
       glassBlurSigma: 3.0,
       chatGlassBlurSigma: 3.0,
       chatInputGlassOpacity: 0.22,
       chatTitleGlassOpacity: 0.22,
       chatGlassContentPadding: 16.0,
       chatGlassBorderOpacity: 0.33,
+      chatGlassBorderWidth: 0.33,
       avatarGradients: AppColors.avatarGradients,
     );
   }
@@ -119,11 +125,13 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       glassBlurSigma: 18.0,
       chatBubbleOpacity: 0.76,
       chatComposerHeight: 56.0,
+      chatMessageMinHeight: 44.0,
       chatGlassBlurSigma: 18.0,
       chatInputGlassOpacity: 0.48,
       chatTitleGlassOpacity: 0.48,
       chatGlassContentPadding: 16.0,
       chatGlassBorderOpacity: 0.33,
+      chatGlassBorderWidth: 0.33,
       avatarGradients: AppColors.avatarGradients,
     );
   }
@@ -158,11 +166,13 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     double? glassBlurSigma,
     double? chatBubbleOpacity,
     double? chatComposerHeight,
+    double? chatMessageMinHeight,
     double? chatGlassBlurSigma,
     double? chatInputGlassOpacity,
     double? chatTitleGlassOpacity,
     double? chatGlassContentPadding,
     double? chatGlassBorderOpacity,
+    double? chatGlassBorderWidth,
     List<List<Color>>? avatarGradients,
   }) {
     return AppThemeTokens(
@@ -189,6 +199,7 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       glassBlurSigma: glassBlurSigma ?? this.glassBlurSigma,
       chatBubbleOpacity: chatBubbleOpacity ?? this.chatBubbleOpacity,
       chatComposerHeight: chatComposerHeight ?? this.chatComposerHeight,
+      chatMessageMinHeight: chatMessageMinHeight ?? this.chatMessageMinHeight,
       chatGlassBlurSigma: chatGlassBlurSigma ?? this.chatGlassBlurSigma,
       chatInputGlassOpacity:
           chatInputGlassOpacity ?? this.chatInputGlassOpacity,
@@ -198,6 +209,7 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
           chatGlassContentPadding ?? this.chatGlassContentPadding,
       chatGlassBorderOpacity:
           chatGlassBorderOpacity ?? this.chatGlassBorderOpacity,
+      chatGlassBorderWidth: chatGlassBorderWidth ?? this.chatGlassBorderWidth,
       avatarGradients: avatarGradients ?? this.avatarGradients,
     );
   }
@@ -249,6 +261,9 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       chatComposerHeight:
           chatComposerHeight +
           (other.chatComposerHeight - chatComposerHeight) * t,
+      chatMessageMinHeight:
+          chatMessageMinHeight +
+          (other.chatMessageMinHeight - chatMessageMinHeight) * t,
       chatGlassBlurSigma:
           chatGlassBlurSigma +
           (other.chatGlassBlurSigma - chatGlassBlurSigma) * t,
@@ -264,6 +279,9 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       chatGlassBorderOpacity:
           chatGlassBorderOpacity +
           (other.chatGlassBorderOpacity - chatGlassBorderOpacity) * t,
+      chatGlassBorderWidth:
+          chatGlassBorderWidth +
+          (other.chatGlassBorderWidth - chatGlassBorderWidth) * t,
       avatarGradients: t < 0.5 ? avatarGradients : other.avatarGradients,
     );
   }

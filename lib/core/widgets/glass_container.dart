@@ -161,6 +161,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.blurSigma,
     this.backgroundColor,
     this.borderColor,
+    this.borderWidth = 0.8,
     this.centerTitle = true,
   });
 
@@ -171,6 +172,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double? blurSigma;
   final Color? backgroundColor;
   final Color? borderColor;
+  final double borderWidth;
   final bool centerTitle;
 
   @override
@@ -193,7 +195,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
           decoration: BoxDecoration(
             color: effectiveBg,
             border: Border(
-              bottom: BorderSide(color: effectiveBorder, width: 0.8),
+              bottom: BorderSide(color: effectiveBorder, width: borderWidth),
             ),
           ),
           child: AppBar(

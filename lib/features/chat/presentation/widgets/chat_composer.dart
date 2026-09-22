@@ -441,14 +441,20 @@ class ChatComposerState extends State<ChatComposer>
   @override
   Widget build(BuildContext context) {
     final tokens = context.appTokens;
-    const verticalPadding = 6.0;
-    final inputControlHeight = tokens.chatComposerHeight - verticalPadding * 2;
+    final inputControlHeight = tokens.chatMessageMinHeight;
+    final verticalPadding =
+        ((tokens.chatComposerHeight - inputControlHeight) / 2)
+            .clamp(0.0, double.infinity)
+            .toDouble();
     final glassBorderColor = tokens.glassBorderColor.withValues(
       alpha: tokens.chatGlassBorderOpacity,
     );
     final glassInputBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: glassBorderColor, width: 0.8),
+      borderSide: BorderSide(
+        color: glassBorderColor,
+        width: tokens.chatGlassBorderWidth,
+      ),
     );
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     if (bottomInset > _minValidKeyboardHeight) {
@@ -510,7 +516,7 @@ class ChatComposerState extends State<ChatComposer>
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: <Widget>[
                     SizedBox(
-                      width: 44,
+                      width: inputControlHeight,
                       height: inputControlHeight,
                       child: IconButton(
                         tooltip:
@@ -567,8 +573,11 @@ class ChatComposerState extends State<ChatComposer>
                                   ),
                                 ),
                               )
-                              : SizedBox(
-                                height: inputControlHeight,
+                              : ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minHeight: inputControlHeight,
+                                  maxHeight: 132,
+                                ),
                                 child: TextField(
                                   controller: widget.input,
                                   focusNode: _focusNode,
@@ -580,8 +589,8 @@ class ChatComposerState extends State<ChatComposer>
                                   onChanged: _onInputChanged,
                                   enabled: !widget.controller.isMuted,
                                   minLines: 1,
-                                  maxLines: 1,
-                                  textInputAction: TextInputAction.send,
+                                  maxLines: 5,
+                                  textInputAction: TextInputAction.newline,
                                   decoration: InputDecoration(
                                     hintText:
                                         widget.controller.isMuted
@@ -590,6 +599,7 @@ class ChatComposerState extends State<ChatComposer>
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12,
+                                      vertical: 10,
                                     ),
                                     filled: widget.useGlass,
                                     fillColor:
@@ -619,7 +629,7 @@ class ChatComposerState extends State<ChatComposer>
                     ),
                     if (!_voiceMode)
                       SizedBox(
-                        width: 44,
+                        width: inputControlHeight,
                         height: inputControlHeight,
                         child: IconButton(
                           tooltip: _showFunctions ? '打开键盘' : '更多功能',
@@ -701,7 +711,7 @@ class ChatComposerState extends State<ChatComposer>
 
     return GlassContainer(
       borderRadius: BorderRadius.zero,
-      borderWidth: 0.8,
+      borderWidth: tokens.chatGlassBorderWidth,
       blurSigma: tokens.chatGlassBlurSigma,
       backgroundColor: tokens.glassSurfaceColor.withValues(
         alpha: tokens.chatInputGlassOpacity,
