@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme_tokens.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/widgets/glass_container.dart';
 import '../../../../core/widgets/half_page_sheet.dart';
 import '../../application/chat_controller.dart';
 import '../../data/models/chat_message.dart';
@@ -24,6 +26,7 @@ class ChatComposer extends StatefulWidget {
     required this.controller,
     required this.input,
     required this.quoteContentBuilder,
+    this.useGlass = false,
     super.key,
   });
 
@@ -35,6 +38,7 @@ class ChatComposer extends StatefulWidget {
 
   /// 引用消息内容构建器
   final Widget Function(ChatMessage quote) quoteContentBuilder;
+  final bool useGlass;
 
   @override
   State<ChatComposer> createState() => ChatComposerState();
@@ -42,7 +46,6 @@ class ChatComposer extends StatefulWidget {
 
 class ChatComposerState extends State<ChatComposer>
     with WidgetsBindingObserver {
-
   final FocusNode _focusNode = FocusNode();
   final PageController _pageController = PageController();
   bool _showFunctions = false;
@@ -235,9 +238,7 @@ class ChatComposerState extends State<ChatComposer>
       final newText = '$currentText$mentionText';
       widget.input.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.collapsed(
-          offset: newText.length,
-        ),
+        selection: TextSelection.collapsed(offset: newText.length),
       );
     }
   }
@@ -439,6 +440,9 @@ class ChatComposerState extends State<ChatComposer>
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.appTokens;
+    const verticalPadding = 6.0;
+    final inputControlHeight = tokens.chatComposerHeight - verticalPadding * 2;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     if (bottomInset > _minValidKeyboardHeight) {
       final clamped = bottomInset.clamp(240.0, 420.0);
@@ -459,14 +463,18 @@ class ChatComposerState extends State<ChatComposer>
       }
     }
 
-    final effectiveBottomHeight = (_showFunctions || _isSwitchingToKeyboard)
-        ? (_keyboardTrayHeight > bottomInset ? _keyboardTrayHeight : bottomInset)
-        : bottomInset;
+    final effectiveBottomHeight =
+        (_showFunctions || _isSwitchingToKeyboard)
+            ? (_keyboardTrayHeight > bottomInset
+                ? _keyboardTrayHeight
+                : bottomInset)
+            : bottomInset;
 
     final isKeyboardActive = bottomInset > 0 || _isSwitchingToKeyboard;
     final needBottomSafeArea = effectiveBottomHeight == 0;
 
-    return Material(
+    final composer = Material(
+      color: widget.useGlass ? Colors.transparent : null,
       elevation: 8,
       child: SafeArea(
         top: false,
@@ -476,28 +484,36 @@ class ChatComposerState extends State<ChatComposer>
           children: <Widget>[
             if (_menuMode && widget.controller.officialAccountMenus.isNotEmpty)
               ChatPublicAccountMenu(
-                menus: widget.controller.officialAccountMenus
-                    .map(PublicAccountMenuItem.fromJson)
-                    .toList(),
+                menus:
+                    widget.controller.officialAccountMenus
+                        .map(PublicAccountMenuItem.fromJson)
+                        .toList(),
                 onToggleKeyboard: () => setState(() => _menuMode = false),
                 onMenuItemSelected: _onMenuItemSelected,
               )
             else ...[
               Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+                padding: EdgeInsets.fromLTRB(
+                  10,
+                  verticalPadding,
+                  10,
+                  verticalPadding,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: <Widget>[
                     SizedBox(
                       width: 44,
-                      height: 42,
+                      height: inputControlHeight,
                       child: IconButton(
-                        tooltip: widget.controller.isOfficialAccount
-                            ? '切换公众号菜单'
-                            : (_voiceMode ? '切换键盘' : '语音输入'),
-                        onPressed: widget.controller.isOfficialAccount
-                            ? () => setState(() => _menuMode = true)
-                            : _toggleVoiceMode,
+                        tooltip:
+                            widget.controller.isOfficialAccount
+                                ? '切换公众号菜单'
+                                : (_voiceMode ? '切换键盘' : '语音输入'),
+                        onPressed:
+                            widget.controller.isOfficialAccount
+                                ? () => setState(() => _menuMode = true)
+                                : _toggleVoiceMode,
                         padding: EdgeInsets.zero,
                         icon: Icon(
                           widget.controller.isOfficialAccount
@@ -509,61 +525,84 @@ class ChatComposerState extends State<ChatComposer>
                       ),
                     ),
                     Expanded(
-                      child: _voiceMode
-                          ? GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onLongPressStart: _startRecording,
-                              onLongPressMoveUpdate: _moveRecording,
-                              onLongPressEnd: _endRecording,
-                              child: Container(
-                                height: 42,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: _recording
-                                      ? Theme.of(context)
-                                          .colorScheme
-                                          .primaryContainer
-                                      : Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerHigh,
-                                  borderRadius: BorderRadius.circular(8),
+                      child:
+                          _voiceMode
+                              ? GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onLongPressStart: _startRecording,
+                                onLongPressMoveUpdate: _moveRecording,
+                                onLongPressEnd: _endRecording,
+                                child: Container(
+                                  height: inputControlHeight,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        _recording
+                                            ? Theme.of(
+                                              context,
+                                            ).colorScheme.primaryContainer
+                                            : widget.useGlass
+                                            ? tokens.glassSecondarySurface
+                                                .withValues(
+                                                  alpha:
+                                                      tokens
+                                                          .chatInputGlassOpacity,
+                                                )
+                                            : Theme.of(
+                                              context,
+                                            ).colorScheme.surfaceContainerHigh,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    _recording
+                                        ? (_cancelRecording ? '松开取消' : '松开发送')
+                                        : '按住说话',
+                                  ),
                                 ),
-                                child: Text(
-                                  _recording
-                                      ? (_cancelRecording ? '松开取消' : '松开发送')
-                                      : '按住说话',
+                              )
+                              : ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minHeight: inputControlHeight,
+                                  maxHeight: 132,
+                                ),
+                                child: TextField(
+                                  controller: widget.input,
+                                  focusNode: _focusNode,
+                                  onTap: () {
+                                    if (_showFunctions) {
+                                      _startSwitchingToKeyboard();
+                                    }
+                                  },
+                                  onChanged: _onInputChanged,
+                                  enabled: !widget.controller.isMuted,
+                                  minLines: 1,
+                                  maxLines: 5,
+                                  textInputAction: TextInputAction.newline,
+                                  decoration: InputDecoration(
+                                    hintText:
+                                        widget.controller.isMuted
+                                            ? '你已被禁言，暂不能发言'
+                                            : '输入消息',
+                                    isDense: true,
+                                    filled: widget.useGlass,
+                                    fillColor:
+                                        widget.useGlass
+                                            ? tokens.glassSecondarySurface
+                                                .withValues(
+                                                  alpha:
+                                                      tokens
+                                                          .chatInputGlassOpacity,
+                                                )
+                                            : null,
+                                    border: const OutlineInputBorder(),
+                                  ),
                                 ),
                               ),
-                            )
-                          : ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 132),
-                              child: TextField(
-                                controller: widget.input,
-                                focusNode: _focusNode,
-                                onTap: () {
-                                  if (_showFunctions) {
-                                    _startSwitchingToKeyboard();
-                                  }
-                                },
-                                onChanged: _onInputChanged,
-                                enabled: !widget.controller.isMuted,
-                                minLines: 1,
-                                maxLines: 5,
-                                textInputAction: TextInputAction.newline,
-                                decoration: InputDecoration(
-                                  hintText: widget.controller.isMuted
-                                      ? '你已被禁言，暂不能发言'
-                                      : '输入消息',
-                                  isDense: true,
-                                  border: const OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
                     ),
                     if (!_voiceMode)
                       SizedBox(
                         width: 44,
-                        height: 42,
+                        height: inputControlHeight,
                         child: IconButton(
                           tooltip: _showFunctions ? '打开键盘' : '更多功能',
                           onPressed: _toggleFunctions,
@@ -578,18 +617,19 @@ class ChatComposerState extends State<ChatComposer>
                     if (!_voiceMode)
                       FilledButton(
                         style: FilledButton.styleFrom(
-                          minimumSize: const Size(56, 40),
+                          minimumSize: Size(56, inputControlHeight),
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        onPressed: widget.controller.isSending ||
-                                widget.controller.isMuted
-                            ? null
-                            : () {
-                                final value = widget.input.text;
-                                widget.input.clear();
-                                widget.controller.send(value);
-                              },
+                        onPressed:
+                            widget.controller.isSending ||
+                                    widget.controller.isMuted
+                                ? null
+                                : () {
+                                  final value = widget.input.text;
+                                  widget.input.clear();
+                                  widget.controller.send(value);
+                                },
                         child: const Text('发送'),
                       ),
                   ],
@@ -606,27 +646,30 @@ class ChatComposerState extends State<ChatComposer>
                 ),
               ClipRect(
                 child: AnimatedContainer(
-                  duration: isKeyboardActive
-                      ? Duration.zero
-                      : const Duration(milliseconds: 220),
+                  duration:
+                      isKeyboardActive
+                          ? Duration.zero
+                          : const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
                   height: effectiveBottomHeight,
                   child: OverflowBox(
                     minHeight: _keyboardTrayHeight,
                     maxHeight: _keyboardTrayHeight,
                     alignment: Alignment.topCenter,
-                    child: _showFunctions
-                        ? SizedBox(
-                            height: _keyboardTrayHeight,
-                            child: ChatFunctionPanel(
-                              items: _functions,
-                              pageController: _pageController,
-                              page: _page,
-                              onPageChanged: (value) => setState(() => _page = value),
-                              onSelected: _selectFunction,
-                            ),
-                          )
-                        : const SizedBox.shrink(),
+                    child:
+                        _showFunctions
+                            ? SizedBox(
+                              height: _keyboardTrayHeight,
+                              child: ChatFunctionPanel(
+                                items: _functions,
+                                pageController: _pageController,
+                                page: _page,
+                                onPageChanged:
+                                    (value) => setState(() => _page = value),
+                                onSelected: _selectFunction,
+                              ),
+                            )
+                            : const SizedBox.shrink(),
                   ),
                 ),
               ),
@@ -634,6 +677,18 @@ class ChatComposerState extends State<ChatComposer>
           ],
         ),
       ),
+    );
+
+    if (!widget.useGlass) return composer;
+
+    return GlassContainer(
+      borderRadius: BorderRadius.zero,
+      borderWidth: 0,
+      blurSigma: tokens.chatGlassBlurSigma,
+      backgroundColor: tokens.glassSurfaceColor.withValues(
+        alpha: tokens.chatInputGlassOpacity,
+      ),
+      child: composer,
     );
   }
 }

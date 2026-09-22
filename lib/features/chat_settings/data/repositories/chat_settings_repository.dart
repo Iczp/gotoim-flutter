@@ -85,6 +85,14 @@ class ChatSettingsRepository {
     await _api.setImmersed(id, value);
   }
 
+  Future<void> exitChat(String id) async {
+    await _api.exitChat(id);
+  }
+
+  Future<void> unsubscribeOfficial(String id) async {
+    await _api.unsubscribeOfficial(id);
+  }
+
   Future<void> clearMessages(int ownerId, String id) async {
     await _api.clearMessages(id);
     await _dao.clearMessages(ownerId, id);

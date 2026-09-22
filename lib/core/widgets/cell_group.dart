@@ -81,18 +81,21 @@ class CellGroup extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final effectiveRadius = borderRadius ?? BorderRadius.circular(16);
 
-    final Widget? header = titleWidget ??
+    final Widget? header =
+        titleWidget ??
         (title != null
             ? Padding(
-                padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-                child: Text(
-                  title!,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.bold,
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+              child: Text(
+                title!,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onSurfaceVariant.withValues(
+                    alpha: theme.brightness == Brightness.dark ? 0.72 : 0.62,
                   ),
+                  fontWeight: FontWeight.w500,
                 ),
-              )
+              ),
+            )
             : null);
 
     Widget content;
@@ -120,7 +123,8 @@ class CellGroup extends StatelessWidget {
       );
     }
 
-    final effectiveGroupSubtitleColor = subTitleColor ??
+    final effectiveGroupSubtitleColor =
+        subTitleColor ??
         subtitleColor ??
         theme.listTileTheme.subtitleTextStyle?.color ??
         colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
@@ -144,39 +148,35 @@ class CellGroup extends StatelessWidget {
       ),
     );
 
-    final Widget card = useGlass
-        ? GlassCard(
-            margin: EdgeInsets.zero,
-            padding: padding,
-            borderRadius: effectiveRadius,
-            backgroundColor: backgroundColor,
-            borderColor: borderColor,
-            child: themedContent,
-          )
-        : Material(
-            color: backgroundColor ?? theme.colorScheme.surface,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: effectiveRadius,
-              side: BorderSide(
-                color: borderColor ?? theme.dividerColor.withValues(alpha: 0.2),
-              ),
-            ),
-            child: Padding(
+    final Widget card =
+        useGlass
+            ? GlassCard(
+              margin: EdgeInsets.zero,
               padding: padding,
+              borderRadius: effectiveRadius,
+              backgroundColor: backgroundColor,
+              borderColor: borderColor,
               child: themedContent,
-            ),
-          );
+            )
+            : Material(
+              color: backgroundColor ?? theme.colorScheme.surface,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: effectiveRadius,
+                side: BorderSide(
+                  color:
+                      borderColor ?? theme.dividerColor.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Padding(padding: padding, child: themedContent),
+            );
 
     return Padding(
       padding: margin,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
-        children: [
-          if (header != null) header,
-          card,
-        ],
+        children: [if (header != null) header, card],
       ),
     );
   }
@@ -304,38 +304,43 @@ class Cell extends StatelessWidget {
     final theme = Theme.of(context);
     final groupScope = _CellGroupScope.maybeOf(context);
 
-    final effectiveTitleFontWeight = titleFontWeight ??
+    final effectiveTitleFontWeight =
+        titleFontWeight ??
         groupScope?.titleFontWeight ??
         theme.listTileTheme.titleTextStyle?.fontWeight ??
         (isCentered ? FontWeight.w600 : FontWeight.w500);
 
-    final effectiveSubtitleColor = subTitleColor ??
+    final effectiveSubtitleColor =
+        subTitleColor ??
         subtitleColor ??
         groupScope?.subtitleColor ??
         theme.listTileTheme.subtitleTextStyle?.color ??
         theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
 
-    final effectiveArrowColor = arrowColor ??
+    final effectiveArrowColor =
+        arrowColor ??
         groupScope?.arrowColor ??
         theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
 
-    final effectiveTrailing = trailing ??
+    final effectiveTrailing =
+        trailing ??
         (switchValue != null
             ? Switch.adaptive(
-                value: switchValue!,
-                onChanged: disabled ? null : onSwitchChanged,
-              )
+              value: switchValue!,
+              onChanged: disabled ? null : onSwitchChanged,
+            )
             : null);
 
-    final effectiveOnTap = onTap ??
+    final effectiveOnTap =
+        onTap ??
         (switchValue != null && onSwitchChanged != null
             ? () => onSwitchChanged!(!switchValue!)
             : (canCopy && (value != null || copyValue != null)
                 ? () {
-                    final text = copyValue ?? value!;
-                    Clipboard.setData(ClipboardData(text: text));
-                    showToast('已复制 $title', type: ToastType.info);
-                  }
+                  final text = copyValue ?? value!;
+                  Clipboard.setData(ClipboardData(text: text));
+                  showToast('已复制 $title', type: ToastType.info);
+                }
                 : null));
 
     Widget content;
@@ -353,7 +358,8 @@ class Cell extends StatelessWidget {
     } else {
       final hasValue =
           valueWidget != null || (value != null && value!.isNotEmpty);
-      final hasRightContent = effectiveTrailing != null || hasValue || showArrow;
+      final hasRightContent =
+          effectiveTrailing != null || hasValue || showArrow;
 
       final Widget leftTitleColumn = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -364,7 +370,8 @@ class Cell extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: effectiveTitleFontWeight,
-              color: titleColor ??
+              color:
+                  titleColor ??
                   (disabled
                       ? theme.disabledColor
                       : theme.colorScheme.onSurface),
@@ -377,10 +384,7 @@ class Cell extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               subtitle!,
-              style: TextStyle(
-                fontSize: 12,
-                color: effectiveSubtitleColor,
-              ),
+              style: TextStyle(fontSize: 12, color: effectiveSubtitleColor),
             ),
           ],
         ],
@@ -390,10 +394,7 @@ class Cell extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (icon != null) ...[
-            icon!,
-            const SizedBox(width: 12),
-          ],
+          if (icon != null) ...[icon!, const SizedBox(width: 12)],
           Flexible(
             fit: hasValue ? FlexFit.loose : FlexFit.tight,
             child: leftTitleColumn,
@@ -416,11 +417,7 @@ class Cell extends StatelessWidget {
           children: [
             Expanded(child: leftContent),
             const SizedBox(width: 8),
-            Icon(
-              Icons.chevron_right,
-              size: 18,
-              color: effectiveArrowColor,
-            ),
+            Icon(Icons.chevron_right, size: 18, color: effectiveArrowColor),
           ],
         );
       } else {
@@ -442,7 +439,8 @@ class Cell extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Flexible(
-                          child: valueWidget ??
+                          child:
+                              valueWidget ??
                               Text(
                                 value!,
                                 style: TextStyle(
@@ -474,10 +472,7 @@ class Cell extends StatelessWidget {
 
     return InkWell(
       onTap: disabled ? null : effectiveOnTap,
-      child: Padding(
-        padding: padding,
-        child: content,
-      ),
+      child: Padding(padding: padding, child: content),
     );
   }
 }

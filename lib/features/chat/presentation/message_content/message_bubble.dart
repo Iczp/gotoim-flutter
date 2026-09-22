@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme_tokens.dart';
 import '../../../../core/widgets/chat_bubble.dart';
 import '../../data/models/chat_message.dart';
 
@@ -34,15 +35,15 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = context.appTokens;
     final bubbleStyle =
         style ??
         ChatBubbleStyle.content(
           side: message.isMine ? ChatBubbleSide.right : ChatBubbleSide.left,
-          backgroundColor:
-              (message.isMine
-                      ? theme.colorScheme.primaryContainer
-                      : theme.colorScheme.surfaceContainerHighest)
-                  .withValues(alpha: 0.75),
+          backgroundColor: (message.isMine
+                  ? theme.colorScheme.primaryContainer
+                  : theme.colorScheme.surfaceContainerHighest)
+              .withValues(alpha: tokens.chatBubbleOpacity),
           tail: tail,
           padding: padding,
         );

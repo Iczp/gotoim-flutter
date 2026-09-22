@@ -27,6 +27,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     required this.glassBorderColor,
     required this.glassSecondarySurface,
     required this.glassBlurSigma,
+    required this.chatBubbleOpacity,
+    required this.chatComposerHeight,
+    required this.chatGlassBlurSigma,
+    required this.chatInputGlassOpacity,
     required this.avatarGradients,
   });
 
@@ -48,6 +52,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
   final Color glassBorderColor;
   final Color glassSecondarySurface;
   final double glassBlurSigma;
+  final double chatBubbleOpacity;
+  final double chatComposerHeight;
+  final double chatGlassBlurSigma;
+  final double chatInputGlassOpacity;
   final List<List<Color>> avatarGradients;
 
   /// Light theme token preset.
@@ -71,6 +79,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       glassBorderColor: Color(0x66FFFFFF),
       glassSecondarySurface: Color(0xB3F1F5F9),
       glassBlurSigma: 16.0,
+      chatBubbleOpacity: 0.72,
+      chatComposerHeight: 56.0,
+      chatGlassBlurSigma: 16.0,
+      chatInputGlassOpacity: 0.82,
       avatarGradients: AppColors.avatarGradients,
     );
   }
@@ -96,6 +108,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       glassBorderColor: Color(0x26FFFFFF),
       glassSecondarySurface: Color(0x800F172A),
       glassBlurSigma: 18.0,
+      chatBubbleOpacity: 0.76,
+      chatComposerHeight: 56.0,
+      chatGlassBlurSigma: 18.0,
+      chatInputGlassOpacity: 0.74,
       avatarGradients: AppColors.avatarGradients,
     );
   }
@@ -128,6 +144,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     Color? glassBorderColor,
     Color? glassSecondarySurface,
     double? glassBlurSigma,
+    double? chatBubbleOpacity,
+    double? chatComposerHeight,
+    double? chatGlassBlurSigma,
+    double? chatInputGlassOpacity,
     List<List<Color>>? avatarGradients,
   }) {
     return AppThemeTokens(
@@ -152,6 +172,11 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       glassSecondarySurface:
           glassSecondarySurface ?? this.glassSecondarySurface,
       glassBlurSigma: glassBlurSigma ?? this.glassBlurSigma,
+      chatBubbleOpacity: chatBubbleOpacity ?? this.chatBubbleOpacity,
+      chatComposerHeight: chatComposerHeight ?? this.chatComposerHeight,
+      chatGlassBlurSigma: chatGlassBlurSigma ?? this.chatGlassBlurSigma,
+      chatInputGlassOpacity:
+          chatInputGlassOpacity ?? this.chatInputGlassOpacity,
       avatarGradients: avatarGradients ?? this.avatarGradients,
     );
   }
@@ -198,6 +223,17 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
           Color.lerp(glassSecondarySurface, other.glassSecondarySurface, t)!,
       glassBlurSigma:
           glassBlurSigma + (other.glassBlurSigma - glassBlurSigma) * t,
+      chatBubbleOpacity:
+          chatBubbleOpacity + (other.chatBubbleOpacity - chatBubbleOpacity) * t,
+      chatComposerHeight:
+          chatComposerHeight +
+          (other.chatComposerHeight - chatComposerHeight) * t,
+      chatGlassBlurSigma:
+          chatGlassBlurSigma +
+          (other.chatGlassBlurSigma - chatGlassBlurSigma) * t,
+      chatInputGlassOpacity:
+          chatInputGlassOpacity +
+          (other.chatInputGlassOpacity - chatInputGlassOpacity) * t,
       avatarGradients: t < 0.5 ? avatarGradients : other.avatarGradients,
     );
   }

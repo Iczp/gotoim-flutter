@@ -51,6 +51,8 @@ class ChatSettingsController extends ChangeNotifier {
   String? get backgroundImage => setting['backgroundImage']?.toString();
   int get objectType =>
       asInt(asMap(friend?.raw['destination'])['objectType']) ?? -1;
+  bool get isGroup => objectType == 2;
+  bool get isOfficial => objectType == 3 || objectType == 4;
   String get objectTypeLabel => switch (objectType) {
     1 => '个人',
     2 => '群聊',
@@ -164,6 +166,11 @@ class ChatSettingsController extends ChangeNotifier {
 
   Future<void> setBackgroundImage(MultipartUploadFile file) =>
       _updateSetting(() => _repository.setBackgroundImage(sessionUnitId, file));
+
+  Future<void> exitChat() => _repository.exitChat(sessionUnitId);
+
+  Future<void> unsubscribeOfficial() =>
+      _repository.unsubscribeOfficial(sessionUnitId);
 
   Future<void> setGroupName(String name) {
     if (sessionId == null) return Future.value();

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +26,7 @@ import '../data/models/chat_message.dart';
 import '../../chat_settings/data/models/chat_member.dart';
 import '../../chat_settings/application/chat_settings_controller.dart';
 import '../../chat_settings/presentation/member_profile_sheet.dart';
+import '../../chat_settings/presentation/chat_settings_page.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/session_change_bus.dart';
 import '../../session/presentation/chat_object_avatar.dart';
@@ -178,6 +178,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     animation: controller,
     builder: (context, _) {
       final mediaItems = _mediaItemsFor(controller.messages);
+      final backgroundImageUrl = resolveApiUrl(
+        controller.backgroundImage,
+        ref.watch(appEnvironmentProvider).apiBaseUrl,
+      );
+      final hasChatBackground = backgroundImageUrl.isNotEmpty;
       _pruneMessageKeys(controller.messages);
       return PopScope(
         canPop: !controller.selectionMode,
@@ -217,47 +222,61 @@ class _ChatPageState extends ConsumerState<ChatPage>
             onOpenSettings: _openChatSettings,
             onOpenAiRuns: _openAiRunTimeline,
           ),
-          body: Column(
+          body: Stack(
+            fit: StackFit.expand,
             children: <Widget>[
-              Expanded(
-                child: ChatMessageList(
-                  messages: controller.messages,
-                  transientItems: controller.aiStreamReplies
-                      .map((reply) => _buildAiStreamReply(reply))
-                      .toList(growable: false),
-                  scrollController: _scrollController,
-                  isLoading: controller.isLoading,
-                  hasMore: controller.hasMore,
-                  error: controller.error,
-                  onViewingLatestChanged: controller.setViewingLatest,
-                  onLoadMore: controller.loadMore,
-                  onTapOutside: _closeInputArea,
-                  itemBuilder:
-                      (context, message, index) => _buildMessageItem(
-                        context,
-                        message,
-                        index,
-                        mediaItems,
-                      ),
+              ColoredBox(color: Theme.of(context).colorScheme.surface),
+              if (hasChatBackground)
+                Image.network(
+                  backgroundImageUrl,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
-              ),
-              if (controller.hasActiveAiStream)
-                _buildActiveAiStreamStopBar(Theme.of(context)),
-              ChatInputArea(
-                selectionMode: controller.selectionMode,
-                selectionActions: ChatSelectionBar(
-                  count: controller.selectedLocalIds.length,
-                  onCancel: controller.cancelSelection,
-                  onDelete: _deleteSelectedMessages,
-                  onMergeForward: _showMergeForwardTargets,
-                ),
-                composer: ChatComposer(
-                  key: _composerKey,
-                  controller: controller,
-                  input: input,
-                  quoteContentBuilder:
-                      (quote) => _buildQuotedContent(quote, _mediaItems),
-                ),
+              Column(
+                children: <Widget>[
+                  Expanded(
+                    child: ChatMessageList(
+                      messages: controller.messages,
+                      transientItems: controller.aiStreamReplies
+                          .map((reply) => _buildAiStreamReply(reply))
+                          .toList(growable: false),
+                      scrollController: _scrollController,
+                      isLoading: controller.isLoading,
+                      hasMore: controller.hasMore,
+                      error: controller.error,
+                      onViewingLatestChanged: controller.setViewingLatest,
+                      onLoadMore: controller.loadMore,
+                      onTapOutside: _closeInputArea,
+                      itemBuilder:
+                          (context, message, index) => _buildMessageItem(
+                            context,
+                            message,
+                            index,
+                            mediaItems,
+                          ),
+                    ),
+                  ),
+                  if (controller.hasActiveAiStream)
+                    _buildActiveAiStreamStopBar(Theme.of(context)),
+                  ChatInputArea(
+                    selectionMode: controller.selectionMode,
+                    selectionActions: ChatSelectionBar(
+                      count: controller.selectedLocalIds.length,
+                      onCancel: controller.cancelSelection,
+                      onDelete: _deleteSelectedMessages,
+                      onMergeForward: _showMergeForwardTargets,
+                    ),
+                    composer: ChatComposer(
+                      key: _composerKey,
+                      controller: controller,
+                      input: input,
+                      useGlass: hasChatBackground,
+                      quoteContentBuilder:
+                          (quote) => _buildQuotedContent(quote, _mediaItems),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -463,11 +482,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// 跳转至聊天会话设置页面（单聊/群聊成员、置顶、免打扰、清空记录等）
   Future<void> _openChatSettings() async {
     _closeInputArea();
-    final cleared = await context.push<bool>(
+    final result = await context.push<ChatSettingsResult>(
       '/chat/${Uri.encodeComponent(widget.sessionUnitId)}/settings'
       '?ownerId=${widget.ownerId}',
     );
-    if (cleared == true) controller.handleMessagesCleared();
+    if (result == ChatSettingsResult.sessionLeft && mounted) {
+      context.pop();
+      return;
+    }
+    await controller.refreshSessionDetail();
+    if (result == ChatSettingsResult.messagesCleared) {
+      controller.handleMessagesCleared();
+    }
   }
 
   Future<void> _openAiRunTimeline() => showHalfPageSheet<void>(
@@ -1159,8 +1185,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
             alignment: .35,
           );
           _quoteHighlightTimer?.cancel();
-          if (mounted)
+          if (mounted) {
             setState(() => _highlightedMessageLocalId = target.localId);
+          }
           _quoteHighlightTimer = Timer(const Duration(milliseconds: 1300), () {
             if (mounted) setState(() => _highlightedMessageLocalId = null);
           });

@@ -260,8 +260,7 @@ class _VideoViewerState extends State<VideoViewer>
               const Center(
                 child: CircularProgressIndicator(color: Colors.white),
               ),
-            if ((_showControls || !value.isPlaying || isCompleted) &&
-                !widget.isDragging)
+            if ((!value.isPlaying || isCompleted) && !widget.isDragging)
               Center(
                 child: Opacity(
                   opacity: 0.8,
@@ -489,8 +488,9 @@ class _FloatingVideoContentState extends State<FloatingVideoContent> {
   }
 
   void _requestAutoPlay() {
-    if (!widget.autoPlay || _autoPlayScheduled || !widget.session.isReady)
+    if (!widget.autoPlay || _autoPlayScheduled || !widget.session.isReady) {
       return;
+    }
     _autoPlayScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;

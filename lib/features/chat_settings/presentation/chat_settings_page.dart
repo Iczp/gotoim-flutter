@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/cell_group.dart';
 import '../../../core/network/api_client.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/models/session_summary.dart';
@@ -13,6 +14,8 @@ import '../../session/presentation/chat_object_avatar.dart';
 import '../../user/presentation/profile_page.dart';
 import '../application/chat_settings_controller.dart';
 import 'member_tile.dart';
+
+enum ChatSettingsResult { messagesCleared, sessionLeft }
 
 class ChatSettingsPage extends ConsumerStatefulWidget {
   const ChatSettingsPage({
@@ -90,7 +93,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                             subject: ProfileSubject.session(controller.friend!),
                           ),
                     ),
-                  ]),
+                  ], title: '会话信息'),
                   const SizedBox(height: 10),
                 ],
                 _section(<Widget>[
@@ -143,7 +146,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     ),
                     onTap: _editRename,
                   ),
-                ]),
+                ], title: '聊天设置'),
                 const SizedBox(height: 10),
                 _section(<Widget>[
                   const ListTile(
@@ -157,7 +160,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _changeBackground,
                   ),
-                ]),
+                ], title: '功能'),
                 const SizedBox(height: 10),
                 _section(<Widget>[
                   ListTile(
@@ -195,7 +198,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     onChanged:
                         controller.updating ? null : controller.setTopping,
                   ),
-                ]),
+                ], title: '通知'),
                 const SizedBox(height: 10),
                 _section(<Widget>[
                   ListTile(
@@ -210,7 +213,29 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     title: Text('投诉'),
                     trailing: Icon(Icons.chevron_right),
                   ),
-                ]),
+                  if (controller.isGroup)
+                    ListTile(
+                      title: Text(
+                        '退出群聊',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _confirmExitGroup,
+                    ),
+                  if (controller.isOfficial)
+                    ListTile(
+                      title: Text(
+                        '取消关注',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _confirmUnsubscribeOfficial,
+                    ),
+                ], title: '其他'),
                 const SizedBox(height: 24),
               ],
             ),
@@ -218,9 +243,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
         ),
   );
 
-  Widget _section(List<Widget> children) => Material(
-    color: Theme.of(context).colorScheme.surface,
-    child: Column(children: children),
+  Widget _section(List<Widget> children, {String? title}) => CellGroup(
+    title: title,
+    margin: const EdgeInsets.only(bottom: 10),
+    children: children,
   );
 
   String? _avatarFor(SessionSummary friend) {
@@ -290,11 +316,45 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     if (!confirmed || !mounted) return;
     try {
       await controller.clearMessages();
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, ChatSettingsResult.messagesCleared);
     } catch (error) {
       if (mounted) {
         showToast('清空失败：$error', type: ToastType.error);
       }
+    }
+  }
+
+  Future<void> _confirmExitGroup() async {
+    final confirmed = await showConfirmModal(
+      context: context,
+      title: '退出群聊',
+      message: '退出后将不再接收该群的新消息，确定退出吗？',
+      confirmText: '退出',
+      isDestructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await controller.exitChat();
+      if (mounted) Navigator.pop(context, ChatSettingsResult.sessionLeft);
+    } catch (error) {
+      if (mounted) showToast('退出群聊失败：$error', type: ToastType.error);
+    }
+  }
+
+  Future<void> _confirmUnsubscribeOfficial() async {
+    final confirmed = await showConfirmModal(
+      context: context,
+      title: '取消关注',
+      message: '取消关注后将不再接收该公众号的新消息，确定继续吗？',
+      confirmText: '取消关注',
+      isDestructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await controller.unsubscribeOfficial();
+      if (mounted) Navigator.pop(context, ChatSettingsResult.sessionLeft);
+    } catch (error) {
+      if (mounted) showToast('取消关注失败：$error', type: ToastType.error);
     }
   }
 }

@@ -38,6 +38,12 @@ class ChatMemberApi {
         query: <String, Object?>{'isImmersed': value},
       );
 
+  Future<Map<String, dynamic>> exitChat(String id) => _client
+      .post<Map<String, dynamic>>('/api/chat/session-unit-setting/exit/$id');
+
+  Future<Map<String, dynamic>> unsubscribeOfficial(String id) =>
+      _client.post<Map<String, dynamic>>('/api/chat/official/unsubscribe/$id');
+
   Future<Map<String, dynamic>> clearMessages(String id) =>
       _client.post<Map<String, dynamic>>(
         '/api/chat/session-unit-setting/clear-message/$id',
