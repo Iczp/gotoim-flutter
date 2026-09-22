@@ -55,6 +55,27 @@ void main() {
       expect(find.byTooltip('聊天设置'), findsOneWidget);
     });
 
+    testWidgets('ChatTitleBar uses a backdrop filter in glass mode', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            appBar: ChatTitleBar(
+              title: '带背景的聊天',
+              showTransfer: false,
+              useGlass: true,
+              onTransfer: () {},
+              onOpenSettings: () {},
+            ),
+            body: const SizedBox(),
+          ),
+        ),
+      );
+
+      expect(find.text('带背景的聊天'), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(find.byTooltip('聊天设置'), findsOneWidget);
+    });
+
     testWidgets('PopScope cancels selectionMode on back instead of popping page', (tester) async {
       var selectionMode = true;
       var cancelCount = 0;

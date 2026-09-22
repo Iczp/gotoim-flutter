@@ -167,6 +167,9 @@ class ChatSettingsController extends ChangeNotifier {
   Future<void> setBackgroundImage(MultipartUploadFile file) =>
       _updateSetting(() => _repository.setBackgroundImage(sessionUnitId, file));
 
+  Future<void> clearBackgroundImage() =>
+      _updateSetting(() => _repository.clearBackgroundImage(sessionUnitId));
+
   Future<void> exitChat() => _repository.exitChat(sessionUnitId);
 
   Future<void> unsubscribeOfficial() =>

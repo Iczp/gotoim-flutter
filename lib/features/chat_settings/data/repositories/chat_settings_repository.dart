@@ -107,6 +107,10 @@ class ChatSettingsRepository {
     await _api.setBackgroundImage(id: id, file: file);
   }
 
+  Future<void> clearBackgroundImage(String id) async {
+    await _api.clearBackgroundImage(id);
+  }
+
   Future<void> setRoomTitle(String roomId, String title) async {
     await _api.setRoomTitle(roomId, title);
   }

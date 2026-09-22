@@ -65,6 +65,11 @@ class ChatMemberApi {
     onProgress: onProgress,
   );
 
+  Future<Map<String, dynamic>> clearBackgroundImage(String id) =>
+      _client.post<Map<String, dynamic>>(
+        '/api/chat/session-unit-setting/clear-background-image/$id',
+      );
+
   Future<Map<String, dynamic>> setRoomTitle(String roomId, String title) =>
       _client.post<Map<String, dynamic>>(
         '/api/chat/room/set-title/$roomId',

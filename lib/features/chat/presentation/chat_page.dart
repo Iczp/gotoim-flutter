@@ -216,12 +216,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
           appBar: ChatTitleBar(
             title: controller.title,
             showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
+            useGlass: hasChatBackground,
             selectionMode: controller.selectionMode,
             onCancelSelection: controller.cancelSelection,
             onTransfer: _openTransferSheet,
             onOpenSettings: _openChatSettings,
             onOpenAiRuns: _openAiRunTimeline,
           ),
+          extendBodyBehindAppBar: hasChatBackground,
           body: Stack(
             fit: StackFit.expand,
             children: <Widget>[
@@ -233,50 +235,59 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   gaplessPlayback: true,
                   errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
-              Column(
-                children: <Widget>[
-                  Expanded(
-                    child: ChatMessageList(
-                      messages: controller.messages,
-                      transientItems: controller.aiStreamReplies
-                          .map((reply) => _buildAiStreamReply(reply))
-                          .toList(growable: false),
-                      scrollController: _scrollController,
-                      isLoading: controller.isLoading,
-                      hasMore: controller.hasMore,
-                      error: controller.error,
-                      onViewingLatestChanged: controller.setViewingLatest,
-                      onLoadMore: controller.loadMore,
-                      onTapOutside: _closeInputArea,
-                      itemBuilder:
-                          (context, message, index) => _buildMessageItem(
-                            context,
-                            message,
-                            index,
-                            mediaItems,
-                          ),
+              Padding(
+                padding: EdgeInsets.only(
+                  top:
+                      hasChatBackground
+                          ? MediaQuery.paddingOf(context).top +
+                              ChatTitleBar.toolbarHeight
+                          : 0,
+                ),
+                child: Column(
+                  children: <Widget>[
+                    Expanded(
+                      child: ChatMessageList(
+                        messages: controller.messages,
+                        transientItems: controller.aiStreamReplies
+                            .map((reply) => _buildAiStreamReply(reply))
+                            .toList(growable: false),
+                        scrollController: _scrollController,
+                        isLoading: controller.isLoading,
+                        hasMore: controller.hasMore,
+                        error: controller.error,
+                        onViewingLatestChanged: controller.setViewingLatest,
+                        onLoadMore: controller.loadMore,
+                        onTapOutside: _closeInputArea,
+                        itemBuilder:
+                            (context, message, index) => _buildMessageItem(
+                              context,
+                              message,
+                              index,
+                              mediaItems,
+                            ),
+                      ),
                     ),
-                  ),
-                  if (controller.hasActiveAiStream)
-                    _buildActiveAiStreamStopBar(Theme.of(context)),
-                  ChatInputArea(
-                    selectionMode: controller.selectionMode,
-                    selectionActions: ChatSelectionBar(
-                      count: controller.selectedLocalIds.length,
-                      onCancel: controller.cancelSelection,
-                      onDelete: _deleteSelectedMessages,
-                      onMergeForward: _showMergeForwardTargets,
+                    if (controller.hasActiveAiStream)
+                      _buildActiveAiStreamStopBar(Theme.of(context)),
+                    ChatInputArea(
+                      selectionMode: controller.selectionMode,
+                      selectionActions: ChatSelectionBar(
+                        count: controller.selectedLocalIds.length,
+                        onCancel: controller.cancelSelection,
+                        onDelete: _deleteSelectedMessages,
+                        onMergeForward: _showMergeForwardTargets,
+                      ),
+                      composer: ChatComposer(
+                        key: _composerKey,
+                        controller: controller,
+                        input: input,
+                        useGlass: hasChatBackground,
+                        quoteContentBuilder:
+                            (quote) => _buildQuotedContent(quote, _mediaItems),
+                      ),
                     ),
-                    composer: ChatComposer(
-                      key: _composerKey,
-                      controller: controller,
-                      input: input,
-                      useGlass: hasChatBackground,
-                      quoteContentBuilder:
-                          (quote) => _buildQuotedContent(quote, _mediaItems),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

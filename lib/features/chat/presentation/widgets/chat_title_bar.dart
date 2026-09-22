@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme_tokens.dart';
+import '../../../../core/widgets/glass_container.dart';
+
 /// The chat page's title and its page-level actions.
 ///
 /// It deliberately receives callbacks instead of a [ChatController], keeping
@@ -13,6 +16,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
     this.onOpenAiRuns,
     this.selectionMode = false,
     this.onCancelSelection,
+    this.useGlass = false,
     super.key,
   });
 
@@ -23,21 +27,24 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onOpenAiRuns;
   final bool selectionMode;
   final VoidCallback? onCancelSelection;
+  final bool useGlass;
+
+  static const double toolbarHeight = 48;
 
   @override
-  Size get preferredSize => const Size.fromHeight(48);
+  Size get preferredSize => const Size.fromHeight(toolbarHeight);
 
   @override
-  Widget build(BuildContext context) => AppBar(
-    leading: selectionMode
-        ? IconButton(
-            tooltip: '取消',
-            icon: const Icon(Icons.close),
-            onPressed: onCancelSelection ?? () => Navigator.maybePop(context),
-          )
-        : null,
-    title: Text(title, overflow: TextOverflow.ellipsis),
-    actions: <Widget>[
+  Widget build(BuildContext context) {
+    final leading =
+        selectionMode
+            ? IconButton(
+              tooltip: '取消',
+              icon: const Icon(Icons.close),
+              onPressed: onCancelSelection ?? () => Navigator.maybePop(context),
+            )
+            : null;
+    final actions = <Widget>[
       if (!selectionMode && onOpenAiRuns != null)
         IconButton(
           tooltip: 'AI 运行记录',
@@ -56,6 +63,23 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
           onPressed: onOpenSettings,
           icon: const Icon(Icons.more_horiz),
         ),
-    ],
-  );
+    ];
+    final titleWidget = Text(title, overflow: TextOverflow.ellipsis);
+
+    if (useGlass) {
+      final tokens = context.appTokens;
+      return GlassAppBar(
+        leading: leading,
+        title: titleWidget,
+        actions: actions,
+        blurSigma: tokens.chatGlassBlurSigma,
+        backgroundColor: tokens.glassSurfaceColor.withValues(
+          alpha: tokens.chatTitleGlassOpacity,
+        ),
+        centerTitle: false,
+      );
+    }
+
+    return AppBar(leading: leading, title: titleWidget, actions: actions);
+  }
 }
