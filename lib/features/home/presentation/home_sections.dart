@@ -1,5 +1,8 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
+import 'package:gotoim_flutter/core/theme/app_theme_tokens.dart';
 import '../../session/presentation/session_list_page.dart';
 import '../../explore/presentation/explore_page.dart';
 import '../../contact/presentation/contacts_page.dart';
@@ -76,8 +79,27 @@ extension HomeSectionInfo on HomeSection {
   }
 }
 
-Color _homeSectionHeaderBackground(BuildContext context) =>
-    Theme.of(context).colorScheme.surface;
+/// Inherited widget communicating tab header height to child scroll views.
+class TabHeaderHeightScope extends InheritedWidget {
+  const TabHeaderHeightScope({
+    required this.headerHeight,
+    required super.child,
+    super.key,
+  });
+
+  final double headerHeight;
+
+  static double of(BuildContext context) {
+    return context
+            .dependOnInheritedWidgetOfExactType<TabHeaderHeightScope>()
+            ?.headerHeight ??
+        0.0;
+  }
+
+  @override
+  bool updateShouldNotify(covariant TabHeaderHeightScope oldWidget) =>
+      headerHeight != oldWidget.headerHeight;
+}
 
 /// A title owned by an individual tab page, rather than by the home shell.
 class _HomeSectionWithTitle extends StatelessWidget {
@@ -89,33 +111,62 @@ class _HomeSectionWithTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = context.appTokens;
+    final topPadding = MediaQuery.paddingOf(context).top;
+    final headerTotalHeight = kAppHeaderHeight + topPadding;
 
-    return SafeArea(
-      bottom: false,
-      child: Column(
-        children: [
-          Material(
-            color: _homeSectionHeaderBackground(context),
-            child: SizedBox(
-              height: kAppHeaderHeight,
-              width: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    title,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: TabHeaderHeightScope(
+            headerHeight: headerTotalHeight,
+            child: child,
+          ),
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(
+                sigmaX: tokens.glassBlurSigma,
+                sigmaY: tokens.glassBlurSigma,
+              ),
+              child: Container(
+                padding: EdgeInsets.only(top: topPadding),
+                decoration: BoxDecoration(
+                  color: tokens.glassSurfaceColor,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: tokens.glassBorderColor,
+                      width: tokens.dividerThickness,
+                    ),
+                  ),
+                ),
+                child: SizedBox(
+                  height: kAppHeaderHeight,
+                  width: double.infinity,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: tokens.pagePaddingHorizontal,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        title,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-          Expanded(child: child),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

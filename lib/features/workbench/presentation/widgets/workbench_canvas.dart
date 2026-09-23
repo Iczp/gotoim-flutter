@@ -102,6 +102,8 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
         // Responsive width constraint: on tablet/desktop, limit canvas to 640px and center it
         final totalWidth = screenWidth > 640 ? 640.0 : screenWidth;
         const padding = 16.0;
+        final topBarOffset = MediaQuery.paddingOf(context).top + 48.0;
+        final paddingTop = padding + topBarOffset;
         const spacing = 12.0;
         const columns = WorkbenchLayoutEngine.columns;
 
@@ -113,7 +115,8 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
         final totalRows = notifier.engine.calculateTotalRows(state.items);
         final bottomBarPadding = getHomeBottomPadding(context);
         final contentHeight =
-            (padding * 2) +
+            paddingTop +
+            padding +
             (totalRows * cellHeight) +
             (totalRows > 0 ? (totalRows - 1) * spacing : 0.0) +
             80.0 +
@@ -172,6 +175,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
                           cellWidth: cellWidth,
                           cellHeight: cellHeight,
                           padding: padding,
+                          paddingTop: paddingTop,
                           spacing: spacing,
                           totalWidth: totalWidth,
                           colorScheme: colorScheme,
@@ -184,6 +188,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
                           cellWidth: cellWidth,
                           cellHeight: cellHeight,
                           padding: padding,
+                          paddingTop: paddingTop,
                           spacing: spacing,
                           totalWidth: totalWidth,
                           state: state,
@@ -220,6 +225,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
                           cellWidth: cellWidth,
                           cellHeight: cellHeight,
                           padding: padding,
+                          paddingTop: paddingTop,
                           spacing: spacing,
                           totalWidth: totalWidth,
                           colorScheme: colorScheme,
@@ -240,12 +246,13 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
     required double cellWidth,
     required double cellHeight,
     required double padding,
+    required double paddingTop,
     required double spacing,
     required double totalWidth,
     required ColorScheme colorScheme,
   }) {
     final left = padding + slot.x * (cellWidth + spacing);
-    final top = padding + slot.y * (cellHeight + spacing);
+    final top = paddingTop + slot.y * (cellHeight + spacing);
     final width = slot.spanX * cellWidth + (slot.spanX - 1) * spacing;
     final height = slot.spanY * cellHeight + (slot.spanY - 1) * spacing;
 
@@ -274,6 +281,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
     required double cellWidth,
     required double cellHeight,
     required double padding,
+    required double paddingTop,
     required double spacing,
     required double totalWidth,
     required dynamic state,
@@ -285,7 +293,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
     final isEdgeToEdge = item.edgeToEdge && item.spanX == 4;
 
     final itemLeft = isEdgeToEdge ? 0.0 : (padding + item.x * (cellWidth + spacing));
-    final itemTop = padding + item.y * (cellHeight + spacing);
+    final itemTop = paddingTop + item.y * (cellHeight + spacing);
     final itemWidth = isEdgeToEdge
         ? totalWidth
         : (item.spanX * cellWidth + (item.spanX - 1) * spacing);
@@ -446,7 +454,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
                 .clamp(0, WorkbenchLayoutEngine.columns - item.spanX);
             final targetY = math.max(
               0,
-              ((itemTop - padding + (cellHeight * 0.5)) / strideY).floor(),
+              ((itemTop - paddingTop + (cellHeight * 0.5)) / strideY).floor(),
             );
 
             notifier.updateDragHover(
@@ -571,6 +579,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
     required double cellWidth,
     required double cellHeight,
     required double padding,
+    required double paddingTop,
     required double spacing,
     required double totalWidth,
     required ColorScheme colorScheme,
@@ -581,7 +590,7 @@ class _WorkbenchCanvasState extends ConsumerState<WorkbenchCanvas>
 
     final isEdgeToEdge = item.edgeToEdge && item.spanX == 4;
     final itemLeft = isEdgeToEdge ? 0.0 : (padding + item.x * (cellWidth + spacing));
-    final itemTop = padding + item.y * (cellHeight + spacing);
+    final itemTop = paddingTop + item.y * (cellHeight + spacing);
     final itemWidth = isEdgeToEdge
         ? totalWidth
         : (item.spanX * cellWidth + (item.spanX - 1) * spacing);

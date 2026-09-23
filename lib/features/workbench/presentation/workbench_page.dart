@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/deep_link/deep_link_service.dart';
 import '../../../core/services/task/app_task_manager.dart';
+import '../../../core/widgets/glass_container.dart';
 import '../application/workbench_layout_notifier.dart';
 import '../data/workbench_models.dart';
 import '../domain/workbench_grid_item.dart';
@@ -298,18 +299,20 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
           return KeyEventResult.ignored;
         },
         child: Scaffold(
-        appBar: AppBar(
-          leading: layoutState.isEditing
-              ? IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  tooltip: '退出编辑',
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    notifier.toggleEditMode(false);
-                  },
-                )
-              : null,
-          title: Text(layoutState.isEditing ? '编辑工作台' : '工作台'),
+          extendBodyBehindAppBar: true,
+          appBar: GlassAppBar(
+            centerTitle: false,
+            leading: layoutState.isEditing
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    tooltip: '退出编辑',
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      notifier.toggleEditMode(false);
+                    },
+                  )
+                : null,
+            title: Text(layoutState.isEditing ? '编辑工作台' : '工作台'),
           actions: [
           // Launch mode switcher
           Tooltip(

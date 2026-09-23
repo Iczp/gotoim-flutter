@@ -43,10 +43,13 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
         })
         .toList(growable: false);
     final horizontal = widget.isCompact ? 8.0 : 16.0;
+    final headerOffset = TabHeaderHeightScope.of(context);
 
     return CustomScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: <Widget>[
+        if (headerOffset > 0)
+          SliverToBoxAdapter(child: SizedBox(height: headerOffset)),
         SliverToBoxAdapter(child: _hero(context)),
         SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: horizontal),

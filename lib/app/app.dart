@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/theme/app_layout_settings_controller.dart';
 import '../core/theme/app_theme.dart';
 import '../core/theme/chat_appearance_controller.dart';
 import '../core/theme/font_scale_controller.dart';
@@ -71,12 +72,19 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
     final overscrollStyle = ref.watch(overscrollStyleProvider);
     final fontScale = ref.watch(fontScaleProvider);
     final chatAppearance = ref.watch(chatAppearanceProvider);
+    final layoutSettings = ref.watch(appLayoutSettingsProvider);
 
     return MaterialApp.router(
       title: 'Goto IM',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(chatAppearance: chatAppearance),
-      darkTheme: AppTheme.darkTheme(chatAppearance: chatAppearance),
+      theme: AppTheme.lightTheme(
+        chatAppearance: chatAppearance,
+        layoutSettings: layoutSettings,
+      ),
+      darkTheme: AppTheme.darkTheme(
+        chatAppearance: chatAppearance,
+        layoutSettings: layoutSettings,
+      ),
       themeMode: themeMode,
       scrollBehavior: AppScrollBehavior(style: overscrollStyle),
       scaffoldMessengerKey: rootScaffoldMessengerKey,

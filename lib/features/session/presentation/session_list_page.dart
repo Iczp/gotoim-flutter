@@ -153,72 +153,69 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
         (_) => _scrollToFirstUnread(controller, listItems),
       );
     }
-    return SafeArea(
-      bottom: false,
-      child: Column(
-        children: [
-          CurrentOwnerHeader(
-            owner: controller.currentOwner,
-            hasMultiple: controller.owners.length > 1,
-            isConnecting: controller.isRefreshing,
-            otherUnreadCount: controller.otherUnreadCount,
-            otherImmersedCount: controller.otherImmersedCount,
-            onPressed: widget.onOpenOwnerDrawer,
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: controller.refreshChanges,
-              child: NotificationListener<ScrollNotification>(
-                onNotification: (notification) {
-                  final isUserPaging =
-                      (notification is ScrollUpdateNotification &&
-                          (notification.dragDetails != null ||
-                              (notification.scrollDelta != null &&
-                                  notification.scrollDelta! > 0))) ||
-                      (notification is OverscrollNotification &&
-                          notification.dragDetails != null);
-                  final deltaStr =
-                      notification is ScrollUpdateNotification
-                          ? 'delta=${notification.scrollDelta?.toStringAsFixed(1)}'
-                          : (notification is OverscrollNotification
-                              ? 'overscroll=${notification.overscroll.toStringAsFixed(1)}'
-                              : '');
-                  final dragStr =
-                      notification is ScrollUpdateNotification
-                          ? 'drag=${notification.dragDetails != null}'
-                          : (notification is OverscrollNotification
-                              ? 'drag=${notification.dragDetails != null}'
-                              : (notification is UserScrollNotification
-                                  ? 'dir=${notification.direction}'
-                                  : ''));
+    final topPadding = MediaQuery.paddingOf(context).top;
+    final headerTotalHeight = 48.0 + topPadding;
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: RefreshIndicator(
+            edgeOffset: headerTotalHeight,
+            onRefresh: controller.refreshChanges,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                final isUserPaging =
+                    (notification is ScrollUpdateNotification &&
+                        (notification.dragDetails != null ||
+                            (notification.scrollDelta != null &&
+                                notification.scrollDelta! > 0))) ||
+                    (notification is OverscrollNotification &&
+                        notification.dragDetails != null);
+                final deltaStr =
+                    notification is ScrollUpdateNotification
+                        ? 'delta=${notification.scrollDelta?.toStringAsFixed(1)}'
+                        : (notification is OverscrollNotification
+                            ? 'overscroll=${notification.overscroll.toStringAsFixed(1)}'
+                            : '');
+                final dragStr =
+                    notification is ScrollUpdateNotification
+                        ? 'drag=${notification.dragDetails != null}'
+                        : (notification is OverscrollNotification
+                            ? 'drag=${notification.dragDetails != null}'
+                            : (notification is UserScrollNotification
+                                ? 'dir=${notification.direction}'
+                                : ''));
+                sessionScrollTrace(
+                  '🔔 ${notification.runtimeType} | '
+                  'pixels=${notification.metrics.pixels.toStringAsFixed(1)} '
+                  'extentAfter=${notification.metrics.extentAfter.toStringAsFixed(1)} '
+                  'maxExtent=${notification.metrics.maxScrollExtent.toStringAsFixed(1)} '
+                  '$dragStr $deltaStr isPaging=$isUserPaging',
+                );
+                if (isUserPaging &&
+                    notification.metrics.extentAfter < 240 &&
+                    controller.hasMore &&
+                    !controller.isLoading) {
                   sessionScrollTrace(
-                    '🔔 ${notification.runtimeType} | '
-                    'pixels=${notification.metrics.pixels.toStringAsFixed(1)} '
-                    'extentAfter=${notification.metrics.extentAfter.toStringAsFixed(1)} '
-                    'maxExtent=${notification.metrics.maxScrollExtent.toStringAsFixed(1)} '
-                    '$dragStr $deltaStr isPaging=$isUserPaging',
+                    '⚡ Triggering loadNextPage from user scroll',
                   );
-                  if (isUserPaging &&
-                      notification.metrics.extentAfter < 240 &&
-                      controller.hasMore &&
-                      !controller.isLoading) {
-                    sessionScrollTrace(
-                      '⚡ Triggering loadNextPage from user scroll',
-                    );
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        controller.loadNextPage();
-                      }
-                    });
-                  }
-                  return false;
-                },
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    if (controller.connectionState !=
-                        SessionRealtimeStatus.connected)
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      controller.loadNextPage();
+                    }
+                  });
+                }
+                return false;
+              },
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: SizedBox(height: headerTotalHeight),
+                  ),
+                  if (controller.connectionState !=
+                      SessionRealtimeStatus.connected)
                       SliverToBoxAdapter(
                         child: SignalRStatusBar(
                           state: controller.connectionState,
@@ -303,8 +300,20 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
               ),
             ),
           ),
-        ],
-      ),
+          Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: CurrentOwnerHeader(
+            owner: controller.currentOwner,
+            hasMultiple: controller.owners.length > 1,
+            isConnecting: controller.isRefreshing,
+            otherUnreadCount: controller.otherUnreadCount,
+            otherImmersedCount: controller.otherImmersedCount,
+            onPressed: widget.onOpenOwnerDrawer,
+          ),
+        ),
+      ],
     );
   }
 

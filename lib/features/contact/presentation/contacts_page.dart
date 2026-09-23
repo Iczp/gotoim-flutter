@@ -78,8 +78,17 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     if (groups.isNotEmpty &&
         (_activeGroupIndex.value.isEmpty ||
             !groups.any((group) => group.index == _activeGroupIndex.value))) {
-      _activeGroupIndex.value = groups.first.index;
-      _activeSurnameInitial.value = groups.first.contacts.first.surnameInitial;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (groups.isNotEmpty &&
+            (_activeGroupIndex.value.isEmpty ||
+                !groups
+                    .any((group) => group.index == _activeGroupIndex.value))) {
+          _activeGroupIndex.value = groups.first.index;
+          _activeSurnameInitial.value =
+              groups.first.contacts.first.surnameInitial;
+        }
+      });
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -91,23 +100,26 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
         systemNavigationBarColor: Colors.transparent,
       ),
       child: Scaffold(
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            children: <Widget>[
-              const ContactsTitleBar(),
-              Expanded(
-                child: Stack(
-                  children: <Widget>[
-                    RefreshIndicator(
-                      onRefresh: contacts.refresh,
-                      child: CustomScrollView(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: <Widget>[
-                          const SliverToBoxAdapter(
-                            child: ContactsQuickActions(),
-                          ),
+        body: Stack(
+          children: <Widget>[
+            Positioned.fill(
+              child: RefreshIndicator(
+                edgeOffset: ContactsPageMetrics.titleBarExtent +
+                    MediaQuery.paddingOf(context).top,
+                onRefresh: contacts.refresh,
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: <Widget>[
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: ContactsPageMetrics.titleBarExtent +
+                            MediaQuery.paddingOf(context).top,
+                      ),
+                    ),
+                    const SliverToBoxAdapter(
+                      child: ContactsQuickActions(),
+                    ),
                           if (contacts.error != null)
                             SliverToBoxAdapter(
                               child: ContactsErrorBanner(
@@ -155,76 +167,84 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                         ],
                       ),
                     ),
-                    ValueListenableBuilder<PinnedContactGroup?>(
+                  ),
+                  Positioned(
+                    top: ContactsPageMetrics.titleBarExtent +
+                        MediaQuery.paddingOf(context).top,
+                    left: 0,
+                    right: 0,
+                    child: ValueListenableBuilder<PinnedContactGroup?>(
                       valueListenable: _pinnedHeader,
                       builder: (context, header, _) {
                         if (header == null) return const SizedBox.shrink();
-                        return Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: ValueListenableBuilder<bool>(
-                            valueListenable: _isIndexDragging,
-                            builder:
-                                (context, isDragging, _) => ContactGroupHeader(
-                                  group: header.group,
-                                  activeInitial: _activeSurnameInitial.value,
-                                  activeInitialListenable:
-                                      _activeSurnameInitial,
-                                  onSurnameSelected:
-                                      (initial) => _scrollToSurname(
-                                        groups,
-                                        header.group,
-                                        initial,
-                                      ),
-                                  showBlur:
-                                      !_disablePinnedHeaderBlurWhileIndexDragging ||
-                                      !isDragging,
-                                ),
-                          ),
+                        return ValueListenableBuilder<bool>(
+                          valueListenable: _isIndexDragging,
+                          builder:
+                              (context, isDragging, _) => ContactGroupHeader(
+                                group: header.group,
+                                activeInitial: _activeSurnameInitial.value,
+                                activeInitialListenable:
+                                    _activeSurnameInitial,
+                                onSurnameSelected:
+                                    (initial) => _scrollToSurname(
+                                      groups,
+                                      header.group,
+                                      initial,
+                                    ),
+                                showBlur:
+                                    !_disablePinnedHeaderBlurWhileIndexDragging ||
+                                    !isDragging,
+                              ),
                         );
                       },
                     ),
-                    if (groups.isNotEmpty)
-                      Positioned(
-                        top: 8,
-                        right: 2,
-                        bottom: 8 + getHomeBottomPadding(context),
-                        child: ValueListenableBuilder<String>(
-                          valueListenable: _activeGroupIndex,
-                          builder:
-                              (context, activeKey, _) => AlphabetIndexBar(
-                                keys:
-                                    groups.map((group) => group.index).toList(),
-                                activeKey: activeKey,
-                                onSelected:
-                                    (key) => _scrollToGroup(groups, key),
-                                onScrollToTop: _scrollToTop,
-                                onScrollToBottom: _scrollToBottom,
-                                onDragging: (key) {
-                                  if (_draggingIndex.value != key) {
-                                    _draggingIndex.value = key;
-                                  }
-                                  final isDragging = key != null;
-                                  if (_isIndexDragging.value != isDragging) {
-                                    _isIndexDragging.value = isDragging;
-                                  }
-                                },
-                              ),
-                        ),
+                  ),
+                  if (groups.isNotEmpty)
+                    Positioned(
+                      top: 8 +
+                          ContactsPageMetrics.titleBarExtent +
+                          MediaQuery.paddingOf(context).top,
+                      right: 2,
+                      bottom: 8 + getHomeBottomPadding(context),
+                      child: ValueListenableBuilder<String>(
+                        valueListenable: _activeGroupIndex,
+                        builder:
+                            (context, activeKey, _) => AlphabetIndexBar(
+                              keys:
+                                  groups.map((group) => group.index).toList(),
+                              activeKey: activeKey,
+                              onSelected:
+                                  (key) => _scrollToGroup(groups, key),
+                              onScrollToTop: _scrollToTop,
+                              onScrollToBottom: _scrollToBottom,
+                              onDragging: (key) {
+                                if (_draggingIndex.value != key) {
+                                  _draggingIndex.value = key;
+                                }
+                                final isDragging = key != null;
+                                if (_isIndexDragging.value != isDragging) {
+                                  _isIndexDragging.value = isDragging;
+                                }
+                              },
+                            ),
                       ),
-                    DraggingIndexIndicator(
+                    ),
+                  Positioned.fill(
+                    child: DraggingIndexIndicator(
                       draggingIndexListenable: _draggingIndex,
                     ),
-                  ],
-                ),
+                  ),
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: ContactsTitleBar(),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+            ),
+          );
+        }
 
   List<Widget> _buildGroupSlivers(
     BuildContext context,

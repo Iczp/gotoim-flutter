@@ -37,6 +37,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     required this.chatGlassBorderOpacity,
     required this.chatGlassBorderWidth,
     required this.avatarGradients,
+    this.pagePaddingHorizontal = 12.0,
+    this.pagePaddingVertical = 8.0,
+    this.cardRadius = 12.0,
+    this.dividerThickness = 0.33,
   });
 
   final Color sessionPinnedBackground;
@@ -67,6 +71,33 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
   final double chatGlassBorderOpacity;
   final double chatGlassBorderWidth;
   final List<List<Color>> avatarGradients;
+
+  /// 默认页面左右内边距 / 外边距（一般情况 左右 12）
+  final double pagePaddingHorizontal;
+
+  /// 默认页面上下内边距 / 外边距（一般情况 上下 8）
+  final double pagePaddingVertical;
+
+  /// 统一卡片与容器倒角（默认 12）
+  final double cardRadius;
+
+  /// 统一分隔线条高度/粗细（默认 0.33）
+  final double dividerThickness;
+
+  /// 快捷常用页面左右与上下边距
+  EdgeInsets get pagePadding => EdgeInsets.symmetric(
+        horizontal: pagePaddingHorizontal,
+        vertical: pagePaddingVertical,
+      );
+
+  /// 快捷卡片倒角圆角
+  BorderRadius get cardBorderRadius => BorderRadius.circular(cardRadius);
+
+  /// 快捷分隔线条边框
+  BorderSide get dividerBorderSide => BorderSide(
+        color: dividerBorder,
+        width: dividerThickness,
+      );
 
   /// Light theme token preset.
   factory AppThemeTokens.light() {
@@ -99,6 +130,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       chatGlassBorderOpacity: 0.33,
       chatGlassBorderWidth: 0.33,
       avatarGradients: AppColors.avatarGradients,
+      pagePaddingHorizontal: 12.0,
+      pagePaddingVertical: 8.0,
+      cardRadius: 12.0,
+      dividerThickness: 0.33,
     );
   }
 
@@ -133,9 +168,12 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       chatGlassBorderOpacity: 0.33,
       chatGlassBorderWidth: 0.33,
       avatarGradients: AppColors.avatarGradients,
+      pagePaddingHorizontal: 12.0,
+      pagePaddingVertical: 8.0,
+      cardRadius: 12.0,
+      dividerThickness: 0.33,
     );
   }
-
   /// Resolve a curated 2-color aesthetic gradient for an avatar based on a name string.
   List<Color> getAvatarGradient(String name) {
     if (name.isEmpty) return avatarGradients.first;
@@ -174,6 +212,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     double? chatGlassBorderOpacity,
     double? chatGlassBorderWidth,
     List<List<Color>>? avatarGradients,
+    double? pagePaddingHorizontal,
+    double? pagePaddingVertical,
+    double? cardRadius,
+    double? dividerThickness,
   }) {
     return AppThemeTokens(
       sessionPinnedBackground:
@@ -211,6 +253,11 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
           chatGlassBorderOpacity ?? this.chatGlassBorderOpacity,
       chatGlassBorderWidth: chatGlassBorderWidth ?? this.chatGlassBorderWidth,
       avatarGradients: avatarGradients ?? this.avatarGradients,
+      pagePaddingHorizontal:
+          pagePaddingHorizontal ?? this.pagePaddingHorizontal,
+      pagePaddingVertical: pagePaddingVertical ?? this.pagePaddingVertical,
+      cardRadius: cardRadius ?? this.cardRadius,
+      dividerThickness: dividerThickness ?? this.dividerThickness,
     );
   }
 
@@ -283,6 +330,15 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
           chatGlassBorderWidth +
           (other.chatGlassBorderWidth - chatGlassBorderWidth) * t,
       avatarGradients: t < 0.5 ? avatarGradients : other.avatarGradients,
+      pagePaddingHorizontal:
+          pagePaddingHorizontal +
+          (other.pagePaddingHorizontal - pagePaddingHorizontal) * t,
+      pagePaddingVertical:
+          pagePaddingVertical +
+          (other.pagePaddingVertical - pagePaddingVertical) * t,
+      cardRadius: cardRadius + (other.cardRadius - cardRadius) * t,
+      dividerThickness:
+          dividerThickness + (other.dividerThickness - dividerThickness) * t,
     );
   }
 }

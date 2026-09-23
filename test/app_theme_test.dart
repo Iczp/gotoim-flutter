@@ -33,8 +33,12 @@ void main() {
       expect(tokens!.sessionPinnedBackground, const Color(0xFFF1F5F9));
       expect(tokens.mentionBadgeColor, AppColors.mentionBadge);
       expect(tokens.unreadBadgeColor, AppColors.error);
-      expect(tokens.glassBlurSigma, 16.0);
+      expect(tokens.glassBlurSigma, 3.0);
       expect(tokens.glassSurfaceColor, const Color(0xD9FFFFFF));
+      expect(tokens.pagePaddingHorizontal, 12.0);
+      expect(tokens.pagePaddingVertical, 8.0);
+      expect(tokens.cardRadius, 12.0);
+      expect(tokens.dividerThickness, 0.33);
     });
 
     test(

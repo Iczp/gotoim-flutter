@@ -29,11 +29,13 @@ class MinePage extends ConsumerWidget {
     final sessionController = ref.watch(sessionListControllerProvider);
     final currentOwner = sessionController.currentOwner;
     final appUpdateService = ref.watch(appUpdateServiceProvider);
+    final headerOffset = TabHeaderHeightScope.of(context);
+    final topPadding = headerOffset > 0 ? headerOffset + 8.0 : 16.0;
 
     return ListView(
       padding: EdgeInsets.fromLTRB(
         isCompact ? 16 : 32,
-        16,
+        topPadding,
         isCompact ? 16 : 32,
         16 + getHomeBottomPadding(context, isCompact: isCompact),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_modal.dart';
 import '../application/search_controller.dart';
@@ -58,6 +59,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
     final controller = ref.watch(globalSearchControllerProvider);
     final searchState = controller.state;
 
@@ -86,10 +88,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           ),
           title: Container(
             height: 40,
-            margin: const EdgeInsets.only(right: 16),
+            margin: EdgeInsets.only(right: tokens.pagePaddingHorizontal),
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(tokens.cardRadius),
             ),
             child: TextField(
               controller: _textController,
@@ -147,16 +149,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.pagePaddingHorizontal,
+        vertical: tokens.pagePaddingVertical,
+      ),
       decoration: BoxDecoration(
         color: theme.scaffoldBackgroundColor,
         border: Border(
           bottom: BorderSide(
             color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-            width: 0.5,
+            width: tokens.dividerThickness,
           ),
         ),
       ),
@@ -187,11 +193,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(tokens.cardRadius),
                   side: BorderSide(
                     color: isSelected
                         ? colorScheme.primary.withValues(alpha: 0.5)
                         : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                    width: tokens.dividerThickness,
                   ),
                 ),
                 showCheckmark: false,
@@ -234,9 +241,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.pagePaddingHorizontal,
+        vertical: tokens.pagePaddingVertical,
+      ),
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -291,7 +302,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               for (final term in state.history)
                 InkWell(
                   onTap: () => _selectHistory(term),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(tokens.cardRadius),
                   child: Container(
                     padding: const EdgeInsets.only(
                       left: 12,
@@ -301,7 +312,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     ),
                     decoration: BoxDecoration(
                       color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(tokens.cardRadius),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -381,9 +392,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         ? state.remoteContacts.take(limit).toList()
         : state.remoteContacts;
     final hasMoreRemotes = isAll && state.remoteContacts.length > limit;
+    final tokens = context.appTokens;
 
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: tokens.pagePaddingVertical),
       children: [
         // 1. 本地 Friend 表联系人（排第一位，点击直接进入聊天）
         if (showContacts && (state.localContacts.isNotEmpty || state.isLocalLoading)) ...[

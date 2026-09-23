@@ -126,16 +126,18 @@ class _AlphabetIndexBarState extends State<AlphabetIndexBar> {
           double.infinity,
         );
 
-        final double jumpExtent = showJumpIcons
-            ? (availableContentHeight / (widget.keys.length + 2.5)).clamp(14.0, 24.0)
+        final double maxJumpAllowed = (availableContentHeight * 0.15).clamp(0.0, 24.0);
+        final double jumpExtent = (showJumpIcons && maxJumpAllowed >= 10.0)
+            ? (availableContentHeight / (widget.keys.length + 2.5)).clamp(10.0, maxJumpAllowed)
             : 0.0;
+        final bool effectiveShowJumpIcons = showJumpIcons && jumpExtent >= 10.0;
         final double alphabetHeight =
-            (availableContentHeight - (showJumpIcons ? jumpExtent * 2 : 0.0)).clamp(
+            (availableContentHeight - (effectiveShowJumpIcons ? jumpExtent * 2 : 0.0)).clamp(
               0.0,
               double.infinity,
             );
 
-        final double itemExtent = alphabetHeight / widget.keys.length;
+        final double itemExtent = widget.keys.isNotEmpty ? alphabetHeight / widget.keys.length : 0.0;
 
         // 自适应字体大小与稀疏采样间隔
         final double fontSize = (itemExtent * 0.72).clamp(7.5, 11.0).toDouble();
@@ -159,14 +161,14 @@ class _AlphabetIndexBarState extends State<AlphabetIndexBar> {
               details.localPosition,
               alphabetHeight: alphabetHeight,
               jumpExtent: jumpExtent,
-              showJumpIcons: showJumpIcons,
+              showJumpIcons: effectiveShowJumpIcons,
               verticalPadding: verticalPadding,
             ),
             onPanUpdate: (details) => _selectAt(
               details.localPosition,
               alphabetHeight: alphabetHeight,
               jumpExtent: jumpExtent,
-              showJumpIcons: showJumpIcons,
+              showJumpIcons: effectiveShowJumpIcons,
               verticalPadding: verticalPadding,
             ),
             onPanEnd: (_) => _stopDragging(),
@@ -205,35 +207,37 @@ class _AlphabetIndexBarState extends State<AlphabetIndexBar> {
                   vertical: verticalPadding,
                   horizontal: 1,
                 ),
-                child: Column(
-                  children: <Widget>[
-                    if (showJumpIcons)
-                      AlphabetJumpIcon(
-                        icon: Icons.vertical_align_top_rounded,
-                        extent: jumpExtent,
-                        width: barWidth,
-                      ),
-                    for (var i = 0; i < widget.keys.length; i++)
-                      Expanded(
-                        child: _buildIndexItem(
-                          key: widget.keys[i],
-                          index: i,
-                          totalCount: widget.keys.length,
-                          step: step,
-                          barWidth: barWidth,
-                          fontSize: fontSize,
-                          shownKey: shownKey,
-                          isTouching: isTouching,
-                          colors: colors,
+                child: ClipRect(
+                  child: Column(
+                    children: <Widget>[
+                      if (effectiveShowJumpIcons)
+                        AlphabetJumpIcon(
+                          icon: Icons.vertical_align_top_rounded,
+                          extent: jumpExtent,
+                          width: barWidth,
                         ),
-                      ),
-                    if (showJumpIcons)
-                      AlphabetJumpIcon(
-                        icon: Icons.vertical_align_bottom_rounded,
-                        extent: jumpExtent,
-                        width: barWidth,
-                      ),
-                  ],
+                      for (var i = 0; i < widget.keys.length; i++)
+                        Expanded(
+                          child: _buildIndexItem(
+                            key: widget.keys[i],
+                            index: i,
+                            totalCount: widget.keys.length,
+                            step: step,
+                            barWidth: barWidth,
+                            fontSize: fontSize,
+                            shownKey: shownKey,
+                            isTouching: isTouching,
+                            colors: colors,
+                          ),
+                        ),
+                      if (effectiveShowJumpIcons)
+                        AlphabetJumpIcon(
+                          icon: Icons.vertical_align_bottom_rounded,
+                          extent: jumpExtent,
+                          width: barWidth,
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),

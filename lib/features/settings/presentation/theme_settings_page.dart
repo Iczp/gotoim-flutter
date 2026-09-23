@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_layout_settings_controller.dart';
 import '../../../core/theme/font_scale_controller.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/theme/chat_appearance_controller.dart';
@@ -22,6 +23,7 @@ class ThemeSettingsPage extends ConsumerWidget {
     final fontScale = ref.watch(fontScaleProvider);
     final overscrollStyle = ref.watch(overscrollStyleProvider);
     final chatAppearance = ref.watch(chatAppearanceProvider);
+    final layoutSettings = ref.watch(appLayoutSettingsProvider);
     final chatTokens = context.appTokens;
     final currentLevel = FontScaleLevel.fromScale(fontScale);
     final levelIndex = FontScaleLevel.values.indexOf(currentLevel);
@@ -343,6 +345,100 @@ class ThemeSettingsPage extends ConsumerWidget {
                   onSwitchChanged: (val) {
                     ref.read(tabGlassProvider.notifier).setEnabled(val);
                   },
+                ),
+              ],
+            ),
+          ),
+          CellGroup(
+            title: '全局布局与几何规范',
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.space_dashboard_outlined,
+                      color: colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '边距、倒角与线条',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed:
+                          () =>
+                              ref
+                                  .read(appLayoutSettingsProvider.notifier)
+                                  .reset(),
+                      child: const Text('恢复默认'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '规范全局页面的常用左右与上下边距、卡片倒角以及分隔线的厚度，实时生效。',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _ChatAppearanceSlider(
+                  label: '页面左右边距 (左右 12)',
+                  value: layoutSettings.pagePaddingHorizontal,
+                  min: 8,
+                  max: 24,
+                  divisions: 16,
+                  onChanged:
+                      (val) => ref
+                          .read(appLayoutSettingsProvider.notifier)
+                          .update(
+                            layoutSettings.copyWith(
+                              pagePaddingHorizontal: val,
+                            ),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '页面上下边距 (上下 8)',
+                  value: layoutSettings.pagePaddingVertical,
+                  min: 4,
+                  max: 16,
+                  divisions: 12,
+                  onChanged:
+                      (val) => ref
+                          .read(appLayoutSettingsProvider.notifier)
+                          .update(
+                            layoutSettings.copyWith(pagePaddingVertical: val),
+                          ),
+                ),
+                _ChatAppearanceSlider(
+                  label: '卡片与容器倒角 (圆角 12)',
+                  value: layoutSettings.cardRadius,
+                  min: 0,
+                  max: 24,
+                  divisions: 24,
+                  onChanged:
+                      (val) => ref
+                          .read(appLayoutSettingsProvider.notifier)
+                          .update(layoutSettings.copyWith(cardRadius: val)),
+                ),
+                _ChatAppearanceSlider(
+                  label: '分隔线条高度/粗细 (线条 0.33)',
+                  value: layoutSettings.dividerThickness,
+                  min: 0.2,
+                  max: 1.0,
+                  divisions: 16,
+                  onChanged:
+                      (val) => ref
+                          .read(appLayoutSettingsProvider.notifier)
+                          .update(
+                            layoutSettings.copyWith(dividerThickness: val),
+                          ),
                 ),
               ],
             ),

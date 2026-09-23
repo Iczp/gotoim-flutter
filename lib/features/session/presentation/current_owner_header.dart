@@ -1,8 +1,11 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
+import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/widgets/app_badge.dart';
 import '../data/models/chat_owner.dart';
 import 'chat_object_avatar.dart';
@@ -34,13 +37,34 @@ class CurrentOwnerHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
+    final topPadding = MediaQuery.paddingOf(context).top;
 
-    return SizedBox(
-      height: 48,
-      child: Material(
-        color: Colors.transparent,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaX: tokens.glassBlurSigma,
+          sigmaY: tokens.glassBlurSigma,
+        ),
+        child: Container(
+          padding: EdgeInsets.only(top: topPadding),
+          decoration: BoxDecoration(
+            color: tokens.glassSurfaceColor,
+            border: Border(
+              bottom: BorderSide(
+                color: tokens.glassBorderColor,
+                width: tokens.dividerThickness,
+              ),
+            ),
+          ),
+          child: SizedBox(
+            height: 48,
+            child: Material(
+              color: Colors.transparent,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: tokens.pagePaddingHorizontal,
+                ),
           child: Row(
             children: [
               // 左侧身份切换区域
@@ -115,7 +139,10 @@ class CurrentOwnerHeader extends ConsumerWidget {
           ),
         ),
       ),
-    );
+    ),
+  ),
+),
+);
   }
 
   void _showAddMenu(

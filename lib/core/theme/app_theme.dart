@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import 'app_layout_settings_controller.dart';
 import 'chat_appearance_controller.dart';
 import 'app_theme_tokens.dart';
 import 'app_typography.dart';
@@ -8,7 +9,10 @@ import 'app_typography.dart';
 /// Central theme factory providing unified Light and Dark [ThemeData].
 abstract final class AppTheme {
   /// Build the unified Material 3 Light Theme.
-  static ThemeData lightTheme({ChatAppearanceSettings? chatAppearance}) {
+  static ThemeData lightTheme({
+    ChatAppearanceSettings? chatAppearance,
+    AppLayoutSettings? layoutSettings,
+  }) {
     final colorScheme = const ColorScheme.light(
       primary: AppColors.lightPrimary,
       onPrimary: AppColors.lightOnPrimary,
@@ -40,9 +44,12 @@ abstract final class AppTheme {
     );
 
     final textTheme = AppTypography.createTextTheme(colorScheme.onSurface);
-    final tokens = (chatAppearance ?? const ChatAppearanceSettings()).applyTo(
+    var tokens = (chatAppearance ?? const ChatAppearanceSettings()).applyTo(
       AppThemeTokens.light(),
     );
+    if (layoutSettings != null) {
+      tokens = layoutSettings.applyTo(tokens);
+    }
 
     return _buildTheme(
       colorScheme: colorScheme,
@@ -53,7 +60,10 @@ abstract final class AppTheme {
   }
 
   /// Build the unified Material 3 Dark Theme.
-  static ThemeData darkTheme({ChatAppearanceSettings? chatAppearance}) {
+  static ThemeData darkTheme({
+    ChatAppearanceSettings? chatAppearance,
+    AppLayoutSettings? layoutSettings,
+  }) {
     final colorScheme = const ColorScheme.dark(
       primary: AppColors.darkPrimary,
       onPrimary: AppColors.darkOnPrimary,
@@ -85,9 +95,12 @@ abstract final class AppTheme {
     );
 
     final textTheme = AppTypography.createTextTheme(colorScheme.onSurface);
-    final tokens = (chatAppearance ?? const ChatAppearanceSettings()).applyTo(
+    var tokens = (chatAppearance ?? const ChatAppearanceSettings()).applyTo(
       AppThemeTokens.dark(),
     );
+    if (layoutSettings != null) {
+      tokens = layoutSettings.applyTo(tokens);
+    }
 
     return _buildTheme(
       colorScheme: colorScheme,
@@ -129,21 +142,31 @@ abstract final class AppTheme {
         actionsIconTheme: IconThemeData(color: colorScheme.onSurface, size: 22),
       ),
 
+      // Divider Theme
+      dividerTheme: DividerThemeData(
+        color: tokens.dividerBorder,
+        thickness: tokens.dividerThickness,
+        space: tokens.dividerThickness,
+      ),
+
       // Card Theme
       cardTheme: CardThemeData(
         color: colorScheme.surfaceContainerLowest,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(tokens.cardRadius),
           side: BorderSide(
             color: colorScheme.outlineVariant.withValues(
               alpha: isDark ? 0.3 : 0.5,
             ),
-            width: 1,
+            width: tokens.dividerThickness,
           ),
         ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        margin: EdgeInsets.symmetric(
+          horizontal: tokens.pagePaddingHorizontal,
+          vertical: tokens.pagePaddingVertical,
+        ),
       ),
 
       // ListTile Theme
@@ -314,13 +337,6 @@ abstract final class AppTheme {
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.horizontal(right: Radius.circular(20)),
         ),
-      ),
-
-      // Divider Theme
-      dividerTheme: DividerThemeData(
-        color: tokens.dividerBorder,
-        thickness: 0.8,
-        space: 1,
       ),
 
       // Badge Theme

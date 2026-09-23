@@ -1,10 +1,15 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/theme/app_theme_tokens.dart';
 
 /// Shared visual constants for the contacts page.
 abstract final class ContactsPageMetrics {
   static const rowExtent = 56.0;
   static const groupHeaderExtent = 36.0;
-  static const titleBarExtent = 56.0;
+  static const titleBarExtent = 48.0;
   static const quickActionsExtent = rowExtent * 4;
 }
 
@@ -15,37 +20,60 @@ class ContactsTitleBar extends StatelessWidget {
   const ContactsTitleBar({super.key});
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: contactHeaderBackground(context),
-    child: SizedBox(
-      height: ContactsPageMetrics.titleBarExtent,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
-          children: <Widget>[
-            Text('通讯录', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            IconButton(
-              tooltip: '搜索联系人',
-              onPressed:
-                  () => ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('联系人搜索将在下一步接入'))),
-              icon: const Icon(Icons.search),
+  Widget build(BuildContext context) {
+    final tokens = context.appTokens;
+    final topPadding = MediaQuery.paddingOf(context).top;
+
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaX: tokens.glassBlurSigma,
+          sigmaY: tokens.glassBlurSigma,
+        ),
+        child: Container(
+          padding: EdgeInsets.only(top: topPadding),
+          decoration: BoxDecoration(
+            color: tokens.glassSurfaceColor,
+            border: Border(
+              bottom: BorderSide(
+                color: tokens.glassBorderColor,
+                width: tokens.dividerThickness,
+              ),
             ),
-            IconButton(
-              tooltip: '添加好友',
-              onPressed:
-                  () => ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('添加好友功能即将接入'))),
-              icon: const Icon(Icons.add),
+          ),
+          child: SizedBox(
+            height: ContactsPageMetrics.titleBarExtent,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: tokens.pagePaddingHorizontal,
+              ),
+              child: Row(
+                children: <Widget>[
+                  Text(
+                    '通讯录',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '搜索联系人',
+                    onPressed: () => context.push('/search'),
+                    icon: const Icon(Icons.search),
+                  ),
+                  IconButton(
+                    tooltip: '添加好友',
+                    onPressed: () => context.push('/add-friend'),
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class ContactsQuickActions extends StatelessWidget {
