@@ -96,6 +96,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// 前台活跃会话注册表
   late final ActiveChatRegistry _activeChatRegistry;
 
+  /// 浮窗管理器
+  late final FloatingWindowManager _floatingWindowManager;
+
   /// 底部消息输入框控制器
   final input = TextEditingController();
 
@@ -138,6 +141,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       );
     });
     _audioPlayback = ref.read(audioPlaybackServiceProvider);
+    _floatingWindowManager = ref.read(floatingWindowManagerProvider);
     controller = ChatController(
       ref.read(messageRepositoryProvider),
       ref.read(sessionRepositoryProvider),
@@ -163,7 +167,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       'totalSessionDuration=${_pageStopwatch.elapsedMilliseconds}ms',
     );
     WidgetsBinding.instance.removeObserver(this);
-    ref.read(floatingWindowManagerProvider).close(_appearanceWindowId);
+    _floatingWindowManager.close(_appearanceWindowId);
     _activeChatRegistry.leaveChat(widget.sessionUnitId);
     unawaited(_audioPlayback.stop());
     controller.dispose();
@@ -346,10 +350,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   );
 
   Future<void> _openAppearancePanel() async {
-    ref
-        .read(floatingWindowManagerProvider)
-        .show(
-          id: _appearanceWindowId,
+    _floatingWindowManager.show(
+      id: _appearanceWindowId,
           contentMode: FloatingWindowContentMode.platformView,
           options: const FloatingWindowOptions(
             title: '聊天背景与外观',
