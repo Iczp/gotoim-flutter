@@ -118,30 +118,170 @@ class ContactsQuickActions extends StatelessWidget {
   );
 }
 
-class ContactsErrorBanner extends StatelessWidget {
-  const ContactsErrorBanner({
+class ContactsFloatingErrorBanner extends StatelessWidget {
+  const ContactsFloatingErrorBanner({
     required this.error,
-    required this.hasContacts,
     required this.onRetry,
+    this.onDismiss,
     super.key,
   });
 
   final Object error;
-  final bool hasContacts;
   final VoidCallback onRetry;
+  final VoidCallback? onDismiss;
 
   @override
-  Widget build(BuildContext context) => MaterialBanner(
-    content: Text(hasContacts ? '在线通讯录更新失败，正在显示本地联系人。' : '通讯录加载失败：$error'),
-    actions: <Widget>[TextButton(onPressed: onRetry, child: const Text('重试'))],
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final tokens = context.appTokens;
+
+    final bgColor = isDark
+        ? const Color(0xE678350F)
+        : const Color(0xF2FEF3C7);
+    final textColor = isDark
+        ? const Color(0xFFFDE68A)
+        : const Color(0xFF92400E);
+    final borderColor = isDark
+        ? const Color(0x66F59E0B)
+        : const Color(0x66D97706);
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        margin: EdgeInsets.symmetric(
+          horizontal: tokens.pagePaddingHorizontal,
+          vertical: 4,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(tokens.cardRadius),
+          border: Border.all(
+            color: borderColor,
+            width: tokens.dividerThickness,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.wifi_off_rounded, size: 16, color: textColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '在线更新失败，正在显示本地联系人',
+                style: TextStyle(
+                  fontSize: 12.0,
+                  fontWeight: FontWeight.w500,
+                  color: textColor,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: onRetry,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '重试',
+                  style: TextStyle(
+                    fontSize: 12.0,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ),
+            if (onDismiss != null) ...[
+              const SizedBox(width: 4),
+              InkWell(
+                onTap: onDismiss,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(Icons.close_rounded, size: 14, color: textColor),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class NoContacts extends StatelessWidget {
-  const NoContacts({super.key});
+  const NoContacts({
+    this.error,
+    this.onRetry,
+    super.key,
+  });
+
+  final Object? error;
+  final VoidCallback? onRetry;
 
   @override
-  Widget build(BuildContext context) => const Center(child: Text('暂无联系人'));
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isError = error != null;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isError
+                  ? Icons.cloud_off_rounded
+                  : Icons.people_outline_rounded,
+              size: 56,
+              color: isError
+                  ? colorScheme.error.withValues(alpha: 0.8)
+                  : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isError ? '通讯录加载失败' : '暂无联系人',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: isError ? colorScheme.error : colorScheme.onSurface,
+              ),
+            ),
+            if (isError) ...[
+              const SizedBox(height: 6),
+              Text(
+                '$error',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 16),
+              if (onRetry != null)
+                FilledButton.tonal(
+                  onPressed: onRetry,
+                  child: const Text('重新加载'),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class ContactsLoadingSkeleton extends StatelessWidget {

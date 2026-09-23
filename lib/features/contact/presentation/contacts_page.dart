@@ -37,6 +37,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       ValueNotifier<PinnedContactGroup?>(null);
   List<double> _groupOffsets = const <double>[];
   List<ContactGroup> _offsetGroups = const <ContactGroup>[];
+  Object? _dismissedError;
 
   @override
   void initState() {
@@ -91,6 +92,11 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       });
     }
 
+    final hasFloatingError = contacts.error != null &&
+        groups.isNotEmpty &&
+        _dismissedError != contacts.error;
+    const floatingErrorExtent = 38.0;
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
@@ -120,31 +126,23 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                     const SliverToBoxAdapter(
                       child: ContactsQuickActions(),
                     ),
-                          if (contacts.error != null)
-                            SliverToBoxAdapter(
-                              child: ContactsErrorBanner(
-                                error: contacts.error!,
-                                hasContacts: groups.isNotEmpty,
-                                onRetry:
-                                    groups.isEmpty
-                                        ? () => ref
-                                            .read(contactsControllerProvider)
-                                            .initialize(ownerId)
-                                        : contacts.refresh,
-                              ),
-                            ),
-                          if (isInitialLoading)
-                            const SliverToBoxAdapter(
-                              child: ContactsLoadingSkeleton(),
-                            )
-                          else if (groups.isEmpty)
-                            const SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: NoContacts(),
-                            )
-                          else
-                            ..._buildGroupSlivers(context, groups, ownerId),
-                          if (groups.isNotEmpty)
+                    if (isInitialLoading)
+                      const SliverToBoxAdapter(
+                        child: ContactsLoadingSkeleton(),
+                      )
+                    else if (groups.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: NoContacts(
+                          error: contacts.error,
+                          onRetry: () => ref
+                              .read(contactsControllerProvider)
+                              .initialize(ownerId),
+                        ),
+                      )
+                    else
+                      ..._buildGroupSlivers(context, groups, ownerId),
+                    if (groups.isNotEmpty)
                             SliverToBoxAdapter(
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -170,7 +168,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                   ),
                   Positioned(
                     top: ContactsPageMetrics.titleBarExtent +
-                        MediaQuery.paddingOf(context).top,
+                        MediaQuery.paddingOf(context).top +
+                        (hasFloatingError ? floatingErrorExtent : 0.0),
                     left: 0,
                     right: 0,
                     child: ValueListenableBuilder<PinnedContactGroup?>(
@@ -204,7 +203,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                     Positioned(
                       top: 8 +
                           ContactsPageMetrics.titleBarExtent +
-                          MediaQuery.paddingOf(context).top,
+                          MediaQuery.paddingOf(context).top +
+                          (hasFloatingError ? floatingErrorExtent : 0.0),
                       right: 2,
                       bottom: 8 + getHomeBottomPadding(context),
                       child: ValueListenableBuilder<String>(
@@ -235,6 +235,19 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                       draggingIndexListenable: _draggingIndex,
                     ),
                   ),
+                  if (hasFloatingError)
+                    Positioned(
+                      top: ContactsPageMetrics.titleBarExtent +
+                          MediaQuery.paddingOf(context).top,
+                      left: 0,
+                      right: 0,
+                      child: ContactsFloatingErrorBanner(
+                        error: contacts.error!,
+                        onRetry: contacts.refresh,
+                        onDismiss: () =>
+                            setState(() => _dismissedError = contacts.error),
+                      ),
+                    ),
                   const Positioned(
                     top: 0,
                     left: 0,
