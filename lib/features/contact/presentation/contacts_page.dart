@@ -37,7 +37,6 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       ValueNotifier<PinnedContactGroup?>(null);
   List<double> _groupOffsets = const <double>[];
   List<ContactGroup> _offsetGroups = const <ContactGroup>[];
-  Object? _dismissedError;
 
   @override
   void initState() {
@@ -92,11 +91,6 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       });
     }
 
-    final hasFloatingError = contacts.error != null &&
-        groups.isNotEmpty &&
-        _dismissedError != contacts.error;
-    const floatingErrorExtent = 38.0;
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
@@ -143,40 +137,76 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                     else
                       ..._buildGroupSlivers(context, groups, ownerId),
                     if (groups.isNotEmpty)
-                            SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 20,
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '共有 ${contacts.totalCount} 位联系人',
-                                    style:
-                                        Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          SliverToBoxAdapter(
-                            child: SizedBox(
-                              height: getHomeBottomPadding(context) + 8,
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 20,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '共有 ${contacts.totalCount} 位联系人',
+                              style:
+                                  Theme.of(context).textTheme.bodySmall,
                             ),
                           ),
-                        ],
+                        ),
+                      ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: getHomeBottomPadding(context) + 8,
                       ),
                     ),
-                  ),
-                  Positioned(
-                    top: ContactsPageMetrics.titleBarExtent +
-                        MediaQuery.paddingOf(context).top +
-                        (hasFloatingError ? floatingErrorExtent : 0.0),
-                    left: 0,
-                    right: 0,
-                    child: ValueListenableBuilder<PinnedContactGroup?>(
-                      valueListenable: _pinnedHeader,
-                      builder: (context, header, _) {
-                        if (header == null) return const SizedBox.shrink();
-                        return ValueListenableBuilder<bool>(
+                  ],
+                ),
+              ),
+            ),
+            if (groups.isNotEmpty)
+              Positioned(
+                top: 8 +
+                    ContactsPageMetrics.titleBarExtent +
+                    MediaQuery.paddingOf(context).top,
+                right: 2,
+                bottom: 8 + getHomeBottomPadding(context),
+                child: ValueListenableBuilder<String>(
+                  valueListenable: _activeGroupIndex,
+                  builder:
+                      (context, activeKey, _) => AlphabetIndexBar(
+                        keys:
+                            groups.map((group) => group.index).toList(),
+                        activeKey: activeKey,
+                        onSelected:
+                            (key) => _scrollToGroup(groups, key),
+                        onScrollToTop: _scrollToTop,
+                        onScrollToBottom: _scrollToBottom,
+                        onDragging: (key) {
+                          if (_draggingIndex.value != key) {
+                            _draggingIndex.value = key;
+                          }
+                          final isDragging = key != null;
+                          if (_isIndexDragging.value != isDragging) {
+                            _isIndexDragging.value = isDragging;
+                          }
+                        },
+                      ),
+                ),
+              ),
+            Positioned.fill(
+              child: DraggingIndexIndicator(
+                draggingIndexListenable: _draggingIndex,
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: ValueListenableBuilder<PinnedContactGroup?>(
+                valueListenable: _pinnedHeader,
+                builder: (context, header, _) => ContactsTitleBar(
+                  hasError: contacts.error != null,
+                  onRetry: contacts.refresh,
+                  bottom: header == null
+                      ? null
+                      : ValueListenableBuilder<bool>(
                           valueListenable: _isIndexDragging,
                           builder:
                               (context, isDragging, _) => ContactGroupHeader(
@@ -195,70 +225,15 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                                     !isDragging,
                                 isPinned: true,
                               ),
-                        );
-                      },
-                    ),
-                  ),
-                  if (groups.isNotEmpty)
-                    Positioned(
-                      top: 8 +
-                          ContactsPageMetrics.titleBarExtent +
-                          MediaQuery.paddingOf(context).top +
-                          (hasFloatingError ? floatingErrorExtent : 0.0),
-                      right: 2,
-                      bottom: 8 + getHomeBottomPadding(context),
-                      child: ValueListenableBuilder<String>(
-                        valueListenable: _activeGroupIndex,
-                        builder:
-                            (context, activeKey, _) => AlphabetIndexBar(
-                              keys:
-                                  groups.map((group) => group.index).toList(),
-                              activeKey: activeKey,
-                              onSelected:
-                                  (key) => _scrollToGroup(groups, key),
-                              onScrollToTop: _scrollToTop,
-                              onScrollToBottom: _scrollToBottom,
-                              onDragging: (key) {
-                                if (_draggingIndex.value != key) {
-                                  _draggingIndex.value = key;
-                                }
-                                final isDragging = key != null;
-                                if (_isIndexDragging.value != isDragging) {
-                                  _isIndexDragging.value = isDragging;
-                                }
-                              },
-                            ),
-                      ),
-                    ),
-                  Positioned.fill(
-                    child: DraggingIndexIndicator(
-                      draggingIndexListenable: _draggingIndex,
-                    ),
-                  ),
-                  if (hasFloatingError)
-                    Positioned(
-                      top: ContactsPageMetrics.titleBarExtent +
-                          MediaQuery.paddingOf(context).top,
-                      left: 0,
-                      right: 0,
-                      child: ContactsFloatingErrorBanner(
-                        error: contacts.error!,
-                        onRetry: contacts.refresh,
-                        onDismiss: () =>
-                            setState(() => _dismissedError = contacts.error),
-                      ),
-                    ),
-                  const Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: ContactsTitleBar(),
-                  ),
-                ],
+                        ),
+                ),
               ),
             ),
-          );
-        }
+          ],
+        ),
+      ),
+    );
+  }
 
   List<Widget> _buildGroupSlivers(
     BuildContext context,

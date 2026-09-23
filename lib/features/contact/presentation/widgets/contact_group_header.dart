@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -83,18 +81,18 @@ class ContactGroupHeader extends StatelessWidget {
             Text(
               group.index,
               style: TextStyle(
-                fontSize: 15.0,
+                fontSize: 14.0,
                 fontWeight: FontWeight.w700,
                 color: colors.primary,
                 height: 1.0,
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 3.5),
             // 该组联系人总数
             Text(
               '(${group.count})',
               style: TextStyle(
-                fontSize: 11.5,
+                fontSize: 11.0,
                 fontWeight: FontWeight.w500,
                 color: colors.onSurfaceVariant.withValues(alpha: 0.65),
                 height: 1.0,
@@ -102,10 +100,10 @@ class ContactGroupHeader extends StatelessWidget {
             ),
             // 垂直分割微线
             Container(
-              height: 11,
+              height: 10,
               width: tokens.dividerThickness,
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              color: colors.outlineVariant.withValues(alpha: 0.6),
+              margin: const EdgeInsets.symmetric(horizontal: 7),
+              color: colors.outlineVariant.withValues(alpha: 0.5),
             ),
             // 横向拼音/姓氏筛选条
             ContactSurnameInitialBar(
@@ -120,31 +118,14 @@ class ContactGroupHeader extends StatelessWidget {
     );
 
     if (effectiveIsPinned) {
-      // 吸顶状态：采用与顶部毛玻璃标题栏同源的材质与分割线，浑然一体
-      return ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(
-            sigmaX: tokens.glassBlurSigma,
-            sigmaY: tokens.glassBlurSigma,
-          ),
-          child: Container(
-            height: ContactsPageMetrics.groupHeaderExtent,
-            decoration: BoxDecoration(
-              color: tokens.glassSurfaceColor,
-              border: Border(
-                bottom: BorderSide(
-                  color: tokens.glassBorderColor,
-                  width: tokens.dividerThickness,
-                ),
-              ),
-            ),
-            child: content,
-          ),
-        ),
+      // 吸顶状态：已由外层 ContactsTitleBar 统一应用毛玻璃背景与外边框，此处直接无缝呈现
+      return SizedBox(
+        height: ContactsPageMetrics.groupHeaderExtent,
+        child: content,
       );
     }
 
-    // 列表内部普通流状态：轻量自然背景
+    // 列表内部普通流状态：轻量自然背景与底部分割线
     return Container(
       height: ContactsPageMetrics.groupHeaderExtent,
       decoration: BoxDecoration(

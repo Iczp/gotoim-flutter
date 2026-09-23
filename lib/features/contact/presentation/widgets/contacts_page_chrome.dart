@@ -17,10 +17,21 @@ Color contactHeaderBackground(BuildContext context) =>
     Theme.of(context).colorScheme.surface;
 
 class ContactsTitleBar extends StatelessWidget {
-  const ContactsTitleBar({super.key});
+  const ContactsTitleBar({
+    this.bottom,
+    this.hasError = false,
+    this.onRetry,
+    super.key,
+  });
+
+  final Widget? bottom;
+  final bool hasError;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final tokens = context.appTokens;
     final topPadding = MediaQuery.paddingOf(context).top;
 
@@ -41,34 +52,89 @@ class ContactsTitleBar extends StatelessWidget {
               ),
             ),
           ),
-          child: SizedBox(
-            height: ContactsPageMetrics.titleBarExtent,
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: tokens.pagePaddingHorizontal,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              SizedBox(
+                height: ContactsPageMetrics.titleBarExtent,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: tokens.pagePaddingHorizontal,
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Text(
+                        '通讯录',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (hasError) ...[
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: onRetry,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0x33F59E0B)
+                                  : const Color(0x22D97706),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isDark
+                                    ? const Color(0x66F59E0B)
+                                    : const Color(0x55D97706),
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Icon(
+                                  Icons.sync_problem_rounded,
+                                  size: 11,
+                                  color: isDark
+                                      ? const Color(0xFFFBBF24)
+                                      : const Color(0xFFB45309),
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '未同步·重试',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: isDark
+                                        ? const Color(0xFFFBBF24)
+                                        : const Color(0xFFB45309),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      IconButton(
+                        tooltip: '搜索联系人',
+                        onPressed: () => context.push('/search'),
+                        icon: const Icon(Icons.search),
+                      ),
+                      IconButton(
+                        tooltip: '添加好友',
+                        onPressed: () => context.push('/add-friend'),
+                        icon: const Icon(Icons.add),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              child: Row(
-                children: <Widget>[
-                  Text(
-                    '通讯录',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: '搜索联系人',
-                    onPressed: () => context.push('/search'),
-                    icon: const Icon(Icons.search),
-                  ),
-                  IconButton(
-                    tooltip: '添加好友',
-                    onPressed: () => context.push('/add-friend'),
-                    icon: const Icon(Icons.add),
-                  ),
-                ],
-              ),
-            ),
+              if (bottom != null) bottom!,
+            ],
           ),
         ),
       ),
