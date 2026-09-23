@@ -1,6 +1,7 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme_tokens.dart';
 import '../../data/models/contact_group.dart';
 
 class ContactSurnameInitialBar extends StatefulWidget {
@@ -78,40 +79,80 @@ class _ContactSurnameInitialBarState extends State<ContactSurnameInitialBar> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final tokens = context.appTokens;
+    final initials = widget.group.surnameInitials;
+
     return Expanded(
       child: SingleChildScrollView(
         controller: _scrollController,
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(right: 42),
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.only(right: 36),
         child: Row(
-          children: widget.group.surnameInitials
-              .expand<Widget>((initial) sync* {
-                yield KeyedSubtree(
-                  key: _initialKeys[initial],
-                  child: _buildButton(
-                    initial,
-                    initial == _currentInitial,
-                    colors,
-                  ),
-                );
-                if (initial != widget.group.surnameInitials.last) {
-                  yield const Text('、');
-                }
-              })
-              .toList(growable: false),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < initials.length; i++) ...[
+              KeyedSubtree(
+                key: _initialKeys[initials[i]],
+                child: _buildChip(
+                  initial: initials[i],
+                  isActive: initials[i] == _currentInitial,
+                  colors: colors,
+                  tokens: tokens,
+                ),
+              ),
+              if (i < initials.length - 1) const SizedBox(width: 4),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildButton(String initial, bool isActive, ColorScheme colors) =>
-      TextButton(
-        onPressed: () => widget.onSelected(initial),
-        style: TextButton.styleFrom(
-          foregroundColor: isActive ? colors.primary : colors.onSurfaceVariant,
-          minimumSize: const Size(28, 32),
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+  Widget _buildChip({
+    required String initial,
+    required bool isActive,
+    required ColorScheme colors,
+    required AppThemeTokens tokens,
+  }) {
+    final bgColor = isActive
+        ? colors.primaryContainer.withValues(alpha: 0.85)
+        : Colors.transparent;
+    final textColor = isActive ? colors.primary : colors.onSurfaceVariant;
+    final borderColor = isActive
+        ? colors.primary.withValues(alpha: 0.28)
+        : Colors.transparent;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => widget.onSelected(initial),
+        borderRadius: BorderRadius.circular(tokens.cardRadius),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOut,
+          height: 22,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(tokens.cardRadius),
+            border: Border.all(
+              color: borderColor,
+              width: tokens.dividerThickness,
+            ),
+          ),
+          child: Text(
+            initial,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+              color: textColor,
+              height: 1.1,
+            ),
+          ),
         ),
-        child: Text(initial),
-      );
+      ),
+    );
+  }
 }

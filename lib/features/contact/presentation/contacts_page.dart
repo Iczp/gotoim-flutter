@@ -194,6 +194,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                                 showBlur:
                                     !_disablePinnedHeaderBlurWhileIndexDragging ||
                                     !isDragging,
+                                isPinned: true,
                               ),
                         );
                       },
