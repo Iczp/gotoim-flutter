@@ -30,6 +30,7 @@ class ChatComposer extends StatefulWidget {
     required this.quoteContentBuilder,
     this.onOpenAppearancePanel,
     this.useGlass = false,
+    this.hasBackground = false,
     super.key,
   });
 
@@ -43,6 +44,7 @@ class ChatComposer extends StatefulWidget {
   final Widget Function(ChatMessage quote) quoteContentBuilder;
   final Future<void> Function()? onOpenAppearancePanel;
   final bool useGlass;
+  final bool hasBackground;
 
   @override
   State<ChatComposer> createState() => ChatComposerState();
@@ -496,29 +498,63 @@ class ChatComposerState extends State<ChatComposer>
     final tokens = context.appTokens;
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasBg = widget.hasBackground;
+
     final sendButtonBackground =
         isDark
-            ? colorScheme.primaryContainer.withValues(alpha: 0.72)
-            : colorScheme.primary.withValues(alpha: 0.72);
+            ? colorScheme.primary
+            : colorScheme.primary;
     final sendButtonForeground =
-        isDark ? colorScheme.onPrimaryContainer : colorScheme.onPrimary;
-    final disabledSendButtonBackground = tokens.glassSecondarySurface
-        .withValues(alpha: isDark ? 0.48 : 0.38);
+        isDark ? colorScheme.onPrimary : colorScheme.onPrimary;
+    final disabledSendButtonBackground =
+        isDark
+            ? const Color(0xFF334155).withValues(alpha: 0.5)
+            : const Color(0xFFCBD5E1).withValues(alpha: 0.6);
+
     final inputControlHeight = tokens.chatMessageMinHeight;
     final verticalPadding =
         ((tokens.chatComposerHeight - inputControlHeight) / 2)
             .clamp(0.0, double.infinity)
             .toDouble();
-    final glassBorderColor = tokens.glassBorderColor.withValues(
-      alpha: tokens.chatGlassBorderOpacity,
-    );
-    final glassInputBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
+
+    // 胶囊药丸式输入框底色与边框：适配 Light / Dark 与 未设置背景 / 已设置背景
+    final Color inputFillColor;
+    final Color inputBorderColor;
+    if (hasBg) {
+      inputFillColor =
+          isDark
+              ? const Color(0xFF1E293B).withValues(alpha: 0.85)
+              : Colors.white.withValues(alpha: 0.88);
+      inputBorderColor =
+          isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.black.withValues(alpha: 0.08);
+    } else {
+      inputFillColor =
+          isDark
+              ? const Color(0xFF1E293B)
+              : const Color(0xFFF1F5F9);
+      inputBorderColor =
+          isDark
+              ? const Color(0xFF334155).withValues(alpha: 0.6)
+              : const Color(0xFFE2E8F0);
+    }
+
+    final inputPillBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(20),
       borderSide: BorderSide(
-        color: glassBorderColor,
-        width: tokens.chatGlassBorderWidth,
+        color: inputBorderColor,
+        width: 0.8,
       ),
     );
+    final inputFocusedBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(20),
+      borderSide: BorderSide(
+        color: colorScheme.primary.withValues(alpha: 0.7),
+        width: 1.2,
+      ),
+    );
+
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final bottomSafeArea = MediaQuery.viewPaddingOf(context).bottom;
     final keyboardSlotHeight =
@@ -593,25 +629,27 @@ class ChatComposerState extends State<ChatComposer>
                                 decoration: BoxDecoration(
                                   color:
                                       _recording
-                                          ? Theme.of(
-                                            context,
-                                          ).colorScheme.primaryContainer
-                                          : widget.useGlass
-                                          ? tokens.glassSecondarySurface
-                                              .withValues(
-                                                alpha:
-                                                    tokens
-                                                        .chatInputGlassOpacity,
-                                              )
-                                          : Theme.of(
-                                            context,
-                                          ).colorScheme.surfaceContainerHigh,
-                                  borderRadius: BorderRadius.circular(8),
+                                          ? colorScheme.primaryContainer
+                                          : inputFillColor,
+                                  border: Border.all(
+                                    color: inputBorderColor,
+                                    width: 0.8,
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
                                   _recording
                                       ? (_cancelRecording ? '松开取消' : '松开发送')
                                       : '按住说话',
+                                  style: TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: _recording
+                                        ? colorScheme.onPrimaryContainer
+                                        : (isDark
+                                            ? const Color(0xFFE2E8F0)
+                                            : const Color(0xFF334155)),
+                                  ),
                                 ),
                               ),
                             )
@@ -633,34 +671,33 @@ class ChatComposerState extends State<ChatComposer>
                                 minLines: 1,
                                 maxLines: 5,
                                 textInputAction: TextInputAction.newline,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: isDark
+                                      ? const Color(0xFFF8FAFC)
+                                      : const Color(0xFF0F172A),
+                                ),
                                 decoration: InputDecoration(
                                   hintText:
                                       widget.controller.isMuted
                                           ? '你已被禁言，暂不能发言'
                                           : '输入消息',
+                                  hintStyle: TextStyle(
+                                    fontSize: 14.5,
+                                    color: isDark
+                                        ? const Color(0xFF64748B)
+                                        : const Color(0xFF94A3B8),
+                                  ),
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
+                                    horizontal: 14,
+                                    vertical: 9.5,
                                   ),
-                                  filled: widget.useGlass,
-                                  fillColor:
-                                      widget.useGlass
-                                          ? tokens.glassSecondarySurface
-                                              .withValues(
-                                                alpha:
-                                                    tokens
-                                                        .chatInputGlassOpacity,
-                                              )
-                                          : null,
-                                  border:
-                                      widget.useGlass
-                                          ? glassInputBorder
-                                          : const OutlineInputBorder(),
-                                  enabledBorder:
-                                      widget.useGlass ? glassInputBorder : null,
-                                  focusedBorder:
-                                      widget.useGlass ? glassInputBorder : null,
+                                  filled: true,
+                                  fillColor: inputFillColor,
+                                  border: inputPillBorder,
+                                  enabledBorder: inputPillBorder,
+                                  focusedBorder: inputFocusedBorder,
                                 ),
                               ),
                             ),
@@ -683,17 +720,16 @@ class ChatComposerState extends State<ChatComposer>
                   if (!_voiceMode)
                     FilledButton(
                       style: FilledButton.styleFrom(
-                        minimumSize: Size(56, inputControlHeight),
+                        minimumSize: Size(58, inputControlHeight),
                         padding: const EdgeInsets.symmetric(horizontal: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        backgroundColor:
-                            widget.useGlass ? sendButtonBackground : null,
-                        foregroundColor:
-                            widget.useGlass ? sendButtonForeground : null,
-                        disabledBackgroundColor:
-                            widget.useGlass
-                                ? disabledSendButtonBackground
-                                : null,
+                        backgroundColor: sendButtonBackground,
+                        foregroundColor: sendButtonForeground,
+                        disabledBackgroundColor: disabledSendButtonBackground,
+                        elevation: 0,
                       ),
                       onPressed:
                           widget.controller.isSending ||
@@ -704,7 +740,13 @@ class ChatComposerState extends State<ChatComposer>
                                 widget.input.clear();
                                 widget.controller.send(value);
                               },
-                      child: const Text('发送'),
+                      child: const Text(
+                        '发送',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -742,10 +784,6 @@ class ChatComposerState extends State<ChatComposer>
       ),
     );
 
-    final effectiveInputGlassOpacity = tokens.chatInputGlassOpacity > 0
-        ? tokens.chatInputGlassOpacity
-        : (isDark ? 0.55 : 0.65);
-
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -755,14 +793,36 @@ class ChatComposerState extends State<ChatComposer>
     );
 
     if (widget.useGlass) {
+      final Color glassBackground;
+      final Color glassBorder;
+      final double blurSigma = hasBg ? 18.0 : 20.0;
+
+      if (hasBg) {
+        glassBackground =
+            isDark
+                ? const Color(0xFF0B1120).withValues(alpha: 0.74)
+                : Colors.white.withValues(alpha: 0.72);
+        glassBorder =
+            isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06);
+      } else {
+        glassBackground =
+            isDark
+                ? const Color(0xFF0B1120).withValues(alpha: 0.90)
+                : Colors.white.withValues(alpha: 0.90);
+        glassBorder =
+            isDark
+                ? const Color(0xFF1E293B).withValues(alpha: 0.8)
+                : const Color(0xFFE2E8F0).withValues(alpha: 0.8);
+      }
+
       return GlassContainer(
         borderRadius: BorderRadius.zero,
-        borderWidth: tokens.chatGlassBorderWidth,
-        blurSigma: tokens.chatGlassBlurSigma,
-        backgroundColor: tokens.glassSurfaceColor.withValues(
-          alpha: effectiveInputGlassOpacity,
-        ),
-        borderColor: glassBorderColor,
+        borderWidth: 0.8,
+        blurSigma: blurSigma,
+        backgroundColor: glassBackground,
+        borderColor: glassBorder,
         child: content,
       );
     }

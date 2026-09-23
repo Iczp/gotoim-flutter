@@ -102,6 +102,7 @@ class ChatController extends ChangeNotifier {
   final int ownerId;
   final String sessionUnitId;
   final List<ChatMessage> _messages = <ChatMessage>[];
+  final Set<String> _liveAnimatedMessageIds = <String>{};
   final Map<String, SelectedFile> _pendingFiles = <String, SelectedFile>{};
   final Map<String, Uint8List> _imagePreviews = <String, Uint8List>{};
   final Map<String, double> uploadProgress = <String, double>{};
@@ -110,6 +111,17 @@ class ChatController extends ChangeNotifier {
   bool isLoadingLatest = false;
   bool hasMore = true;
   Object? error;
+
+  bool shouldAnimateMessage(String localId) =>
+      _liveAnimatedMessageIds.contains(localId);
+
+  void markMessageAnimated(String localId) {
+    _liveAnimatedMessageIds.remove(localId);
+  }
+
+  void _markLiveMessageForAnimation(String localId) {
+    _liveAnimatedMessageIds.add(localId);
+  }
   SessionSummary? friend;
   String _title;
   StreamSubscription<SessionChangeEvent>? _sessionChangeSubscription;
@@ -614,6 +626,7 @@ class ChatController extends ChangeNotifier {
         if (quote != null) 'quoteMessage': quote.raw,
       },
     );
+    _markLiveMessageForAnimation(clientMessageId);
     _replaceMessage(pending);
     notifyListeners();
 
@@ -807,6 +820,7 @@ class ChatController extends ChangeNotifier {
         );
         _pendingFiles[local.localId] = image;
         _imagePreviews[local.localId] = await image.readBytes();
+        _markLiveMessageForAnimation(local.localId);
         _replaceMessage(local);
         if (!_isDisposed) notifyListeners();
         uploadProgress[local.localId] = 0;
@@ -870,6 +884,7 @@ class ChatController extends ChangeNotifier {
     );
     _pendingFiles[local.localId] = image;
     _imagePreviews[local.localId] = await image.readBytes();
+    _markLiveMessageForAnimation(local.localId);
     _replaceMessage(local);
     if (!_isDisposed) notifyListeners();
     uploadProgress[local.localId] = 0;
@@ -906,6 +921,7 @@ class ChatController extends ChangeNotifier {
       file: video,
     );
     _pendingFiles[local.localId] = video;
+    _markLiveMessageForAnimation(local.localId);
     _replaceMessage(local);
     uploadProgress[local.localId] = 0;
     if (!_isDisposed) notifyListeners();
@@ -1105,7 +1121,10 @@ class ChatController extends ChangeNotifier {
             item.localId == message.localId ||
             (item.serverId != null && item.serverId == message.serverId),
       );
-      if (!known && !message.isMine) receivedIncoming = true;
+      if (!known && !message.isMine) {
+        receivedIncoming = true;
+        _markLiveMessageForAnimation(message.localId);
+      }
       _replaceMessage(message);
       if (message.quoteMessageId != null) {
         _aiStreamReplies.remove(message.quoteMessageId);
@@ -1141,6 +1160,7 @@ class ChatController extends ChangeNotifier {
       duration: duration,
     );
     _pendingFiles[local.localId] = file;
+    _markLiveMessageForAnimation(local.localId);
     _replaceMessage(local);
     if (!_isDisposed) notifyListeners();
 
@@ -1169,6 +1189,7 @@ class ChatController extends ChangeNotifier {
       file: file,
     );
     _pendingFiles[local.localId] = file;
+    _markLiveMessageForAnimation(local.localId);
     _replaceMessage(local);
     if (!_isDisposed) notifyListeners();
 

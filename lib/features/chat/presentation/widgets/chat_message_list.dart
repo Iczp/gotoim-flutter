@@ -10,7 +10,7 @@ typedef ChatMessageItemBuilder =
 ///
 /// The caller supplies item rendering and behavior callbacks so the list stays
 /// presentational and does not depend on the chat controller.
-class ChatMessageList extends StatefulWidget {
+class ChatMessageList extends StatelessWidget {
   const ChatMessageList({
     required this.messages,
     this.transientItems = const <Widget>[],
@@ -22,6 +22,8 @@ class ChatMessageList extends StatefulWidget {
     required this.onLoadMore,
     required this.onTapOutside,
     required this.itemBuilder,
+    this.shouldAnimateMessage,
+    this.onMessageAnimated,
     this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
     super.key,
   });
@@ -36,56 +38,9 @@ class ChatMessageList extends StatefulWidget {
   final Future<void> Function() onLoadMore;
   final VoidCallback onTapOutside;
   final ChatMessageItemBuilder itemBuilder;
+  final bool Function(String localId)? shouldAnimateMessage;
+  final ValueChanged<String>? onMessageAnimated;
   final EdgeInsetsGeometry padding;
-
-  @override
-  State<ChatMessageList> createState() => _ChatMessageListState();
-}
-
-class _ChatMessageListState extends State<ChatMessageList> {
-  final Set<String> _knownLocalIds = <String>{};
-  final Set<String> _animatingLocalIds = <String>{};
-  bool _isInitialLoaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _seedInitialMessages();
-  }
-
-  @override
-  void didUpdateWidget(covariant ChatMessageList oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!_isInitialLoaded) {
-      _seedInitialMessages();
-      return;
-    }
-    // 识别新收/发送的新消息：仅对列表头部（最新端）新增的未知消息启用滑入动画
-    if (widget.messages.isNotEmpty && oldWidget.messages.isNotEmpty) {
-      for (var i = 0; i < widget.messages.length; i++) {
-        final message = widget.messages[i];
-        if (_knownLocalIds.contains(message.localId)) {
-          // 遇到已认识的消息，说明头部新增的新消息已全部检索完毕
-          break;
-        }
-        // 标记此新消息播放入场动画
-        _animatingLocalIds.add(message.localId);
-      }
-    }
-    // 将所有新消息 ID 记入已知集合
-    for (final message in widget.messages) {
-      _knownLocalIds.add(message.localId);
-    }
-  }
-
-  void _seedInitialMessages() {
-    if (widget.messages.isNotEmpty) {
-      for (final message in widget.messages) {
-        _knownLocalIds.add(message.localId);
-      }
-      _isInitialLoaded = true;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +52,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: widget.onTapOutside,
+        onTap: onTapOutside,
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             if (notification is ScrollUpdateNotification ||
@@ -105,29 +60,29 @@ class _ChatMessageListState extends State<ChatMessageList> {
                 notification is OverscrollNotification) {
               FloatingPopover.hideAll();
             }
-            widget.onViewingLatestChanged(notification.metrics.pixels <= 32);
+            onViewingLatestChanged(notification.metrics.pixels <= 32);
             // In reverse: true ListView, older history is at maxScrollExtent (extentAfter -> 0).
             // Trigger loading earlier (300px threshold) without requiring active finger drag
             // so fling/momentum scrolling loads smoothly.
-            if (widget.hasMore &&
-                !widget.isLoading &&
-                widget.error == null &&
+            if (hasMore &&
+                !isLoading &&
+                error == null &&
                 notification.metrics.extentAfter < 300) {
-              widget.onLoadMore();
+              onLoadMore();
             }
             return false;
           },
           child:
-              widget.messages.isEmpty && widget.transientItems.isEmpty
+              messages.isEmpty && transientItems.isEmpty
                   ? _EmptyMessagesState(
-                    isLoading: widget.isLoading,
-                    error: widget.error,
-                    onRetry: widget.onLoadMore,
+                    isLoading: isLoading,
+                    error: error,
+                    onRetry: onLoadMore,
                   )
                   : Align(
                     alignment: Alignment.topCenter,
                     child: RawScrollbar(
-                      controller: widget.scrollController,
+                      controller: scrollController,
                       thumbVisibility: false, // 仅在手指拖拽/滑动时显现，停止后自动淡出
                       thumbColor:
                           isDark
@@ -139,7 +94,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
                       timeToFade: const Duration(milliseconds: 800),
                       interactive: false, // 纯指示条，不干扰气泡长按或手势
                       child: ListView.builder(
-                        controller: widget.scrollController,
+                        controller: scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
                         keyboardDismissBehavior:
                             ScrollViewKeyboardDismissBehavior.manual,
@@ -147,43 +102,43 @@ class _ChatMessageListState extends State<ChatMessageList> {
                         shrinkWrap: true,
                         findChildIndexCallback: (key) {
                           if (key is! ValueKey<String>) return null;
-                          final index = widget.messages.indexWhere(
+                          final index = messages.indexWhere(
                             (message) => message.localId == key.value,
                           );
                           return index < 0
                               ? null
-                              : widget.transientItems.length + index;
+                              : transientItems.length + index;
                         },
-                        padding: widget.padding,
+                        padding: padding,
                         itemCount:
-                            widget.transientItems.length +
-                            widget.messages.length +
+                            transientItems.length +
+                            messages.length +
                             1,
                         itemBuilder: (context, index) {
-                          if (index < widget.transientItems.length) {
-                            return widget.transientItems[index];
+                          if (index < transientItems.length) {
+                            return transientItems[index];
                           }
                           final messageIndex =
-                              index - widget.transientItems.length;
-                          if (messageIndex == widget.messages.length) {
+                              index - transientItems.length;
+                          if (messageIndex == messages.length) {
                             return _ChatHistoryFooter(
-                              isLoading: widget.isLoading,
-                              hasMore: widget.hasMore,
-                              error: widget.error,
-                              onLoadMore: widget.onLoadMore,
+                              isLoading: isLoading,
+                              hasMore: hasMore,
+                              error: error,
+                              onLoadMore: onLoadMore,
                             );
                           }
-                          final message = widget.messages[messageIndex];
-                          final shouldAnimate = _animatingLocalIds.contains(
-                            message.localId,
-                          );
+                          final message = messages[messageIndex];
+                          final shouldAnimate =
+                              shouldAnimateMessage?.call(message.localId) ??
+                              false;
                           return _MessageEntryTransition(
                             key: ValueKey<String>(message.localId),
                             animate: shouldAnimate,
                             onAnimationEnd: () {
-                              _animatingLocalIds.remove(message.localId);
+                              onMessageAnimated?.call(message.localId);
                             },
-                            child: widget.itemBuilder(
+                            child: itemBuilder(
                               context,
                               message,
                               messageIndex,

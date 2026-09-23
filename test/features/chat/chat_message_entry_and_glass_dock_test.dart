@@ -80,7 +80,7 @@ void main() {
       expect(sizeTransitions, isEmpty);
     });
 
-    testWidgets('New message added at the head triggers entry transition animation', (tester) async {
+    testWidgets('New message marked for animation triggers entry transition animation', (tester) async {
       final initialMessages = [
         createMessage('1', '已存在的旧消息'),
       ];
@@ -88,6 +88,7 @@ void main() {
       final scrollController = ScrollController();
       late StateSetter testSetState;
       var currentMessages = List<ChatMessage>.from(initialMessages);
+      final animatingIds = <String>{};
 
       await tester.pumpWidget(
         MaterialApp(
@@ -104,6 +105,8 @@ void main() {
                   onViewingLatestChanged: (_) {},
                   onLoadMore: () async {},
                   onTapOutside: () {},
+                  shouldAnimateMessage: (id) => animatingIds.contains(id),
+                  onMessageAnimated: (id) => animatingIds.remove(id),
                   itemBuilder: (context, message, index) => Text(message.text),
                 );
               },
@@ -114,7 +117,8 @@ void main() {
 
       expect(find.text('已存在的旧消息'), findsOneWidget);
 
-      // 发送/接收一条新消息（添加到头部 index 0）
+      // 发送/接收一条新消息（标记进行入场动画）
+      animatingIds.add('2');
       testSetState(() {
         currentMessages = [
           createMessage('2', '刚刚新收到的消息'),
@@ -140,6 +144,8 @@ void main() {
       // 推进直到动画完成 (260ms)
       await tester.pumpAndSettle();
       expect(find.text('刚刚新收到的消息'), findsOneWidget);
+      // 动画完成后已从 animatingIds 移除
+      expect(animatingIds.contains('2'), isFalse);
     });
   });
 }

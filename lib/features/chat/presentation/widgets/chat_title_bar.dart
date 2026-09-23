@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme_tokens.dart';
 import '../../../../core/widgets/glass_container.dart';
 
 /// The chat page's title and its page-level actions.
@@ -17,6 +16,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
     this.selectionMode = false,
     this.onCancelSelection,
     this.useGlass = false,
+    this.hasBackground = false,
     super.key,
   });
 
@@ -28,6 +28,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final bool selectionMode;
   final VoidCallback? onCancelSelection;
   final bool useGlass;
+  final bool hasBackground;
 
   static const double toolbarHeight = 48;
 
@@ -36,6 +37,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final leading =
         selectionMode
             ? IconButton(
@@ -64,26 +66,68 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
           icon: const Icon(Icons.more_horiz),
         ),
     ];
-    final titleWidget = Text(title, overflow: TextOverflow.ellipsis);
+
+    final titleStyle = TextStyle(
+      fontSize: 16.5,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.2,
+      color:
+          isDark
+              ? const Color(0xFFF1F5F9)
+              : (hasBackground
+                  ? const Color(0xFF0F172A)
+                  : const Color(0xFF1E293B)),
+    );
+
+    final titleWidget = Text(
+      title,
+      style: titleStyle,
+      overflow: TextOverflow.ellipsis,
+    );
 
     if (useGlass) {
-      final tokens = context.appTokens;
+      final Color glassBackground;
+      final Color glassBorder;
+      final double blurSigma = hasBackground ? 18.0 : 20.0;
+
+      if (hasBackground) {
+        glassBackground =
+            isDark
+                ? const Color(0xFF0B1120).withValues(alpha: 0.74)
+                : Colors.white.withValues(alpha: 0.72);
+        glassBorder =
+            isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06);
+      } else {
+        glassBackground =
+            isDark
+                ? const Color(0xFF0B1120).withValues(alpha: 0.88)
+                : Colors.white.withValues(alpha: 0.88);
+        glassBorder =
+            isDark
+                ? const Color(0xFF1E293B).withValues(alpha: 0.8)
+                : const Color(0xFFE2E8F0).withValues(alpha: 0.8);
+      }
+
       return GlassAppBar(
         leading: leading,
         title: titleWidget,
         actions: actions,
-        blurSigma: tokens.chatGlassBlurSigma,
-        backgroundColor: tokens.glassSurfaceColor.withValues(
-          alpha: tokens.chatTitleGlassOpacity,
-        ),
-        borderColor: tokens.glassBorderColor.withValues(
-          alpha: tokens.chatGlassBorderOpacity,
-        ),
-        borderWidth: tokens.chatGlassBorderWidth,
+        blurSigma: blurSigma,
+        backgroundColor: glassBackground,
+        borderColor: glassBorder,
+        borderWidth: 0.8,
         centerTitle: false,
       );
     }
 
-    return AppBar(leading: leading, title: titleWidget, actions: actions);
+    return AppBar(
+      leading: leading,
+      title: titleWidget,
+      actions: actions,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    );
   }
 }

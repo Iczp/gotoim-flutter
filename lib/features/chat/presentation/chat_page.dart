@@ -234,6 +234,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             title: controller.title,
             showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
             useGlass: true,
+            hasBackground: hasChatBackground,
             selectionMode: controller.selectionMode,
             onCancelSelection: controller.cancelSelection,
             onTransfer: _openTransferSheet,
@@ -244,15 +245,38 @@ class _ChatPageState extends ConsumerState<ChatPage>
           body: Stack(
             fit: StackFit.expand,
             children: <Widget>[
-              ColoredBox(color: Theme.of(context).colorScheme.surface),
               if (hasChatBackground)
                 Image(
                   image: createImageProvider(backgroundImageUrl),
                   fit: BoxFit.cover,
                   gaplessPlayback: true,
                   errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                )
+              else
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors:
+                          Theme.of(context).brightness == Brightness.dark
+                              ? const <Color>[
+                                Color(0xFF090D16),
+                                Color(0xFF0F172A),
+                              ]
+                              : const <Color>[
+                                Color(0xFFF8FAFC),
+                                Color(0xFFEDF2F7),
+                              ],
+                    ),
+                  ),
                 ),
-              _buildGlassChatContent(context, controller, mediaItems),
+              _buildGlassChatContent(
+                context,
+                controller,
+                mediaItems,
+                hasBackground: hasChatBackground,
+              ),
             ],
           ),
         ),
@@ -263,11 +287,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Widget _buildGlassChatContent(
     BuildContext context,
     ChatController controller,
-    List<MediaPreviewItem> mediaItems,
-  ) {
+    List<MediaPreviewItem> mediaItems, {
+    bool hasBackground = false,
+  }) {
     final safeArea = MediaQuery.paddingOf(context);
     final tokens = context.appTokens;
-    final composer = _buildChatInputArea(controller, useGlass: true);
+    final composer = _buildChatInputArea(
+      controller,
+      useGlass: true,
+      hasBackground: hasBackground,
+    );
 
     final effectiveBottomPadding = _bottomBarHeight > 0
         ? _bottomBarHeight + tokens.chatGlassContentPadding
@@ -291,6 +320,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             onViewingLatestChanged: controller.setViewingLatest,
             onLoadMore: controller.loadMore,
             onTapOutside: _closeInputArea,
+            shouldAnimateMessage: controller.shouldAnimateMessage,
+            onMessageAnimated: controller.markMessageAnimated,
             padding: EdgeInsets.fromLTRB(
               12,
               safeArea.top +
@@ -331,6 +362,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Widget _buildChatInputArea(
     ChatController controller, {
     bool useGlass = false,
+    bool hasBackground = false,
   }) => ChatInputArea(
     selectionMode: controller.selectionMode,
     selectionActions: ChatSelectionBar(
@@ -344,6 +376,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       controller: controller,
       input: input,
       useGlass: useGlass,
+      hasBackground: hasBackground,
       quoteContentBuilder: (quote) => _buildQuotedContent(quote, _mediaItems),
       onOpenAppearancePanel: _openAppearancePanel,
     ),
