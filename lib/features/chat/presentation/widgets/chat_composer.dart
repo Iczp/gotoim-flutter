@@ -533,7 +533,7 @@ class ChatComposerState extends State<ChatComposer>
 
     final composer = Material(
       color: widget.useGlass ? Colors.transparent : null,
-      elevation: 8,
+      elevation: widget.useGlass ? 0 : 8,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
@@ -742,23 +742,31 @@ class ChatComposerState extends State<ChatComposer>
       ),
     );
 
-    final glassComposer =
-        widget.useGlass
-            ? GlassContainer(
-              borderRadius: BorderRadius.zero,
-              borderWidth: tokens.chatGlassBorderWidth,
-              blurSigma: tokens.chatGlassBlurSigma,
-              backgroundColor: tokens.glassSurfaceColor.withValues(
-                alpha: tokens.chatInputGlassOpacity,
-              ),
-              borderColor: glassBorderColor,
-              child: composer,
-            )
-            : composer;
+    final effectiveInputGlassOpacity = tokens.chatInputGlassOpacity > 0
+        ? tokens.chatInputGlassOpacity
+        : (isDark ? 0.55 : 0.65);
 
-    return Column(
+    final content = Column(
       mainAxisSize: MainAxisSize.min,
-      children: <Widget>[glassComposer, SizedBox(height: bottomSafeArea)],
+      children: <Widget>[
+        composer,
+        if (bottomSafeArea > 0) SizedBox(height: bottomSafeArea),
+      ],
     );
+
+    if (widget.useGlass) {
+      return GlassContainer(
+        borderRadius: BorderRadius.zero,
+        borderWidth: tokens.chatGlassBorderWidth,
+        blurSigma: tokens.chatGlassBlurSigma,
+        backgroundColor: tokens.glassSurfaceColor.withValues(
+          alpha: effectiveInputGlassOpacity,
+        ),
+        borderColor: glassBorderColor,
+        child: content,
+      );
+    }
+
+    return content;
   }
 }

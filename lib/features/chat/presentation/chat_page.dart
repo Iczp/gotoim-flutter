@@ -23,6 +23,7 @@ import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/half_page_sheet.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/floating_popover.dart';
+import '../../../core/widgets/measure_size.dart';
 import '../../../core/widgets/target_picker/target_picker.dart';
 import '../application/chat_controller.dart';
 import '../application/ai_stream_change_bus.dart';
@@ -116,6 +117,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   String? _highlightedMessageLocalId;
   Timer? _quoteHighlightTimer;
   final Stopwatch _pageStopwatch = Stopwatch();
+  double _bottomBarHeight = 0;
 
   String get _appearanceWindowId => 'chat-appearance:${widget.sessionUnitId}';
 
@@ -263,9 +265,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final tokens = context.appTokens;
     final composer = _buildChatInputArea(controller, useGlass: true);
 
-    return Column(
+    final effectiveBottomPadding = _bottomBarHeight > 0
+        ? _bottomBarHeight + tokens.chatGlassContentPadding
+        : safeArea.bottom +
+            tokens.chatComposerHeight +
+            tokens.chatGlassContentPadding;
+
+    return Stack(
+      fit: StackFit.expand,
       children: <Widget>[
-        Expanded(
+        Positioned.fill(
           child: ChatMessageList(
             messages: controller.messages,
             transientItems: controller.aiStreamReplies
@@ -284,16 +293,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   ChatTitleBar.toolbarHeight +
                   tokens.chatGlassContentPadding,
               12,
-              tokens.chatGlassContentPadding,
+              effectiveBottomPadding,
             ),
             itemBuilder:
                 (context, message, index) =>
                     _buildMessageItem(context, message, index, mediaItems),
           ),
         ),
-        if (controller.hasActiveAiStream)
-          _buildActiveAiStreamStopBar(Theme.of(context)),
-        composer,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: MeasureSize(
+            onSizeChanged: (size) {
+              if (mounted && (_bottomBarHeight - size.height).abs() >= 0.5) {
+                setState(() => _bottomBarHeight = size.height);
+              }
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (controller.hasActiveAiStream)
+                  _buildActiveAiStreamStopBar(Theme.of(context)),
+                composer,
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
