@@ -199,9 +199,9 @@ class _ChatAppearanceSheetState extends ConsumerState<ChatAppearanceSheet> {
                       _AppearanceSlider(
                         label: '输入栏与功能区透明度',
                         value: tokens.chatInputGlassOpacity,
-                        min: .05,
+                        min: 0,
                         max: .9,
-                        divisions: 17,
+                        divisions: 18,
                         onChanged:
                             (value) => appearanceController.update(
                               appearance.copyWith(inputGlassOpacity: value),
@@ -301,38 +301,25 @@ class _AppearanceSlider extends StatelessWidget {
   final ValueChanged<double> onChanged;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 84,
-    // FloatingWindowLayer is a sibling of Navigator, so Slider cannot find
-    // Navigator's Overlay there. Give each interactive slider a local Overlay
-    // for its Material touch/value-indicator portal.
-    child: Overlay(
-      initialEntries: <OverlayEntry>[
-        OverlayEntry(
-          builder:
-              (_) => Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: <Widget>[
-                        Text(label),
-                        Text(value.toStringAsFixed(value < 2 ? 2 : 0)),
-                      ],
-                    ),
-                    Slider(
-                      value: value.clamp(min, max).toDouble(),
-                      min: min,
-                      max: max,
-                      divisions: divisions,
-                      label: value.toStringAsFixed(value < 2 ? 2 : 0),
-                      onChanged: onChanged,
-                    ),
-                  ],
-                ),
-              ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Text(label),
+            Text(value.toStringAsFixed(value < 2 ? 2 : 0)),
+          ],
+        ),
+        Slider(
+          value: value.clamp(min, max).toDouble(),
+          min: min,
+          max: max,
+          divisions: divisions,
+          label: value.toStringAsFixed(value < 2 ? 2 : 0),
+          onChanged: onChanged,
         ),
       ],
     ),

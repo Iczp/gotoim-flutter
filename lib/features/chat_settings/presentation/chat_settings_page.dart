@@ -52,40 +52,40 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: controller,
-    builder:
-        (context, _) => Scaffold(
-          appBar: AppBar(title: const Text('聊天设置')),
-          body: RefreshIndicator(
-            onRefresh: controller.refresh,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              children: <Widget>[
-                if (controller.error != null)
-                  MaterialBanner(
-                    content: Text('加载失败：${controller.error}'),
-                    actions: <Widget>[
-                      TextButton(
-                        onPressed: controller.refresh,
-                        child: const Text('重试'),
-                      ),
-                    ],
-                  ),
+  @override
+  Widget build(BuildContext context) {
+    final horizontalPadding =
+        MediaQuery.sizeOf(context).width > 700 ? 32.0 : 16.0;
 
-                // ── 成员预览卡片 ─────────────────────────────────────
-                GlassCard(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-                  child: _MemberPreview(controller: controller),
+    return AnimatedBuilder(
+      animation: controller,
+      builder:
+          (context, _) => Scaffold(
+            appBar: AppBar(title: const Text('聊天设置')),
+            body: RefreshIndicator(
+              onRefresh: controller.refresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  16,
+                  horizontalPadding,
+                  24,
                 ),
-
-                // ── 会话信息 ─────────────────────────────────────────
-                if (controller.friend != null)
-                  CellGroup(
-                    title: '会话信息',
-                    children: <Widget>[
+                children: <Widget>[
+                  if (controller.error != null)
+                    MaterialBanner(
+                      content: Text('加载失败：${controller.error}'),
+                      actions: <Widget>[
+                        TextButton(
+                          onPressed: controller.refresh,
+                          child: const Text('重试'),
+                        ),
+                      ],
+                    ),
+                  _MemberPreview(controller: controller),
+                  if (controller.friend != null)
+                    _section(<Widget>[
                       Cell(
                         icon: ChatObjectAvatar(
                           name: controller.friend!.title,
@@ -96,22 +96,17 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                         title: controller.objectType == 2 ? '查看群资料' : '查看好友资料',
                         subtitle: controller.friend!.title,
                         showArrow: true,
-                        onTap: () => openProfilePage(
-                          context,
-                          subject: ProfileSubject.session(controller.friend!),
-                        ),
+                        onTap:
+                            () => openProfilePage(
+                              context,
+                              subject: ProfileSubject.session(
+                                controller.friend!,
+                              ),
+                            ),
                       ),
-                    ],
-                  ),
-
-                // ── 聊天设置 ─────────────────────────────────────────
-                CellGroup(
-                  title: '聊天设置',
-                  children: <Widget>[
-                    Cell(
-                      title: '类型',
-                      value: controller.objectTypeLabel,
-                    ),
+                    ], title: '会话信息'),
+                  _section(<Widget>[
+                    Cell(title: '类型', value: controller.objectTypeLabel),
                     if (controller.objectType == 2)
                       Cell(
                         title: '群名称',
@@ -128,59 +123,50 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                       showArrow: true,
                       onTap: _editRename,
                     ),
-                  ],
-                ),
-
-                // ── 功能 ─────────────────────────────────────────────
-                CellGroup(
-                  title: '功能',
-                  children: <Widget>[
+                  ], title: '聊天设置'),
+                  _section(<Widget>[
                     Cell(
-                      icon: const Icon(Icons.search),
+                      icon: const Icon(Icons.search_rounded),
                       title: '查找聊天记录',
                       showArrow: true,
+                      onTap:
+                          () => showToast('查找聊天记录功能即将上线', type: ToastType.info),
                     ),
                     Cell(
                       icon: const Icon(Icons.wallpaper_rounded),
                       title: '设置聊天背景',
-                      showArrow: true,
-                      trailing:
-                          (controller.backgroundImage ?? '').isNotEmpty
-                              ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  IconButton(
-                                    tooltip: '取消背景',
-                                    onPressed: _confirmClearBackground,
-                                    icon: const Icon(
-                                      Icons.delete_outline_rounded,
-                                    ),
-                                    iconSize: 20,
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  const Icon(Icons.chevron_right, size: 18),
-                                ],
-                              )
-                              : null,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          if ((controller.backgroundImage ?? '').isNotEmpty)
+                            IconButton(
+                              tooltip: '取消背景',
+                              onPressed: _confirmClearBackground,
+                              icon: const Icon(Icons.delete_outline_rounded),
+                            ),
+                          Icon(
+                            Icons.chevron_right,
+                            size: 18,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant
+                                .withValues(alpha: 0.5),
+                          ),
+                        ],
+                      ),
                       onTap: _changeBackground,
                     ),
-                  ],
-                ),
-
-                // ── 通知 ─────────────────────────────────────────────
-                CellGroup(
-                  title: '通知',
-                  children: <Widget>[
+                  ], title: '功能'),
+                  _section(<Widget>[
                     Cell(
                       icon: const Icon(Icons.notifications_active_outlined),
                       title: '消息提醒',
                       subtitle: '本会话的通知、声音、振动与消息预览',
                       showArrow: true,
-                      onTap: () => context.push(
-                        '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/notifications?title=${Uri.encodeQueryComponent(controller.title)}',
-                      ),
+                      onTap:
+                          () => context.push(
+                            '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/notifications?title=${Uri.encodeQueryComponent(controller.title)}',
+                          ),
                     ),
                     if (controller.objectType == 2)
                       Cell(
@@ -196,33 +182,45 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                                 ),
                       ),
                     Cell(
+                      icon: const Icon(Icons.notifications_off_outlined),
                       title: '免打扰',
                       switchValue: controller.isImmersed,
+                      disabled: controller.updating,
                       onSwitchChanged:
                           controller.updating ? null : controller.setImmersed,
                     ),
                     Cell(
+                      icon: const Icon(Icons.push_pin_outlined),
                       title: '置顶聊天',
                       switchValue: controller.isTopping,
+                      disabled: controller.updating,
                       onSwitchChanged:
                           controller.updating ? null : controller.setTopping,
                     ),
-                  ],
-                ),
-
-                // ── 其他（危险操作）──────────────────────────────────
-                CellGroup(
-                  title: '其他',
-                  children: <Widget>[
+                  ], title: '通知与管理'),
+                  _section(<Widget>[
                     Cell(
+                      icon: const Icon(
+                        Icons.cleaning_services_outlined,
+                        color: Colors.redAccent,
+                      ),
                       title: '清空聊天记录',
-                      titleColor: Colors.red,
+                      titleColor: Colors.redAccent,
                       showArrow: true,
                       onTap: _confirmClear,
                     ),
-                    const Cell(title: '投诉', showArrow: true),
+                    Cell(
+                      icon: const Icon(Icons.report_problem_outlined),
+                      title: '投诉',
+                      showArrow: true,
+                      onTap: () => showToast('投诉通道暂未开放', type: ToastType.info),
+                    ),
                     if (controller.isGroup)
                       Cell(
+                        icon: Icon(
+                          Icons.exit_to_app_rounded,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                         title: '退出群聊',
                         titleColor: Theme.of(context).colorScheme.error,
                         showArrow: true,
@@ -230,18 +228,25 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                       ),
                     if (controller.isOfficial)
                       Cell(
+                        icon: Icon(
+                          Icons.unsubscribe_outlined,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                         title: '取消关注',
                         titleColor: Theme.of(context).colorScheme.error,
                         showArrow: true,
                         onTap: _confirmUnsubscribeOfficial,
                       ),
-                  ],
-                ),
-              ],
+                  ], title: '操作'),
+                ],
+              ),
             ),
           ),
-        ),
-  );
+    );
+  }
+
+  Widget _section(List<Widget> children, {String? title}) =>
+      CellGroup(title: title, children: children);
 
   String? _avatarFor(SessionSummary friend) {
     final destination = friend.raw['destination'];
@@ -379,39 +384,42 @@ class _MemberPreview extends StatelessWidget {
   final ChatSettingsController controller;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: <Widget>[
-      if (controller.loading && controller.members.isEmpty)
-        const Padding(
-          padding: EdgeInsets.all(24),
-          child: CircularProgressIndicator(),
-        )
-      else
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5,
-            childAspectRatio: .78,
-            mainAxisSpacing: 4,
+  Widget build(BuildContext context) => GlassCard(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
+    child: Column(
+      children: <Widget>[
+        if (controller.loading && controller.members.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: CircularProgressIndicator(),
+          )
+        else
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 5,
+              childAspectRatio: .72,
+              mainAxisSpacing: 4,
+            ),
+            itemCount: controller.members.length,
+            itemBuilder:
+                (context, index) => MemberTile(
+                  member: controller.members[index],
+                  compact: true,
+                ),
           ),
-          itemCount: controller.members.length,
-          itemBuilder:
-              (context, index) => MemberTile(
-                member: controller.members[index],
-                compact: true,
-              ),
-        ),
-      TextButton(
-        onPressed:
-            controller.totalCount == 0
-                ? null
-                : () => context.push(
+        if (controller.totalCount > 0)
+          TextButton(
+            onPressed:
+                () => context.push(
                   '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/members'
                   '?ownerId=${controller.ownerId}',
                 ),
-        child: Text('查看更多（${controller.totalCount}）'),
-      ),
-    ],
+            child: Text('查看更多（${controller.totalCount}）'),
+          ),
+      ],
+    ),
   );
 }

@@ -63,6 +63,49 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   }
 
   @override
+  Future<void> register({
+    required String username,
+    required String password,
+    String? emailAddress,
+  }) async {
+    try {
+      final email =
+          (emailAddress != null && emailAddress.contains('@'))
+              ? emailAddress
+              : (username.contains('@') ? username : '$username@gotoim.com');
+      final url = '${_environment.apiBaseUrl}/api/account/register';
+      await _dio.post<dynamic>(
+        url,
+        data: <String, dynamic>{
+          'userName': username,
+          'emailAddress': email,
+          'password': password,
+          'appName':
+              _environment.appName.isNotEmpty ? _environment.appName : 'IM',
+        },
+        options: Options(contentType: Headers.jsonContentType),
+      );
+    } on DioException catch (error) {
+      final body = error.response?.data;
+      String message = '注册失败，请稍后重试。';
+      if (body is Map) {
+        if (body['error'] is Map && body['error']['message'] != null) {
+          message = body['error']['message'].toString();
+          if (body['error']['details'] != null &&
+              '${body['error']['details']}'.isNotEmpty) {
+            message += ': ${body['error']['details']}';
+          }
+        } else if (body['error_description'] != null) {
+          message = body['error_description'].toString();
+        } else if (body['message'] != null) {
+          message = body['message'].toString();
+        }
+      }
+      throw ApiException(message, statusCode: error.response?.statusCode);
+    }
+  }
+
+  @override
   Future<void> loginWithScanToken(String scanToken) async {
     final session = await _requestToken(<String, String>{
       'grant_type': 'scan-token',

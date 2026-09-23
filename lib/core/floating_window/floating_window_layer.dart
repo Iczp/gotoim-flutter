@@ -9,23 +9,30 @@ class FloatingWindowLayer extends StatelessWidget {
   final FloatingWindowManager manager;
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: manager,
-    builder: (context, _) {
-      final windows = manager.entries.where((entry) => entry.visible).toList();
-      if (windows.isEmpty) return const SizedBox.shrink();
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              for (final entry in windows)
-                _buildWindow(context, constraints.biggest, entry),
-            ],
-          );
-        },
-      );
-    },
+  Widget build(BuildContext context) => Overlay(
+    initialEntries: <OverlayEntry>[
+      OverlayEntry(
+        builder:
+            (overlayContext) => AnimatedBuilder(
+              animation: manager,
+              builder: (_, _) {
+                final windows =
+                    manager.entries.where((entry) => entry.visible).toList();
+                if (windows.isEmpty) return const SizedBox.shrink();
+                return LayoutBuilder(
+                  builder:
+                      (context, constraints) => Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          for (final entry in windows)
+                            _buildWindow(context, constraints.biggest, entry),
+                        ],
+                      ),
+                );
+              },
+            ),
+      ),
+    ],
   );
 
   Widget _buildWindow(

@@ -409,9 +409,9 @@ class ThemeSettingsPage extends ConsumerWidget {
                 _ChatAppearanceSlider(
                   label: '输入栏与功能区透明度',
                   value: chatTokens.chatInputGlassOpacity,
-                  min: .05,
+                  min: 0,
                   max: .9,
-                  divisions: 17,
+                  divisions: 18,
                   onChanged:
                       (value) => ref
                           .read(chatAppearanceProvider.notifier)

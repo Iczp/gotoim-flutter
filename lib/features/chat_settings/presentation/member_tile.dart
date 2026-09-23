@@ -16,9 +16,10 @@ class MemberTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         onTap: () => showMemberDetails(context, member),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               Stack(
                 clipBehavior: Clip.none,
@@ -27,7 +28,7 @@ class MemberTile extends StatelessWidget {
                     name: member.name,
                     imageUrl:
                         member.avatarUrl.isEmpty ? null : member.avatarUrl,
-                    radius: 24,
+                    radius: 20,
                     chatObjectId: member.chatObjectId,
                   ),
                   if (member.isCreator)
@@ -36,14 +37,21 @@ class MemberTile extends StatelessWidget {
                       bottom: -2,
                       child: Icon(
                         Icons.workspace_premium,
-                        size: 17,
+                        size: 15,
                         color: Colors.amber,
                       ),
                     ),
                 ],
               ),
-              const SizedBox(height: 5),
-              Text(member.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 3),
+              Flexible(
+                child: Text(
+                  member.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
             ],
           ),
         ),

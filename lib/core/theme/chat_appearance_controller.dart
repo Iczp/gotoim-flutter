@@ -62,6 +62,19 @@ class ChatAppearanceSettings {
     glassBorderWidth: glassBorderWidth ?? this.glassBorderWidth,
   );
 
+  /// Clears only the input/function-panel override, allowing the new theme
+  /// default to take effect while preserving all other appearance settings.
+  ChatAppearanceSettings withoutInputGlassOpacity() => ChatAppearanceSettings(
+    bubbleOpacity: bubbleOpacity,
+    composerHeight: composerHeight,
+    messageMinHeight: messageMinHeight,
+    glassBlurSigma: glassBlurSigma,
+    titleGlassOpacity: titleGlassOpacity,
+    glassContentPadding: glassContentPadding,
+    glassBorderOpacity: glassBorderOpacity,
+    glassBorderWidth: glassBorderWidth,
+  );
+
   Map<String, double> toJson() => <String, double>{
     if (bubbleOpacity != null) 'bubbleOpacity': bubbleOpacity!,
     if (composerHeight != null) 'composerHeight': composerHeight!,
@@ -91,6 +104,8 @@ class ChatAppearanceSettings {
 
 class ChatAppearanceController extends Notifier<ChatAppearanceSettings> {
   static const _key = 'gotoim.chat-appearance.v1';
+  static const _inputGlassOpacityMigrationKey =
+      'gotoim.chat-appearance.input-glass-opacity.v2';
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   var _changedLocally = false;
 
@@ -103,10 +118,23 @@ class ChatAppearanceController extends Notifier<ChatAppearanceSettings> {
   Future<void> _restore() async {
     try {
       final raw = await _storage.read(key: _key);
-      if (raw == null || _changedLocally) return;
+      if (_changedLocally) return;
+      if (raw == null) {
+        await _storage.write(key: _inputGlassOpacityMigrationKey, value: '1');
+        return;
+      }
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
-        state = ChatAppearanceSettings.fromJson(decoded);
+        var restored = ChatAppearanceSettings.fromJson(decoded);
+        final migrated = await _storage.read(
+          key: _inputGlassOpacityMigrationKey,
+        );
+        if (migrated == null) {
+          restored = restored.withoutInputGlassOpacity();
+          await _storage.write(key: _key, value: jsonEncode(restored.toJson()));
+          await _storage.write(key: _inputGlassOpacityMigrationKey, value: '1');
+        }
+        if (!_changedLocally) state = restored;
       }
     } catch (_) {}
   }
@@ -124,6 +152,7 @@ class ChatAppearanceController extends Notifier<ChatAppearanceSettings> {
     state = const ChatAppearanceSettings();
     try {
       await _storage.delete(key: _key);
+      await _storage.delete(key: _inputGlassOpacityMigrationKey);
     } catch (_) {}
   }
 }

@@ -92,7 +92,16 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<bool> restoreSession() async => restoreSuccess;
   @override
-  Future<void> login({required String username, required String password}) async {}
+  Future<void> login({
+    required String username,
+    required String password,
+  }) async {}
+  @override
+  Future<void> register({
+    required String username,
+    required String password,
+    String? emailAddress,
+  }) async {}
   @override
   Future<void> loginWithScanToken(String scanToken) async {}
   @override
@@ -101,16 +110,16 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> logout() async {}
   @override
   Future<AuthSession> refreshSession() async => const AuthSession(
-        accessToken: 'new-token',
-        refreshToken: 'new-refresh',
-        expiresIn: Duration(hours: 1),
-      );
+    accessToken: 'new-token',
+    refreshToken: 'new-refresh',
+    expiresIn: Duration(hours: 1),
+  );
   @override
-  Future<Map<String, dynamic>> getUserInfo() async => {
-        'name': 'Fallback Name',
-      };
+  Future<Map<String, dynamic>> getUserInfo() async => {'name': 'Fallback Name'};
   @override
-  Future<Map<String, dynamic>> introspect(RevocationTokenType tokenType) async => {};
+  Future<Map<String, dynamic>> introspect(
+    RevocationTokenType tokenType,
+  ) async => {};
   @override
   Future<void> revoke(RevocationTokenType tokenType) async {}
 }
@@ -179,12 +188,17 @@ void main() {
 
   group('AbpApplicationConfigurationDto', () {
     test('parses currentUser, auth, setting, features from raw JSON', () {
-      final config = AbpApplicationConfigurationDto.fromJson(_kSampleAppConfigJson);
+      final config = AbpApplicationConfigurationDto.fromJson(
+        _kSampleAppConfigJson,
+      );
 
       expect(config.currentUser.id, '360cfedb-e92d-3331-1fad-3a086371e0e4');
       expect(config.currentUser.userName, 'admin');
       expect(config.auth?['policies']?['AbpIdentity.Users'], isTrue);
-      expect(config.setting?['values']?['Abp.Localization.DefaultLanguage'], 'zh-Hans');
+      expect(
+        config.setting?['values']?['Abp.Localization.DefaultLanguage'],
+        'zh-Hans',
+      );
       expect(config.features?['values']?['Chat.MaxMessageLength'], '4000');
     });
   });
@@ -207,7 +221,10 @@ void main() {
 
       // Check that it wrote to fakeDb
       expect(fakeDb.settings['abp_application_configuration'], isNotNull);
-      expect(fakeDb.settings['abp_application_configuration_cached_at'], isNotNull);
+      expect(
+        fakeDb.settings['abp_application_configuration_cached_at'],
+        isNotNull,
+      );
 
       // Subsequent loadCachedConfiguration returns cached data without calling API
       final cached = await repo.loadCachedConfiguration();
@@ -221,55 +238,66 @@ void main() {
     });
   });
 
-  group('AuthController ABP Application Configuration & Current User Integration', () {
-    test('restoring session fetches application configuration and sets currentUser as current account', () async {
-      final fakeApi = FakeApiClient();
-      final api = AbpConfigurationApi(fakeApi);
-      final fakeDb = FakeUnifiedDatabase();
-      final repo = AbpConfigurationRepository(api: api, database: fakeDb);
-      final authRepo = FakeAuthRepository()..restoreSuccess = true;
-      final signalR = FakeSignalRGateway();
+  group(
+    'AuthController ABP Application Configuration & Current User Integration',
+    () {
+      test(
+        'restoring session fetches application configuration and sets currentUser as current account',
+        () async {
+          final fakeApi = FakeApiClient();
+          final api = AbpConfigurationApi(fakeApi);
+          final fakeDb = FakeUnifiedDatabase();
+          final repo = AbpConfigurationRepository(api: api, database: fakeDb);
+          final authRepo = FakeAuthRepository()..restoreSuccess = true;
+          final signalR = FakeSignalRGateway();
 
-      final controller = AuthController(
-        authRepo,
-        signalR,
-        abpConfigurationRepository: repo,
+          final controller = AuthController(
+            authRepo,
+            signalR,
+            abpConfigurationRepository: repo,
+          );
+
+          // Wait for async restore & fetch
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+
+          expect(controller.status, AuthStatus.authenticated);
+          expect(controller.currentUser, isNotNull);
+          expect(
+            controller.currentUser!.id,
+            '360cfedb-e92d-3331-1fad-3a086371e0e4',
+          );
+          expect(controller.currentUser!.userName, 'admin');
+          expect(controller.accountName, 'IM'); // displayName from currentUser
+          expect(controller.applicationConfiguration, isNotNull);
+        },
       );
 
-      // Wait for async restore & fetch
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      test('loads offline cache first before network call completes', () async {
+        final fakeDb = FakeUnifiedDatabase();
+        // Pre-seed offline cache in database
+        fakeDb.settings['abp_application_configuration'] = jsonEncode(
+          _kSampleAppConfigJson,
+        );
 
-      expect(controller.status, AuthStatus.authenticated);
-      expect(controller.currentUser, isNotNull);
-      expect(controller.currentUser!.id, '360cfedb-e92d-3331-1fad-3a086371e0e4');
-      expect(controller.currentUser!.userName, 'admin');
-      expect(controller.accountName, 'IM'); // displayName from currentUser
-      expect(controller.applicationConfiguration, isNotNull);
-    });
+        final fakeApi = FakeApiClient();
+        final api = AbpConfigurationApi(fakeApi);
+        final repo = AbpConfigurationRepository(api: api, database: fakeDb);
+        final authRepo = FakeAuthRepository()..restoreSuccess = true;
+        final signalR = FakeSignalRGateway();
 
-    test('loads offline cache first before network call completes', () async {
-      final fakeDb = FakeUnifiedDatabase();
-      // Pre-seed offline cache in database
-      fakeDb.settings['abp_application_configuration'] = jsonEncode(_kSampleAppConfigJson);
+        final controller = AuthController(
+          authRepo,
+          signalR,
+          abpConfigurationRepository: repo,
+        );
 
-      final fakeApi = FakeApiClient();
-      final api = AbpConfigurationApi(fakeApi);
-      final repo = AbpConfigurationRepository(api: api, database: fakeDb);
-      final authRepo = FakeAuthRepository()..restoreSuccess = true;
-      final signalR = FakeSignalRGateway();
+        // Give microtask time to read cached config
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      final controller = AuthController(
-        authRepo,
-        signalR,
-        abpConfigurationRepository: repo,
-      );
-
-      // Give microtask time to read cached config
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-
-      expect(controller.currentUser, isNotNull);
-      expect(controller.currentUser!.userName, 'admin');
-      expect(controller.accountName, 'IM');
-    });
-  });
+        expect(controller.currentUser, isNotNull);
+        expect(controller.currentUser!.userName, 'admin');
+        expect(controller.accountName, 'IM');
+      });
+    },
+  );
 }

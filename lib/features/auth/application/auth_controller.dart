@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
@@ -20,18 +22,39 @@ import '../domain/auth_repository.dart';
 
 enum AuthStatus { checking, unauthenticated, authenticated }
 
+bool _detectTestMode() {
+  if (const bool.fromEnvironment('flutter.test')) return true;
+  try {
+    if (!kIsWeb && Platform.environment.containsKey('FLUTTER_TEST')) {
+      return true;
+    }
+  } catch (_) {}
+  try {
+    return WidgetsBinding.instance.runtimeType.toString().contains('Test');
+  } catch (_) {
+    return false;
+  }
+}
+
 class AuthController extends ChangeNotifier {
   AuthController(
     this._repository,
     this._signalRGateway, {
     AbpConfigurationRepository? abpConfigurationRepository,
-  }) : _abpConfigurationRepository = abpConfigurationRepository {
+    Duration? minSplashDuration,
+  }) : _abpConfigurationRepository = abpConfigurationRepository,
+       minSplashDuration =
+           minSplashDuration ??
+           (_detectTestMode()
+               ? Duration.zero
+               : const Duration(milliseconds: 1500)) {
     _restore();
   }
 
   final AuthRepository _repository;
   final SignalRGateway _signalRGateway;
   final AbpConfigurationRepository? _abpConfigurationRepository;
+  final Duration minSplashDuration;
   AuthStatus _status = AuthStatus.checking;
   String? _errorMessage;
   String? _accountName;
@@ -70,6 +93,36 @@ class AuthController extends ChangeNotifier {
       _errorMessage = _displayError(error);
     }
     notifyListeners();
+  }
+
+  Future<void> register({
+    required String username,
+    required String password,
+    String? emailAddress,
+  }) async {
+    _status = AuthStatus.checking;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _repository.register(
+        username: username,
+        password: password,
+        emailAddress: emailAddress,
+      );
+      // 注册成功后自动登录
+      await _repository.login(username: username, password: password);
+      _status = AuthStatus.authenticated;
+      _accountName = username;
+      _onAccountChanged?.call();
+      _connectRealtime();
+      await _fetchAbpConfigurationSafely();
+    } catch (error) {
+      _status = AuthStatus.unauthenticated;
+      _errorMessage = _displayError(error);
+      rethrow;
+    } finally {
+      notifyListeners();
+    }
   }
 
   Future<void> loginWithScanToken(String scanToken) async {
@@ -138,12 +191,12 @@ class AuthController extends ChangeNotifier {
 
       final hasSession = await _repository.restoreSession();
 
-      // 保证启动页品牌体验（至少停留 1.5 秒），避免 20ms 闪退导致用户无法感知科技启动屏与全屏沉浸效果
-      final elapsed = DateTime.now().difference(startTime);
-      if (elapsed < const Duration(milliseconds: 1500)) {
-        await Future<void>.delayed(
-          const Duration(milliseconds: 1500) - elapsed,
-        );
+      // 保证启动页品牌体验（至少停留 1.5 秒），避免 20ms 闪退导致用户无法感知科技启动屏与全屏沉浸效果（测试环境除外）
+      if (minSplashDuration > Duration.zero) {
+        final elapsed = DateTime.now().difference(startTime);
+        if (elapsed < minSplashDuration) {
+          await Future<void>.delayed(minSplashDuration - elapsed);
+        }
       }
 
       _status =
@@ -155,11 +208,11 @@ class AuthController extends ChangeNotifier {
         unawaited(_loadUserInfoSafely());
       }
     } catch (_) {
-      final elapsed = DateTime.now().difference(startTime);
-      if (elapsed < const Duration(milliseconds: 1500)) {
-        await Future<void>.delayed(
-          const Duration(milliseconds: 1500) - elapsed,
-        );
+      if (minSplashDuration > Duration.zero) {
+        final elapsed = DateTime.now().difference(startTime);
+        if (elapsed < minSplashDuration) {
+          await Future<void>.delayed(minSplashDuration - elapsed);
+        }
       }
       _status = AuthStatus.unauthenticated;
     }
