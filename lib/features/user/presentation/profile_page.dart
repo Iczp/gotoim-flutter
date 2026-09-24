@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/native/native.dart';
 import '../../../core/theme/app_theme_tokens.dart';
@@ -8,6 +7,8 @@ import '../../../core/ui/adaptive_page/adaptive_page.dart';
 import '../../../core/ui/adaptive_page/adaptive_page_config.dart';
 import '../../../core/ui/adaptive_page/adaptive_page_controller.dart';
 import '../../../core/ui/adaptive_page/adaptive_page_presentation.dart';
+import '../../../core/widgets/cell_group.dart';
+import '../../../core/widgets/glass_container.dart';
 import '../../chat_settings/data/models/chat_member.dart';
 import '../../contact/data/models/contact_group.dart';
 import '../../session/data/models/chat_owner.dart';
@@ -90,29 +91,90 @@ String _sessionAvatar(Map<String, dynamic> raw) {
   ]);
 }
 
+/// 解析资料卡结构化数据的 Helper
+class _ProfileData {
+  _ProfileData(ProfileSubject subject) {
+    final owner = asMap(subject.raw['owner']);
+    final destination = asMap(subject.raw['destination']);
+    final setting = asMap(subject.raw['setting']);
+
+    displayName = subject.name;
+    originalNickname = firstNonEmpty(<Object?>[
+      owner['displayName'],
+      owner['name'],
+      subject.raw['nickname'],
+      destination['memberName'],
+      setting['memberName'],
+    ]);
+    showNickname =
+        originalNickname.isNotEmpty && originalNickname != displayName;
+
+    accountCode = firstNonEmpty(<Object?>[
+      owner['code'],
+      subject.raw['code'],
+      subject.id,
+    ]);
+
+    region = firstNonEmpty(<Object?>[
+      owner['area'],
+      owner['region'],
+      subject.raw['area'],
+      subject.raw['region'],
+    ]);
+
+    phone = firstNonEmpty(<Object?>[
+      owner['phone'],
+      owner['phoneNumber'],
+      subject.raw['phone'],
+      subject.raw['phoneNumber'],
+    ]);
+
+    gender = asInt(owner['gender']) ?? asInt(subject.raw['gender']) ?? 0;
+
+    description = firstNonEmpty(<Object?>[
+      owner['description'],
+      subject.raw['description'],
+    ]);
+
+    chatObjectId =
+        asInt(destination['id']) ??
+        asInt(subject.raw['destinationId']) ??
+        asInt(subject.raw['id']);
+
+    isGroup = subject.kind == ProfileKind.group;
+  }
+
+  late final String displayName;
+  late final String originalNickname;
+  late final bool showNickname;
+  late final String accountCode;
+  late final String region;
+  late final String phone;
+  late final int gender; // 1: 男, 2: 女, 0: 未知
+  late final String description;
+  late final int? chatObjectId;
+  late final bool isGroup;
+}
+
+/// 以半屏轻量资料卡方式自适应弹出（手机端半屏，宽屏侧栏或全屏）
 Future<void> openProfilePage(
   BuildContext context, {
   required ProfileSubject subject,
   VoidCallback? onSendMessage,
 }) async {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
   await AdaptivePage.open<void>(
     context,
     config: AdaptivePageConfig(
-      title: '',
-      sheetSizingMode: AdaptiveSheetSizingMode.draggable,
-      initialChildSize: .76,
-      minChildSize: .45,
-      maxChildSize: .96,
+      title: _titleFor(subject.kind),
+      sheetSizingMode: AdaptiveSheetSizingMode.content,
+      maxContentHeightFactor: .78,
       sheetBorderRadius: 16,
-      backgroundColor:
-          isDark ? const Color(0xFF141414) : const Color(0xFFEDEDED),
       showDragHandle: true,
       showCloseButton: true,
       fullPageMinWidth: 720,
     ),
     builder:
-        (context, controller) => ProfilePage(
+        (context, controller) => ProfileSheet(
           subject: subject,
           adaptiveController: controller,
           onSendMessage: onSendMessage,
@@ -120,8 +182,13 @@ Future<void> openProfilePage(
   );
 }
 
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. 半屏轻量资料卡（ProfileSheet）
+//    只显示核心信息，头部个人主信息卡片右侧带箭头，点击推进到真正的详细资料卡。
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ProfileSheet extends StatelessWidget {
+  const ProfileSheet({
     required this.subject,
     required this.adaptiveController,
     this.onSendMessage,
@@ -132,238 +199,396 @@ class ProfilePage extends StatelessWidget {
   final AdaptivePageController adaptiveController;
   final VoidCallback? onSendMessage;
 
+  void _navigateToDetail(BuildContext context) {
+    adaptiveController.close();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (context) => ProfileDetailPage(
+              subject: subject,
+              onSendMessage: onSendMessage,
+            ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final tokens = context.appTokens;
+    final data = _ProfileData(subject);
 
-    // 微信主题配色
-    final cardColor = isDark ? const Color(0xFF1F1F1F) : Colors.white;
-    final dividerColor =
-        isDark ? const Color(0x1FFFFFFF) : const Color(0x12000000);
-    final linkColor = const Color(0xFF576B95);
-    final subtextColor =
-        isDark ? const Color(0x99FFFFFF) : const Color(0x88000000);
-
-    final owner = asMap(subject.raw['owner']);
-    final destination = asMap(subject.raw['destination']);
-    final setting = asMap(subject.raw['setting']);
-
-    // 昵称与展示名
-    final displayName = subject.name;
-    final originalNickname = firstNonEmpty(<Object?>[
-      owner['displayName'],
-      owner['name'],
-      subject.raw['nickname'],
-      destination['memberName'],
-      setting['memberName'],
-    ]);
-    final showNickname =
-        originalNickname.isNotEmpty && originalNickname != displayName;
-
-    // 账号/微信号
-    final accountCode = firstNonEmpty(<Object?>[
-      owner['code'],
-      subject.raw['code'],
-      subject.id,
-    ]);
-
-    // 地区
-    final region = firstNonEmpty(<Object?>[
-      owner['area'],
-      owner['region'],
-      subject.raw['area'],
-      subject.raw['region'],
-    ]);
-
-    // 电话
-    final phone = firstNonEmpty(<Object?>[
-      owner['phone'],
-      owner['phoneNumber'],
-      subject.raw['phone'],
-      subject.raw['phoneNumber'],
-    ]);
-
-    // 性别 (1: 男, 2: 女, 0: 未知)
-    final gender = asInt(owner['gender']) ?? asInt(subject.raw['gender']) ?? 0;
-
-    // 简介/描述
-    final description = firstNonEmpty(<Object?>[
-      owner['description'],
-      subject.raw['description'],
-    ]);
-
-    final chatObjectId =
-        asInt(destination['id']) ??
-        asInt(subject.raw['destinationId']) ??
-        asInt(subject.raw['id']);
-
-    return ListView(
+    return SingleChildScrollView(
       controller: adaptiveController.scrollController,
       physics: const BouncingScrollPhysics(),
       padding: EdgeInsets.fromLTRB(
-        0,
-        0,
-        0,
-        MediaQuery.paddingOf(context).bottom + 20,
+        tokens.pagePaddingHorizontal,
+        tokens.pagePaddingVertical,
+        tokens.pagePaddingHorizontal,
+        MediaQuery.paddingOf(context).bottom + tokens.pagePaddingVertical * 2,
       ),
-      children: <Widget>[
-        // ── 1. 头部卡片（头像、名字、性别、昵称、微信号、地区） ──
-        Container(
-          color: cardColor,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              // 大方形圆角头像
-              Stack(
-                clipBehavior: Clip.none,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // ── 头部个人主信息卡片（可点击进入详情，右侧带箭头） ──
+          GlassCard(
+            margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+            padding: EdgeInsets.all(tokens.pagePaddingHorizontal),
+            borderRadius: BorderRadius.circular(tokens.cardRadius),
+            child: InkWell(
+              onTap: () => _navigateToDetail(context),
+              borderRadius: BorderRadius.circular(tokens.cardRadius),
+              child: Row(
                 children: <Widget>[
+                  // 头像（与本项目统一圆角）
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(tokens.cardRadius),
                     child: SizedBox(
-                      width: 60,
-                      height: 60,
+                      width: 56,
+                      height: 56,
                       child: ChatObjectAvatar(
-                        name: displayName,
+                        name: data.displayName,
                         imageUrl:
-                            subject.avatarUrl.isEmpty ? null : subject.avatarUrl,
-                        radius: 30,
-                        chatObjectId: chatObjectId,
+                            subject.avatarUrl.isEmpty
+                                ? null
+                                : subject.avatarUrl,
+                        radius: 28,
+                        chatObjectId: data.chatObjectId,
                       ),
                     ),
                   ),
-                  if (subject.editableAvatar)
-                    Positioned(
-                      right: -4,
-                      bottom: -4,
-                      child: GestureDetector(
-                        onTap: () {
-                          adaptiveController.close();
-                          context.push('/settings/avatar');
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.edit,
-                            size: 12,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 14),
-              // 右侧信息流
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    // 第一行：主名称 + 性别图标
-                    Row(
+                  SizedBox(width: tokens.pagePaddingHorizontal),
+                  // 中间信息
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Flexible(
-                          child: Text(
-                            displayName,
-                            style: const TextStyle(
-                              fontSize: 18.5,
-                              fontWeight: FontWeight.w700,
-                              height: 1.2,
+                        Row(
+                          children: <Widget>[
+                            Flexible(
+                              child: Text(
+                                data.displayName,
+                                style: const TextStyle(
+                                  fontSize: 17.5,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (data.gender != 0) ...[
+                              const SizedBox(width: 6),
+                              _buildGenderBadge(data.gender),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '账号: ${data.accountCode.isEmpty ? '-' : data.accountCode}',
+                          style: TextStyle(
+                            fontSize: 13.0,
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.75),
+                            height: 1.25,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (data.region.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '地区: ${data.region}',
+                            style: TextStyle(
+                              fontSize: 13.0,
+                              color: theme.colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.75),
+                              height: 1.25,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        if (gender != 0) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 2.5,
-                              vertical: 1.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color:
-                                  gender == 2
-                                      ? const Color(0xFFF99788)
-                                      : const Color(0xFF32BBFB),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: Icon(
-                              gender == 2 ? Icons.female : Icons.male,
-                              size: 12,
-                              color: Colors.white,
-                            ),
-                          ),
                         ],
                       ],
                     ),
-                    const SizedBox(height: 5),
-                    // 第二行：原始昵称（如果与显示名不同）
-                    if (showNickname) ...[
+                  ),
+                  // 右侧箭头（提示点击进入完整详情）
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.5,
+                    ),
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── 半屏轻量内容区（电话 / 简介，使用统一 CellGroup） ──
+          if (data.phone.isNotEmpty || data.description.isNotEmpty)
+            CellGroup(
+              margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+              borderRadius: BorderRadius.circular(tokens.cardRadius),
+              children: <Widget>[
+                if (data.phone.isNotEmpty)
+                  Cell(
+                    title: '电话',
+                    valueWidget: Text(
+                      data.phone,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    icon: const Icon(Icons.phone_outlined, size: 19),
+                    onTap: () => _handleCallPhone(context, data.phone),
+                  ),
+                if (data.description.isNotEmpty)
+                  Cell(
+                    title: '签名',
+                    subtitle: data.description,
+                    icon: const Icon(Icons.edit_note_rounded, size: 20),
+                    showArrow: false,
+                  ),
+              ],
+            ),
+
+          // ── 底部双操作按钮卡片（发消息、音视频通话） ──
+          GlassCard(
+            margin: EdgeInsets.zero,
+            padding: EdgeInsets.zero,
+            borderRadius: BorderRadius.circular(tokens.cardRadius),
+            child: Column(
+              children: <Widget>[
+                InkWell(
+                  onTap: () {
+                    adaptiveController.close();
+                    onSendMessage?.call();
+                  },
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(tokens.cardRadius),
+                  ),
+                  child: SizedBox(
+                    height: 48,
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 19,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '发消息',
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Divider(
+                  height: tokens.dividerThickness,
+                  thickness: tokens.dividerThickness,
+                  indent: 24,
+                  endIndent: 24,
+                  color: tokens.dividerBorder,
+                ),
+                InkWell(
+                  onTap: () => _handleCallMedia(context, data.displayName),
+                  borderRadius: BorderRadius.vertical(
+                    bottom: Radius.circular(tokens.cardRadius),
+                  ),
+                  child: SizedBox(
+                    height: 48,
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(
+                            Icons.videocam_outlined,
+                            size: 21,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '音视频通话',
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. 真正的资料卡详情页（ProfileDetailPage）
+//    全屏完整排版，包含朋友资料、朋友圈动态、视频号、扩展签名与全套操作。
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ProfileDetailPage extends StatelessWidget {
+  const ProfileDetailPage({
+    required this.subject,
+    this.onSendMessage,
+    super.key,
+  });
+
+  final ProfileSubject subject;
+  final VoidCallback? onSendMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.appTokens;
+    final data = _ProfileData(subject);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('详细资料'),
+        centerTitle: true,
+        actions: <Widget>[
+          IconButton(
+            icon: const Icon(Icons.more_horiz_rounded),
+            tooltip: '更多选项',
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('更多资料设置'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: ListView(
+        physics: const BouncingScrollPhysics(),
+        padding: EdgeInsets.symmetric(
+          horizontal: tokens.pagePaddingHorizontal,
+          vertical: tokens.pagePaddingVertical,
+        ),
+        children: <Widget>[
+          // ── 1. 头部个人大卡片 ──
+          GlassCard(
+            margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+            padding: EdgeInsets.all(tokens.pagePaddingHorizontal),
+            borderRadius: BorderRadius.circular(tokens.cardRadius),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(tokens.cardRadius),
+                  child: SizedBox(
+                    width: 62,
+                    height: 62,
+                    child: ChatObjectAvatar(
+                      name: data.displayName,
+                      imageUrl:
+                          subject.avatarUrl.isEmpty ? null : subject.avatarUrl,
+                      radius: 31,
+                      chatObjectId: data.chatObjectId,
+                    ),
+                  ),
+                ),
+                SizedBox(width: tokens.pagePaddingHorizontal),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Flexible(
+                            child: Text(
+                              data.displayName,
+                              style: const TextStyle(
+                                fontSize: 18.5,
+                                fontWeight: FontWeight.w700,
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (data.gender != 0) ...[
+                            const SizedBox(width: 6),
+                            _buildGenderBadge(data.gender),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      if (data.showNickname) ...[
+                        Text(
+                          '昵称: ${data.originalNickname}',
+                          style: TextStyle(
+                            fontSize: 13.0,
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.75),
+                            height: 1.25,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                      ],
                       Text(
-                        '昵称: $originalNickname',
+                        '微信号: ${data.accountCode.isEmpty ? '-' : data.accountCode}',
                         style: TextStyle(
                           fontSize: 13.0,
-                          color: subtextColor,
-                          height: 1.3,
+                          color: theme.colorScheme.onSurfaceVariant
+                              .withValues(alpha: 0.75),
+                          height: 1.25,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 3),
+                      Text(
+                        '地区: ${data.region.isEmpty ? '中国' : data.region}',
+                        style: TextStyle(
+                          fontSize: 13.0,
+                          color: theme.colorScheme.onSurfaceVariant
+                              .withValues(alpha: 0.75),
+                          height: 1.25,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
-                    // 第三行：微信号/账号
-                    Text(
-                      '微信号: ${accountCode.isEmpty ? '-' : accountCode}',
-                      style: TextStyle(
-                        fontSize: 13.0,
-                        color: subtextColor,
-                        height: 1.3,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 3),
-                    // 第四行：地区
-                    Text(
-                      '地区: ${region.isEmpty ? '中国' : region}',
-                      style: TextStyle(
-                        fontSize: 13.0,
-                        color: subtextColor,
-                        height: 1.3,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
 
-        // ── 2. 功能分组（朋友资料 / 电话） ──
-        Container(
-          color: cardColor,
-          child: Column(
+          // ── 2. 朋友资料分组（设置备注和标签、电话） ──
+          CellGroup(
+            margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+            borderRadius: BorderRadius.circular(tokens.cardRadius),
             children: <Widget>[
-              _buildCellRow(
-                context,
+              Cell(
                 title: '朋友资料',
-                trailing: const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Color(0xFFB2B2B2),
-                  size: 20,
-                ),
+                showArrow: true,
                 onTap: () {
-                  // 点击查看或编辑标签/备注
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('朋友资料与标签设置'),
@@ -372,483 +597,439 @@ class ProfilePage extends StatelessWidget {
                   );
                 },
               ),
-              Divider(
-                height: tokens.dividerThickness,
-                thickness: tokens.dividerThickness,
-                indent: 16,
-                color: dividerColor,
-              ),
-              _buildCellRow(
-                context,
+              Cell(
                 title: '电话',
-                content:
-                    phone.isNotEmpty
-                        ? InkWell(
-                          onTap: () => _handleCallPhone(context, phone),
-                          child: Text(
-                            phone,
-                            style: TextStyle(
-                              fontSize: 14.5,
-                              color: linkColor,
-                              fontWeight: FontWeight.w500,
+                valueWidget: Text(
+                  data.phone.isNotEmpty ? data.phone : '未填写',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    color:
+                        data.phone.isNotEmpty
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.6,
                             ),
-                          ),
-                        )
-                        : Text(
-                          '未填写',
-                          style: TextStyle(fontSize: 14.0, color: subtextColor),
-                        ),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 trailing:
-                    phone.isNotEmpty
-                        ? IconButton(
-                          icon: Icon(
-                            Icons.phone_outlined,
-                            size: 18,
-                            color: linkColor,
-                          ),
-                          onPressed: () => _handleCallPhone(context, phone),
-                          tooltip: '拨打电话',
+                    data.phone.isNotEmpty
+                        ? Icon(
+                          Icons.phone_outlined,
+                          size: 19,
+                          color: theme.colorScheme.primary,
                         )
+                        : null,
+                onTap:
+                    data.phone.isNotEmpty
+                        ? () => _handleCallPhone(context, data.phone)
                         : null,
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 8),
 
-        // ── 3. 朋友圈分组（微信朋友圈动态展示） ──
-        Container(
-          color: cardColor,
-          child: _buildCellRow(
-            context,
-            title: '朋友圈',
-            content: SizedBox(
-              height: 44,
-              child: Row(
-                children: <Widget>[
-                  // 缩略图阵列（模拟微信朋友圈最新发表图格）
-                  _buildMomentsThumbnail(
-                    color: const Color(0xFFE57373),
-                    isText: true,
-                    label: '动态',
-                  ),
-                  const SizedBox(width: 6),
-                  _buildMomentsThumbnail(
-                    color: const Color(0xFF81C784),
-                    icon: Icons.image_outlined,
-                  ),
-                  const SizedBox(width: 6),
-                  _buildMomentsThumbnail(
-                    color: const Color(0xFF64B5F6),
-                    icon: Icons.play_arrow_rounded,
-                    isVideo: true,
-                  ),
-                  const SizedBox(width: 6),
-                  _buildMomentsThumbnail(
-                    color: const Color(0xFFFFB74D),
-                    icon: Icons.celebration_rounded,
-                  ),
-                ],
-              ),
-            ),
-            trailing: const Icon(
-              Icons.chevron_right_rounded,
-              color: Color(0xFFB2B2B2),
-              size: 20,
-            ),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('查看朋友圈'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // ── 4. 视频号 / 扩展资料分组 ──
-        Container(
-          color: cardColor,
-          child: _buildCellRow(
-            context,
-            title: '视频号',
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  displayName,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w500,
-                    color: theme.textTheme.bodyMedium?.color,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                SizedBox(
-                  height: 48,
+          // ── 3. 朋友圈动态分组（与本项目统一风格的缩略矩阵） ──
+          CellGroup(
+            margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+            borderRadius: BorderRadius.circular(tokens.cardRadius),
+            children: <Widget>[
+              Cell(
+                title: '朋友圈',
+                showArrow: true,
+                valueWidget: SizedBox(
+                  height: 38,
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      _buildVideoFeedThumbnail(const Color(0xFF4DB6AC)),
-                      const SizedBox(width: 6),
-                      _buildVideoFeedThumbnail(const Color(0xFF7986CB)),
-                      const SizedBox(width: 6),
-                      _buildVideoFeedThumbnail(const Color(0xFFA1887F)),
-                      const SizedBox(width: 6),
-                      _buildVideoFeedThumbnail(const Color(0xFF90A4AE)),
+                      _buildMomentThumbnail(
+                        context,
+                        color: theme.colorScheme.primaryContainer,
+                        icon: Icons.image_rounded,
+                        tokens: tokens,
+                      ),
+                      const SizedBox(width: 5),
+                      _buildMomentThumbnail(
+                        context,
+                        color: theme.colorScheme.secondaryContainer,
+                        icon: Icons.play_arrow_rounded,
+                        isVideo: true,
+                        tokens: tokens,
+                      ),
+                      const SizedBox(width: 5),
+                      _buildMomentThumbnail(
+                        context,
+                        color: theme.colorScheme.tertiaryContainer,
+                        icon: Icons.camera_alt_outlined,
+                        tokens: tokens,
+                      ),
                     ],
                   ),
                 ),
-              ],
-            ),
-            trailing: const Icon(
-              Icons.chevron_right_rounded,
-              color: Color(0xFFB2B2B2),
-              size: 20,
-            ),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('查看视频号'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
-          ),
-        ),
-        if (description.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Container(
-            color: cardColor,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                SizedBox(
-                  width: 72,
-                  child: Text(
-                    '个性签名',
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      color: theme.textTheme.bodyMedium?.color,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    description,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      color: subtextColor,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-
-        // ── 5. 底部双操作按钮栏（居中、清爽发消息与音视频通话） ──
-        Container(
-          color: cardColor,
-          child: Column(
-            children: <Widget>[
-              // 发消息
-              InkWell(
                 onTap: () {
-                  adaptiveController.close();
-                  onSendMessage?.call();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('查看朋友圈'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
                 },
-                child: SizedBox(
-                  height: 50,
-                  child: Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(
-                          Icons.chat_bubble_outline_rounded,
-                          size: 19,
-                          color: linkColor,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '发消息',
-                          style: TextStyle(
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.w600,
-                            color: linkColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Divider(
-                height: tokens.dividerThickness,
-                thickness: tokens.dividerThickness,
-                indent: 32,
-                endIndent: 32,
-                color: dividerColor,
-              ),
-              // 音视频通话
-              InkWell(
-                onTap: () => _handleCallMedia(context, displayName),
-                child: SizedBox(
-                  height: 50,
-                  child: Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(
-                          Icons.videocam_outlined,
-                          size: 22,
-                          color: linkColor,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '音视频通话',
-                          style: TextStyle(
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.w600,
-                            color: linkColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ),
             ],
           ),
-        ),
-      ],
-    );
-  }
 
-  // 微信经典单元行
-  Widget _buildCellRow(
-    BuildContext context, {
-    required String title,
-    Widget? content,
-    Widget? trailing,
-    VoidCallback? onTap,
-  }) {
-    final theme = Theme.of(context);
-    final rowContent = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-      child: Row(
-        crossAxisAlignment:
-            content != null && content is Column
-                ? CrossAxisAlignment.start
-                : CrossAxisAlignment.center,
-        children: <Widget>[
-          SizedBox(
-            width: 72,
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 14.5,
-                color: theme.textTheme.bodyMedium?.color,
+          // ── 4. 视频号分组（与本项目统一多媒体封面风格） ──
+          CellGroup(
+            margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+            borderRadius: BorderRadius.circular(tokens.cardRadius),
+            children: <Widget>[
+              Cell(
+                title: '视频号',
+                showArrow: true,
+                subtitleWidget: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    children: <Widget>[
+                      _buildVideoThumbnail(
+                        context,
+                        theme.colorScheme.surfaceContainerHighest,
+                        tokens,
+                      ),
+                      const SizedBox(width: 6),
+                      _buildVideoThumbnail(
+                        context,
+                        theme.colorScheme.surfaceContainerHighest,
+                        tokens,
+                      ),
+                      const SizedBox(width: 6),
+                      _buildVideoThumbnail(
+                        context,
+                        theme.colorScheme.surfaceContainerHighest,
+                        tokens,
+                      ),
+                    ],
+                  ),
+                ),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('查看视频号'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                },
               ),
-            ),
+            ],
           ),
-          if (content != null) Expanded(child: content),
-          if (trailing != null) trailing,
-        ],
-      ),
-    );
 
-    if (onTap != null) {
-      return InkWell(onTap: onTap, child: rowContent);
-    }
-    return rowContent;
-  }
-
-  // 朋友圈缩略图
-  Widget _buildMomentsThumbnail({
-    required Color color,
-    IconData? icon,
-    bool isText = false,
-    bool isVideo = false,
-    String? label,
-  }) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: <Widget>[
-          if (isText && label != null)
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            )
-          else if (icon != null)
-            Icon(icon, size: 20, color: color),
-          if (isVideo)
-            Positioned(
-              right: 2,
-              bottom: 2,
-              child: Container(
-                padding: const EdgeInsets.all(1),
-                decoration: const BoxDecoration(
-                  color: Colors.black45,
-                  shape: BoxShape.circle,
+          // ── 5. 个性签名分组 ──
+          if (data.description.isNotEmpty)
+            CellGroup(
+              margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+              borderRadius: BorderRadius.circular(tokens.cardRadius),
+              children: <Widget>[
+                Cell(
+                  title: '个性签名',
+                  subtitle: data.description,
+                  showArrow: false,
                 ),
-                child: const Icon(
-                  Icons.play_arrow,
-                  size: 9,
-                  color: Colors.white,
-                ),
-              ),
+              ],
             ),
-        ],
-      ),
-    );
-  }
 
-  // 视频号缩略图
-  Widget _buildVideoFeedThumbnail(Color color) {
-    return Container(
-      width: 36,
-      height: 48,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: const Center(
-        child: Icon(Icons.play_arrow_rounded, size: 16, color: Colors.white),
-      ),
-    );
-  }
+          const SizedBox(height: 6),
 
-  // 拨打电话处理
-  void _handleCallPhone(BuildContext context, String phone) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder:
-          (sheetContext) => Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
-              ),
+          // ── 6. 底部双操作栏（发消息与音视频通话） ──
+          GlassCard(
+            margin: EdgeInsets.only(
+              bottom:
+                  MediaQuery.paddingOf(context).bottom +
+                  tokens.pagePaddingVertical * 2,
             ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  ListTile(
-                    title: Center(
-                      child: Text(
-                        '呼叫 $phone',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+            padding: EdgeInsets.zero,
+            borderRadius: BorderRadius.circular(tokens.cardRadius),
+            child: Column(
+              children: <Widget>[
+                InkWell(
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onSendMessage?.call();
+                  },
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(tokens.cardRadius),
+                  ),
+                  child: SizedBox(
+                    height: 50,
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 20,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '发消息',
+                            style: TextStyle(
+                              fontSize: 16.0,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      Native.system.makePhoneCall(phone);
-                    },
                   ),
-                  const Divider(height: 0.5),
-                  ListTile(
-                    title: const Center(
-                      child: Text('复制号码', style: TextStyle(fontSize: 15)),
-                    ),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      Clipboard.setData(ClipboardData(text: phone));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('电话号码已复制到剪贴板'),
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-                    },
+                ),
+                Divider(
+                  height: tokens.dividerThickness,
+                  thickness: tokens.dividerThickness,
+                  indent: 28,
+                  endIndent: 28,
+                  color: tokens.dividerBorder,
+                ),
+                InkWell(
+                  onTap: () => _handleCallMedia(context, data.displayName),
+                  borderRadius: BorderRadius.vertical(
+                    bottom: Radius.circular(tokens.cardRadius),
                   ),
-                  const Divider(height: 0.5),
-                  ListTile(
-                    title: const Center(
-                      child: Text(
-                        '取消',
-                        style: TextStyle(fontSize: 15, color: Colors.grey),
+                  child: SizedBox(
+                    height: 50,
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(
+                            Icons.videocam_outlined,
+                            size: 22,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '音视频通话',
+                            style: TextStyle(
+                              fontSize: 16.0,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    onTap: () => Navigator.pop(sheetContext),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-    );
-  }
-
-  // 音视频通话处理
-  void _handleCallMedia(BuildContext context, String displayName) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder:
-          (sheetContext) => Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
-              ),
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  ListTile(
-                    leading: const Icon(
-                      Icons.phone_rounded,
-                      color: Color(0xFF07C160),
-                    ),
-                    title: const Text('语音通话'),
-                    subtitle: Text('与 $displayName 进行实时语音沟通'),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('语音通话功能接入中')),
-                      );
-                    },
-                  ),
-                  const Divider(height: 0.5),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.videocam_rounded,
-                      color: Color(0xFF07C160),
-                    ),
-                    title: const Text('视频通话'),
-                    subtitle: Text('与 $displayName 进行面对面高清视频'),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('视频通话功能接入中')),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
+        ],
+      ),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 公共视觉组件 & 交互方法
+// ─────────────────────────────────────────────────────────────────────────────
+
+Widget _buildGenderBadge(int gender) {
+  final isFemale = gender == 2;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5),
+    decoration: BoxDecoration(
+      color: isFemale ? const Color(0xFFF99788) : const Color(0xFF32BBFB),
+      borderRadius: BorderRadius.circular(3),
+    ),
+    child: Icon(
+      isFemale ? Icons.female : Icons.male,
+      size: 11.5,
+      color: Colors.white,
+    ),
+  );
+}
+
+Widget _buildMomentThumbnail(
+  BuildContext context, {
+  required Color color,
+  required IconData icon,
+  required AppThemeTokens tokens,
+  bool isVideo = false,
+}) {
+  return Container(
+    width: 38,
+    height: 38,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(tokens.cardRadius * 0.35),
+    ),
+    child: Stack(
+      alignment: Alignment.center,
+      children: <Widget>[
+        Icon(
+          icon,
+          size: 19,
+          color: Theme.of(context).colorScheme.onPrimaryContainer,
+        ),
+        if (isVideo)
+          Positioned(
+            right: 2,
+            bottom: 2,
+            child: Container(
+              padding: const EdgeInsets.all(1),
+              decoration: const BoxDecoration(
+                color: Colors.black45,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.play_arrow,
+                size: 8,
+                color: Colors.white,
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+Widget _buildVideoThumbnail(
+  BuildContext context,
+  Color color,
+  AppThemeTokens tokens,
+) {
+  return Container(
+    width: 40,
+    height: 52,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(tokens.cardRadius * 0.35),
+    ),
+    child: Center(
+      child: Icon(
+        Icons.play_circle_outline_rounded,
+        size: 18,
+        color: Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
+      ),
+    ),
+  );
+}
+
+void _handleCallPhone(BuildContext context, String phone) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder:
+        (sheetContext) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                ListTile(
+                  title: Center(
+                    child: Text(
+                      '呼叫 $phone',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Native.system.makePhoneCall(phone);
+                  },
+                ),
+                const Divider(height: 0.5),
+                ListTile(
+                  title: const Center(
+                    child: Text('复制号码', style: TextStyle(fontSize: 15)),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Clipboard.setData(ClipboardData(text: phone));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('电话号码已复制到剪贴板'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 0.5),
+                ListTile(
+                  title: const Center(
+                    child: Text(
+                      '取消',
+                      style: TextStyle(fontSize: 15, color: Colors.grey),
+                    ),
+                  ),
+                  onTap: () => Navigator.pop(sheetContext),
+                ),
+              ],
+            ),
+          ),
+        ),
+  );
+}
+
+void _handleCallMedia(BuildContext context, String displayName) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder:
+        (sheetContext) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                ListTile(
+                  leading: const Icon(
+                    Icons.phone_rounded,
+                    color: Color(0xFF07C160),
+                  ),
+                  title: const Text('语音通话'),
+                  subtitle: Text('与 $displayName 进行实时语音沟通'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('语音通话功能接入中')),
+                    );
+                  },
+                ),
+                const Divider(height: 0.5),
+                ListTile(
+                  leading: const Icon(
+                    Icons.videocam_rounded,
+                    color: Color(0xFF07C160),
+                  ),
+                  title: const Text('视频通话'),
+                  subtitle: Text('与 $displayName 进行面对面高清视频'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('视频通话功能接入中')),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+  );
+}
+
+String _titleFor(ProfileKind kind) => switch (kind) {
+  ProfileKind.user => '我的资料',
+  ProfileKind.friend => '好友资料',
+  ProfileKind.group => '群资料',
+  ProfileKind.member => '成员资料',
+};
