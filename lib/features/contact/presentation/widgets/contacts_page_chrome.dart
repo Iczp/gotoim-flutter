@@ -20,13 +20,17 @@ class ContactsTitleBar extends StatelessWidget {
   const ContactsTitleBar({
     this.bottom,
     this.hasError = false,
+    this.isLoading = false,
     this.onRetry,
+    this.onDismiss,
     super.key,
   });
 
   final Widget? bottom;
   final bool hasError;
+  final bool isLoading;
   final VoidCallback? onRetry;
+  final VoidCallback? onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -45,12 +49,6 @@ class ContactsTitleBar extends StatelessWidget {
           padding: EdgeInsets.only(top: topPadding),
           decoration: BoxDecoration(
             color: tokens.glassSurfaceColor,
-            border: Border(
-              bottom: BorderSide(
-                color: tokens.glassBorderColor,
-                width: tokens.dividerThickness,
-              ),
-            ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -70,51 +68,109 @@ class ContactsTitleBar extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (hasError) ...[
+                      if (hasError || isLoading) ...[
                         const SizedBox(width: 8),
-                        InkWell(
-                          onTap: onRetry,
-                          borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
+                        Container(
+                          padding: const EdgeInsets.only(
+                            left: 6,
+                            top: 2,
+                            bottom: 2,
+                            right: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? (isLoading
+                                    ? const Color(0x333B82F6)
+                                    : const Color(0x33F59E0B))
+                                : (isLoading
+                                    ? const Color(0x222563EB)
+                                    : const Color(0x22D97706)),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
                               color: isDark
-                                  ? const Color(0x33F59E0B)
-                                  : const Color(0x22D97706),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: isDark
-                                    ? const Color(0x66F59E0B)
-                                    : const Color(0x55D97706),
-                                width: 0.5,
-                              ),
+                                  ? (isLoading
+                                      ? const Color(0x663B82F6)
+                                      : const Color(0x66F59E0B))
+                                  : (isLoading
+                                      ? const Color(0x552563EB)
+                                      : const Color(0x55D97706)),
+                              width: 0.5,
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                Icon(
-                                  Icons.sync_problem_rounded,
-                                  size: 11,
-                                  color: isDark
-                                      ? const Color(0xFFFBBF24)
-                                      : const Color(0xFFB45309),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              if (isLoading) ...[
+                                SizedBox(
+                                  width: 10,
+                                  height: 10,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      isDark
+                                          ? const Color(0xFF60A5FA)
+                                          : const Color(0xFF2563EB),
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(width: 3),
+                                const SizedBox(width: 4),
                                 Text(
-                                  '未同步·重试',
+                                  '正在重试...',
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w500,
                                     color: isDark
-                                        ? const Color(0xFFFBBF24)
-                                        : const Color(0xFFB45309),
+                                        ? const Color(0xFF60A5FA)
+                                        : const Color(0xFF2563EB),
+                                  ),
+                                ),
+                              ] else ...[
+                                InkWell(
+                                  onTap: onRetry,
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.sync_problem_rounded,
+                                        size: 11,
+                                        color: isDark
+                                            ? const Color(0xFFFBBF24)
+                                            : const Color(0xFFB45309),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '未同步·重试',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w500,
+                                          color: isDark
+                                              ? const Color(0xFFFBBF24)
+                                              : const Color(0xFFB45309),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
-                            ),
+                              if (onDismiss != null) ...[
+                                const SizedBox(width: 2),
+                                InkWell(
+                                  onTap: onDismiss,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(2),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 11,
+                                      color: isDark
+                                          ? const Color(0x99FFFFFF)
+                                          : const Color(0x88000000),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ],

@@ -37,6 +37,24 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       ValueNotifier<PinnedContactGroup?>(null);
   List<double> _groupOffsets = const <double>[];
   List<ContactGroup> _offsetGroups = const <ContactGroup>[];
+  Object? _dismissedError;
+  bool _isManualRetrying = false;
+
+  Future<void> _handleRetrySync() async {
+    setState(() {
+      _isManualRetrying = true;
+      _dismissedError = null;
+    });
+    try {
+      await ref.read(contactsControllerProvider).refresh();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isManualRetrying = false;
+        });
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -90,6 +108,10 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
         }
       });
     }
+
+    final isSyncing = contacts.isRefreshing || _isManualRetrying;
+    final hasVisibleError =
+        contacts.error != null && _dismissedError != contacts.error;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -202,8 +224,12 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
               child: ValueListenableBuilder<PinnedContactGroup?>(
                 valueListenable: _pinnedHeader,
                 builder: (context, header, _) => ContactsTitleBar(
-                  hasError: contacts.error != null,
-                  onRetry: contacts.refresh,
+                  hasError: hasVisibleError,
+                  isLoading: isSyncing,
+                  onRetry: _handleRetrySync,
+                  onDismiss: () => setState(
+                    () => _dismissedError = contacts.error ?? Object(),
+                  ),
                   bottom: header == null
                       ? null
                       : ValueListenableBuilder<bool>(
