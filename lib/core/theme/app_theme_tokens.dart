@@ -86,18 +86,16 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
 
   /// 快捷常用页面左右与上下边距
   EdgeInsets get pagePadding => EdgeInsets.symmetric(
-        horizontal: pagePaddingHorizontal,
-        vertical: pagePaddingVertical,
-      );
+    horizontal: pagePaddingHorizontal,
+    vertical: pagePaddingVertical,
+  );
 
   /// 快捷卡片倒角圆角
   BorderRadius get cardBorderRadius => BorderRadius.circular(cardRadius);
 
   /// 快捷分隔线条边框
-  BorderSide get dividerBorderSide => BorderSide(
-        color: dividerBorder,
-        width: dividerThickness,
-      );
+  BorderSide get dividerBorderSide =>
+      BorderSide(color: dividerBorder, width: dividerThickness);
 
   /// Light theme token preset.
   factory AppThemeTokens.light() {
@@ -131,7 +129,7 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       chatGlassBorderWidth: 0.33,
       avatarGradients: AppColors.avatarGradients,
       pagePaddingHorizontal: 12.0,
-      pagePaddingVertical: 8.0,
+      pagePaddingVertical: 12.0,
       cardRadius: 12.0,
       dividerThickness: 0.33,
     );
@@ -174,6 +172,7 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       dividerThickness: 0.33,
     );
   }
+
   /// Resolve a curated 2-color aesthetic gradient for an avatar based on a name string.
   List<Color> getAvatarGradient(String name) {
     if (name.isEmpty) return avatarGradients.first;

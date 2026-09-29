@@ -65,84 +65,92 @@ class CurrentOwnerHeader extends ConsumerWidget {
                 padding: EdgeInsets.symmetric(
                   horizontal: tokens.pagePaddingHorizontal,
                 ),
-          child: Row(
-            children: [
-              // 左侧身份切换区域
-              Expanded(
-                child: InkWell(
-                  onTap: onPressed,
-                  borderRadius: BorderRadius.circular(24),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 4,
+                child: Row(
+                  // 使用 spaceBetween 将左侧身份区域与右侧操作按钮分散在左右两端
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // 左侧身份切换区域（包裹内容，精准点击）
+                    InkWell(
+                      onTap: onPressed,
+                      borderRadius: BorderRadius.circular(24),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min, // 紧凑包裹，只占用子项所需宽度
+                          children: [
+                            // 当前身份头像
+                            ChatObjectAvatar(
+                              name: owner?.name ?? '-',
+                              imageUrl: owner?.imageUrl,
+                              radius: 18,
+                              chatObjectId: owner?.id,
+                            ),
+                            const SizedBox(width: 10),
+
+                            // 限制文本最大宽度，超过自动省略，且不强制撑开宽度
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxWidth: 160,
+                              ), // 根据设计预留最大宽度
+                              child: Text(
+                                owner?.name ?? 'Goto IM',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+
+                            if (hasMultiple)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: _DropdownWithBadge(
+                                  otherUnreadCount: otherUnreadCount,
+                                  otherImmersedCount: otherImmersedCount,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                    child: Row(
+
+                    // 右侧操作按钮：搜索与 + 号菜单
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // 当前身份头像（无角标）
-                        ChatObjectAvatar(
-                          name: owner?.name ?? '-',
-                          imageUrl: owner?.imageUrl,
-                          radius: 18,
-                          chatObjectId: owner?.id,
+                        IconButton(
+                          icon: const Icon(Icons.search_rounded),
+                          tooltip: '搜索',
+                          onPressed: () => context.push('/search'),
                         ),
-                        const SizedBox(width: 10),
-                        Flexible(
-                          child: Text(
-                            owner?.name ?? 'Goto IM',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        Builder(
+                          builder: (buttonContext) {
+                            return IconButton(
+                              icon: const Icon(
+                                Icons.add_circle_outline_rounded,
+                              ),
+                              tooltip: '更多功能',
+                              onPressed:
+                                  () =>
+                                      _showAddMenu(buttonContext, context, ref),
+                            );
+                          },
                         ),
-                        if (hasMultiple)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: _DropdownWithBadge(
-                              otherUnreadCount: otherUnreadCount,
-                              otherImmersedCount: otherImmersedCount,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
                       ],
                     ),
-                  ),
+                  ],
                 ),
               ),
-
-              const SizedBox(width: 8),
-
-              // 右侧操作按钮：搜索与 + 号菜单
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.search_rounded),
-                    tooltip: '搜索',
-                    onPressed: () => context.push('/search'),
-                  ),
-                  Builder(
-                    builder: (buttonContext) {
-                      return IconButton(
-                        icon: const Icon(Icons.add_circle_outline_rounded),
-                        tooltip: '更多功能',
-                        onPressed:
-                            () => _showAddMenu(buttonContext, context, ref),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  ),
-),
-);
+    );
   }
 
   void _showAddMenu(
@@ -193,10 +201,7 @@ class _DropdownWithBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(
-      Icons.keyboard_arrow_down_rounded,
-      color: color,
-    );
+    final icon = Icon(Icons.keyboard_arrow_down_rounded, color: color);
 
     final isDotOnly = otherUnreadCount == 0 && otherImmersedCount > 0;
     if (otherUnreadCount <= 0 && !isDotOnly) {

@@ -11,6 +11,7 @@ import 'widgets/profile_media_thumbnails.dart';
 
 /// 真正的资料卡详情页（ProfileDetailPage）
 /// 全屏完整排版，包含朋友资料、朋友圈动态、视频号、扩展签名与全套操作。
+/// 头部个人主信息卡片采用通栏设计，与标题栏浑然一体。
 class ProfileDetailPage extends StatelessWidget {
   const ProfileDetailPage({
     required this.subject,
@@ -28,9 +29,13 @@ class ProfileDetailPage extends StatelessWidget {
     final data = ProfileData(subject);
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surfaceContainerLowest,
       appBar: AppBar(
         title: const Text('详细资料'),
         centerTitle: true,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: theme.colorScheme.surface,
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.more_horiz_rounded),
@@ -48,16 +53,18 @@ class ProfileDetailPage extends StatelessWidget {
       ),
       body: ListView(
         physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.pagePaddingHorizontal,
-          vertical: tokens.pagePaddingVertical,
-        ),
+        padding: EdgeInsets.zero,
         children: <Widget>[
-          // ── 1. 头部个人大卡片 ──
-          GlassCard(
-            margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
-            padding: EdgeInsets.all(tokens.pagePaddingHorizontal),
-            borderRadius: BorderRadius.circular(tokens.cardRadius),
+          // ── 1. 头部个人大卡片（通栏设计，与标题栏浑然一体） ──
+          Container(
+            color: theme.colorScheme.surface,
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(
+              tokens.pagePaddingHorizontal,
+              8,
+              tokens.pagePaddingHorizontal,
+              tokens.pagePaddingVertical * 2,
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
@@ -75,7 +82,7 @@ class ProfileDetailPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                SizedBox(width: tokens.pagePaddingHorizontal),
+                SizedBox(width: tokens.pagePaddingHorizontal + 2),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,7 +93,7 @@ class ProfileDetailPage extends StatelessWidget {
                             child: Text(
                               data.displayName,
                               style: const TextStyle(
-                                fontSize: 18.5,
+                                fontSize: 19.0,
                                 fontWeight: FontWeight.w700,
                                 height: 1.2,
                               ),
@@ -159,238 +166,256 @@ class ProfileDetailPage extends StatelessWidget {
               ],
             ),
           ),
-
-          // ── 2. 朋友资料分组（设置备注和标签、电话） ──
-          CellGroup(
-            margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
-            borderRadius: BorderRadius.circular(tokens.cardRadius),
-            children: <Widget>[
-              Cell(
-                title: '朋友资料',
-                showArrow: true,
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('朋友资料与标签设置'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                },
-              ),
-              Cell(
-                title: '电话',
-                valueWidget: Text(
-                  data.phone.isNotEmpty ? data.phone : '未填写',
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    color:
-                        data.phone.isNotEmpty
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurfaceVariant.withValues(
-                              alpha: 0.6,
-                            ),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                trailing:
-                    data.phone.isNotEmpty
-                        ? Icon(
-                          Icons.phone_outlined,
-                          size: 19,
-                          color: theme.colorScheme.primary,
-                        )
-                        : null,
-                onTap:
-                    data.phone.isNotEmpty
-                        ? () => showPhoneActionSheet(context, data.phone)
-                        : null,
-              ),
-            ],
+          Divider(
+            height: tokens.dividerThickness,
+            thickness: tokens.dividerThickness,
+            color: tokens.dividerBorder,
           ),
+          SizedBox(height: tokens.pagePaddingVertical),
 
-          // ── 3. 朋友圈动态分组（与本项目统一风格的缩略矩阵） ──
-          CellGroup(
-            margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
-            borderRadius: BorderRadius.circular(tokens.cardRadius),
-            children: <Widget>[
-              Cell(
-                title: '朋友圈',
-                showArrow: true,
-                valueWidget: SizedBox(
-                  height: 38,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      ProfileMomentThumbnail(
-                        color: theme.colorScheme.primaryContainer,
-                        icon: Icons.image_rounded,
-                        tokens: tokens,
-                      ),
-                      const SizedBox(width: 5),
-                      ProfileMomentThumbnail(
-                        color: theme.colorScheme.secondaryContainer,
-                        icon: Icons.play_arrow_rounded,
-                        isVideo: true,
-                        tokens: tokens,
-                      ),
-                      const SizedBox(width: 5),
-                      ProfileMomentThumbnail(
-                        color: theme.colorScheme.tertiaryContainer,
-                        icon: Icons.camera_alt_outlined,
-                        tokens: tokens,
-                      ),
-                    ],
-                  ),
-                ),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('查看朋友圈'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-
-          // ── 4. 视频号分组（与本项目统一多媒体封面风格） ──
-          CellGroup(
-            margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
-            borderRadius: BorderRadius.circular(tokens.cardRadius),
-            children: <Widget>[
-              Cell(
-                title: '视频号',
-                showArrow: true,
-                subtitleWidget: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Row(
-                    children: <Widget>[
-                      ProfileVideoThumbnail(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        tokens: tokens,
-                      ),
-                      const SizedBox(width: 6),
-                      ProfileVideoThumbnail(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        tokens: tokens,
-                      ),
-                      const SizedBox(width: 6),
-                      ProfileVideoThumbnail(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        tokens: tokens,
-                      ),
-                    ],
-                  ),
-                ),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('查看视频号'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-
-          // ── 5. 个性签名分组 ──
-          if (data.description.isNotEmpty)
-            CellGroup(
-              margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
-              borderRadius: BorderRadius.circular(tokens.cardRadius),
-              children: <Widget>[
-                Cell(
-                  title: '个性签名',
-                  subtitle: data.description,
-                  showArrow: false,
-                ),
-              ],
+          // ── 下方各功能分组（统一具有 tokens.pagePaddingHorizontal 左右边距） ──
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: tokens.pagePaddingHorizontal,
             ),
-
-          const SizedBox(height: 6),
-
-          // ── 6. 底部双操作栏（发消息与音视频通话） ──
-          GlassCard(
-            margin: EdgeInsets.only(
-              bottom:
-                  MediaQuery.paddingOf(context).bottom +
-                  tokens.pagePaddingVertical * 2,
-            ),
-            padding: EdgeInsets.zero,
-            borderRadius: BorderRadius.circular(tokens.cardRadius),
             child: Column(
               children: <Widget>[
-                InkWell(
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onSendMessage?.call();
-                  },
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(tokens.cardRadius),
-                  ),
-                  child: SizedBox(
-                    height: 50,
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            size: 20,
-                            color: theme.colorScheme.primary,
+                // ── 2. 朋友资料分组（设置备注和标签、电话） ──
+                CellGroup(
+                  margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+                  borderRadius: BorderRadius.circular(tokens.cardRadius),
+                  children: <Widget>[
+                    Cell(
+                      title: '朋友资料',
+                      showArrow: true,
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('朋友资料与标签设置'),
+                            duration: Duration(seconds: 1),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '发消息',
-                            style: TextStyle(
-                              fontSize: 16.0,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.primary,
+                        );
+                      },
+                    ),
+                    Cell(
+                      title: '电话',
+                      valueWidget: Text(
+                        data.phone.isNotEmpty ? data.phone : '未填写',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          color:
+                              data.phone.isNotEmpty
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      trailing:
+                          data.phone.isNotEmpty
+                              ? Icon(
+                                Icons.phone_outlined,
+                                size: 19,
+                                color: theme.colorScheme.primary,
+                              )
+                              : null,
+                      onTap:
+                          data.phone.isNotEmpty
+                              ? () => showPhoneActionSheet(context, data.phone)
+                              : null,
+                    ),
+                  ],
+                ),
+
+                // ── 3. 朋友圈动态分组（与本项目统一风格的缩略矩阵） ──
+                CellGroup(
+                  margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+                  borderRadius: BorderRadius.circular(tokens.cardRadius),
+                  children: <Widget>[
+                    Cell(
+                      title: '朋友圈',
+                      showArrow: true,
+                      valueWidget: SizedBox(
+                        height: 38,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            ProfileMomentThumbnail(
+                              color: theme.colorScheme.primaryContainer,
+                              icon: Icons.image_rounded,
+                              tokens: tokens,
+                            ),
+                            const SizedBox(width: 5),
+                            ProfileMomentThumbnail(
+                              color: theme.colorScheme.secondaryContainer,
+                              icon: Icons.play_arrow_rounded,
+                              isVideo: true,
+                              tokens: tokens,
+                            ),
+                            const SizedBox(width: 5),
+                            ProfileMomentThumbnail(
+                              color: theme.colorScheme.tertiaryContainer,
+                              icon: Icons.camera_alt_outlined,
+                              tokens: tokens,
+                            ),
+                          ],
+                        ),
+                      ),
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('查看朋友圈'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+
+                // ── 4. 视频号分组（与本项目统一多媒体封面风格） ──
+                CellGroup(
+                  margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+                  borderRadius: BorderRadius.circular(tokens.cardRadius),
+                  children: <Widget>[
+                    Cell(
+                      title: '视频号',
+                      showArrow: true,
+                      subtitleWidget: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Row(
+                          children: <Widget>[
+                            ProfileVideoThumbnail(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              tokens: tokens,
+                            ),
+                            const SizedBox(width: 6),
+                            ProfileVideoThumbnail(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              tokens: tokens,
+                            ),
+                            const SizedBox(width: 6),
+                            ProfileVideoThumbnail(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              tokens: tokens,
+                            ),
+                          ],
+                        ),
+                      ),
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('查看视频号'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+
+                // ── 5. 个性签名分组 ──
+                if (data.description.isNotEmpty)
+                  CellGroup(
+                    margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
+                    borderRadius: BorderRadius.circular(tokens.cardRadius),
+                    children: <Widget>[
+                      Cell(
+                        title: '个性签名',
+                        subtitle: data.description,
+                        showArrow: false,
+                      ),
+                    ],
+                  ),
+
+                const SizedBox(height: 6),
+
+                // ── 6. 底部双操作栏（发消息与音视频通话） ──
+                GlassCard(
+                  margin: EdgeInsets.only(
+                    bottom:
+                        MediaQuery.paddingOf(context).bottom +
+                        tokens.pagePaddingVertical * 2,
+                  ),
+                  padding: EdgeInsets.zero,
+                  borderRadius: BorderRadius.circular(tokens.cardRadius),
+                  child: Column(
+                    children: <Widget>[
+                      InkWell(
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          onSendMessage?.call();
+                        },
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(tokens.cardRadius),
+                        ),
+                        child: SizedBox(
+                          height: 50,
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  size: 20,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '发消息',
+                                  style: TextStyle(
+                                    fontSize: 16.0,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-                Divider(
-                  height: tokens.dividerThickness,
-                  thickness: tokens.dividerThickness,
-                  indent: 28,
-                  endIndent: 28,
-                  color: tokens.dividerBorder,
-                ),
-                InkWell(
-                  onTap:
-                      () => showMediaCallActionSheet(context, data.displayName),
-                  borderRadius: BorderRadius.vertical(
-                    bottom: Radius.circular(tokens.cardRadius),
-                  ),
-                  child: SizedBox(
-                    height: 50,
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Icon(
-                            Icons.videocam_outlined,
-                            size: 22,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '音视频通话',
-                            style: TextStyle(
-                              fontSize: 16.0,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.primary,
+                      Divider(
+                        height: tokens.dividerThickness,
+                        thickness: tokens.dividerThickness,
+                        indent: 28,
+                        endIndent: 28,
+                        color: tokens.dividerBorder,
+                      ),
+                      InkWell(
+                        onTap:
+                            () => showMediaCallActionSheet(
+                              context,
+                              data.displayName,
+                            ),
+                        borderRadius: BorderRadius.vertical(
+                          bottom: Radius.circular(tokens.cardRadius),
+                        ),
+                        child: SizedBox(
+                          height: 50,
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Icon(
+                                  Icons.videocam_outlined,
+                                  size: 22,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '音视频通话',
+                                  style: TextStyle(
+                                    fontSize: 16.0,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ],
