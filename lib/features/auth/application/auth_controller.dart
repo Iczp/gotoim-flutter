@@ -19,6 +19,8 @@ import '../../../core/realtime/signalr_gateway.dart';
 import '../../../core/realtime/signalr_gateway_factory.dart';
 import '../data/openid_connect_auth_repository.dart';
 import '../domain/auth_repository.dart';
+import '../../../core/statistic/statistic_event_names.dart';
+import '../../../core/statistic/statistic_service.dart';
 
 enum AuthStatus { checking, unauthenticated, authenticated }
 
@@ -147,6 +149,8 @@ class AuthController extends ChangeNotifier {
     await _signalRGateway.disconnect();
     await _repository.logout();
     await _abpConfigurationRepository?.clearCache();
+    await StatisticService.instance.track(StatisticEventNames.logout);
+    StatisticService.instance.clearUser();
     _status = AuthStatus.unauthenticated;
     _errorMessage = null;
     _accountName = null;
@@ -228,6 +232,11 @@ class AuthController extends ChangeNotifier {
       _currentUser = config.currentUser;
       if (_currentUser != null && _currentUser!.isAuthenticated) {
         _accountName = _currentUser!.displayName;
+        final uid = _currentUser?.id;
+        if (uid != null && uid.isNotEmpty) {
+          StatisticService.instance.setUser(uid);
+          unawaited(StatisticService.instance.track(StatisticEventNames.login));
+        }
       }
       notifyListeners();
     } catch (e) {

@@ -842,6 +842,18 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "package_info_plus",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/package_info_plus-10.2.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.10"
+    },
+    {
+      "name": "package_info_plus_platform_interface",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/package_info_plus_platform_interface-4.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.10"
+    },
+    {
       "name": "path",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/path-1.9.1",
       "packageUri": "lib/",

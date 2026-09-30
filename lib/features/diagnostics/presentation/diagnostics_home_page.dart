@@ -87,6 +87,13 @@ class DiagnosticsHomePage extends StatelessWidget {
                 showArrow: true,
                 onTap: () => context.push('/diagnostics/privacy-and-update'),
               ),
+              Cell(
+                icon: const Icon(Icons.analytics_outlined),
+                title: '数据统计与埋点 (AppStatistic)',
+                subtitle: '设备指纹、Session生命周期、前后台/页面停留、本地队列与批量上传',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/statistic'),
+              ),
             ],
           ),
 

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/browser/app_webview_page.dart';
 import '../../core/compliance/agreement_viewer_page.dart';
 import '../../core/compliance/privacy_service.dart';
+import '../../core/statistic/statistic_route_observer.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/presentation/auth_loading_page.dart';
 import '../../features/auth/presentation/login_page.dart';
@@ -64,6 +65,7 @@ import '../../features/contact/presentation/add_friend_page.dart';
 import '../../features/diagnostics/presentation/search_and_group_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/privacy_and_update_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/badge_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/app_statistic_diagnostics_page.dart';
 import '../app_navigation.dart';
 import '../shell/application_shell.dart';
 import 'route_transitions.dart';
@@ -106,6 +108,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
+    observers: [StatisticRouteObserver()],
     refreshListenable: authNotifier,
     redirect: (context, state) {
       final location = state.uri.path;
@@ -387,6 +390,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       _buildAppRoute(
         path: '/diagnostics/badge',
         builder: (context, state) => const BadgeDiagnosticsPage(),
+      ),
+      _buildAppRoute(
+        path: '/diagnostics/statistic',
+        builder: (context, state) => const AppStatisticDiagnosticsPage(),
       ),
       _buildAppRoute(
         path: '/workbench',

@@ -64,6 +64,7 @@ dependencies:
   video_player: ^2.14.0
   gal: ^2.3.3
   flutter_native_splash: ^2.4.4
+  package_info_plus: ^10.2.1
 
 dev_dependencies:
   flutter_test:

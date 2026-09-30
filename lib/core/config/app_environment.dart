@@ -44,6 +44,7 @@ class AppEnvironment {
     required this.enableNetworkLogging,
     required this.deepLinkCustomSchemes,
     required this.deepLinkAllowedHosts,
+    required this.statisticBaseUrl,
   });
 
   final AppFlavor flavor;
@@ -96,6 +97,9 @@ class AppEnvironment {
 
   /// Allowed HTTPS domain hosts for universal/app links (e.g. gotoim.com).
   final List<String> deepLinkAllowedHosts;
+
+  /// Base URL for AppStatistic API.
+  final String statisticBaseUrl;
 
   static AppFlavor parseFlavor(String value) {
     return AppFlavor.values.firstWhere(
@@ -208,6 +212,10 @@ class AppEnvironment {
       ),
       deepLinkAllowedHosts: _parseCsv(
         dotenv.get('DEEP_LINK_ALLOWED_HOSTS', fallback: 'gotoim.com'),
+      ),
+      statisticBaseUrl: _nonEmpty(
+        dotenv.get('STATISTIC_BASE_URL', fallback: ''),
+        fallback: 'http://10.0.5.20:51621',
       ),
     );
   }

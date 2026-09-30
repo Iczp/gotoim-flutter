@@ -39,6 +39,7 @@ class UnifiedDatabase {
     'Members',
     'Messages',
     diagnosticsTable,
+    'StatisticEventQueue',
   };
 
   final DatabaseConnection _connection;
@@ -841,6 +842,90 @@ class UnifiedDatabase {
     return rows;
   }
 
+  Future<void> enqueueStatisticEvent({
+    required String eventId,
+    required String eventName,
+    String? sessionId,
+    String? page,
+    required int eventTime,
+    String? properties,
+  }) async {
+    await initialize();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _connection.runInsert(
+      'INSERT INTO StatisticEventQueue '
+      '(eventId, eventName, sessionId, page, eventTime, properties, retryCount, nextRetryTime, createdAt) '
+      'VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?) '
+      'ON CONFLICT(eventId) DO NOTHING',
+      <Object?>[eventId, eventName, sessionId, page, eventTime, properties, now],
+    );
+  }
+
+  Future<List<Map<String, Object?>>> readPendingStatisticEvents({
+    int limit = 100,
+  }) async {
+    await initialize();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return _connection.runSelect(
+      'SELECT id, eventId, eventName, sessionId, page, eventTime, properties, retryCount, nextRetryTime, createdAt '
+      'FROM StatisticEventQueue '
+      'WHERE nextRetryTime <= ? '
+      'ORDER BY id ASC LIMIT ?',
+      <Object?>[now, limit.clamp(1, 100)],
+    );
+  }
+
+  Future<int> deleteStatisticEvents(List<String> eventIds) async {
+    if (eventIds.isEmpty) return 0;
+    await initialize();
+    final placeholders = List.filled(eventIds.length, '?').join(',');
+    return _connection.runDelete(
+      'DELETE FROM StatisticEventQueue WHERE eventId IN ($placeholders)',
+      eventIds,
+    );
+  }
+
+  Future<int> updateStatisticEventsRetry({
+    required List<String> eventIds,
+    required int delaySeconds,
+  }) async {
+    if (eventIds.isEmpty) return 0;
+    await initialize();
+    final nextRetry =
+        DateTime.now().millisecondsSinceEpoch + (delaySeconds * 1000);
+    final placeholders = List.filled(eventIds.length, '?').join(',');
+    return _connection.runUpdate(
+      'UPDATE StatisticEventQueue SET retryCount = retryCount + 1, nextRetryTime = ? '
+      'WHERE eventId IN ($placeholders)',
+      <Object?>[nextRetry, ...eventIds],
+    );
+  }
+
+  Future<int> countPendingStatisticEvents() async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT COUNT(*) AS count FROM StatisticEventQueue',
+      const [],
+    );
+    return (rows.single['count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<List<Map<String, Object?>>> readRecentStatisticEvents({
+    int limit = 50,
+  }) async {
+    await initialize();
+    return _connection.runSelect(
+      'SELECT id, eventId, eventName, sessionId, page, eventTime, properties, retryCount, nextRetryTime, createdAt '
+      'FROM StatisticEventQueue ORDER BY id DESC LIMIT ?',
+      <Object?>[limit.clamp(1, 100)],
+    );
+  }
+
+  Future<int> clearStatisticEventQueue() async {
+    await initialize();
+    return _connection.runDelete('DELETE FROM StatisticEventQueue', const []);
+  }
+
   Future<void> close() => _connection.close();
 
   Future<int> _rowCount(String table) async {
@@ -994,6 +1079,19 @@ const _version1Schema = <String>[
     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
   )''',
   'CREATE INDEX IF NOT EXISTS idx_diagnostic_records_updated_at ON diagnostic_records (updated_at DESC)',
+  '''CREATE TABLE IF NOT EXISTS StatisticEventQueue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    eventId TEXT UNIQUE NOT NULL,
+    eventName TEXT NOT NULL,
+    sessionId TEXT,
+    page TEXT,
+    eventTime INTEGER NOT NULL,
+    properties TEXT,
+    retryCount INTEGER NOT NULL DEFAULT 0,
+    nextRetryTime INTEGER NOT NULL DEFAULT 0,
+    createdAt INTEGER NOT NULL
+  )''',
+  'CREATE INDEX IF NOT EXISTS idx_statistic_queue_retry ON StatisticEventQueue (nextRetryTime ASC, id ASC)',
 ];
 
 class _UnifiedDatabaseUser extends QueryExecutorUser {
