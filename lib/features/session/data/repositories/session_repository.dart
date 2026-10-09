@@ -277,10 +277,16 @@ class SessionRepository {
   Future<List<SessionSummary>> loadChanges({required int ownerId}) async {
     final initialTicks = await _dao.readMaxTicks(ownerId);
     if (initialTicks == null || initialTicks <= 0) return const [];
-    var minTicks = initialTicks;
+    // Replay the boundary millisecond after interruption/new same-tick events.
+    var minTicks = initialTicks - 1;
+    String? cursorId;
     final changed = <String, SessionSummary>{};
     while (true) {
-      final page = await _api.getChanges(ownerId: ownerId, minTicks: minTicks);
+      final page = await _api.getChanges(
+        ownerId: ownerId,
+        minTicks: minTicks,
+        cursorId: cursorId,
+      );
       if (page.items.isEmpty) break;
       final items = await _mergeWithLocalSummaries(
         ownerId: ownerId,
@@ -293,11 +299,21 @@ class SessionRepository {
       for (final item in items) {
         _changeBus?.publish(ownerId: ownerId, sessionUnitId: item.id);
       }
-      final nextTicks = items
-          .map((item) => item.ticks)
-          .fold<int>(minTicks, (max, ticks) => ticks > max ? ticks : max);
-      if (items.length < 99 || nextTicks <= minTicks) break;
+      final nextTicks =
+          page.nextCursorTicks ??
+          items
+              .map((item) => item.ticks)
+              .fold<int>(minTicks, (max, ticks) => ticks > max ? ticks : max);
+      final nextId = page.nextCursorId;
+      if (page.hasMore == false ||
+          (page.hasMore == null && items.length < 99) ||
+          nextTicks < minTicks ||
+          (nextTicks == minTicks && nextId == cursorId) ||
+          (nextTicks == minTicks && nextId == null)) {
+        break;
+      }
       minTicks = nextTicks;
+      cursorId = nextId;
     }
     return changed.values.toList(growable: false);
   }

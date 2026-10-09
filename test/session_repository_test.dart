@@ -10,6 +10,71 @@ import 'package:gotoim_flutter/features/session/data/models/session_summary.dart
 import 'package:gotoim_flutter/features/session/data/repositories/session_repository.dart';
 
 void main() {
+  test(
+    'loadChanges drains equal-tick pages and replays the boundary',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = SessionDao(database);
+      await dao.upsertAll([
+        SessionSummary.fromJson({
+          'id': 'cached',
+          'ownerId': 7,
+          'ticks': 1000,
+          'score': 1000,
+          'destination': {'name': 'cached'},
+        }),
+      ]);
+      final rows = List.generate(
+        150,
+        (i) => <String, dynamic>{
+          'id': 'session-${i.toString().padLeft(3, '0')}',
+          'ownerId': 7,
+          'ticks': 1000,
+          'score': 1000,
+          'destination': {'name': '$i'},
+        },
+      );
+      final client = _FakeApiClient(
+        getResponse: (query) {
+          final cursor = query['cursorId'] as String?;
+          final remaining =
+              rows
+                  .where(
+                    (row) =>
+                        cursor == null ||
+                        (row['id'] as String).compareTo(cursor) > 0,
+                  )
+                  .toList();
+          final page = remaining.take(99).toList();
+          return <String, dynamic>{
+            'items': page,
+            'totalCount': page.length,
+            'extra': {
+              'hasMore': remaining.length > 99,
+              'nextCursorTicks': 1000,
+              'nextCursorId': page.isEmpty ? null : page.last['id'],
+            },
+          };
+        },
+      );
+      final repository = SessionRepository(
+        api: SessionUnitApi(client),
+        aiApi: AiApi(client),
+        dao: dao,
+      );
+      final result = await repository.loadChanges(ownerId: 7);
+      expect(result.length, 150);
+      expect(client.getQueries.length, 2);
+      expect(client.getQueries.first['minTicks'], 999);
+      expect(client.getQueries.last['minTicks'], 1000);
+      expect(client.getQueries.last['cursorId'], 'session-098');
+      expect(await dao.count(7), 151);
+    },
+  );
+
   SessionSummary item(String id, int score) => SessionSummary.fromJson({
     'id': id,
     'ownerId': 7,
@@ -399,7 +464,8 @@ void main() {
 }
 
 class _FakeApiClient implements ApiClient {
-  _FakeApiClient({this.responses = const {}});
+  _FakeApiClient({this.responses = const {}, this.getResponse});
+  final Object? Function(Map<String, Object?> query)? getResponse;
   final Map<String, Object?> responses;
   final List<String> getPaths = [];
   final List<Map<String, Object?>> getQueries = [];
@@ -412,7 +478,7 @@ class _FakeApiClient implements ApiClient {
   }) async {
     getPaths.add(path);
     getQueries.add(query ?? const {});
-    final response = responses[path];
+    final response = getResponse?.call(query ?? const {}) ?? responses[path];
     if (response == null) throw StateError('Unexpected GET $path');
     return response as T;
   }

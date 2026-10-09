@@ -3,6 +3,8 @@ class PagedResultDto<T> {
     required this.items,
     required this.totalCount,
     this.hasMore,
+    this.nextCursorTicks,
+    this.nextCursorId,
   });
 
   factory PagedResultDto.fromJson(
@@ -27,10 +29,17 @@ class PagedResultDto<T> {
               ? rawCount.toInt()
               : int.tryParse('$rawCount') ?? items.length,
       hasMore: rawHasMore is bool ? rawHasMore : null,
+      nextCursorTicks:
+          extra is Map && extra['nextCursorTicks'] is num
+              ? (extra['nextCursorTicks'] as num).toInt()
+              : null,
+      nextCursorId: extra is Map ? extra['nextCursorId']?.toString() : null,
     );
   }
 
   final List<T> items;
   final int totalCount;
   final bool? hasMore;
+  final int? nextCursorTicks;
+  final String? nextCursorId;
 }

@@ -130,10 +130,20 @@ class DioStatisticApi implements StatisticApi {
         errorMessage: 'HTTP $statusCode: ${response.statusMessage}',
       );
     } on DioException catch (dioErr) {
+      String? detailMessage;
+      final resData = dioErr.response?.data;
+      if (resData is Map) {
+        final err = resData['error'];
+        if (err is Map) {
+          detailMessage = err['details']?.toString() ?? err['message']?.toString();
+        } else if (resData['message'] != null) {
+          detailMessage = resData['message']?.toString();
+        }
+      }
       return StatisticUploadResult(
         isSuccess: false,
         statusCode: dioErr.response?.statusCode,
-        errorMessage: dioErr.message ?? dioErr.error?.toString(),
+        errorMessage: detailMessage ?? dioErr.message ?? dioErr.error?.toString(),
       );
     } catch (e) {
       return StatisticUploadResult(

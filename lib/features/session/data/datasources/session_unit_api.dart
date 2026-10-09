@@ -96,6 +96,7 @@ class SessionUnitApi {
   Future<PagedResultDto<SessionSummary>> getChanges({
     required int ownerId,
     required int minTicks,
+    String? cursorId,
     int maxResultCount = 99,
   }) async {
     final response = await _apiClient.get<Map<String, dynamic>>(
@@ -103,6 +104,7 @@ class SessionUnitApi {
       query: <String, Object?>{
         'ownerId': ownerId,
         'minTicks': minTicks,
+        if (cursorId != null) 'cursorId': cursorId,
         'maxResultCount': maxResultCount,
       },
     );
