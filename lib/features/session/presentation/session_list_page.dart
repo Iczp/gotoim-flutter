@@ -26,7 +26,6 @@ class SessionListPage extends ConsumerStatefulWidget {
 class _SessionListPageState extends ConsumerState<SessionListPage>
     with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
-  bool _isNavigatingToChat = false;
   int _lastChatNavigatedTime = 0;
   int _handledFocusUnreadRequest = 0;
   int _currentScrollIndex = -1;
@@ -325,15 +324,18 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
     SessionListController controller,
     SessionSummary session,
   ) async {
+    if (session.id.isEmpty) {
+      debugPrint('[ChatTrace] 🛑 SessionListPage._openChat ignored: session.id is empty');
+      return;
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (_isNavigatingToChat || now - _lastChatNavigatedTime < 400) {
+    if (now - _lastChatNavigatedTime < 400) {
       sessionScrollTrace(
         '🛑 _openChat THROTTLED | session=${session.id} '
-        'elapsed=${now - _lastChatNavigatedTime}ms isNavigating=$_isNavigatingToChat',
+        'elapsed=${now - _lastChatNavigatedTime}ms',
       );
       return;
     }
-    _isNavigatingToChat = true;
     _lastChatNavigatedTime = now;
     final targetOwnerId = session.ownerId ?? controller.currentOwner?.id ?? 0;
     final initialOffset =
@@ -355,8 +357,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
         '?ownerId=$targetOwnerId'
         '&title=${Uri.encodeQueryComponent(session.title)}',
       );
-    } finally {
-      _isNavigatingToChat = false;
+    } catch (e, stack) {
+      debugPrint('[ChatTrace] ✖ _openChat error: $e\n$stack');
     }
     final returnOffset =
         _scrollController.hasClients

@@ -687,6 +687,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       key: _messageKeyFor(message.localId),
       message: message,
       showTime: _showTime(message, older),
+      showAvatar: !controller.isOfficialAccount,
       onUserTap: () => _showSenderProfile(message),
       onSessionUnitTap: _showSessionUnitProfile,
       onVoiceOpened: () => controller.markVoiceOpened(message),

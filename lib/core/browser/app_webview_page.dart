@@ -10,6 +10,8 @@ import 'browser_more_sheet.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/data/models/chat_owner.dart';
+import '../config/app_environment.dart';
+import '../utils/api_url_resolver.dart';
 
 /// 解析 CSS 颜色值（支持 hex、rgb、rgba、hsl、hsla 及常见命名颜色）
 Color? parseCssColor(String? raw) {
@@ -529,6 +531,19 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           },
         );
         controller.addJavaScriptHandler(
+          handlerName: 'setTitle',
+          callback: (args) {
+            if (args.isNotEmpty && args[0] != null && mounted) {
+              final newTitle = args[0].toString().trim();
+              if (newTitle.isNotEmpty && _pageTitle != newTitle) {
+                setState(() {
+                  _pageTitle = newTitle;
+                });
+              }
+            }
+          },
+        );
+        controller.addJavaScriptHandler(
           handlerName: 'onHtmlThemeChanged',
           callback: (args) {
             if (args.isNotEmpty && args[0] != null) {
@@ -542,15 +557,19 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           handlerName: 'getAppContext',
           callback: (_) async {
             try {
+              final isDark = mounted && Theme.of(context).brightness == Brightness.dark;
               final tokenStorage = ref.read(tokenStorageProvider);
               final token = await tokenStorage.readAccessToken();
               final auth = ref.read(authControllerProvider);
+              final env = ref.read(appEnvironmentProvider);
+              final apiBaseUrl = env.apiBaseUrl;
               final sessionList = ref.read(sessionListControllerProvider);
               final currentOwner = sessionList.currentOwner;
               final owners = sessionList.owners;
 
               return <String, dynamic>{
                 'token': token,
+                'theme': isDark ? 'dark' : 'light',
                 'user': auth.currentUser != null
                     ? <String, dynamic>{
                         'id': auth.currentUser!.id,
@@ -564,7 +583,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
                     ? <String, dynamic>{
                         'id': currentOwner.id,
                         'name': currentOwner.name,
-                        'portrait': currentOwner.imageUrl,
+                        'portrait': resolveApiUrl(currentOwner.imageUrl, apiBaseUrl),
                         'objectType': currentOwner.typeDescription,
                       }
                     : null,
@@ -572,7 +591,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
                     .map((o) => <String, dynamic>{
                           'id': o.id,
                           'name': o.name,
-                          'portrait': o.imageUrl,
+                          'portrait': resolveApiUrl(o.imageUrl, apiBaseUrl),
                           'objectType': o.typeDescription,
                         })
                     .toList(),

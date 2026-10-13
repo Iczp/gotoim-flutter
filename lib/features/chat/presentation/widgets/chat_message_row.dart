@@ -227,11 +227,13 @@ class ChatMessageRow extends StatelessWidget {
                     .clamp(0.0, double.infinity);
 
                 // 响应式拟定消息气泡的最大宽度：
-                // 1. 移动端窄屏（< 600px）：利用率提升至 78%，文本更易读且不易产生过度断行；
+                // 1. 移动端窄屏（< 600px）：有头像时利用率 78%；无头像（如公众号或大卡片模式）时留出 24px 边距，上限 480px；
                 // 2. 平板与桌面宽屏（>= 600px）：限制在 68% 且设定上限 620px，保证舒适阅读视线，防止单行文字过长。
                 final double bubbleWidth;
                 if (constraints.maxWidth < 600) {
-                  bubbleWidth = contentMaxWidth * 0.78;
+                  bubbleWidth = showAvatar
+                      ? contentMaxWidth * 0.78
+                      : (contentMaxWidth - 24.0).clamp(0.0, 480.0);
                 } else {
                   bubbleWidth = (contentMaxWidth * 0.68).clamp(360.0, 620.0);
                 }
@@ -304,7 +306,7 @@ class ChatMessageRow extends StatelessWidget {
                             : CrossAxisAlignment.start,
                     children: <Widget>[
                       // 发送人名称 (各自加 padding: 12)
-                      if (!message.isMine && _senderLabel.isNotEmpty)
+                      if (showAvatar && !message.isMine && _senderLabel.isNotEmpty)
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Padding(
@@ -328,7 +330,9 @@ class ChatMessageRow extends StatelessWidget {
                         alignment:
                             message.isMine
                                 ? Alignment.centerRight
-                                : Alignment.centerLeft,
+                                : (showAvatar
+                                    ? Alignment.centerLeft
+                                    : Alignment.center),
                         child: messageContentWidget,
                       ),
                       // 引用消息 (各自加 padding: 12)

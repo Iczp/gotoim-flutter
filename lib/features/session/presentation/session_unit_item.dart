@@ -51,12 +51,14 @@ class SessionUnitItem extends StatelessWidget {
         onLongPress: onLongPress,
         onTap:
             onTap ??
-            () => SafeChatNavigator.pushChat(
-              context,
-              '/chat/${Uri.encodeComponent(item.id)}'
-              '?ownerId=${item.ownerId ?? 0}'
-              '&title=${Uri.encodeQueryComponent(item.title)}',
-            ),
+            (item.id.isEmpty
+                ? null
+                : () => SafeChatNavigator.pushChat(
+                      context,
+                      '/chat/${Uri.encodeComponent(item.id)}'
+                      '?ownerId=${item.ownerId ?? 0}'
+                      '&title=${Uri.encodeQueryComponent(item.title)}',
+                    )),
         child: Stack(
           alignment: Alignment.bottomCenter,
           children: [

@@ -311,4 +311,60 @@ void main() {
     expect(positioned.end, 0.0);
     expect(positioned.start, 74.0);
   });
+
+  testWidgets('SessionUnitItem invokes onTap when tapped', (tester) async {
+    var tapped = false;
+    final s = session(
+      id: 'tap-test-session',
+      ticks: now.millisecondsSinceEpoch,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appEnvironmentProvider.overrideWithValue(
+            AppEnvironment.fromDotEnv(AppFlavor.development),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.lightTheme(),
+          home: Scaffold(
+            body: SessionUnitItem(
+              item: s,
+              showDivider: false,
+              onTap: () {
+                tapped = true;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tapped, isFalse);
+    await tester.tap(find.byType(SessionUnitItem));
+    await tester.pumpAndSettle();
+    expect(tapped, isTrue);
+  });
+
+  test('SessionSummary correctly extracts id from sessionUnitId and DB row id', () {
+    final fromUnitId = SessionSummary.fromJson({
+      'sessionUnitId': 'unit-abc-123',
+      'ownerId': 1,
+      'score': 100,
+      'ticks': 100,
+    });
+    expect(fromUnitId.id, 'unit-abc-123');
+
+    final fromDbRow = SessionSummary.fromDatabaseRow({
+      'id': 'db-row-id-456',
+      'ownerId': 2,
+      'score': 200,
+      'ticks': 200,
+      'sorting': 0,
+      'raw': '{"title": "Test Title"}',
+    });
+    expect(fromDbRow.id, 'db-row-id-456');
+  });
 }

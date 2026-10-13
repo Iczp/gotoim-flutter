@@ -91,8 +91,17 @@ class SessionSummary {
       'ticks': ticks,
     };
 
+    final id = firstNonEmpty(<Object?>[
+      json['id'],
+      json['Id'],
+      json['sessionUnitId'],
+      json['SessionUnitId'],
+      asMap(json['sessionUnit'])['id'],
+      asMap(json['sessionUnit'])['Id'],
+    ]);
+
     return SessionSummary(
-      id: (json['id'] ?? json['Id'])?.toString() ?? '',
+      id: id,
       ownerId: asInt(json['ownerId'] ?? json['OwnerId']),
       score: score,
       sorting: sorting,
@@ -232,11 +241,13 @@ class SessionSummary {
       throw const FormatException('Friends.raw is missing');
     }
     final decoded = decodeJsonObject(raw);
+    final rowId = row['id']?.toString();
     final rowOwnerId = asInt(row['ownerId']);
     final rowScore = asInt(row['score']);
     final rowSorting = asInt(row['sorting']);
     final rowTicks = asInt(row['ticks']);
 
+    if (rowId != null && rowId.isNotEmpty) decoded['id'] = rowId;
     if (rowOwnerId != null) decoded['ownerId'] = rowOwnerId;
     if (rowScore != null && rowScore > 0) decoded['score'] = rowScore;
     if (rowSorting != null) decoded['sorting'] = rowSorting;

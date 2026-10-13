@@ -34,29 +34,45 @@ ProviderContainer? get globalProviderContainer {
 /// 聊天导航防重入保护工具类
 class SafeChatNavigator {
   static int _lastNavigatedTime = 0;
-  static bool _isNavigating = false;
 
   /// 安全跳转聊天页面，防止快速连击或短时间内重复 push 造成页面栈堆叠
   static Future<T?> pushChat<T>(
     BuildContext context,
     String location, {
     Object? extra,
-  }) async {
+  }) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (_isNavigating || now - _lastNavigatedTime < 400) {
+    if (now - _lastNavigatedTime < 400) {
       debugPrint(
-        '[ChatTrace] 🛑 SafeChatNavigator throttled navigation | '
+        '[ChatTrace] 🛑 SafeChatNavigator throttled rapid tap | '
         'elapsed=${now - _lastNavigatedTime}ms | location=$location',
       );
-      return null;
+      return Future<T?>.value(null);
     }
-    _isNavigating = true;
     _lastNavigatedTime = now;
+
+    final navContext =
+        context.mounted ? context : rootNavigatorKey.currentContext;
+    if (navContext == null || !navContext.mounted) {
+      debugPrint(
+        '[ChatTrace] ✖ SafeChatNavigator context is not mounted | location=$location',
+      );
+      return Future<T?>.value(null);
+    }
+
     try {
-      return await GoRouter.of(context).push<T>(location, extra: extra);
-    } finally {
-      _isNavigating = false;
+      return GoRouter.of(navContext).push<T>(location, extra: extra);
+    } catch (e, stack) {
+      debugPrint('[ChatTrace] ✖ SafeChatNavigator.pushChat error: $e\n$stack');
+      return Future<T?>.value(null);
     }
   }
+
+  /// 重置导航防抖状态（用于测试或强制恢复）
+  @visibleForTesting
+  static void resetThrottle() {
+    _lastNavigatedTime = 0;
+  }
 }
+
 
