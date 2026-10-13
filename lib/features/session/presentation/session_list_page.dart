@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/app_navigation.dart';
 import '../../../core/logging/app_logger.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/session_summary.dart';
@@ -25,6 +26,8 @@ class SessionListPage extends ConsumerStatefulWidget {
 class _SessionListPageState extends ConsumerState<SessionListPage>
     with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
+  bool _isNavigatingToChat = false;
+  int _lastChatNavigatedTime = 0;
   int _handledFocusUnreadRequest = 0;
   int _currentScrollIndex = -1;
   int? _lastOwnerId;
@@ -322,6 +325,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
     SessionListController controller,
     SessionSummary session,
   ) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_isNavigatingToChat || now - _lastChatNavigatedTime < 400) {
+      sessionScrollTrace(
+        '🛑 _openChat THROTTLED | session=${session.id} '
+        'elapsed=${now - _lastChatNavigatedTime}ms isNavigating=$_isNavigatingToChat',
+      );
+      return;
+    }
+    _isNavigatingToChat = true;
+    _lastChatNavigatedTime = now;
     final targetOwnerId = session.ownerId ?? controller.currentOwner?.id ?? 0;
     final initialOffset =
         _scrollController.hasClients
@@ -335,11 +348,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
       '🚀 _openChat START | session=${session.id} '
       'title=${session.title} offset=$initialOffset maxExtent=$initialMax',
     );
-    await context.push(
-      '/chat/${Uri.encodeComponent(session.id)}'
-      '?ownerId=$targetOwnerId'
-      '&title=${Uri.encodeQueryComponent(session.title)}',
-    );
+    try {
+      await SafeChatNavigator.pushChat(
+        context,
+        '/chat/${Uri.encodeComponent(session.id)}'
+        '?ownerId=$targetOwnerId'
+        '&title=${Uri.encodeQueryComponent(session.title)}',
+      );
+    } finally {
+      _isNavigatingToChat = false;
+    }
     final returnOffset =
         _scrollController.hasClients
             ? _scrollController.offset.toStringAsFixed(1)

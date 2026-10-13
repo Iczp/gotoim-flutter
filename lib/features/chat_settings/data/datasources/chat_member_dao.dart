@@ -21,6 +21,19 @@ class ChatMemberDao {
     keyword: keyword,
   )).map(ChatMember.fromDatabaseRow).toList(growable: false);
 
+  Future<int?> readMemberCount(String sessionUnitId) =>
+      _database.readFriendMemberCount(sessionUnitId);
+
+  Future<int> countMembers({
+    required int ownerId,
+    required String sessionUnitId,
+    String keyword = '',
+  }) => _database.countMembers(
+    ownerId: ownerId,
+    sessionUnitId: sessionUnitId,
+    keyword: keyword,
+  );
+
   Future<void> upsertAll(
     int ownerId,
     String sessionUnitId,

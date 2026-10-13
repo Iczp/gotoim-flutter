@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../../chat/data/models/article_message_item.dart';
+
 import '../../../../core/utils/message_text_formatter.dart';
 
 Map<String, dynamic> asMap(Object? value) {
@@ -56,6 +58,7 @@ String messageContentType(Map<String, dynamic> message) {
     7 => '[位置]',
     8 => '[名片]',
     10 => '[HTML]',
+    11 => '[文章]',
     12 => '[聊天记录]',
     _ => '',
   };
@@ -74,6 +77,7 @@ String messageContentText(Map<String, dynamic> message) {
     5 => content['fileName']?.toString() ?? '',
     6 => firstNonEmpty([content['title'], content['url']]),
     10 || 12 => content['title']?.toString() ?? '',
+    11 => _articlePreview(message['content']),
     null => stripMessageTags(messagePreview(message['content'])),
     _ => '',
   };
@@ -85,6 +89,13 @@ Map<String, dynamic> decodeJsonObject(String raw) {
     throw const FormatException('Friends.raw is not an object');
   }
   return decoded.cast<String, dynamic>();
+}
+
+String _articlePreview(Object? content) {
+  final items = ArticleMessageItem.fromContent(content);
+  if (items.isEmpty) return '文章内容不可用';
+  final title = items.first.title.isEmpty ? '文章' : items.first.title;
+  return stripMessageTags('$title${items.length > 1 ? ' 等${items.length}篇' : ''}');
 }
 
 String encodeJson(Map<String, dynamic> value) => jsonEncode(value);

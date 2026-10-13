@@ -16,6 +16,7 @@ import '../../features/diagnostics/presentation/connection_test_page.dart';
 import '../../features/diagnostics/presentation/abp_configuration_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/auth_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/diagnostics_home_page.dart';
+import '../../features/diagnostics/presentation/article_message_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/local_notification_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/signalr_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/scan_code_diagnostics_page.dart';
@@ -328,6 +329,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ChatDiagnosticsPage(),
       ),
       _buildAppRoute(
+        path: '/diagnostics/article-message',
+        builder: (context, state) => const ArticleMessageDiagnosticsPage(),
+      ),
+      _buildAppRoute(
         path: '/diagnostics/chat-bubble',
         builder: (context, state) => const ChatBubbleDiagnosticsPage(),
       ),
@@ -447,6 +452,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ownerId:
                   int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
               sessionUnitId: state.pathParameters['sessionUnitId']!,
+              initialTotalCount:
+                  int.tryParse(state.uri.queryParameters['totalCount'] ?? ''),
             ),
       ),
       _buildAppRoute(

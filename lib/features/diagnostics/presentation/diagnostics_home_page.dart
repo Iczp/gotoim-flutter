@@ -102,6 +102,13 @@ class DiagnosticsHomePage extends StatelessWidget {
             title: '聊天与实时通信',
             children: [
               Cell(
+                icon: const Icon(Icons.article_outlined),
+                title: '文章消息',
+                subtitle: '文章组 JSON、解析结果、卡片预览和逐篇阅读',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/article-message'),
+              ),
+              Cell(
                 icon: const Icon(Icons.forum_outlined),
                 title: '消息列表数据流',
                 subtitle: 'Owner、本地好友分页、线上补页、changes 增量与游标',

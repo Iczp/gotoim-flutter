@@ -1,4 +1,5 @@
 import '../../../session/data/models/session_summary_helpers.dart';
+import 'article_message_item.dart';
 
 class ChatMessage {
   const ChatMessage({
@@ -89,6 +90,9 @@ class ChatMessage {
       state == 'sending' ||
       state == 'pending';
   bool get isOpened => raw['isOpened'] == true || isMine;
+  List<ArticleMessageItem> get articleItems =>
+      ArticleMessageItem.fromContent(raw['content']);
+
   Map<String, dynamic> get senderSessionUnit => asMap(raw['senderSessionUnit']);
   int? get senderChatObjectId =>
       asInt(asMap(senderSessionUnit['owner'])['id']) ??

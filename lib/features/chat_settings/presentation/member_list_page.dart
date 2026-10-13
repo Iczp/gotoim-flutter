@@ -9,10 +9,12 @@ class MemberListPage extends ConsumerStatefulWidget {
   const MemberListPage({
     required this.ownerId,
     required this.sessionUnitId,
+    this.initialTotalCount,
     super.key,
   });
   final int ownerId;
   final String sessionUnitId;
+  final int? initialTotalCount;
 
   @override
   ConsumerState<MemberListPage> createState() => _MemberListPageState();
@@ -31,6 +33,7 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
       ref.read(chatSettingsRepositoryProvider),
       ownerId: widget.ownerId,
       sessionUnitId: widget.sessionUnitId,
+      initialTotalCount: widget.initialTotalCount ?? 0,
     )..initialize();
   }
 
@@ -48,7 +51,13 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
     builder: (context, _) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
       return Scaffold(
-        appBar: AppBar(title: const Text('成员列表')),
+        appBar: AppBar(
+          title: Text(
+            controller.totalCount > 0
+                ? '群聊成员 (${controller.totalCount})'
+                : '群聊成员',
+          ),
+        ),
         body: Column(
           children: <Widget>[
             Padding(
@@ -113,7 +122,15 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
                       return Padding(
                         padding: const EdgeInsets.all(20),
                         child: Center(
-                          child: Text('共有 ${controller.totalCount} 人'),
+                          child: Text(
+                            controller.members.isEmpty
+                                ? '暂无成员'
+                                : '共有 ${controller.totalCount} 人',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context).hintColor,
+                            ),
+                          ),
                         ),
                       );
                     },

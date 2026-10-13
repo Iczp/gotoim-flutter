@@ -2,11 +2,82 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/database/unified_database.dart';
+import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_dao.dart';
 import 'package:gotoim_flutter/features/session/data/models/paged_result_dto.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
 
 void main() {
+  test(
+    'ISO message times preserve the instant in list, detail and storage',
+    () {
+      final instant = DateTime.utc(2026, 10, 12, 10, 12, 16);
+      for (final value in [
+        '2026-10-12T10:12:16Z',
+        '2026-10-12T18:12:16+08:00',
+      ]) {
+        final messageJson = <String, dynamic>{'id': 123, 'creationTime': value};
+        final summary = SessionSummary.fromJson(<String, dynamic>{
+          'id': 'unit-time',
+          'ownerId': 42,
+          'lastMessage': messageJson,
+        });
+        final message = ChatMessage.fromJson(
+          messageJson,
+          ownerId: 42,
+          sessionUnitId: 'unit-time',
+        );
+
+        expect(summary.updatedAt, instant.toLocal());
+        expect(message.createdAt, summary.updatedAt);
+        expect(
+          summary.updatedAt?.millisecondsSinceEpoch,
+          instant.millisecondsSinceEpoch,
+        );
+        final restored = SessionSummary.fromDatabaseRow(
+          summary.toDatabaseValues(),
+        );
+        expect(restored.updatedAt, summary.updatedAt);
+      }
+    },
+  );
+
+  test(
+    'session send time follows the last message rather than stale cache',
+    () {
+      for (final pascalCase in [false, true]) {
+        final summary = SessionSummary.fromJson(<String, dynamic>{
+          'id': 'unit-time',
+          'ownerId': 42,
+          pascalCase ? 'LastMessageTime' : 'lastMessageTime':
+              '2026-10-12T02:46:00',
+          pascalCase ? 'LastMessage' : 'lastMessage': <String, dynamic>{
+            pascalCase ? 'CreationTime' : 'creationTime': '2026-10-12T14:46:00',
+          },
+        });
+
+        expect(summary.updatedAt, DateTime(2026, 10, 12, 14, 46));
+        final restored = SessionSummary.fromDatabaseRow(
+          summary.toDatabaseValues(),
+        );
+        expect(restored.updatedAt, summary.updatedAt);
+      }
+    },
+  );
+
+  test(
+    'session send time falls back when the last message time is missing',
+    () {
+      final summary = SessionSummary.fromJson(<String, dynamic>{
+        'id': 'unit-time',
+        'lastMessageTime': '2026-10-12T14:46:00',
+        'lastMessage': <String, dynamic>{'content': '你好'},
+      });
+
+      expect(summary.updatedAt, DateTime(2026, 10, 12, 14, 46));
+    },
+  );
+
   test('session summary maps the UniApp friend DTO fields', () {
     final summary = SessionSummary.fromJson(<String, dynamic>{
       'id': 'unit-1',

@@ -11,7 +11,7 @@ import '../application/scan_login_hub.dart';
 import 'qr_code_overlay.dart';
 import 'verification_code_boxes.dart';
 
-enum _QrLoginStatus { ready, scanned, rejected, cancelled, granted }
+enum _QrLoginStatus { ready, scanned, rejected, cancelled, granted, failed }
 
 class LoginQrSignIn extends ConsumerStatefulWidget {
   const LoginQrSignIn({super.key});
@@ -128,22 +128,27 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
         if (mounted) {
           setState(() {
             _status = _QrLoginStatus.scanned;
-            _scanUserName =
-                event.payload['scanUserName']?.toString() ??
-                event.payload['userName']?.toString();
+            _scanUserName = event.scanUserName;
           });
         }
         break;
       case 'granted':
         final token = event.scanToken;
-        if (token != null && token.isNotEmpty) {
-          _expiryTimer?.cancel();
-          if (mounted) setState(() => _status = _QrLoginStatus.granted);
-          Future<void>.delayed(
-            const Duration(milliseconds: 800),
-            () => _completeLogin(token),
-          );
+        _expiryTimer?.cancel();
+        if (token == null || token.isEmpty) {
+          if (mounted) {
+            setState(() {
+              _status = _QrLoginStatus.failed;
+              _error = '授权已确认，但未收到登录票据。请刷新二维码重试。';
+            });
+          }
+          break;
         }
+        if (mounted) setState(() => _status = _QrLoginStatus.granted);
+        Future<void>.delayed(
+          const Duration(milliseconds: 800),
+          () => _completeLogin(token),
+        );
         break;
       case 'rejected':
         if (mounted) setState(() => _status = _QrLoginStatus.rejected);
@@ -164,6 +169,7 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
       context.go('/');
     } else {
       setState(() {
+        _status = _QrLoginStatus.failed;
         _error = auth.errorMessage ?? '扫码登录失败，请重试。';
         _loggingIn = false;
       });
@@ -231,6 +237,8 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
         return '用户取消了本次登录\n请手动刷新二维码';
       case _QrLoginStatus.granted:
         return '用户已同意登录\n正在安全登录…';
+      case _QrLoginStatus.failed:
+        return '扫码登录未完成\n请刷新二维码重试';
     }
   }
 
@@ -245,6 +253,8 @@ class _LoginQrSignInState extends ConsumerState<LoginQrSignIn> {
       case _QrLoginStatus.rejected:
       case _QrLoginStatus.cancelled:
         return Colors.orange;
+      case _QrLoginStatus.failed:
+        return Colors.red;
       case _QrLoginStatus.ready:
         return Colors.indigo;
     }

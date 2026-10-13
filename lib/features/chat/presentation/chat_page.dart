@@ -124,13 +124,31 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   String get _appearanceWindowId => 'chat-appearance:${widget.sessionUnitId}';
 
+  /// 全局活跃的 ChatPage 实例追踪，用于检测路由堆叠/实例泄露
+  static int _activeInstanceCount = 0;
+  static final Set<String> _activeSessionUnitIds = <String>{};
+
   @override
   void initState() {
     super.initState();
     _pageStopwatch.start();
+    _activeInstanceCount++;
+    final isDuplicate = _activeSessionUnitIds.contains(widget.sessionUnitId);
+    _activeSessionUnitIds.add(widget.sessionUnitId);
     debugPrint(
-      '[ChatTrace] 🚀 ChatPage.initState | session=${widget.sessionUnitId}',
+      '[ChatTrace] 🚀 ChatPage.initState | session=${widget.sessionUnitId} '
+      '| totalActivePages=$_activeInstanceCount'
+      '${isDuplicate ? ' ⚠️ [DUPLICATE SESSION INSTANCE DETECTED]' : ''}',
     );
+    if (_activeInstanceCount > 1 || isDuplicate) {
+      debugPrint(
+        '🚨🚨🚨 [ChatTrace]【检测到多个聊天窗口并发运行】🚨🚨🚨\n'
+        '  ▶ 活跃窗口总数: $_activeInstanceCount\n'
+        '  ▶ 新打开会话: ${widget.sessionUnitId}\n'
+        '  ▶ 当前已在后台/前台存活的会话: $_activeSessionUnitIds\n'
+        '  ▶ 风险说明: 多个后台窗口并存会导致每个窗口都在执行 SignalR/DB 同步，导致手机严重卡顿！',
+      );
+    }
     WidgetsBinding.instance.addObserver(this);
     _activeChatRegistry = ref.read(activeChatRegistryProvider);
     _activeChatRegistry.enterChat(widget.sessionUnitId);
@@ -162,8 +180,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   @override
   void dispose() {
+    _activeInstanceCount = (_activeInstanceCount - 1).clamp(0, 9999);
+    _activeSessionUnitIds.remove(widget.sessionUnitId);
     debugPrint(
-      '[ChatTrace] 🚪 ChatPage.dispose | '
+      '[ChatTrace] 🚪 ChatPage.dispose | session=${widget.sessionUnitId} '
+      '| remainingActivePages=$_activeInstanceCount | '
       'totalSessionDuration=${_pageStopwatch.elapsedMilliseconds}ms',
     );
     WidgetsBinding.instance.removeObserver(this);

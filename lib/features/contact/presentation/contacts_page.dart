@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../../app/app_navigation.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../user/presentation/profile_page.dart';
 import '../application/contacts_controller.dart';
@@ -292,7 +292,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       .toList(growable: false);
 
   void _openChat(BuildContext context, ContactEntry contact, int? ownerId) {
-    context.push(
+    SafeChatNavigator.pushChat(
+      context,
       '/chat/${Uri.encodeComponent(contact.id)}'
       '?ownerId=${contact.ownerId ?? ownerId ?? 0}'
       '&title=${Uri.encodeQueryComponent(contact.displayName)}',

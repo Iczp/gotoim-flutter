@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:image_picker/image_picker.dart';
-
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
-import '../../../core/network/api_client.dart';
+import '../../../core/config/app_environment.dart';
+import '../../../core/media/image_provider_factory.dart';
+import '../../../core/utils/api_url_resolver.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/presentation/chat_object_avatar.dart';
 import '../../user/presentation/profile_page.dart';
 import '../application/chat_settings_controller.dart';
+import 'chat_background_page.dart';
+import 'chat_background_preview_page.dart';
 import 'member_tile.dart';
 
 enum ChatSettingsResult { messagesCleared, sessionLeft }
@@ -132,29 +134,78 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                       onTap:
                           () => showToast('查找聊天记录功能即将上线', type: ToastType.info),
                     ),
-                    Cell(
-                      icon: const Icon(Icons.wallpaper_rounded),
-                      title: '设置聊天背景',
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          if ((controller.backgroundImage ?? '').isNotEmpty)
-                            IconButton(
-                              tooltip: '取消背景',
-                              onPressed: _confirmClearBackground,
-                              icon: const Icon(Icons.delete_outline_rounded),
-                            ),
-                          Icon(
-                            Icons.chevron_right,
-                            size: 18,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant
-                                .withValues(alpha: 0.5),
+                    Builder(
+                      builder: (context) {
+                        final rawBg = controller.backgroundImage;
+                        final hasBg = rawBg != null && rawBg.isNotEmpty;
+                        final bgUrl = hasBg
+                            ? resolveApiUrl(
+                                rawBg,
+                                ref.watch(appEnvironmentProvider).apiBaseUrl,
+                              )
+                            : null;
+                        return Cell(
+                          icon: const Icon(Icons.wallpaper_rounded),
+                          title: '设置聊天背景',
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              if (hasBg && bgUrl != null) ...[
+                                GestureDetector(
+                                  onTap: () => _previewCurrentBackground(bgUrl),
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    margin: const EdgeInsets.only(right: 4),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .outlineVariant
+                                            .withValues(alpha: 0.6),
+                                        width: 1,
+                                      ),
+                                      image: DecorationImage(
+                                        image: createImageProvider(bgUrl),
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: '删除背景',
+                                  onPressed: _confirmClearBackground,
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    size: 20,
+                                  ),
+                                ),
+                              ] else
+                                Text(
+                                  '默认',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.chevron_right,
+                                size: 18,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant
+                                    .withValues(alpha: 0.5),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      onTap: _changeBackground,
+                          onTap: _openBackgroundSettings,
+                        );
+                      },
                     ),
                   ], title: '功能'),
                   _section(<Widget>[
@@ -285,42 +336,55 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     }
   }
 
-  Future<void> _changeBackground() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null && mounted) {
-      try {
-        await controller.setBackgroundImage(
-          MultipartUploadFile(
-            name: picked.name,
-            length: await picked.length(),
-            openRead: picked.openRead,
-          ),
-        );
-        showToast('聊天背景已设置', type: ToastType.success);
-      } catch (e) {
-        showToast('设置背景失败：$e', type: ToastType.error);
-      }
+  Future<void> _previewCurrentBackground(String bgUrl) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => ChatBackgroundPreviewPage(
+          controller: controller,
+          chatTitle: controller.title,
+          currentImageUrl: bgUrl,
+        ),
+      ),
+    );
+    if (result == true && mounted) {
+      await controller.refresh();
+      setState(() {});
+    }
+  }
+
+  Future<void> _openBackgroundSettings() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatBackgroundPage(
+          controller: controller,
+        ),
+      ),
+    );
+    if (mounted) {
+      await controller.refresh();
+      setState(() {});
     }
   }
 
   Future<void> _confirmClearBackground() async {
     final confirmed = await showConfirmModal(
       context: context,
-      title: '取消聊天背景',
-      message: '将恢复默认聊天背景，确定继续吗？',
-      confirmText: '取消背景',
+      title: '删除聊天背景',
+      message: '确定要删除当前聊天背景并恢复默认吗？',
+      confirmText: '确认删除',
       isDestructive: true,
     );
     if (!confirmed || !mounted) return;
     try {
       await controller.clearBackgroundImage();
       if (mounted) {
-        showToast('聊天背景已取消', type: ToastType.success);
+        showToast('聊天背景已删除', type: ToastType.success);
+        await controller.refresh();
+        setState(() {});
       }
     } catch (error) {
       if (mounted) {
-        showToast('取消背景失败：$error', type: ToastType.error);
+        showToast('删除背景失败：$error', type: ToastType.error);
       }
     }
   }
@@ -410,14 +474,18 @@ class _MemberPreview extends StatelessWidget {
                   compact: true,
                 ),
           ),
-        if (controller.totalCount > 0)
+        if (controller.totalCount > 0 || controller.isGroup)
           TextButton(
             onPressed:
                 () => context.push(
                   '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/members'
-                  '?ownerId=${controller.ownerId}',
+                  '?ownerId=${controller.ownerId}&totalCount=${controller.totalCount}',
                 ),
-            child: Text('查看更多（${controller.totalCount}）'),
+            child: Text(
+              controller.totalCount > 0
+                  ? '查看更多（${controller.totalCount}）'
+                  : '查看全部群成员',
+            ),
           ),
       ],
     ),

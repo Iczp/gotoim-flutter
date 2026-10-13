@@ -318,7 +318,15 @@ class MessageRepository {
       '[loadMessages][loaded-all-check] session=$sessionUnitId '
       'loadedAll=$loadedAll localAdded=${local.length}',
     );
-    if (loadedAll) return MessagePage(local, false);
+    if (local.isEmpty && loadedAll) {
+      debugPrint(
+        '[loadMessages][loaded-all-reset] session=$sessionUnitId '
+        'local is empty but loadedAll was true; resetting to false',
+      );
+      await _dao.markLoadedAll(sessionUnitId, false);
+    } else if (loadedAll) {
+      return MessagePage(local, false);
+    }
     final cursorScore = local.isNotEmpty ? local.last.score : beforeScore;
     final maxMessageId = cursorScore == null ? null : cursorScore ~/ 1000000;
     try {

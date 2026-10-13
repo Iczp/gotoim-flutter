@@ -40,7 +40,16 @@ class ScanLoginHubEvent {
   final String command;
   final Map<String, dynamic> payload;
 
-  String? get scanToken => payload['scanToken']?.toString();
+  // Older AuthServer instances kept the nested Redis payload in PascalCase.
+  String? get scanToken =>
+      (payload['scanToken'] ?? payload['ScanToken'])?.toString();
+
+  String? get scanUserName =>
+      (payload['scanUserName'] ??
+              payload['ScanUserName'] ??
+              payload['userName'] ??
+              payload['UserName'])
+          ?.toString();
 }
 
 class ScanLoginTokenException implements Exception {

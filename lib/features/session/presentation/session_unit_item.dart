@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../../app/app_navigation.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/widgets/app_badge.dart';
 import '../data/models/session_summary.dart';
@@ -51,7 +51,8 @@ class SessionUnitItem extends StatelessWidget {
         onLongPress: onLongPress,
         onTap:
             onTap ??
-            () => context.push(
+            () => SafeChatNavigator.pushChat(
+              context,
               '/chat/${Uri.encodeComponent(item.id)}'
               '?ownerId=${item.ownerId ?? 0}'
               '&title=${Uri.encodeQueryComponent(item.title)}',

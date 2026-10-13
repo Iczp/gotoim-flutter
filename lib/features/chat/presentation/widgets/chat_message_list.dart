@@ -168,15 +168,70 @@ class _EmptyMessagesState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isLoading) return const Center(child: CircularProgressIndicator());
+    final theme = Theme.of(context);
     if (error != null) {
       return Center(
-        child: TextButton(
-          onPressed: onRetry,
-          child: Text('消息加载失败，点击重试：$error'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                size: 40,
+                color: theme.colorScheme.error.withValues(alpha: 0.8),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '消息加载失败',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$error',
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('点击重试'),
+              ),
+            ],
+          ),
         ),
       );
     }
-    return const Center(child: Text('暂无消息'));
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.chat_bubble_outline_rounded,
+            size: 48,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.22),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '暂无消息',
+            style: TextStyle(
+              fontSize: 14,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

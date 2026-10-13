@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/app_navigation.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_modal.dart';
@@ -444,7 +445,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               onTap: () {
                 controller.recordKeyword(keyword);
                 final ownerId = contact.ownerId ?? 0;
-                context.push(
+                SafeChatNavigator.pushChat(
+                  context,
                   '/chat/${Uri.encodeComponent(contact.id)}'
                   '?ownerId=$ownerId'
                   '&title=${Uri.encodeQueryComponent(contact.title)}',
@@ -497,7 +499,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   : null,
               onTap: () {
                 controller.recordKeyword(keyword);
-                context.push(
+                SafeChatNavigator.pushChat(
+                  context,
                   '/chat/${Uri.encodeComponent(msg.sessionUnitId)}'
                   '?title=${Uri.encodeQueryComponent(msg.sessionTitle ?? '')}',
                 );
@@ -572,7 +575,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       ),
                       onPressed: () {
                         controller.recordKeyword(keyword);
-                        context.push(
+                        SafeChatNavigator.pushChat(
+                          context,
                           '/chat/${Uri.encodeComponent(remote.id)}'
                           '?title=${Uri.encodeQueryComponent(remote.name)}',
                         );

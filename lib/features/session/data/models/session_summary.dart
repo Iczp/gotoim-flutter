@@ -99,9 +99,11 @@ class SessionSummary {
       ticks: ticks,
       title: title.isEmpty ? '未命名会话' : title,
       preview: messageContentText(lastMessage),
+      // Display the preview message's send time, as the chat detail does.
+      // lastMessageTime may be stale in an older cached Friend record.
       updatedAt:
-          asDate(json['lastMessageTime'] ?? json['LastMessageTime']) ??
           asDate(lastMessage['creationTime'] ?? lastMessage['CreationTime']) ??
+          asDate(json['lastMessageTime'] ?? json['LastMessageTime']) ??
           asDate(
             json['lastModificationTime'] ?? json['LastModificationTime'],
           ) ??

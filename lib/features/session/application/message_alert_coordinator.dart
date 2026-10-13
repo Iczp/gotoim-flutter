@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/app_navigation.dart';
@@ -207,9 +206,17 @@ class MessageAlertCoordinator {
 
   void _openChat(String sessionUnitId, int ownerId, String title) {
     if (sessionUnitId.isEmpty || ownerId <= 0) return;
+    if (_activeChat.isForegroundSession(sessionUnitId)) {
+      debugPrint(
+        '[ChatTrace] 🛑 MessageAlert _openChat ignored: '
+        'session $sessionUnitId is already active in foreground',
+      );
+      return;
+    }
     final context = rootNavigatorKey.currentContext;
     if (context?.mounted != true) return;
-    GoRouter.of(context!).push(
+    SafeChatNavigator.pushChat(
+      context!,
       '/chat/${Uri.encodeComponent(sessionUnitId)}?ownerId=$ownerId&title=${Uri.encodeQueryComponent(title)}',
     );
   }

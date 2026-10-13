@@ -7,6 +7,9 @@ import '../floating_window/floating_window.dart';
 import '../widgets/app_toast.dart';
 import 'floating_web_bubble.dart';
 import 'browser_more_sheet.dart';
+import '../../features/auth/application/auth_controller.dart';
+import '../../features/session/application/session_list_controller.dart';
+import '../../features/session/data/models/chat_owner.dart';
 
 /// 解析 CSS 颜色值（支持 hex、rgb、rgba、hsl、hsla 及常见命名颜色）
 Color? parseCssColor(String? raw) {
@@ -193,7 +196,6 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
   String _pageTitle = '';
   double _progress = 0.0;
   bool _isLoading = true;
-  bool _canGoBack = false;
   String? _errorMessage;
   bool _showPureText = false;
   Color? _htmlThemeColor;
@@ -242,20 +244,6 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
       return uri.host.isNotEmpty ? uri.host : '';
     } catch (_) {
       return '';
-    }
-  }
-
-  Future<void> _handleBack() async {
-    if (_controller != null && await _controller!.canGoBack()) {
-      await _controller!.goBack();
-      final canBack = await _controller!.canGoBack();
-      if (mounted) {
-        setState(() => _canGoBack = canBack);
-      }
-    } else {
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
     }
   }
 
@@ -335,12 +323,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
         : (widget.title?.isNotEmpty == true ? widget.title! : '网页');
 
     return PopScope(
-      canPop: !_canGoBack,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) {
-          _handleBack();
-        }
-      },
+      canPop: true,
       child: Scaffold(
         backgroundColor: effectiveBarColor,
         appBar: AppBar(
@@ -359,27 +342,14 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
                 ),
           elevation: 0.5,
           scrolledUnderElevation: 1,
-          leading: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                tooltip: '返回',
-                padding: const EdgeInsets.only(left: 8, right: 2),
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
-                onPressed: _handleBack,
-              ),
-              if (_canGoBack)
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 22),
-                  tooltip: '关闭',
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  constraints: const BoxConstraints(minWidth: 34, minHeight: 40),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-            ],
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded, size: 24),
+            tooltip: '关闭',
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            onPressed: () => Navigator.of(context).pop(),
           ),
-          leadingWidth: _canGoBack ? 84 : 48,
+          leadingWidth: 48,
           title: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -546,9 +516,18 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
         displayZoomControls: false,
         javaScriptCanOpenWindowsAutomatically: true,
         safeBrowsingEnabled: false,
+        applicationNameForUserAgent: 'GotoIM/1.0.0',
       ),
       onWebViewCreated: (controller) {
         _controller = controller;
+        controller.addJavaScriptHandler(
+          handlerName: 'close',
+          callback: (_) {
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
+          },
+        );
         controller.addJavaScriptHandler(
           handlerName: 'onHtmlThemeChanged',
           callback: (args) {
@@ -557,6 +536,74 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
             } else {
               _applyThemeColor(null);
             }
+          },
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'getAppContext',
+          callback: (_) async {
+            try {
+              final tokenStorage = ref.read(tokenStorageProvider);
+              final token = await tokenStorage.readAccessToken();
+              final auth = ref.read(authControllerProvider);
+              final sessionList = ref.read(sessionListControllerProvider);
+              final currentOwner = sessionList.currentOwner;
+              final owners = sessionList.owners;
+
+              return <String, dynamic>{
+                'token': token,
+                'user': auth.currentUser != null
+                    ? <String, dynamic>{
+                        'id': auth.currentUser!.id,
+                        'userName': auth.currentUser!.userName,
+                        'name': auth.currentUser!.name,
+                        'email': auth.currentUser!.email,
+                        'phoneNumber': auth.currentUser!.phoneNumber,
+                      }
+                    : null,
+                'currentChatObject': currentOwner != null
+                    ? <String, dynamic>{
+                        'id': currentOwner.id,
+                        'name': currentOwner.name,
+                        'portrait': currentOwner.imageUrl,
+                        'objectType': currentOwner.typeDescription,
+                      }
+                    : null,
+                'availableChatObjects': owners
+                    .map((o) => <String, dynamic>{
+                          'id': o.id,
+                          'name': o.name,
+                          'portrait': o.imageUrl,
+                          'objectType': o.typeDescription,
+                        })
+                    .toList(),
+              };
+            } catch (e) {
+              debugPrint('[WebViewBridge] getAppContext error: $e');
+              return null;
+            }
+          },
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'switchChatObject',
+          callback: (args) async {
+            try {
+              if (args.isNotEmpty && args[0] != null) {
+                final target = args[0] is Map ? args[0] as Map : {};
+                final targetId = int.tryParse(target['id']?.toString() ?? '') ?? 0;
+                final sessionList = ref.read(sessionListControllerProvider);
+                final targetOwner = sessionList.owners.cast<ChatOwner?>().firstWhere(
+                      (o) => o?.id == targetId,
+                      orElse: () => null,
+                    );
+                if (targetOwner != null) {
+                  await sessionList.selectOwner(targetOwner);
+                  return true;
+                }
+              }
+            } catch (e) {
+              debugPrint('[WebViewBridge] switchChatObject error: $e');
+            }
+            return false;
           },
         );
       },
@@ -587,10 +634,8 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
       },
       onLoadStop: (controller, url) async {
         if (!mounted) return;
-        final canBack = await controller.canGoBack();
         setState(() {
           _isLoading = false;
-          _canGoBack = canBack;
           if (url != null) {
             _currentUrl = url.toString();
           }

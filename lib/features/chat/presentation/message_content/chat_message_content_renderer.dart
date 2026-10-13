@@ -86,7 +86,12 @@ class ChatMessageContentRenderer extends StatelessWidget {
       presentation: presentation,
     ),
     10 => HtmlMessageContent(message: message, presentation: presentation),
-    11 => ArticleMessageContent(message: message, presentation: presentation),
+    11 => ArticleMessageContent(
+      message: message,
+      presentation: presentation,
+      apiBaseUrl: apiBaseUrl,
+      maxWidth: maxWidth,
+    ),
     12 => HistoryMessageContent(message: message, presentation: presentation),
     3 => VoiceMessageContent(
       message: message,

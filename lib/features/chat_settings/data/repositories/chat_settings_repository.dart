@@ -19,6 +19,88 @@ class ChatSettingsRepository {
   final ChatMemberDao _dao;
   final SessionChangeBus? _sessionChangeBus;
 
+  /// 读取本地缓存的成员列表与总数（0 延迟即时呈现）
+  Future<MemberPage> loadLocalMembers({
+    required int ownerId,
+    required String sessionUnitId,
+    int? cursorScore,
+    String? cursorId,
+    int limit = 30,
+    String keyword = '',
+  }) async {
+    final local = await _dao.readPage(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      cursorScore: cursorScore,
+      cursorId: cursorId,
+      limit: limit,
+      keyword: keyword,
+    );
+    var count = await _dao.readMemberCount(sessionUnitId);
+    if (count == null || count <= 0) {
+      count = await _dao.countMembers(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        keyword: keyword,
+      );
+    }
+    final isLoadedAll = await _dao.isLoadedAll(sessionUnitId);
+    final hasMore = !isLoadedAll && local.length >= limit;
+    final resolvedCount =
+        count > 0 ? count : (local.isNotEmpty ? local.length : null);
+    return MemberPage(local, hasMore, resolvedCount);
+  }
+
+  /// 从服务端拉取最新成员列表并更新本地缓存与状态
+  Future<MemberPage> loadRemoteMembers({
+    required int ownerId,
+    required String sessionUnitId,
+    int? cursorScore,
+    String? cursorId,
+    int limit = 30,
+    int skipCount = 0,
+    String keyword = '',
+  }) async {
+    final hasCursor = cursorScore != null || (cursorId != null && cursorId.isNotEmpty);
+    final remote = await _api.getMembers(
+      sessionUnitId: sessionUnitId,
+      limit: limit,
+      maxScore: cursorScore,
+      cursorId: cursorId,
+      skipCount: hasCursor ? 0 : skipCount,
+      keyword: keyword,
+    );
+
+    if (remote.items.isNotEmpty) {
+      await _dao.upsertAll(ownerId, sessionUnitId, remote.items);
+    }
+
+    final isFirstPage =
+        cursorScore == null && cursorId == null && skipCount == 0;
+    final hasMore = remote.hasMore ?? (remote.items.length >= limit);
+
+    // 仅在无搜索、第一页请求时拿到全群权威总人数，才持久化到本地
+    if (isFirstPage && keyword.isEmpty && remote.totalCount > 0) {
+      await _dao.updateState(
+        sessionUnitId,
+        totalCount: remote.totalCount,
+        loadedAll: !hasMore,
+      );
+    } else if (!hasMore && keyword.isEmpty) {
+      await _dao.updateState(
+        sessionUnitId,
+        loadedAll: true,
+      );
+    }
+
+    debugPrint(
+      '[loadRemoteMembers] session=$sessionUnitId count=${remote.items.length} '
+      'total=${remote.totalCount} hasMore=$hasMore',
+    );
+    return MemberPage(remote.items, hasMore, remote.totalCount);
+  }
+
+  /// 兼容旧调用入口
   Future<MemberPage> loadMembers({
     required int ownerId,
     required String sessionUnitId,
@@ -28,9 +110,8 @@ class ChatSettingsRepository {
     String keyword = '',
     bool forceRemote = false,
   }) async {
-    var local = <ChatMember>[];
     if (!forceRemote) {
-      local = await _dao.readPage(
+      final localPage = await loadLocalMembers(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
         cursorScore: cursorScore,
@@ -38,43 +119,19 @@ class ChatSettingsRepository {
         limit: limit,
         keyword: keyword,
       );
-      debugPrint(
-        '[loadMembers][local] session=$sessionUnitId requested=$limit '
-        'cursorScore=$cursorScore cursorId=$cursorId added=${local.length}',
-      );
-      if (local.length >= limit) return MemberPage(local, true, null);
-      if (await _dao.isLoadedAll(sessionUnitId)) {
-        return MemberPage(local, false, null);
+      if (localPage.items.length >= limit) {
+        return localPage;
       }
     }
 
-    final last = local.isEmpty ? null : local.last;
-    final remote = await _api.getMembers(
+    return loadRemoteMembers(
+      ownerId: ownerId,
       sessionUnitId: sessionUnitId,
-      limit: limit - local.length,
-      maxScore: last?.score ?? cursorScore,
-      cursorId: last?.id ?? cursorId,
+      cursorScore: cursorScore,
+      cursorId: cursorId,
+      limit: limit,
       keyword: keyword,
     );
-    await _dao.upsertAll(ownerId, sessionUnitId, remote.items);
-    final requestedRemoteCount = limit - local.length;
-    final hasMore =
-        remote.hasMore ?? remote.items.length >= requestedRemoteCount;
-    await _dao.updateState(
-      sessionUnitId,
-      totalCount: remote.totalCount,
-      loadedAll: !hasMore,
-    );
-    debugPrint(
-      '[loadMembers][remote] session=$sessionUnitId received=${remote.items.length} '
-      'persisted=${remote.items.length} total=${remote.totalCount} hasMore=$hasMore',
-    );
-    final merged =
-        <String, ChatMember>{
-          for (final item in local) item.id: item,
-          for (final item in remote.items) item.id: item,
-        }.values.toList();
-    return MemberPage(merged, hasMore, remote.totalCount);
   }
 
   Future<void> setTopping(String id, bool value) async {

@@ -101,6 +101,7 @@ class ChatController extends ChangeNotifier {
   final SignalRGateway _signalRGateway;
   final int ownerId;
   final String sessionUnitId;
+  int get effectiveOwnerId => ownerId > 0 ? ownerId : (friend?.ownerId ?? 0);
   final List<ChatMessage> _messages = <ChatMessage>[];
   final Set<String> _liveAnimatedMessageIds = <String>{};
   final Map<String, SelectedFile> _pendingFiles = <String, SelectedFile>{};
@@ -302,11 +303,12 @@ class ChatController extends ChangeNotifier {
 
     isLoading = true;
     final localLoadWatch = Stopwatch()..start();
+    var hasLocalMessages = false;
     try {
       final results = await Future.wait([
         _sessionRepository.loadLocalFriendDetail(sessionUnitId),
         _repository.loadInitialLocal(
-          ownerId: ownerId,
+          ownerId: effectiveOwnerId,
           sessionUnitId: sessionUnitId,
           limit: initialPageSize,
         ),
@@ -325,6 +327,7 @@ class ChatController extends ChangeNotifier {
       _deduplicateMessages();
       _restoreAiStreamReplies();
       hasMore = localPage.hasMore;
+      hasLocalMessages = _messages.isNotEmpty;
 
       _initialUnreadDividerMessageId = findInitialUnreadDividerMessageId(
         messages: _messages,
@@ -344,46 +347,94 @@ class ChatController extends ChangeNotifier {
         'cost=${localLoadWatch.elapsedMilliseconds}ms | '
         'error=$exception',
       );
-    } finally {
-      isLoading = false;
-      notifyListeners();
     }
 
-    if (_messages.isEmpty && hasMore) {
-      unawaited(loadMore());
+    if (_isDisposed) return;
+
+    if (hasLocalMessages) {
+      isLoading = false;
+      notifyListeners();
+    } else {
+      final remoteWatch = Stopwatch()..start();
+      debugPrint(
+        '[ChatTrace] 🚀 local cache empty, pulling remote messages immediately | '
+        'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
+      );
+      try {
+        final remotePage = await _repository.loadHistory(
+          ownerId: effectiveOwnerId,
+          sessionUnitId: sessionUnitId,
+          beforeScore: null,
+          limit: initialPageSize,
+        );
+        if (_isDisposed) return;
+        _messages
+          ..clear()
+          ..addAll(remotePage.items);
+        _deduplicateMessages();
+        _restoreAiStreamReplies();
+        hasMore = remotePage.hasMore;
+        _initialUnreadDividerMessageId = findInitialUnreadDividerMessageId(
+          messages: _messages,
+          readMessageId: friend?.readMessageId,
+        );
+        debugPrint(
+          '[ChatTrace] ✔ initial remote messages loaded | '
+          'cost=${remoteWatch.elapsedMilliseconds}ms | '
+          'count=${_messages.length}',
+        );
+      } catch (remoteError) {
+        if (_isDisposed) return;
+        error = remoteError;
+        debugPrint(
+          '[ChatTrace] ✖ initial remote messages load failed | '
+          'cost=${remoteWatch.elapsedMilliseconds}ms | '
+          'error=$remoteError',
+        );
+      } finally {
+        if (!_isDisposed) {
+          isLoading = false;
+          notifyListeners();
+        }
+      }
     }
+
+    if (_isDisposed) return;
 
     // Defer background network synchronization until after the page route animation
     unawaited(
-      Future.delayed(const Duration(milliseconds: 300), () async {
-        if (_isDisposed) return;
-        debugPrint(
-          '[ChatTrace] ⏳ [3/5] deferred network sync triggered | '
-          'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
-        );
-        await _restoreActiveAiRun();
-        if (_isDisposed) return;
-        // The friend detail supplies the authoritative remote destination
-        // (AI/contact) and lastMessage. It must follow the local Friend cache
-        // directly, before subsequent message/read-state synchronization.
-        await _refreshFriendDetail();
-        if (_isDisposed) return;
-        // SignalR may have been disconnected while the AI final message was
-        // persisted.  Always run the incremental pull, including for a fresh
-        // local cache (cursor = 0), so reopening a conversation cannot lose
-        // an offline reply merely because SQLite has no prior message yet.
-        final syncWatch = Stopwatch()..start();
-        await loadLatest();
-        if (_isDisposed) return;
-        debugPrint(
-          '[ChatTrace] ✔ [4/5] latest messages synced | '
-          'cost=${syncWatch.elapsedMilliseconds}ms | '
-          'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
-        );
-        // Reading is intentionally last: it must only acknowledge messages
-        // after the remote Friend and message payloads are persisted locally.
-        await markLatestRead();
-      }),
+      Future.delayed(
+        hasLocalMessages ? const Duration(milliseconds: 300) : Duration.zero,
+        () async {
+          if (_isDisposed) return;
+          debugPrint(
+            '[ChatTrace] ⏳ [3/5] deferred network sync triggered | '
+            'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
+          );
+          await _restoreActiveAiRun();
+          if (_isDisposed) return;
+          // The friend detail supplies the authoritative remote destination
+          // (AI/contact) and lastMessage. It must follow the local Friend cache
+          // directly, before subsequent message/read-state synchronization.
+          await _refreshFriendDetail();
+          if (_isDisposed) return;
+          // SignalR may have been disconnected while the AI final message was
+          // persisted.  Always run the incremental pull, including for a fresh
+          // local cache (cursor = 0), so reopening a conversation cannot lose
+          // an offline reply merely because SQLite has no prior message yet.
+          final syncWatch = Stopwatch()..start();
+          await loadLatest();
+          if (_isDisposed) return;
+          debugPrint(
+            '[ChatTrace] ✔ [4/5] latest messages synced | '
+            'cost=${syncWatch.elapsedMilliseconds}ms | '
+            'totalElapsed=${_traceStopwatch.elapsedMilliseconds}ms',
+          );
+          // Reading is intentionally last: it must only acknowledge messages
+          // after the remote Friend and message payloads are persisted locally.
+          await markLatestRead();
+        },
+      ),
     );
   }
 
@@ -478,7 +529,7 @@ class ChatController extends ChangeNotifier {
     final watch = Stopwatch()..start();
     try {
       final remote = await _sessionRepository.loadRemoteFriendDetail(
-        ownerId: ownerId,
+        ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
       );
       friend = remote;
@@ -509,7 +560,7 @@ class ChatController extends ChangeNotifier {
     final watch = Stopwatch()..start();
     try {
       final page = await _repository.loadHistory(
-        ownerId: ownerId,
+        ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
         beforeScore: _messages.isEmpty ? null : _messages.last.score,
         limit: pageSize,
@@ -555,7 +606,7 @@ class ChatController extends ChangeNotifier {
     // database can reliably carry forward the newest persisted server ID.
     try {
       final minMessageId = await _repository.maxLocalServerId(
-        ownerId: ownerId,
+        ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
       );
       if (_isDisposed) return;
@@ -563,7 +614,7 @@ class ChatController extends ChangeNotifier {
         return;
       }
       final latest = await _repository.loadLatest(
-        ownerId: ownerId,
+        ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
         minMessageId: minMessageId,
       );

@@ -21,7 +21,20 @@ class PagedResultDto<T> {
             : List<T>.empty(growable: false);
     final rawCount = json['totalCount'];
     final extra = json['extra'];
+    final nextCursor = extra is Map && extra['nextCursor'] is Map
+        ? (extra['nextCursor'] as Map)
+        : null;
     final rawHasMore = extra is Map ? extra['hasMore'] : null;
+    final cursorTicks = nextCursor != null
+        ? (nextCursor['cursorScore'] is num
+            ? (nextCursor['cursorScore'] as num).toInt()
+            : int.tryParse('${nextCursor['cursorScore']}'))
+        : (extra is Map && extra['nextCursorTicks'] is num
+            ? (extra['nextCursorTicks'] as num).toInt()
+            : null);
+    final cursorId = nextCursor != null
+        ? nextCursor['cursorId']?.toString()
+        : (extra is Map ? extra['nextCursorId']?.toString() : null);
     return PagedResultDto<T>(
       items: items,
       totalCount:
@@ -29,11 +42,8 @@ class PagedResultDto<T> {
               ? rawCount.toInt()
               : int.tryParse('$rawCount') ?? items.length,
       hasMore: rawHasMore is bool ? rawHasMore : null,
-      nextCursorTicks:
-          extra is Map && extra['nextCursorTicks'] is num
-              ? (extra['nextCursorTicks'] as num).toInt()
-              : null,
-      nextCursorId: extra is Map ? extra['nextCursorId']?.toString() : null,
+      nextCursorTicks: cursorTicks,
+      nextCursorId: cursorId,
     );
   }
 

@@ -11,6 +11,7 @@ class ChatMemberApi {
     required int limit,
     int? maxScore,
     String? cursorId,
+    int? skipCount,
     String keyword = '',
   }) async {
     final json = await _client.get<Map<String, dynamic>>(
@@ -18,6 +19,7 @@ class ChatMemberApi {
       query: <String, Object?>{
         'sessionUnitId': sessionUnitId,
         'maxResultCount': limit,
+        if (skipCount != null && skipCount > 0) 'skipCount': skipCount,
         if (maxScore != null) 'maxScore': maxScore,
         if (cursorId != null) 'cursorId': cursorId,
         if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),

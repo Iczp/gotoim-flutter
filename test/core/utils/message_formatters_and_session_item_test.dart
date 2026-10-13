@@ -77,6 +77,14 @@ void main() {
       expect(formatMessageTime(target, now: baseNow), equals('昨天 14:20'));
     });
 
+    test('session and chat times keep afternoon hours in 24-hour format', () {
+      final target = DateTime(2026, 9, 7, 14, 46);
+      final now = DateTime(2026, 9, 7, 16);
+
+      expect(formatMessageTime(target, now: now), equals('下午 14:46'));
+      expect(formatChatMessageTime(target), equals('9-7 14:46'));
+    });
+
     test('returns weekday for within 7 days', () {
       // 2026-09-07 is Monday (星期一)
       // 2026-09-04 is Friday (星期五)
