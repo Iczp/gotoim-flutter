@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
@@ -123,6 +125,7 @@ class ChatController extends ChangeNotifier {
   void _markLiveMessageForAnimation(String localId) {
     _liveAnimatedMessageIds.add(localId);
   }
+
   SessionSummary? friend;
   String _title;
   StreamSubscription<SessionChangeEvent>? _sessionChangeSubscription;
@@ -225,6 +228,15 @@ class ChatController extends ChangeNotifier {
       (asMap(friend?.raw['destination'])['thumbnail'] ??
               asMap(friend?.raw['destination'])['portrait'])
           ?.toString();
+  String? get myAvatarUrl {
+    final owner = asMap(friend?.raw['owner'] ?? friend?.raw['Owner']);
+    final value = firstNonEmpty(<Object?>[
+      owner['thumbnail'],
+      owner['portrait'],
+    ]);
+    return value.isEmpty ? null : value;
+  }
+
   int? get peerChatObjectId =>
       asInt(asMap(friend?.raw['destination'])['id']) ??
       asInt(friend?.raw['destinationId']);
@@ -294,7 +306,7 @@ class ChatController extends ChangeNotifier {
     _attachmentTransferService.addListener(_onAttachmentTransferChanged);
     _sessionChangeSubscription = _sessionChangeBus.events.listen((event) {
       if (event.ownerId == ownerId && event.sessionUnitId == sessionUnitId) {
-        unawaited(_reloadFromLocalChange());
+        unawaited(_reloadFromLocalChange(messageId: event.messageId));
       }
     });
     _aiStreamSubscription = _aiStreamChangeBus.events.listen(_onAiStreamEvent);
@@ -423,7 +435,7 @@ class ChatController extends ChangeNotifier {
           // local cache (cursor = 0), so reopening a conversation cannot lose
           // an offline reply merely because SQLite has no prior message yet.
           final syncWatch = Stopwatch()..start();
-          await loadLatest();
+          await loadLatest(refreshRecent: true);
           if (_isDisposed) return;
           debugPrint(
             '[ChatTrace] ✔ [4/5] latest messages synced | '
@@ -598,7 +610,7 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  Future<void> loadLatest() async {
+  Future<void> loadLatest({bool refreshRecent = false}) async {
     if (_isDisposed || isLoadingLatest) return;
     isLoadingLatest = true;
     // The cursor must come from Drift instead of this controller's temporary
@@ -610,13 +622,14 @@ class ChatController extends ChangeNotifier {
         sessionUnitId: sessionUnitId,
       );
       if (_isDisposed) return;
-      if (minMessageId <= 0) {
+      if (minMessageId <= 0 && !refreshRecent) {
         return;
       }
       final latest = await _repository.loadLatest(
         ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
         minMessageId: minMessageId,
+        refreshRecent: refreshRecent,
       );
       if (_isDisposed) return;
       final byId = <String, ChatMessage>{
@@ -1160,11 +1173,22 @@ class ChatController extends ChangeNotifier {
     if (value) clearNewMessageCount();
   }
 
-  Future<void> _reloadFromLocalChange() async {
-    final latest = await _repository.loadLocalLatest(
-      ownerId: ownerId,
-      sessionUnitId: sessionUnitId,
-    );
+  Future<void> _reloadFromLocalChange({int? messageId}) async {
+    final changed =
+        messageId == null
+            ? null
+            : await _repository.findLocalByServerId(
+              ownerId: ownerId,
+              sessionUnitId: sessionUnitId,
+              serverId: messageId,
+            );
+    final latest =
+        changed != null
+            ? <ChatMessage>[changed]
+            : await _repository.loadLocalLatest(
+              ownerId: ownerId,
+              sessionUnitId: sessionUnitId,
+            );
     var receivedIncoming = false;
     for (final message in latest) {
       final known = _messages.any(
@@ -1172,7 +1196,7 @@ class ChatController extends ChangeNotifier {
             item.localId == message.localId ||
             (item.serverId != null && item.serverId == message.serverId),
       );
-      if (!known && !message.isMine) {
+      if (!known && !message.isMine && !message.isRollbacked) {
         receivedIncoming = true;
         _markLiveMessageForAnimation(message.localId);
       }
@@ -1259,7 +1283,14 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> retryFile(ChatMessage message) async {
-    final file = _pendingFiles[message.localId];
+    var file = _pendingFiles[message.localId];
+    if (file == null && message.localFilePath != null && !kIsWeb) {
+      final ioFile = File(message.localFilePath!);
+      if (ioFile.existsSync()) {
+        file = await SelectedFile.fromXFile(XFile(ioFile.path));
+        _pendingFiles[message.localId] = file;
+      }
+    }
     if (file == null || message.state == 'sending') return;
     final sending = message.copyWith(state: 'sending');
     _replaceMessage(sending);
@@ -1269,19 +1300,30 @@ class ChatController extends ChangeNotifier {
       try {
         final sent =
             message.messageType == 3
-                ? await _repository.sendLocalVoice(local: sending, file: file)
+                ? await _repository.sendLocalVoice(local: sending, file: file!)
                 : message.messageType == 2
-                ? await _repository.sendLocalImage(local: sending, file: file)
+                ? await _repository.sendLocalImage(local: sending, file: file!)
                 : message.messageType == 4
-                ? await _repository.sendLocalVideo(local: sending, file: file)
-                : await _repository.sendLocalFile(local: sending, file: file);
+                ? await _repository.sendLocalVideo(local: sending, file: file!)
+                : await _repository.sendLocalFile(local: sending, file: file!);
         if (_isDisposed) return;
         _replaceMessage(sent);
         if (sent.state == 'sent') _pendingFiles.remove(message.localId);
         notifyListeners();
         _playSentEffect(sent);
-      } catch (_) {
-        if (!_isDisposed) notifyListeners();
+      } catch (error) {
+        if (!_isDisposed) {
+          final failedMsg = sending.copyWith(
+            state: 'failed',
+            raw: <String, dynamic>{
+              ...sending.raw,
+              'errorMessage': '$error',
+              'error': '$error',
+            },
+          );
+          _replaceMessage(failedMsg);
+          notifyListeners();
+        }
       }
     }());
   }
@@ -1292,6 +1334,10 @@ class ChatController extends ChangeNotifier {
       await retryFile(message);
       return;
     }
+    final sending = message.copyWith(state: 'sending');
+    _replaceMessage(sending);
+    if (!_isDisposed) notifyListeners();
+
     unawaited(() async {
       try {
         final retried = await _repository.retryText(message);
@@ -1299,15 +1345,36 @@ class ChatController extends ChangeNotifier {
         _replaceMessage(retried);
         notifyListeners();
         _playSentEffect(retried);
-      } catch (_) {
-        if (!_isDisposed) notifyListeners();
+      } catch (error) {
+        if (!_isDisposed) {
+          final failedMsg = message.copyWith(
+            state: 'failed',
+            raw: <String, dynamic>{
+              ...message.raw,
+              'errorMessage': '$error',
+              'error': '$error',
+            },
+          );
+          _replaceMessage(failedMsg);
+          notifyListeners();
+        }
       }
     }());
   }
 
-  bool canRetryMessage(ChatMessage message) =>
-      message.state == 'failed' &&
-      (message.messageType == 0 || _pendingFiles.containsKey(message.localId));
+  bool canRetryMessage(ChatMessage message) {
+    if (message.state != 'failed') return false;
+    if (message.messageType == 0) return true;
+    if (_pendingFiles.containsKey(message.localId)) return true;
+    if (!kIsWeb && message.localFilePath != null) {
+      try {
+        return File(message.localFilePath!).existsSync();
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
 
   String _attachmentSource(ChatMessage message) =>
       message.mediaUrl ?? message.audioUrl ?? message.linkUrl;
@@ -1476,7 +1543,7 @@ class ChatController extends ChangeNotifier {
     try {
       await _restoreActiveAiRun();
       await _refreshFriendDetail();
-      await loadLatest();
+      await loadLatest(refreshRecent: true);
       await markLatestRead();
       debugPrint(
         '[ChatTrace] SignalR reconnect durable recovery complete | '

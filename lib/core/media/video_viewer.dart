@@ -47,6 +47,23 @@ class VideoViewer extends StatefulWidget {
   State<VideoViewer> createState() => _VideoViewerState();
 }
 
+String formatVideoErrorMessage(Object? error) {
+  if (error == null) return '未知错误';
+  final str = error.toString();
+  if (str.contains('本地视频文件不存在') ||
+      str.contains('FileNotFoundException') ||
+      str.contains('ENOENT')) {
+    return '本地视频文件不存在或已被清理';
+  }
+  if (str.contains('Source error') || str.contains('ExoPlaybackException')) {
+    return '视频资源加载失败或格式不支持';
+  }
+  if (str.contains('PlatformException')) {
+    return '播放器解析失败';
+  }
+  return str;
+}
+
 class _VideoViewerState extends State<VideoViewer>
     with AutomaticKeepAliveClientMixin {
   @override
@@ -65,7 +82,9 @@ class _VideoViewerState extends State<VideoViewer>
     super.initState();
     _session = VideoPlaybackSessionRegistry.obtain(
       _sessionId,
-      widget.item.source,
+      widget.item.playableSource,
+      localPath: widget.item.localPath,
+      item: widget.item,
     );
     _session.addListener(_onSessionChanged);
     unawaited(_initializeAndAutoPlay());
@@ -87,22 +106,7 @@ class _VideoViewerState extends State<VideoViewer>
     }
   }
 
-  String _formatErrorMessage(Object? error) {
-    if (error == null) return '未知错误';
-    final str = error.toString();
-    if (str.contains('本地视频文件不存在') ||
-        str.contains('FileNotFoundException') ||
-        str.contains('ENOENT')) {
-      return '本地视频文件不存在或已被清理';
-    }
-    if (str.contains('Source error') || str.contains('ExoPlaybackException')) {
-      return '视频资源加载失败或格式不支持';
-    }
-    if (str.contains('PlatformException')) {
-      return '播放器解析失败';
-    }
-    return str;
-  }
+  String _formatErrorMessage(Object? error) => formatVideoErrorMessage(error);
 
   void _onSessionChanged() {
     if (mounted) {
@@ -409,23 +413,31 @@ void openFloatingVideoWindow(
   // 若小窗口已经存在，直接激活并置顶
   if (manager.restore(id)) return;
 
-  final session = VideoPlaybackSessionRegistry.obtain(id, item.source)
-    ..initialize();
+  final session = VideoPlaybackSessionRegistry.obtain(
+    id,
+    item.playableSource,
+    localPath: item.localPath,
+    item: item,
+  )..initialize();
 
   void restoreToFullscreen() {
     manager.close(id);
-    if (items != null && items.isNotEmpty) {
-      final nav =
-          rootNavigatorKey.currentState ??
-          Navigator.maybeOf(context, rootNavigator: true) ??
-          Navigator.maybeOf(context);
-      if (nav != null) {
-        MediaPreview.openWithNavigator(
-          nav,
-          items: items,
-          initialIndex: initialIndex,
-        );
-      }
+    final effectiveItems =
+        (items != null && items.isNotEmpty) ? items : <MediaPreviewItem>[item];
+    final effectiveIndex =
+        (items != null && items.isNotEmpty && initialIndex >= 0)
+            ? initialIndex
+            : 0;
+    final nav =
+        rootNavigatorKey.currentState ??
+        Navigator.maybeOf(context, rootNavigator: true) ??
+        Navigator.maybeOf(context);
+    if (nav != null) {
+      MediaPreview.openWithNavigator(
+        nav,
+        items: effectiveItems,
+        initialIndex: effectiveIndex,
+      );
     }
   }
 
@@ -501,15 +513,65 @@ class _FloatingVideoContentState extends State<FloatingVideoContent> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.session.controller;
-    if (controller == null || !controller.value.isInitialized) {
-      return const ColoredBox(
-        color: Colors.black,
-        child: Center(child: CircularProgressIndicator(color: Colors.white)),
+    final isInitialized = controller != null && controller.value.isInitialized;
+    final error = widget.session.error;
+
+    Widget body;
+    if (error != null) {
+      body = Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.wifi_off_rounded,
+                color: Colors.white70,
+                size: 32,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                formatVideoErrorMessage(error),
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => widget.session.initialize(force: true),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    '重试',
+                    style: TextStyle(color: Colors.white, fontSize: 11),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
-    }
-    return Material(
-      type: MaterialType.transparency,
-      child: Stack(
+    } else if (!isInitialized) {
+      body = const Center(
+        child: SizedBox.square(
+          dimension: 28,
+          child: CircularProgressIndicator(
+            color: Colors.white,
+            strokeWidth: 2.5,
+          ),
+        ),
+      );
+    } else {
+      body = Stack(
         fit: StackFit.expand,
         children: [
           GestureDetector(
@@ -533,30 +595,6 @@ class _FloatingVideoContentState extends State<FloatingVideoContent> {
                 size: 44,
                 color: Colors.white.withValues(alpha: 0.9),
                 shadows: const [Shadow(blurRadius: 6, color: Colors.black54)],
-              ),
-            ),
-          ),
-          Positioned(
-            left: 2,
-            top: 2,
-            child: Opacity(
-              opacity: 0.8,
-              child: IconButton(
-                tooltip: '恢复全屏播放',
-                onPressed: widget.onRestore,
-                icon: const Icon(Icons.fullscreen, color: Colors.white),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 2,
-            right: 2,
-            child: Opacity(
-              opacity: 0.8,
-              child: IconButton(
-                tooltip: '关闭视频',
-                onPressed: widget.onClose,
-                icon: const Icon(Icons.close, color: Colors.white),
               ),
             ),
           ),
@@ -631,6 +669,61 @@ class _FloatingVideoContentState extends State<FloatingVideoContent> {
                   valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Material(
+      type: MaterialType.transparency,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(child: ColoredBox(color: Colors.black, child: body)),
+          // 悬浮窗控制按钮始终处于顶层，无论 loading、播放还是报错均可交互
+          Positioned(
+            left: 4,
+            top: 4,
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.black45,
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 30,
+                  height: 30,
+                ),
+                tooltip: '恢复全屏播放',
+                onPressed: widget.onRestore,
+                icon: const Icon(
+                  Icons.fullscreen,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.black45,
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 30,
+                  height: 30,
+                ),
+                tooltip: '关闭视频',
+                onPressed: widget.onClose,
+                icon: const Icon(Icons.close, color: Colors.white, size: 18),
+              ),
             ),
           ),
         ],

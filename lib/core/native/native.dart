@@ -6,6 +6,7 @@ import 'device.dart';
 import 'sensor.dart';
 import 'system.dart';
 
+export 'app_haptics.dart';
 export 'device.dart';
 export 'sensor.dart';
 export 'system.dart';

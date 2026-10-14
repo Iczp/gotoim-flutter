@@ -369,6 +369,25 @@ class UnifiedDatabase {
     final decoded = jsonDecode(rows.single['raw'] as String);
     if (decoded is! Map) return;
     final raw = Map<String, dynamic>.from(decoded);
+    final previousMessage = raw['lastMessage'];
+    if (previousMessage is Map) {
+      final previousId = int.tryParse(
+        '${previousMessage['id'] ?? previousMessage['messageId']}',
+      );
+      final nextId = int.tryParse('${message['id'] ?? message['messageId']}');
+      // An older withdrawal must not replace the conversation's latest message.
+      if (previousId != null && nextId != null && nextId < previousId) return;
+      if (previousId != null &&
+          previousId == nextId &&
+          (previousMessage['isRollbacked'] == true ||
+              previousMessage['rollbackTime'] != null)) {
+        message = <String, dynamic>{
+          ...message,
+          'isRollbacked': true,
+          'rollbackTime': previousMessage['rollbackTime'],
+        };
+      }
+    }
     final messageTime =
         DateTime.tryParse('${message['creationTime'] ?? ''}') ?? DateTime.now();
     final ticks = messageTime.millisecondsSinceEpoch;
@@ -677,7 +696,11 @@ class UnifiedDatabase {
         'ownerId = excluded.ownerId, '
         'sessionUnitId = excluded.sessionUnitId, '
         'state = excluded.state, '
-        'raw = excluded.raw, '
+        "raw = CASE WHEN json_extract(Messages.raw, '\$.isRollbacked') = 1 "
+        "OR json_extract(Messages.raw, '\$.rollbackTime') IS NOT NULL "
+        "THEN json_set(excluded.raw, '\$.isRollbacked', json('true'), "
+        "'\$.rollbackTime', json_extract(Messages.raw, '\$.rollbackTime')) "
+        'ELSE excluded.raw END, '
         'updateTime = excluded.createTime',
         <Object?>[
           row['id'],
@@ -893,7 +916,15 @@ class UnifiedDatabase {
       '(eventId, eventName, sessionId, page, eventTime, properties, retryCount, nextRetryTime, createdAt) '
       'VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?) '
       'ON CONFLICT(eventId) DO NOTHING',
-      <Object?>[eventId, eventName, sessionId, page, eventTime, properties, now],
+      <Object?>[
+        eventId,
+        eventName,
+        sessionId,
+        page,
+        eventTime,
+        properties,
+        now,
+      ],
     );
   }
 

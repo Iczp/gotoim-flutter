@@ -40,6 +40,7 @@ class _ArticleMessageDiagnosticsPageState
     },
     {
       "title": "《庆余年》神预测：京都掀起鏖战，人质拿捏东宫",
+      "description": "二皇子绝地反扑，范闲运筹帷幄，关键对峙一触即发。",
       "coverImageUrl": "https://picsum.photos/seed/tencent_news2/200/200",
       "originalUrl": "https://news.qq.com/article/2"
     },

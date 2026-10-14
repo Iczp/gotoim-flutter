@@ -6,6 +6,7 @@ import '../../../../core/floating_window/floating_window.dart';
 import '../../../../core/utils/api_url_resolver.dart';
 import '../../../../core/media/media_preview.dart';
 import '../../data/models/chat_message.dart';
+import '../widgets/chat_message_delivery_state.dart';
 import 'chat_message_presentation.dart';
 import 'media_message_layout.dart';
 
@@ -18,6 +19,7 @@ class VideoMessageContent extends StatelessWidget {
     required this.mediaItems,
     required this.initialIndex,
     this.presentation = ChatMessagePresentation.normal,
+    this.onRetry,
     super.key,
   });
 
@@ -27,6 +29,7 @@ class VideoMessageContent extends StatelessWidget {
   final List<MediaPreviewItem> mediaItems;
   final int initialIndex;
   final ChatMessagePresentation presentation;
+  final VoidCallback? onRetry;
 
   Uri? get _uri {
     final localPath = message.localFilePath;
@@ -84,7 +87,7 @@ class VideoMessageContent extends StatelessWidget {
             ? <MediaPreviewItem>[item, ...mediaItems]
             : mediaItems;
     final compact = presentation == ChatMessagePresentation.quote;
-    return InkWell(
+    final bubble = InkWell(
       onTap:
           _uri == null
               ? null
@@ -198,6 +201,25 @@ class VideoMessageContent extends StatelessWidget {
         ),
       ),
     );
+
+    if (presentation == ChatMessagePresentation.normal &&
+        message.isMine &&
+        (message.state == 'sending' || message.state == 'failed')) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          ChatMessageDeliveryState(
+            isMine: message.isMine,
+            state: message.state,
+            onRetry: onRetry,
+          ),
+          Flexible(child: bubble),
+        ],
+      );
+    }
+
+    return bubble;
   }
 
   String _formatDuration(Duration? duration) {

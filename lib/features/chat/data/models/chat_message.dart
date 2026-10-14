@@ -93,6 +93,14 @@ class ChatMessage {
   List<ArticleMessageItem> get articleItems =>
       ArticleMessageItem.fromContent(raw['content']);
 
+  /// 发送失败的错误原因（若未失败或无错误信息则为 null）
+  String? get errorMessage {
+    final msg = raw['errorMessage'] ?? raw['error'] ?? raw['errorDescription'];
+    if (msg == null) return null;
+    final str = msg.toString().trim();
+    return str.isEmpty ? null : str;
+  }
+
   Map<String, dynamic> get senderSessionUnit => asMap(raw['senderSessionUnit']);
   int? get senderChatObjectId =>
       asInt(asMap(senderSessionUnit['owner'])['id']) ??

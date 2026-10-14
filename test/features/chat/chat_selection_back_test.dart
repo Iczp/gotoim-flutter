@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/features/chat/presentation/widgets/chat_title_bar.dart';
 
@@ -117,6 +118,60 @@ void main() {
 
       expect(cancelCount, equals(1));
       expect(find.text('正常'), findsOneWidget);
+    });
+
+    testWidgets('ChatTitleBar configures dark status bar icons in light theme', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.light(),
+          home: Scaffold(
+            appBar: ChatTitleBar(
+              title: '测试标题',
+              showTransfer: false,
+              useGlass: true,
+              hasBackground: false,
+              onTransfer: () {},
+              onOpenSettings: () {},
+            ),
+            body: const SizedBox(),
+          ),
+        ),
+      );
+
+      final regions = tester.widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+      );
+      expect(regions, isNotEmpty);
+      final overlay = regions.last.value;
+      expect(overlay.statusBarIconBrightness, equals(Brightness.dark));
+      expect(overlay.statusBarBrightness, equals(Brightness.light));
+    });
+
+    testWidgets('ChatTitleBar configures light status bar icons in dark theme', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: Scaffold(
+            appBar: ChatTitleBar(
+              title: '测试标题',
+              showTransfer: false,
+              useGlass: true,
+              hasBackground: false,
+              onTransfer: () {},
+              onOpenSettings: () {},
+            ),
+            body: const SizedBox(),
+          ),
+        ),
+      );
+
+      final regions = tester.widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+      );
+      expect(regions, isNotEmpty);
+      final overlay = regions.last.value;
+      expect(overlay.statusBarIconBrightness, equals(Brightness.light));
+      expect(overlay.statusBarBrightness, equals(Brightness.dark));
     });
   });
 }

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/app_navigation.dart';
 import '../../../core/logging/app_logger.dart';
+import '../../../core/native/native.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/session_summary.dart';
 import 'current_device_bar.dart';
@@ -273,11 +274,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                                     : null,
                             onLongPress:
                                 item.session != null
-                                    ? () => SessionMenuSheet.show(
-                                      context: context,
-                                      controller: controller,
-                                      session: item.session!,
-                                    )
+                                    ? () {
+                                      AppHaptics.medium();
+                                      SessionMenuSheet.show(
+                                        context: context,
+                                        controller: controller,
+                                        session: item.session!,
+                                      );
+                                    }
                                     : null,
                             showDivider:
                                 index + 1 < listItems.length &&

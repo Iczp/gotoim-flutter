@@ -97,6 +97,8 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),

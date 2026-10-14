@@ -82,28 +82,41 @@ class NativeDevice {
     HapticFeedbackType type = HapticFeedbackType.medium,
     int? durationMs,
   }) async {
-    if (durationMs != null && durationMs > 0) {
-      try {
-        await _methodChannel.invokeMethod<void>('vibrate', <String, dynamic>{
-          'duration': durationMs,
-        });
-        return;
-      } catch (_) {
-        // Fallback to Flutter HapticFeedback if custom timed vibration fails or is unsupported
-      }
+    final effectiveDuration = durationMs ??
+        switch (type) {
+          HapticFeedbackType.selection => 18,
+          HapticFeedbackType.light => 25,
+          HapticFeedbackType.medium => 40,
+          HapticFeedbackType.heavy => 65,
+          HapticFeedbackType.vibrate => 100,
+        };
+
+    // 1. 优先调用原生硬件振动通道（解决华为/荣耀等机型 View.performHapticFeedback 无响应问题）
+    try {
+      await _methodChannel.invokeMethod<bool>('vibrate', <String, dynamic>{
+        'duration': effectiveDuration,
+        'type': type.name,
+      });
+    } catch (_) {
+      // 平台通道未注册或不支持时忽略（如 Desktop/Web/测试环境）
     }
 
-    switch (type) {
-      case HapticFeedbackType.vibrate:
-        await HapticFeedback.vibrate();
-      case HapticFeedbackType.light:
-        await HapticFeedback.lightImpact();
-      case HapticFeedbackType.medium:
-        await HapticFeedback.mediumImpact();
-      case HapticFeedbackType.heavy:
-        await HapticFeedback.heavyImpact();
-      case HapticFeedbackType.selection:
-        await HapticFeedback.selectionClick();
+    // 2. 同时触发系统标准触感反馈（双通道保障）
+    try {
+      switch (type) {
+        case HapticFeedbackType.vibrate:
+          await HapticFeedback.vibrate();
+        case HapticFeedbackType.light:
+          await HapticFeedback.lightImpact();
+        case HapticFeedbackType.medium:
+          await HapticFeedback.mediumImpact();
+        case HapticFeedbackType.heavy:
+          await HapticFeedback.heavyImpact();
+        case HapticFeedbackType.selection:
+          await HapticFeedback.selectionClick();
+      }
+    } catch (_) {
+      // 忽略平台不支持情况
     }
   }
 

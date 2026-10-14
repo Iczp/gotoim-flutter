@@ -49,6 +49,17 @@ class MediaPreviewItem {
   /// 聊天对象会话 ID 或名称。
   final String? chatTarget;
 
+  /// 获取优先用于播放或渲染的有效地址。
+  /// 若本地已存在有效下载或缓存文件，则直接返回本地文件路径；否则返回远端网络地址。
+  String get playableSource {
+    if (localPath != null && localPath!.isNotEmpty && !kIsWeb) {
+      try {
+        if (File(localPath!).existsSync()) return localPath!;
+      } catch (_) {}
+    }
+    return source;
+  }
+
   MediaPreviewItem copyWith({
     String? id,
     String? messageId,

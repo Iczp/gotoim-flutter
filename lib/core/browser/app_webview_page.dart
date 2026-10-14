@@ -12,6 +12,8 @@ import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/data/models/chat_owner.dart';
 import '../config/app_environment.dart';
 import '../utils/api_url_resolver.dart';
+import '../../app/application_providers.dart';
+import '../jsbridge/js_bridge_models.dart';
 
 /// 解析 CSS 颜色值（支持 hex、rgb、rgba、hsl、hsla 及常见命名颜色）
 Color? parseCssColor(String? raw) {
@@ -522,6 +524,85 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
       ),
       onWebViewCreated: (controller) {
         _controller = controller;
+
+        // 统一主信道：GotoIMBridge (处理标准 JSON-RPC 格式调用)
+        controller.addJavaScriptHandler(
+          handlerName: 'GotoIMBridge',
+          callback: (args) async {
+            if (args.isEmpty || args[0] == null) return null;
+            final raw = args[0].toString();
+            try {
+              final dispatcher = ref.read(jsApiDispatcherProvider);
+              return await dispatcher.handleRaw(raw);
+            } catch (e) {
+              debugPrint('[GotoIMBridge] error: $e');
+              return null;
+            }
+          },
+        );
+
+        // 快捷兼容通道：openImage (直接映射至 media.previewImage)
+        controller.addJavaScriptHandler(
+          handlerName: 'openImage',
+          callback: (args) async {
+            if (args.isEmpty || !mounted) return false;
+            try {
+              final dispatcher = ref.read(jsApiDispatcherProvider);
+              final data = <String, dynamic>{};
+              if (args[0] is Map) {
+                data.addAll(Map<String, dynamic>.from(args[0] as Map));
+              } else if (args[0] is String) {
+                data['current'] = args[0].toString();
+                if (args.length > 1 && args[1] is List) {
+                  data['urls'] = (args[1] as List).map((e) => e.toString()).toList();
+                }
+              }
+              final resp = await dispatcher.dispatch(
+                JsBridgeRequest(
+                  id: 'shim_open_image_${DateTime.now().millisecondsSinceEpoch}',
+                  action: 'media.previewImage',
+                  data: data,
+                ),
+              );
+              return resp.success;
+            } catch (e) {
+              debugPrint('[WebViewBridge] openImage error: $e');
+              return false;
+            }
+          },
+        );
+
+        // 快捷兼容通道：openVideo (直接映射至 media.previewVideo)
+        controller.addJavaScriptHandler(
+          handlerName: 'openVideo',
+          callback: (args) async {
+            if (args.isEmpty || !mounted) return false;
+            try {
+              final dispatcher = ref.read(jsApiDispatcherProvider);
+              final data = <String, dynamic>{};
+              if (args[0] is Map) {
+                data.addAll(Map<String, dynamic>.from(args[0] as Map));
+              } else if (args[0] is String) {
+                data['url'] = args[0].toString();
+                if (args.length > 1 && args[1] != null) {
+                  data['poster'] = args[1].toString();
+                }
+              }
+              final resp = await dispatcher.dispatch(
+                JsBridgeRequest(
+                  id: 'shim_open_video_${DateTime.now().millisecondsSinceEpoch}',
+                  action: 'media.previewVideo',
+                  data: data,
+                ),
+              );
+              return resp.success;
+            } catch (e) {
+              debugPrint('[WebViewBridge] openVideo error: $e');
+              return false;
+            }
+          },
+        );
+
         controller.addJavaScriptHandler(
           handlerName: 'close',
           callback: (_) {

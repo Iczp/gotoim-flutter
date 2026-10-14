@@ -7,6 +7,8 @@ import '../../../../core/native/native.dart';
 void showPhoneActionSheet(BuildContext context, String phone) {
   showModalBottomSheet<void>(
     context: context,
+    isDismissible: true,
+    enableDrag: true,
     backgroundColor: Colors.transparent,
     builder:
         (sheetContext) => Container(
@@ -70,6 +72,8 @@ void showPhoneActionSheet(BuildContext context, String phone) {
 void showMediaCallActionSheet(BuildContext context, String displayName) {
   showModalBottomSheet<void>(
     context: context,
+    isDismissible: true,
+    enableDrag: true,
     backgroundColor: Colors.transparent,
     builder:
         (sheetContext) => Container(

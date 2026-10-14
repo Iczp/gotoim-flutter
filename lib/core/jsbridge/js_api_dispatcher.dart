@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../capabilities/client_capability_models.dart';
 import '../capabilities/client_capability_service.dart';
+import '../media/media_preview.dart';
 import '../native/native.dart';
 import '../services/file/file_picker_service.dart';
 import '../services/file/file_upload_service.dart';
@@ -265,6 +266,71 @@ class JsApiDispatcher {
         final cleared = await _capabilities.clearTemporaryFiles();
         _fileReferences.clear();
         return <String, bool>{'cleared': cleared};
+      case 'previewImage':
+      case 'media.previewImage':
+      case 'openImage':
+        final navigator = _navigatorProvider();
+        if (navigator == null) {
+          throw const JsBridgeException(
+            'UNAVAILABLE',
+            '当前没有可用于打开图片预览的 Navigator。',
+          );
+        }
+        final current = _optionalString(request.data, 'current') ?? '';
+        final urls = (request.data['urls'] as List?)
+                ?.map((e) => e.toString())
+                .where((e) => e.isNotEmpty)
+                .toList() ??
+            (current.isNotEmpty ? <String>[current] : <String>[]);
+        if (urls.isEmpty) {
+          throw const JsBridgeException('INVALID_ARGUMENT', '预览图片列表不能为空。');
+        }
+        final index = _optionalInt(request.data, 'index') ??
+            (current.isNotEmpty ? urls.indexOf(current) : 0);
+        final safeIndex = index.clamp(0, urls.length - 1);
+        final items = urls.map((url) {
+          return MediaPreviewItem(
+            id: url,
+            messageId: 'jsbridge_img_${url.hashCode}',
+            type: MediaPreviewType.image,
+            source: url,
+            heroTag: 'jsbridge-image-$url',
+          );
+        }).toList();
+        await MediaPreview.openWithNavigator(
+          navigator,
+          items: items,
+          initialIndex: safeIndex,
+        );
+        return const <String, bool>{'ok': true};
+      case 'previewVideo':
+      case 'media.previewVideo':
+      case 'openVideo':
+        final navigator = _navigatorProvider();
+        if (navigator == null) {
+          throw const JsBridgeException(
+            'UNAVAILABLE',
+            '当前没有可用于打开视频预览的 Navigator。',
+          );
+        }
+        final url = _requiredString(request.data, 'url');
+        final poster = _optionalString(request.data, 'poster');
+        final title = _optionalString(request.data, 'title');
+        final item = MediaPreviewItem(
+          id: url,
+          messageId: 'jsbridge_vid_${url.hashCode}',
+          type: MediaPreviewType.video,
+          source: url,
+          thumbnail: poster,
+          fileName: title,
+          heroTag: 'jsbridge-video-$url',
+        );
+        await MediaPreview.openWithNavigator(
+          navigator,
+          items: [item],
+          initialIndex: 0,
+        );
+        return const <String, bool>{'ok': true};
       case 'chooseImage':
       case 'media.chooseImage':
         final files = await _capabilities.chooseImage(

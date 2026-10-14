@@ -143,6 +143,14 @@ class ArticleMessageContent extends StatelessWidget {
     final cardBg = isDark ? theme.colorScheme.surfaceContainer : Colors.white;
     final dividerColor = theme.colorScheme.outlineVariant.withValues(alpha: 0.35);
 
+    // 统一文章消息副标题/摘要样式：比主标题更淡、更小、字号与行高一致
+    final subtitleStyle = (theme.textTheme.bodySmall ?? const TextStyle()).copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+      fontSize: 13,
+      fontWeight: FontWeight.normal,
+      height: 1.4,
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = maxWidth ?? constraints.maxWidth;
@@ -207,11 +215,7 @@ class ArticleMessageContent extends StatelessWidget {
                                   first.description,
                                   maxLines: 3,
                                   overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                    fontSize: 13.5,
-                                    height: 1.4,
-                                  ),
+                                  style: subtitleStyle,
                                 ),
                               ),
                             if (first.author.isNotEmpty)
@@ -304,18 +308,33 @@ class ArticleMessageContent extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Expanded(
-                            child: Text(
-                              items[index].title.isEmpty
-                                  ? '文章'
-                                  : items[index].title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurface,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w400,
-                                height: 1.35,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  items[index].title.isEmpty
+                                      ? '文章'
+                                      : items[index].title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    color: theme.colorScheme.onSurface,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.35,
+                                  ),
+                                ),
+                                if (items[index].description.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    items[index].description,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: subtitleStyle,
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                           if (items[index].coverImageUrl.isNotEmpty) ...[

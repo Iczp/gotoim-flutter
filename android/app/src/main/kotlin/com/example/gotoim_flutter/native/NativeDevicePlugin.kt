@@ -198,7 +198,26 @@ class NativeDevicePlugin(
             }
 
             "vibrate" -> {
-                val duration = call.argument<Int>("duration") ?: 100
+                val durationArg = call.argument<Int>("duration")
+                val type = call.argument<String>("type") ?: "medium"
+
+                val defaultDuration = when (type) {
+                    "selection" -> 18
+                    "light" -> 25
+                    "heavy" -> 65
+                    "medium" -> 40
+                    else -> 100
+                }
+                val duration = (durationArg ?: defaultDuration).coerceAtLeast(10)
+
+                val amplitude = when (type) {
+                    "selection" -> 90
+                    "light" -> 130
+                    "heavy" -> 255
+                    "medium" -> 180
+                    else -> VibrationEffect.DEFAULT_AMPLITUDE
+                }
+
                 try {
                     val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
@@ -208,18 +227,43 @@ class NativeDevicePlugin(
                         context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                     }
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        vibrator?.vibrate(
-                            VibrationEffect.createOneShot(
-                                duration.toLong(),
-                                VibrationEffect.DEFAULT_AMPLITUDE
-                            )
-                        )
+                    if (vibrator != null && vibrator.hasVibrator()) {
+                        var vibrated = false
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val effectId = when (type) {
+                                "selection" -> VibrationEffect.EFFECT_TICK
+                                "light" -> VibrationEffect.EFFECT_CLICK
+                                "heavy" -> VibrationEffect.EFFECT_HEAVY_CLICK
+                                "medium" -> VibrationEffect.EFFECT_CLICK
+                                else -> -1
+                            }
+                            if (effectId != -1) {
+                                try {
+                                    vibrator.vibrate(VibrationEffect.createPredefined(effectId))
+                                    vibrated = true
+                                } catch (ignored: Exception) {
+                                    // Vendor fallback (e.g. Huawei/Honor) to createOneShot below
+                                }
+                            }
+                        }
+
+                        if (!vibrated) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                vibrator.vibrate(
+                                    VibrationEffect.createOneShot(
+                                        duration.toLong(),
+                                        amplitude
+                                    )
+                                )
+                            } else {
+                                @Suppress("DEPRECATION")
+                                vibrator.vibrate(duration.toLong())
+                            }
+                        }
+                        result.success(true)
                     } else {
-                        @Suppress("DEPRECATION")
-                        vibrator?.vibrate(duration.toLong())
+                        result.success(false)
                     }
-                    result.success(true)
                 } catch (e: Exception) {
                     Log.e(TAG, "vibrate error", e)
                     result.success(false)

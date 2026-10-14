@@ -74,8 +74,15 @@ class MessageRepository {
         state: 'sent',
         raw: <String, dynamic>{...result.raw, ...response},
       );
-    } catch (_) {
-      result = result.copyWith(state: 'failed');
+    } catch (error) {
+      result = result.copyWith(
+        state: 'failed',
+        raw: <String, dynamic>{
+          ...result.raw,
+          'errorMessage': '$error',
+          'error': '$error',
+        },
+      );
     }
     await _dao.upsertAll(<ChatMessage>[result]);
     await _updateSessionSummary(result);
@@ -156,6 +163,7 @@ class MessageRepository {
       },
     );
     await _dao.upsertAll(<ChatMessage>[updated]);
+    await _updateSessionSummary(updated);
     return updated;
   }
 
@@ -228,7 +236,8 @@ class MessageRepository {
           if (image != null && image.isNotEmpty) 'image': image,
         },
         if (quoteMessageId != null) 'quoteMessageId': quoteMessageId,
-        if (remindList != null && remindList.isNotEmpty) 'remindList': remindList,
+        if (remindList != null && remindList.isNotEmpty)
+          'remindList': remindList,
       },
     );
     await _dao.upsertAll(<ChatMessage>[localMessage]);
@@ -258,10 +267,21 @@ class MessageRepository {
         state: 'sent',
         raw: <String, dynamic>{...result.raw, ...response},
       );
-      debugPrint('[MessageRepository.sendLink] 链接消息发送成功 -> sessionUnitId: $sessionUnitId, serverId: $serverId');
+      debugPrint(
+        '[MessageRepository.sendLink] 链接消息发送成功 -> sessionUnitId: $sessionUnitId, serverId: $serverId',
+      );
     } catch (e, st) {
-      debugPrint('[MessageRepository.sendLink] 链接消息发送失败 -> sessionUnitId: $sessionUnitId, error: $e\n$st');
-      result = result.copyWith(state: 'failed');
+      debugPrint(
+        '[MessageRepository.sendLink] 链接消息发送失败 -> sessionUnitId: $sessionUnitId, error: $e\n$st',
+      );
+      result = result.copyWith(
+        state: 'failed',
+        raw: <String, dynamic>{
+          ...result.raw,
+          'errorMessage': '$e',
+          'error': '$e',
+        },
+      );
     }
     await _dao.upsertAll(<ChatMessage>[result]);
     await _updateSessionSummary(result);
@@ -350,12 +370,12 @@ class MessageRepository {
         '[loadMessages][remote] session=$sessionUnitId maxMessageId=$maxMessageId '
         'received=${remote.items.length} persisted=${remote.items.length}',
       );
-      final all =
-          <String, ChatMessage>{
-              for (final item in local) item.localId: item,
-              for (final item in remote.items) item.localId: item,
-            }.values.toList()
-            ..sort((a, b) => b.score.compareTo(a.score));
+      final all = await _dao.readPage(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        beforeScore: beforeScore,
+        limit: limit,
+      );
       return MessagePage(all, hasMore);
     } catch (error) {
       debugPrint(
@@ -373,13 +393,26 @@ class MessageRepository {
     required int minMessageId,
     int limit = 99,
     int maxPages = 10,
+    bool refreshRecent = false,
   }) async {
-    if (minMessageId <= 0) {
+    if (minMessageId <= 0 && !refreshRecent) {
       return const <ChatMessage>[];
     }
     var cursor = minMessageId;
     final collected = <String, ChatMessage>{};
-    for (var pageIndex = 0; pageIndex < maxPages; pageIndex++) {
+    if (refreshRecent) {
+      // Withdrawals do not create a larger message ID. Refresh a bounded
+      // recent window as well as the forward cursor on re-entry/reconnect.
+      final recent = await _api.history(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        limit: limit,
+      );
+      for (final item in recent.items) {
+        collected[item.localId] = item;
+      }
+    }
+    for (var pageIndex = 0; cursor > 0 && pageIndex < maxPages; pageIndex++) {
       final page = await _api.latest(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
@@ -398,12 +431,22 @@ class MessageRepository {
     }
     final items = collected.values.toList(growable: false);
     await _dao.upsertAll(items);
+    final persisted =
+        items.isEmpty
+            ? const <ChatMessage>[]
+            : (await _dao.readPage(
+                  ownerId: ownerId,
+                  sessionUnitId: sessionUnitId,
+                  limit: limit + items.length,
+                ))
+                .where((item) => collected.containsKey(item.localId))
+                .toList(growable: false);
     final persistedMaxMessageId = await _dao.maxServerId(
       ownerId,
       sessionUnitId,
     );
-    if (items.isNotEmpty) {
-      final newest = [...items]
+    if (persisted.isNotEmpty) {
+      final newest = [...persisted]
         ..sort((a, b) => (b.serverId ?? 0).compareTo(a.serverId ?? 0));
       await _updateSessionSummary(newest.first);
     }
@@ -411,7 +454,7 @@ class MessageRepository {
       '[loadMessages][latest] session=$sessionUnitId minMessageId=$minMessageId '
       'received=${items.length} persistedMaxMessageId=$persistedMaxMessageId',
     );
-    return items;
+    return persisted;
   }
 
   Future<ChatMessage> sendText({
@@ -472,8 +515,15 @@ class MessageRepository {
             'quoteMessage': quote.raw,
         },
       );
-    } catch (_) {
-      local = local.copyWith(state: 'failed');
+    } catch (error) {
+      local = local.copyWith(
+        state: 'failed',
+        raw: <String, dynamic>{
+          ...local.raw,
+          'errorMessage': '$error',
+          'error': '$error',
+        },
+      );
     }
     await _dao.upsertAll(<ChatMessage>[local]);
     await _updateSessionSummary(local);
@@ -494,25 +544,52 @@ class MessageRepository {
     if (payloadSessionId.isNotEmpty && payloadSessionId != sessionUnitId) {
       return null;
     }
-    final message = ChatMessage.fromJson(
+    final incoming = ChatMessage.fromJson(
       json,
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,
     );
     // SignalR can replay the same durable message after a reconnect. Only a
     // previously unseen incoming message may increase the local unread badge.
-    final wasPersisted =
-        message.serverId != null &&
-        await _dao.findByServerId(
+    final existing =
+        incoming.serverId != null
+            ? await _dao.findByServerId(
               ownerId: ownerId,
               sessionUnitId: sessionUnitId,
-              serverId: message.serverId!,
-            ) !=
-            null;
+              serverId: incoming.serverId!,
+            )
+            : null;
+    // Withdrawal events contain identity and state, not the original content.
+    // Preserve the local row, sender, timestamp and media metadata.
+    if (incoming.isRollbacked && existing == null) {
+      // A notification cannot make a locally deleted or never-loaded message
+      // visible again. The authoritative history API supplies visible rows.
+      final friend = await _sessionDao?.readById(sessionUnitId);
+      final last = asMap(friend?.raw['lastMessage']);
+      if (incoming.serverId != null &&
+          _asInt(last['id'] ?? last['messageId']) == incoming.serverId) {
+        await _updateSessionSummary(incoming);
+      }
+      return null;
+    }
+    final message =
+        existing != null && incoming.isRollbacked
+            ? existing.copyWith(
+              raw: <String, dynamic>{
+                ...existing.raw,
+                'isRollbacked': true,
+                'rollbackTime':
+                    json['rollbackTime'] ?? existing.raw['rollbackTime'],
+              },
+            )
+            : existing?.isRollbacked == true
+            ? existing!
+            : incoming;
     await _dao.upsertAll(<ChatMessage>[message]);
     await _updateSessionSummary(
       message,
-      incrementUnreadBadge: !message.isMine && !wasPersisted,
+      incrementUnreadBadge:
+          !message.isMine && existing == null && !message.isRollbacked,
     );
     return message;
   }
@@ -670,7 +747,11 @@ class MessageRepository {
     } catch (error) {
       result = local.copyWith(
         state: 'failed',
-        raw: <String, dynamic>{...local.raw, 'error': '$error'},
+        raw: <String, dynamic>{
+          ...local.raw,
+          'errorMessage': '$error',
+          'error': '$error',
+        },
       );
     }
     await _dao.upsertAll(<ChatMessage>[result]);
@@ -806,7 +887,11 @@ class MessageRepository {
     } catch (error) {
       result = local.copyWith(
         state: 'failed',
-        raw: <String, dynamic>{...local.raw, 'error': '$error'},
+        raw: <String, dynamic>{
+          ...local.raw,
+          'errorMessage': '$error',
+          'error': '$error',
+        },
       );
       debugPrint(
         '[sendVoice][failed] session=${local.sessionUnitId} '
@@ -847,7 +932,11 @@ class MessageRepository {
     } catch (error) {
       result = local.copyWith(
         state: 'failed',
-        raw: <String, dynamic>{...local.raw, 'error': '$error'},
+        raw: <String, dynamic>{
+          ...local.raw,
+          'errorMessage': '$error',
+          'error': '$error',
+        },
       );
       debugPrint(
         '[sendFile][failed] session=${local.sessionUnitId} '
@@ -876,6 +965,7 @@ class MessageRepository {
     _sessionChangeBus?.publish(
       ownerId: message.ownerId,
       sessionUnitId: message.sessionUnitId,
+      messageId: message.serverId,
     );
   }
 

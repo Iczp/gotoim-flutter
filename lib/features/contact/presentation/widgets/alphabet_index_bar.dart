@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
+
+import '../../../../core/native/native.dart';
 
 class AlphabetIndexBar extends StatefulWidget {
   const AlphabetIndexBar({
@@ -44,7 +45,7 @@ class _AlphabetIndexBarState extends State<AlphabetIndexBar> {
       if (contentY < jumpExtent) {
         if (_jumpTarget == 'top') return;
         _jumpTarget = 'top';
-        HapticFeedback.selectionClick();
+        AppHaptics.selection();
         _stopDragging(clearJumpTarget: false);
         widget.onScrollToTop();
         return;
@@ -53,7 +54,7 @@ class _AlphabetIndexBarState extends State<AlphabetIndexBar> {
       if (contentY >= alphabetEnd) {
         if (_jumpTarget == 'bottom') return;
         _jumpTarget = 'bottom';
-        HapticFeedback.selectionClick();
+        AppHaptics.selection();
         _stopDragging(clearJumpTarget: false);
         widget.onScrollToBottom();
         return;
@@ -70,7 +71,7 @@ class _AlphabetIndexBarState extends State<AlphabetIndexBar> {
     );
     final key = widget.keys[index];
     if (key == _draggingKey) return;
-    HapticFeedback.selectionClick();
+    AppHaptics.selection();
     setState(() => _draggingKey = key);
     widget.onDragging(key);
     _scheduleSelection(key);

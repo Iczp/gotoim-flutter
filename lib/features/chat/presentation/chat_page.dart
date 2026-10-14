@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../session/application/active_chat_registry.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +18,7 @@ import '../../../core/services/clipboard_service.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/media/media_preview.dart';
 import '../../../core/media/image_provider_factory.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/theme/chat_appearance_controller.dart';
 import '../../../core/utils/api_url_resolver.dart';
@@ -64,11 +66,45 @@ import 'ai_run_timeline_page.dart';
 ///    - [ChatInputArea] 与 [ChatComposer]：底部输入框、语音录制、附件功能区；
 ///    - [ChatSelectionBar]：多选批量删除/合并转发控制条；
 /// 4. 路由与弹窗交互代理（群设置、消息菜单、转发目标选择、客服转接弹窗）。
+/// 将原始错误文本转换为用户可读的友好说明
+String formatDeliveryErrorMessage(String? rawError) {
+  if (rawError == null || rawError.isEmpty) {
+    return '网络连接失败，请检查网络设置或稍后重试';
+  }
+  if (rawError.contains('SocketException') ||
+      rawError.contains('Connection refused') ||
+      rawError.contains('Network is unreachable') ||
+      rawError.contains('Failed host lookup')) {
+    return '网络不可用或无法连接到服务器';
+  }
+  if (rawError.contains('timeout') || rawError.contains('TimeoutException')) {
+    return '请求超时，网络较弱或服务器响应缓慢';
+  }
+  if (rawError.contains('401') || rawError.contains('Unauthorized')) {
+    return '登录凭据已过期 (401)，请重新登录';
+  }
+  if (rawError.contains('403') || rawError.contains('Forbidden')) {
+    return '没有权限执行此操作 (403)';
+  }
+  if (rawError.contains('404')) {
+    return '请求的会话或资源不存在 (404)';
+  }
+  if (rawError.contains('500') || rawError.contains('InternalServerError')) {
+    return '服务器内部错误 (500)';
+  }
+  if (rawError.startsWith('Exception: ')) {
+    return rawError.substring('Exception: '.length);
+  }
+  return rawError;
+}
+
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
     required this.ownerId,
     required this.sessionUnitId,
     required this.title,
+    this.showArticleAvatar,
+    this.showMyAvatarInOfficialAccount = true,
     super.key,
   });
 
@@ -80,6 +116,12 @@ class ChatPage extends ConsumerStatefulWidget {
 
   /// 页面进入时传入的默认标题（在本地/线上详情加载完成后会自动更新为最新昵称）
   final String title;
+
+  /// 是否显示文章消息的头像（默认 null，为微信公众号排版不展示头像；传 true 时强制展示头像）
+  final bool? showArticleAvatar;
+
+  /// 在公众号/服务号场景下是否显示自己发送消息的头像（默认为 true）
+  final bool showMyAvatarInOfficialAccount;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -121,6 +163,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Timer? _quoteHighlightTimer;
   final Stopwatch _pageStopwatch = Stopwatch();
   double _bottomBarHeight = 0;
+  final Set<String> _recallingMessageIds = <String>{};
 
   String get _appearanceWindowId => 'chat-appearance:${widget.sessionUnitId}';
 
@@ -222,83 +265,97 @@ class _ChatPageState extends ConsumerState<ChatPage>
       );
       final hasChatBackground = backgroundImageUrl.isNotEmpty;
       _pruneMessageKeys(controller.messages);
-      return PopScope(
-        canPop: !controller.selectionMode,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop && controller.selectionMode) {
-            controller.cancelSelection();
-          }
-        },
-        child: Scaffold(
-          resizeToAvoidBottomInset: false,
-          floatingActionButton:
-              controller.newMessageCount > 0
-                  ? FloatingActionButton.extended(
-                    onPressed: () async {
-                      if (_scrollController.hasClients) {
-                        await _scrollController.animateTo(
-                          0,
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeOut,
-                        );
-                      }
-                      controller.clearNewMessageCount();
-                    },
-                    icon: const Icon(Icons.arrow_downward),
-                    label: Text('${controller.newMessageCount} 条新消息'),
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final systemOverlayStyle = SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
+      );
+
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: systemOverlayStyle,
+        child: PopScope(
+          canPop: !controller.selectionMode,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && controller.selectionMode) {
+              controller.cancelSelection();
+            }
+          },
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            floatingActionButton:
+                controller.newMessageCount > 0
+                    ? FloatingActionButton.extended(
+                      onPressed: () async {
+                        if (_scrollController.hasClients) {
+                          await _scrollController.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeOut,
+                          );
+                        }
+                        controller.clearNewMessageCount();
+                      },
+                      icon: const Icon(Icons.arrow_downward),
+                      label: Text('${controller.newMessageCount} 条新消息'),
+                    )
+                    // Keep the Scaffold FAB slot stable while the count changes.
+                    // Replacing a FAB with null during a pointer packet can leave
+                    // Flutter's built-in FAB transition without a laid-out child.
+                    : const SizedBox.shrink(),
+            appBar: ChatTitleBar(
+              title: controller.title,
+              showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
+              useGlass: true,
+              hasBackground: hasChatBackground,
+              systemOverlayStyle: systemOverlayStyle,
+              selectionMode: controller.selectionMode,
+              onCancelSelection: controller.cancelSelection,
+              onTransfer: _openTransferSheet,
+              onOpenSettings: _openChatSettings,
+              onOpenAiRuns: _openAiRunTimeline,
+            ),
+            extendBodyBehindAppBar: true,
+            body: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                if (hasChatBackground)
+                  Image(
+                    image: createImageProvider(backgroundImageUrl),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   )
-                  // Keep the Scaffold FAB slot stable while the count changes.
-                  // Replacing a FAB with null during a pointer packet can leave
-                  // Flutter's built-in FAB transition without a laid-out child.
-                  : const SizedBox.shrink(),
-          appBar: ChatTitleBar(
-            title: controller.title,
-            showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
-            useGlass: true,
-            hasBackground: hasChatBackground,
-            selectionMode: controller.selectionMode,
-            onCancelSelection: controller.cancelSelection,
-            onTransfer: _openTransferSheet,
-            onOpenSettings: _openChatSettings,
-            onOpenAiRuns: _openAiRunTimeline,
-          ),
-          extendBodyBehindAppBar: true,
-          body: Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              if (hasChatBackground)
-                Image(
-                  image: createImageProvider(backgroundImageUrl),
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                )
-              else
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors:
-                          Theme.of(context).brightness == Brightness.dark
-                              ? const <Color>[
-                                Color(0xFF090D16),
-                                Color(0xFF0F172A),
-                              ]
-                              : const <Color>[
-                                Color(0xFFF8FAFC),
-                                Color(0xFFEDF2F7),
-                              ],
+                else
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors:
+                            Theme.of(context).brightness == Brightness.dark
+                                ? const <Color>[
+                                  Color(0xFF090D16),
+                                  Color(0xFF0F172A),
+                                ]
+                                : const <Color>[
+                                  Color(0xFFF8FAFC),
+                                  Color(0xFFEDF2F7),
+                                ],
+                      ),
                     ),
                   ),
+                _buildGlassChatContent(
+                  context,
+                  controller,
+                  mediaItems,
+                  hasBackground: hasChatBackground,
                 ),
-              _buildGlassChatContent(
-                context,
-                controller,
-                mediaItems,
-                hasBackground: hasChatBackground,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -319,11 +376,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       hasBackground: hasBackground,
     );
 
-    final effectiveBottomPadding = _bottomBarHeight > 0
-        ? _bottomBarHeight + tokens.chatGlassContentPadding
-        : safeArea.bottom +
-            tokens.chatComposerHeight +
-            tokens.chatGlassContentPadding;
+    final effectiveBottomPadding =
+        _bottomBarHeight > 0
+            ? _bottomBarHeight + tokens.chatGlassContentPadding
+            : safeArea.bottom +
+                tokens.chatComposerHeight +
+                tokens.chatGlassContentPadding;
 
     return Stack(
       fit: StackFit.expand,
@@ -406,23 +464,23 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _openAppearancePanel() async {
     _floatingWindowManager.show(
       id: _appearanceWindowId,
-          contentMode: FloatingWindowContentMode.platformView,
-          options: const FloatingWindowOptions(
-            title: '聊天背景与外观',
-            initialSize: Size(340, 460),
-            minSize: Size(280, 280),
-            maxSize: Size(480, 680),
-            initialPosition: Offset(18, 88),
-            resizable: true,
-            snapToEdge: false,
-            transparentBackground: true,
-          ),
-          child: ChatAppearanceSheet(
-            ownerId: widget.ownerId,
-            sessionUnitId: widget.sessionUnitId,
-            onBackgroundChanged: controller.refreshSessionDetail,
-          ),
-        );
+      contentMode: FloatingWindowContentMode.platformView,
+      options: const FloatingWindowOptions(
+        title: '聊天背景与外观',
+        initialSize: Size(340, 460),
+        minSize: Size(280, 280),
+        maxSize: Size(480, 680),
+        initialPosition: Offset(18, 88),
+        resizable: true,
+        snapToEdge: false,
+        transparentBackground: true,
+      ),
+      child: ChatAppearanceSheet(
+        ownerId: widget.ownerId,
+        sessionUnitId: widget.sessionUnitId,
+        onBackgroundChanged: controller.refreshSessionDetail,
+      ),
+    );
   }
 
   Widget _buildAiStreamReply(AiStreamReply reply) {
@@ -658,10 +716,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
         index + 1 < controller.messages.length
             ? controller.messages[index + 1]
             : null;
-    final supportsFileRetry = switch (message.messageType) {
-      2 || 3 || 4 || 5 => true,
-      _ => false,
-    };
     final menuController = FloatingPopoverController();
     final menuItems = const ChatMessageMenuBuilder().build(
       ChatMessageMenuContext(
@@ -683,11 +737,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
 
     final quote = _restoreQuoteMessage(message);
+    final showMy =
+        controller.isOfficialAccount
+            ? widget.showMyAvatarInOfficialAccount
+            : true;
+    final showPeer = !controller.isOfficialAccount;
     final row = ChatMessageRow(
       key: _messageKeyFor(message.localId),
       message: message,
       showTime: _showTime(message, older),
       showAvatar: !controller.isOfficialAccount,
+      showMyAvatar: showMy,
+      showPeerAvatar: showPeer,
+      showArticleAvatar: widget.showArticleAvatar,
+      myAvatarUrl: controller.myAvatarUrl,
+      myChatObjectId: controller.effectiveOwnerId,
       onUserTap: () => _showSenderProfile(message),
       onSessionUnitTap: _showSessionUnitProfile,
       onVoiceOpened: () => controller.markVoiceOpened(message),
@@ -711,8 +775,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             success: '已打开另存为窗口',
           ),
       onRetry:
-          supportsFileRetry && message.state == 'failed'
-              ? () => controller.retryFile(message)
+          message.state == 'failed'
+              ? () => _showFailedMessageDialog(message)
               : null,
       imageBytes: controller.imagePreview(message.localId),
       uploadProgress: controller.uploadProgress[message.localId],
@@ -823,6 +887,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _showMuteMemberDialog(ChatMessage message) {
     showModalBottomSheet<void>(
       context: context,
+      isDismissible: true,
+      enableDrag: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -868,6 +934,91 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
         );
       },
+    );
+  }
+
+  Future<void> _showFailedMessageDialog(ChatMessage message) async {
+    final theme = Theme.of(context);
+    final errorDesc = formatDeliveryErrorMessage(message.errorMessage);
+    final canRetry = controller.canRetryMessage(message);
+
+    await showDialog<void>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  Icons.error_outline_rounded,
+                  color: theme.colorScheme.error,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                const Text('消息发送失败'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '失败原因：',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.errorContainer.withValues(
+                      alpha: 0.25,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.error.withValues(alpha: 0.3),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: SelectableText(
+                    errorDesc,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(dialogContext).pop();
+                  await controller.deleteMessages(<String>[message.localId]);
+                  if (mounted) {
+                    showToast('已删除失败消息');
+                  }
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                ),
+                child: const Text('删除'),
+              ),
+              if (canRetry)
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    controller.retryMessage(message);
+                  },
+                  child: const Text('重新发送'),
+                ),
+            ],
+          ),
     );
   }
 
@@ -944,7 +1095,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   List<MediaPreviewItem> _mediaItemsFor(List<ChatMessage> messages) {
     final fingerprint = messages
-        .where((item) => item.messageType == 2 || item.messageType == 4)
+        .where(
+          (item) =>
+              !item.isRollbacked &&
+              (item.messageType == 2 || item.messageType == 4),
+        )
         .map(
           (item) => [
             item.localId,
@@ -962,7 +1117,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final baseUrl = ref.read(appEnvironmentProvider).apiBaseUrl;
     // 列表是 reverse: true（最新消息在 index 0），媒体画廊需按自然时间正序排列（最旧在 index 0，最新在末尾）
     _mediaItems = messages.reversed
-        .where((item) => item.messageType == 2 || item.messageType == 4)
+        .where(
+          (item) =>
+              !item.isRollbacked &&
+              (item.messageType == 2 || item.messageType == 4),
+        )
         .map((message) {
           final localFile =
               (message.localFilePath != null &&
@@ -1072,10 +1231,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         );
         return;
       case 'recall':
-        await _runMessageAction(
-          () => controller.rollbackMessage(message),
-          success: '消息已撤回',
-        );
+        await _recallMessage(message);
         return;
       case 'forward':
         await _showForwardTargets(message);
@@ -1117,6 +1273,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
       baseUrl,
     );
     if (source.isEmpty) return;
+    final cachedAttachmentPath =
+        controller.attachmentState(message.localId).localPath;
+    final validCachedPath =
+        (cachedAttachmentPath != null &&
+                !kIsWeb &&
+                File(cachedAttachmentPath).existsSync())
+            ? cachedAttachmentPath
+            : ((message.localFilePath != null &&
+                    !kIsWeb &&
+                    File(message.localFilePath!).existsSync())
+                ? message.localFilePath
+                : null);
     final item =
         targetIndex >= 0
             ? mediaItems[targetIndex]
@@ -1125,6 +1293,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
               messageId: message.localId,
               type: MediaPreviewType.video,
               source: source,
+              localPath: validCachedPath,
               userId: message.ownerId.toString(),
               chatTarget: message.sessionUnitId,
               createdAt: message.createdAt,
@@ -1218,6 +1387,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _deleteSelectedMessages() =>
       _runMessageAction(controller.deleteSelectedMessages, success: '已删除所选消息');
+
+  Future<void> _recallMessage(ChatMessage message) async {
+    if (!_recallingMessageIds.add(message.localId)) return;
+    final dismissLoading = showLoadingToast('正在撤回消息…');
+    try {
+      await controller.rollbackMessage(message);
+      dismissLoading();
+      showSuccessToast('消息已撤回');
+    } catch (error) {
+      dismissLoading();
+      final detail =
+          error is ApiException
+              ? error.message
+              : formatDeliveryErrorMessage('$error');
+      showErrorToast('撤回失败：$detail');
+    } finally {
+      _recallingMessageIds.remove(message.localId);
+    }
+  }
 
   Future<void> _runMessageAction(
     Future<void> Function() action, {

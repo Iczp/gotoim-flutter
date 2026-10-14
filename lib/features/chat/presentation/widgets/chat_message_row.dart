@@ -50,6 +50,11 @@ class ChatMessageRow extends StatelessWidget {
     this.avatarMenuOffset = const Offset(8, 0),
     this.onTap,
     this.showAvatar = true,
+    this.showMyAvatar,
+    this.showPeerAvatar,
+    this.showArticleAvatar,
+    this.myAvatarUrl,
+    this.myChatObjectId,
     super.key,
   });
 
@@ -59,8 +64,23 @@ class ChatMessageRow extends StatelessWidget {
   /// 是否显示时间分割线
   final bool showTime;
 
-  /// 是否显示发送人头像（默认为 true）
+  /// 是否显示发送人头像（全局开关，默认为 true）
   final bool showAvatar;
+
+  /// 是否显示自己发送消息的头像（若未设置则跟随 showAvatar，公众号场景下默认配置为 true）
+  final bool? showMyAvatar;
+
+  /// 是否显示对方发送消息的头像（若未设置则跟随 showAvatar）
+  final bool? showPeerAvatar;
+
+  /// 是否显示推送文章消息的头像（默认 false）
+  final bool? showArticleAvatar;
+
+  /// 当前登录用户的头像 URL（确保本地发送中的消息即时渲染头像）
+  final String? myAvatarUrl;
+
+  /// 当前登录用户的 ChatObjectId
+  final int? myChatObjectId;
 
   /// 点击发送人头像/昵称回调（打开成员资料卡）
   final VoidCallback onUserTap;
@@ -161,6 +181,17 @@ class ChatMessageRow extends StatelessWidget {
     return '${message.senderName} · $messageId';
   }
 
+  /// 综合全局配置、自身/对方维度以及文章类型，计算当前消息是否显示头像
+  bool get effectiveShowAvatar {
+    if (message.messageType == 11) {
+      return showArticleAvatar ?? false;
+    }
+    if (message.isMine) {
+      return showMyAvatar ?? showAvatar;
+    }
+    return showPeerAvatar ?? showAvatar;
+  }
+
   @override
   Widget build(BuildContext context) {
     final renderedQuote = quoteContent;
@@ -223,7 +254,9 @@ class ChatMessageRow extends StatelessWidget {
                 final availableWidth = constraints.maxWidth - selectionWidth;
 
                 final contentMaxWidth = (availableWidth -
-                        (showAvatar ? avatarSlotWidth + contentPadding : 0.0))
+                        (effectiveShowAvatar
+                            ? avatarSlotWidth + contentPadding
+                            : 0.0))
                     .clamp(0.0, double.infinity);
 
                 // 响应式拟定消息气泡的最大宽度：
@@ -231,7 +264,7 @@ class ChatMessageRow extends StatelessWidget {
                 // 2. 平板与桌面宽屏（>= 600px）：限制在 68% 且设定上限 620px，保证舒适阅读视线，防止单行文字过长。
                 final double bubbleWidth;
                 if (constraints.maxWidth < 600) {
-                  bubbleWidth = showAvatar
+                  bubbleWidth = effectiveShowAvatar
                       ? contentMaxWidth * 0.78
                       : (contentMaxWidth - 24.0).clamp(0.0, 480.0);
                 } else {
@@ -239,13 +272,27 @@ class ChatMessageRow extends StatelessWidget {
                 }
 
                 Widget? avatarWidget;
-                if (showAvatar) {
+                if (effectiveShowAvatar) {
+                  final avatarUrl =
+                      message.isMine
+                          ? (message.senderAvatarUrl ?? myAvatarUrl)
+                          : message.senderAvatarUrl;
+                  final avatarName =
+                      message.isMine
+                          ? (message.senderName != '未知用户'
+                              ? message.senderName
+                              : '我')
+                          : message.senderName;
+                  final avatarObjectId =
+                      message.isMine
+                          ? (message.senderChatObjectId ?? myChatObjectId)
+                          : message.senderChatObjectId;
                   Widget av = ChatObjectAvatar(
-                    name: message.senderName,
-                    imageUrl: message.senderAvatarUrl,
+                    name: avatarName,
+                    imageUrl: avatarUrl,
                     size: avatarSize,
                     radius: avatarSize / 2,
-                    chatObjectId: message.senderChatObjectId,
+                    chatObjectId: avatarObjectId,
                   );
                   av = GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -306,7 +353,7 @@ class ChatMessageRow extends StatelessWidget {
                             : CrossAxisAlignment.start,
                     children: <Widget>[
                       // 发送人名称 (各自加 padding: 12)
-                      if (showAvatar && !message.isMine && _senderLabel.isNotEmpty)
+                      if (effectiveShowAvatar && !message.isMine && _senderLabel.isNotEmpty)
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Padding(
@@ -330,7 +377,7 @@ class ChatMessageRow extends StatelessWidget {
                         alignment:
                             message.isMine
                                 ? Alignment.centerRight
-                                : (showAvatar
+                                : (effectiveShowAvatar
                                     ? Alignment.centerLeft
                                     : Alignment.center),
                         child: messageContentWidget,
@@ -382,14 +429,14 @@ class ChatMessageRow extends StatelessWidget {
                                 ? <Widget>[
                                   // 消息内容（占满）
                                   messageBody,
-                                  if (showAvatar &&
+                                  if (effectiveShowAvatar &&
                                       avatarWidget != null) ...<Widget>[
                                     const SizedBox(width: contentPadding),
                                     avatarWidget,
                                   ],
                                 ]
                                 : <Widget>[
-                                  if (showAvatar &&
+                                  if (effectiveShowAvatar &&
                                       avatarWidget != null) ...<Widget>[
                                     avatarWidget,
                                     const SizedBox(width: contentPadding),

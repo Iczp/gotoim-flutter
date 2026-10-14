@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/widgets/glass_container.dart';
 
@@ -17,6 +18,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
     this.onCancelSelection,
     this.useGlass = false,
     this.hasBackground = false,
+    this.systemOverlayStyle,
     super.key,
   });
 
@@ -29,6 +31,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onCancelSelection;
   final bool useGlass;
   final bool hasBackground;
+  final SystemUiOverlayStyle? systemOverlayStyle;
 
   static const double toolbarHeight = 48;
 
@@ -38,6 +41,22 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final foregroundColor = isDark
+        ? const Color(0xFFF1F5F9)
+        : (hasBackground
+            ? const Color(0xFF0F172A)
+            : const Color(0xFF1E293B));
+
+    final effectiveOverlayStyle = systemOverlayStyle ??
+        SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness:
+              isDark ? Brightness.light : Brightness.dark,
+        );
+
     final leading =
         selectionMode
             ? IconButton(
@@ -71,12 +90,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
       fontSize: 16.5,
       fontWeight: FontWeight.w600,
       letterSpacing: -0.2,
-      color:
-          isDark
-              ? const Color(0xFFF1F5F9)
-              : (hasBackground
-                  ? const Color(0xFF0F172A)
-                  : const Color(0xFF1E293B)),
+      color: foregroundColor,
     );
 
     final titleWidget = Text(
@@ -119,6 +133,10 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
         borderColor: glassBorder,
         borderWidth: 0.8,
         centerTitle: false,
+        foregroundColor: foregroundColor,
+        iconTheme: IconThemeData(color: foregroundColor),
+        actionsIconTheme: IconThemeData(color: foregroundColor),
+        systemOverlayStyle: effectiveOverlayStyle,
       );
     }
 
@@ -128,6 +146,10 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
       actions: actions,
       elevation: 0,
       scrolledUnderElevation: 0,
+      foregroundColor: foregroundColor,
+      iconTheme: IconThemeData(color: foregroundColor),
+      actionsIconTheme: IconThemeData(color: foregroundColor),
+      systemOverlayStyle: effectiveOverlayStyle,
     );
   }
 }

@@ -61,6 +61,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (message.messageType) {
+    _ when message.isRollbacked => const Text('消息已撤回'),
     5 => FileMessageContent(
       message: message,
       transfer: attachmentState,
@@ -117,6 +118,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
       mediaItems: mediaItems,
       initialIndex: mediaInitialIndex,
       presentation: presentation,
+      onRetry: onRetry,
     ),
     0 => TextMessageContent(
       message: message,

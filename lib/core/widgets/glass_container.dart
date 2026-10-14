@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_theme_tokens.dart';
 
@@ -163,6 +164,10 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.borderColor,
     this.borderWidth = 0.8,
     this.centerTitle = true,
+    this.systemOverlayStyle,
+    this.foregroundColor,
+    this.iconTheme,
+    this.actionsIconTheme,
   });
 
   final Widget? title;
@@ -174,6 +179,10 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Color? borderColor;
   final double borderWidth;
   final bool centerTitle;
+  final SystemUiOverlayStyle? systemOverlayStyle;
+  final Color? foregroundColor;
+  final IconThemeData? iconTheme;
+  final IconThemeData? actionsIconTheme;
 
   @override
   Size get preferredSize {
@@ -187,6 +196,25 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     final effectiveBlur = blurSigma ?? tokens.glassBlurSigma;
     final effectiveBg = backgroundColor ?? tokens.glassSurfaceColor;
     final effectiveBorder = borderColor ?? tokens.glassBorderColor;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // When AppBar has backgroundColor: Colors.transparent, Flutter estimates its
+    // brightness as dark, which incorrectly forces white status bar icons on light themes.
+    // Determine the actual brightness based on effective background or the theme.
+    final isBgDark = backgroundColor != null
+        ? ThemeData.estimateBrightnessForColor(effectiveBg) == Brightness.dark
+        : isDark;
+
+    final effectiveOverlayStyle = systemOverlayStyle ??
+        SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: isBgDark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: isBgDark ? Brightness.dark : Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness:
+              isBgDark ? Brightness.light : Brightness.dark,
+        );
 
     return ClipRect(
       child: BackdropFilter(
@@ -201,12 +229,16 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
           child: AppBar(
             backgroundColor: Colors.transparent,
             surfaceTintColor: Colors.transparent,
+            foregroundColor: foregroundColor,
+            iconTheme: iconTheme,
+            actionsIconTheme: actionsIconTheme,
             elevation: 0,
             leading: leading,
             title: title,
             actions: actions,
             bottom: bottom,
             centerTitle: centerTitle,
+            systemOverlayStyle: effectiveOverlayStyle,
           ),
         ),
       ),

@@ -6,9 +6,11 @@ class SessionChangeEvent {
   const SessionChangeEvent({
     required this.ownerId,
     required this.sessionUnitId,
+    this.messageId,
   });
   final int ownerId;
   final String sessionUnitId;
+  final int? messageId;
 }
 
 class SessionChangeBus {
@@ -17,10 +19,18 @@ class SessionChangeBus {
 
   Stream<SessionChangeEvent> get events => _controller.stream;
 
-  void publish({required int ownerId, required String sessionUnitId}) {
+  void publish({
+    required int ownerId,
+    required String sessionUnitId,
+    int? messageId,
+  }) {
     if (!_controller.isClosed) {
       _controller.add(
-        SessionChangeEvent(ownerId: ownerId, sessionUnitId: sessionUnitId),
+        SessionChangeEvent(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          messageId: messageId,
+        ),
       );
     }
   }

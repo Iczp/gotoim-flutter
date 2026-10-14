@@ -259,6 +259,21 @@ class _AdaptiveSheetHostState extends State<_AdaptiveSheetHost> {
       );
     }
 
+    // 点击半屏页外部/顶部遮罩区域关闭支持（默认下滑关闭时，点外部遮罩亦能关闭）
+    if (config.isDismissible) {
+      sheetContent = Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(context).pop(),
+            ),
+          ),
+          sheetContent,
+        ],
+      );
+    }
+
     return sheetContent;
   }
 

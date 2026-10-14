@@ -56,6 +56,8 @@ Future<void> showBrowserMoreSheet(
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    isDismissible: true,
+    enableDrag: true,
     backgroundColor: Colors.transparent,
     builder: (sheetContext) => _BrowserMoreSheetContent(
       url: url,

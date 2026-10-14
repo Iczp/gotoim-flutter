@@ -146,43 +146,49 @@ void main() {
     },
   );
 
-  test('empty remote history marks the friend loaded all', () async {
-    final database = UnifiedDatabase(
-      DatabaseConnection(NativeDatabase.memory()),
-    );
-    addTearDown(database.close);
-    await SessionDao(database).upsertAll(<SessionSummary>[
-      SessionSummary.fromJson(<String, dynamic>{
-        'id': 'session',
-        'ownerId': 7,
-        'score': 1,
-        'ticks': 1,
-        'destination': <String, dynamic>{'name': 'session'},
-      }),
-    ]);
-    final dao = MessageDao(database);
-    final client = _FakeApiClient(<String, Map<String, dynamic>>{
-      '/api/chat/message/history': <String, dynamic>{
-        'items': <Map<String, dynamic>>[],
-        'totalCount': 0,
-      },
-    });
-    final repository = MessageRepository(api: MessageApi(client), dao: dao);
+  test(
+    'empty history is marked loaded but an empty local cache permits recovery',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      await SessionDao(database).upsertAll(<SessionSummary>[
+        SessionSummary.fromJson(<String, dynamic>{
+          'id': 'session',
+          'ownerId': 7,
+          'score': 1,
+          'ticks': 1,
+          'destination': <String, dynamic>{'name': 'session'},
+        }),
+      ]);
+      final dao = MessageDao(database);
+      final client = _FakeApiClient(<String, Map<String, dynamic>>{
+        '/api/chat/message/history': <String, dynamic>{
+          'items': <Map<String, dynamic>>[],
+          'totalCount': 0,
+        },
+      });
+      final repository = MessageRepository(api: MessageApi(client), dao: dao);
 
-    final first = await repository.loadHistory(
-      ownerId: 7,
-      sessionUnitId: 'session',
-    );
-    final second = await repository.loadHistory(
-      ownerId: 7,
-      sessionUnitId: 'session',
-    );
+      final first = await repository.loadHistory(
+        ownerId: 7,
+        sessionUnitId: 'session',
+      );
+      final second = await repository.loadHistory(
+        ownerId: 7,
+        sessionUnitId: 'session',
+      );
 
-    expect(first.hasMore, isFalse);
-    expect(second.hasMore, isFalse);
-    expect(client.paths, <String>['/api/chat/message/history']);
-    expect(await dao.isLoadedAll('session'), isTrue);
-  });
+      expect(first.hasMore, isFalse);
+      expect(second.hasMore, isFalse);
+      expect(client.paths, <String>[
+        '/api/chat/message/history',
+        '/api/chat/message/history',
+      ]);
+      expect(await dao.isLoadedAll('session'), isTrue);
+    },
+  );
 
   test(
     'loadLatest persists and returns messages newer than minMessageId',

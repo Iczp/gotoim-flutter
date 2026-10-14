@@ -57,9 +57,22 @@ import MediaPlayer
         }
 
       case "vibrate":
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.prepare()
-        generator.impactOccurred()
+        let styleStr = (call.arguments as? [String: Any])?["type"] as? String ?? "medium"
+        if styleStr == "selection" {
+          let generator = UISelectionFeedbackGenerator()
+          generator.prepare()
+          generator.selectionChanged()
+        } else {
+          let style: UIImpactFeedbackGenerator.FeedbackStyle
+          switch styleStr {
+          case "light": style = .light
+          case "heavy": style = .heavy
+          default: style = .medium
+          }
+          let generator = UIImpactFeedbackGenerator(style: style)
+          generator.prepare()
+          generator.impactOccurred()
+        }
         result(true)
 
       case "makePhoneCall":

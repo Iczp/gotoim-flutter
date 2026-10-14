@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/native/native.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/session_summary.dart';
 import 'chat_object_avatar.dart';
@@ -18,6 +19,7 @@ class SessionMenuSheet extends StatelessWidget {
     required SessionListController controller,
     required SessionSummary session,
   }) async {
+    AppHaptics.medium();
     final action = await showModalBottomSheet<SessionMenuAction>(
       context: context,
       useRootNavigator: true,
@@ -93,17 +95,31 @@ class SessionMenuSheet extends StatelessWidget {
     }
   }
 
+  static Map<String, dynamic> _map(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return const <String, dynamic>{};
+  }
+
   @override
   Widget build(BuildContext context) {
+    final destination = _map(session.raw['destination']);
+    final avatarName = (destination['displayName'] ??
+            destination['name'] ??
+            session.title)
+        .toString();
+    final avatarUrl =
+        (destination['thumbnail'] ?? destination['portrait'])?.toString();
+
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           ListTile(
             leading: ChatObjectAvatar(
-              name: session.title,
-              imageUrl: null,
-              radius: 22,
+              name: avatarName,
+              imageUrl: avatarUrl,
+              radius: 24,
               chatObjectId: session.destinationId,
             ),
             title: Text(

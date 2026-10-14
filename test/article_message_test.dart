@@ -152,5 +152,38 @@ void main() {
     expect(find.byType(Divider), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('multi article sub-item renders unified subtitle when description present', (
+    tester,
+  ) async {
+    final content = {
+      'items': [
+        {
+          'title': '主文章',
+          'originalUrl': 'https://example.com/1',
+        },
+        {
+          'title': '次条文章',
+          'description': '次条副标题描述',
+          'originalUrl': 'https://example.com/2',
+        },
+      ],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ArticleMessageContent(
+            message: message(content),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('主文章'), findsOneWidget);
+    expect(find.text('次条文章'), findsOneWidget);
+    expect(find.text('次条副标题描述'), findsOneWidget);
+    final textWidget = tester.widget<Text>(find.text('次条副标题描述'));
+    expect(textWidget.style?.fontSize, 13.0);
+    expect(tester.takeException(), isNull);
+  });
 }
 
