@@ -12,6 +12,7 @@ import '../widgets/app_avatar.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/avatar_preferences.dart';
 import '../widgets/target_picker/forward_target_picker.dart';
+import '../security/widgets/report_dialog.dart';
 import 'forward_link_confirm_dialog.dart';
 import 'link_forward_service.dart';
 import 'recent_forward_service.dart';
@@ -192,7 +193,11 @@ class _BrowserMoreSheetContentState
 
   void _showReport(BuildContext context) {
     Navigator.of(context).pop();
-    showToast('投诉已提交，平台将尽快审核', type: ToastType.info);
+    ReportDialog.showForUrl(
+      context,
+      url: widget.url,
+      title: widget.title,
+    );
   }
 
   void _listenFullText(BuildContext context) {

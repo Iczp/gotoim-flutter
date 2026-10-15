@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
-import 'media_downloader.dart';
 import 'media_preview.dart';
 import 'video_controller_factory.dart';
 

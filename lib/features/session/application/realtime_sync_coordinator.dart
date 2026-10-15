@@ -46,9 +46,17 @@ class RealtimeSyncCoordinator {
   final Set<int> _pendingOwnerIds = <int>{};
   final Map<int, Future<void>> _syncInFlightByOwner = <int, Future<void>>{};
   final Map<String, Future<void>> _unitSyncInFlight = <String, Future<void>>{};
+  final Set<int> _ownerResyncRequested = {};
+  bool _disposed = false;
 
   void start() {
     _subscription ??= _gateway.events.listen(_onEvent);
+    _scheduleCurrentOwnerSync();
+  }
+
+  Future<void> syncCurrentOwner() async {
+    final owner = await _sessionRepository.readCurrentOwnerId();
+    if (owner != null && owner > 0) await _syncOwner(owner);
   }
 
   void _onEvent(SignalRAppEvent event) {
@@ -300,7 +308,7 @@ class RealtimeSyncCoordinator {
   }
 
   void _scheduleOwnerSync(int ownerId) {
-    if (ownerId <= 0) return;
+    if (_disposed || ownerId <= 0) return;
     _pendingOwnerIds.add(ownerId);
     _syncTimer?.cancel();
     _syncTimer = Timer(const Duration(milliseconds: 300), () {
@@ -314,10 +322,14 @@ class RealtimeSyncCoordinator {
 
   Future<void> _syncOwner(int ownerId) {
     final existing = _syncInFlightByOwner[ownerId];
-    if (existing != null) return existing;
+    if (existing != null) {
+      _ownerResyncRequested.add(ownerId);
+      return existing;
+    }
     final sync = () async {
       try {
         await _sessionRepository.loadChanges(ownerId: ownerId);
+        await _messageRepository.loadChanges(ownerId: ownerId);
       } catch (error) {
         debugPrint(
           '[realtimeSync][changes-failed] owner=$ownerId error=$error',
@@ -328,11 +340,13 @@ class RealtimeSyncCoordinator {
     return sync.whenComplete(() {
       if (identical(_syncInFlightByOwner[ownerId], sync)) {
         _syncInFlightByOwner.remove(ownerId);
+        if (_ownerResyncRequested.remove(ownerId)) _scheduleOwnerSync(ownerId);
       }
     });
   }
 
   Future<void> dispose() async {
+    _disposed = true;
     _syncTimer?.cancel();
     await _subscription?.cancel();
   }
@@ -373,5 +387,14 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
     },
   );
   ref.onDispose(coordinator.dispose);
+  ref.listen<int?>(
+    sessionListControllerProvider.select((state) => state.currentOwnerId),
+    (previous, next) {
+      if (next != null && next != previous) {
+        coordinator._scheduleOwnerSync(next);
+      }
+    },
+    fireImmediately: true,
+  );
   return coordinator;
 });

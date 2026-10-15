@@ -227,6 +227,13 @@ class DiagnosticsHomePage extends StatelessWidget {
                 showArrow: true,
                 onTap: () => context.push('/diagnostics/webview-session'),
               ),
+              Cell(
+                icon: const Icon(Icons.shield_outlined),
+                title: 'URL 安全与反诈风控',
+                subtitle: '三阶段风控、域名白/灰/黑名单、黄盾警示中转页、红盾阻断与举报投诉',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/url-security'),
+              ),
             ],
           ),
 

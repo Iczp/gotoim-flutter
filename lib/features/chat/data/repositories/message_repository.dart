@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
+import '../../../../core/network/api_exception.dart';
 
 import '../../../../core/services/file/file_picker_service.dart';
 import '../../../session/data/datasources/session_dao.dart';
@@ -8,6 +10,8 @@ import '../../../session/data/models/session_summary.dart';
 import '../datasources/message_api.dart';
 import '../datasources/message_dao.dart';
 import '../models/chat_message.dart';
+
+part 'message_repository_sync.dart';
 
 class MessageRepository {
   MessageRepository({
@@ -23,6 +27,17 @@ class MessageRepository {
   final MessageDao _dao;
   final SessionDao? _sessionDao;
   final SessionChangeBus? _sessionChangeBus;
+  final Map<String, Future<void>> _changeSyncInFlight = {};
+  DateTime? _changeSyncRetryAt;
+  bool get isChangeSyncAvailable =>
+      _changeSyncRetryAt?.isAfter(DateTime.now()) != true;
+  Future<String?> changeSyncCursor(int owner, String unit) =>
+      _dao.syncCursor(owner, unit);
+  Future<List<ChatMessage>> loadLocalByIds(
+    int owner,
+    String unit,
+    List<int> ids,
+  ) => _dao.readByIds(owner, unit, ids);
 
   Future<void> markOpened(String localId) => _dao.markOpened(localId);
   Future<void> deleteLocal(Iterable<String> localIds) =>
@@ -586,12 +601,21 @@ class MessageRepository {
             ? existing!
             : incoming;
     await _dao.upsertAll(<ChatMessage>[message]);
+    final persisted =
+        message.serverId == null
+            ? message
+            : await _dao.findByServerId(
+                  ownerId: ownerId,
+                  sessionUnitId: sessionUnitId,
+                  serverId: message.serverId!,
+                ) ??
+                message;
     await _updateSessionSummary(
-      message,
+      persisted,
       incrementUnreadBadge:
-          !message.isMine && existing == null && !message.isRollbacked,
+          !persisted.isMine && existing == null && !persisted.isRollbacked,
     );
-    return message;
+    return persisted;
   }
 
   /// Stores a realtime message even when its chat page is not open. The

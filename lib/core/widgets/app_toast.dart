@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/app_navigation.dart';
@@ -275,7 +276,18 @@ bool showToast(
   );
 
   _activeToast = _ToastOverlayHandle(entry, removeEntry);
-  overlay.insert(entry);
+  final targetEntry = entry;
+  final phase = SchedulerBinding.instance.schedulerPhase;
+  if (phase == SchedulerPhase.persistentCallbacks ||
+      phase == SchedulerPhase.midFrameMicrotasks) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (overlay.mounted) {
+        overlay.insert(targetEntry);
+      }
+    });
+  } else {
+    overlay.insert(targetEntry);
+  }
   return true;
 }
 

@@ -34,7 +34,10 @@ import '../../chat_settings/data/repositories/chat_settings_repository.dart';
 final messageRepositoryProvider = Provider<MessageRepository>(
   (ref) => MessageRepository(
     api: MessageApi(ref.watch(apiClientProvider)),
-    dao: MessageDao(ref.watch(unifiedDatabaseProvider)),
+    dao: MessageDao(
+      ref.watch(unifiedDatabaseProvider),
+      syncNamespace: ref.watch(appEnvironmentProvider).apiBaseUrl,
+    ),
     sessionDao: SessionDao(ref.watch(unifiedDatabaseProvider)),
     sessionChangeBus: ref.watch(sessionChangeBusProvider),
   ),
@@ -305,8 +308,14 @@ class ChatController extends ChangeNotifier {
     );
     _attachmentTransferService.addListener(_onAttachmentTransferChanged);
     _sessionChangeSubscription = _sessionChangeBus.events.listen((event) {
-      if (event.ownerId == ownerId && event.sessionUnitId == sessionUnitId) {
-        unawaited(_reloadFromLocalChange(messageId: event.messageId));
+      if (event.ownerId == effectiveOwnerId &&
+          event.sessionUnitId == sessionUnitId) {
+        unawaited(
+          _reloadFromLocalChange(
+            messageId: event.messageId,
+            messageIds: event.messageIds,
+          ),
+        );
       }
     });
     _aiStreamSubscription = _aiStreamChangeBus.events.listen(_onAiStreamEvent);
@@ -634,13 +643,21 @@ class ChatController extends ChangeNotifier {
       if (_isDisposed) return;
       final byId = <String, ChatMessage>{
         for (final item in _messages) item.localId: item,
-        for (final item in latest) item.localId: item,
       };
+      for (final item in latest) {
+        byId[item.localId] = _retainRollbackState(item, byId[item.localId]);
+      }
       _messages
         ..clear()
         ..addAll(byId.values);
       _deduplicateMessages();
       _messages.sort((a, b) => b.score.compareTo(a.score));
+      if (refreshRecent) {
+        await _repository.loadChanges(
+          ownerId: effectiveOwnerId,
+          sessionUnitId: sessionUnitId,
+        );
+      }
     } catch (exception) {
       if (_isDisposed) return;
       debugPrint(
@@ -1173,22 +1190,31 @@ class ChatController extends ChangeNotifier {
     if (value) clearNewMessageCount();
   }
 
-  Future<void> _reloadFromLocalChange({int? messageId}) async {
-    final changed =
-        messageId == null
-            ? null
-            : await _repository.findLocalByServerId(
-              ownerId: ownerId,
-              sessionUnitId: sessionUnitId,
-              serverId: messageId,
-            );
+  Future<void> _reloadFromLocalChange({
+    int? messageId,
+    List<int>? messageIds,
+  }) async {
+    if (_isDisposed) return;
+    final affected = {...?messageIds, if (messageId != null) messageId};
+    final targets = {
+      ...affected,
+      for (final item in _messages)
+        if (affected.contains(item.quoteMessageId) ||
+            affected.contains(asInt(item.quoteMessage['id'])))
+          if (item.serverId != null) item.serverId!,
+    };
     final latest =
-        changed != null
-            ? <ChatMessage>[changed]
+        affected.isNotEmpty
+            ? await _repository.loadLocalByIds(
+              effectiveOwnerId,
+              sessionUnitId,
+              targets.toList(),
+            )
             : await _repository.loadLocalLatest(
-              ownerId: ownerId,
+              ownerId: effectiveOwnerId,
               sessionUnitId: sessionUnitId,
             );
+    if (_isDisposed) return;
     var receivedIncoming = false;
     for (final message in latest) {
       final known = _messages.any(
@@ -1461,10 +1487,33 @@ class ChatController extends ChangeNotifier {
     if (index < 0) {
       _messages.insert(0, value);
     } else {
-      _messages[index] = value;
+      _messages[index] = _retainRollbackState(value, _messages[index]);
     }
     _deduplicateMessages();
     _messages.sort((a, b) => b.score.compareTo(a.score));
+  }
+
+  // Local reads can finish out of order while a sync page commits. Once this
+  // view has observed a withdrawal, an earlier read must not restore content.
+  ChatMessage _retainRollbackState(ChatMessage incoming, ChatMessage? known) {
+    if (known == null) return incoming;
+    final raw = <String, dynamic>{...incoming.raw};
+    if (known.isRollbacked) {
+      raw['isRollbacked'] = true;
+      raw['rollbackTime'] = known.raw['rollbackTime'];
+    }
+    final quoteId = asInt(incoming.quoteMessage['id']);
+    if (quoteId != null &&
+        quoteId == asInt(known.quoteMessage['id']) &&
+        (known.quoteMessage['isRollbacked'] == true ||
+            known.quoteMessage['rollbackTime'] != null)) {
+      raw['quoteMessage'] = {
+        ...incoming.quoteMessage,
+        'isRollbacked': true,
+        'rollbackTime': known.quoteMessage['rollbackTime'],
+      };
+    }
+    return incoming.copyWith(raw: raw);
   }
 
   void _deduplicateMessages() {

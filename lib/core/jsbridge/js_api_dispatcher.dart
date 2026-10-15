@@ -276,24 +276,47 @@ class JsApiDispatcher {
             '当前没有可用于打开图片预览的 Navigator。',
           );
         }
-        final current = _optionalString(request.data, 'current') ?? '';
-        final urls = (request.data['urls'] as List?)
-                ?.map((e) => e.toString())
+        var current = _optionalString(request.data, 'current') ??
+            _optionalString(request.data, 'url') ??
+            _optionalString(request.data, 'src') ??
+            _optionalString(request.data, 'image') ??
+            _optionalString(request.data, 'img') ??
+            '';
+        final rawUrls = request.data['urls'] ?? request.data['images'];
+        final urls = (rawUrls is List)
+            ? rawUrls
+                .map((e) => e?.toString().trim() ?? '')
                 .where((e) => e.isNotEmpty)
-                .toList() ??
-            (current.isNotEmpty ? <String>[current] : <String>[]);
-        if (urls.isEmpty) {
+                .toList()
+            : (current.isNotEmpty ? <String>[current] : <String>[]);
+        if (urls.isEmpty && current.isEmpty) {
           throw const JsBridgeException('INVALID_ARGUMENT', '预览图片列表不能为空。');
+        }
+        if (current.isNotEmpty && !urls.contains(current)) {
+          urls.insert(0, current);
+        }
+        if (current.isEmpty && urls.isNotEmpty) {
+          current = urls[0];
         }
         final index = _optionalInt(request.data, 'index') ??
             (current.isNotEmpty ? urls.indexOf(current) : 0);
         final safeIndex = index.clamp(0, urls.length - 1);
         final items = urls.map((url) {
+          Uint8List? dataBytes;
+          if (url.startsWith('data:image/')) {
+            final commaIdx = url.indexOf(',');
+            if (commaIdx != -1) {
+              try {
+                dataBytes = base64Decode(url.substring(commaIdx + 1));
+              } catch (_) {}
+            }
+          }
           return MediaPreviewItem(
             id: url,
             messageId: 'jsbridge_img_${url.hashCode}',
             type: MediaPreviewType.image,
             source: url,
+            bytes: dataBytes,
             heroTag: 'jsbridge-image-$url',
           );
         }).toList();

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../../chat/application/chat_controller.dart';
+import '../../chat/data/repositories/message_repository.dart';
 
 class ChatDiagnosticsPage extends ConsumerStatefulWidget {
   const ChatDiagnosticsPage({super.key});
@@ -20,6 +21,46 @@ class _ChatDiagnosticsPageState extends ConsumerState<ChatDiagnosticsPage> {
   bool _recalling = false;
   String _recallResult = '未执行';
   String? _recallStack;
+  bool _syncingChanges = false;
+  String _changesResult = '未执行增量同步';
+
+  Future<void> _syncChanges() async {
+    final owner = int.tryParse(ownerId.text);
+    final unit = sessionUnitId.text.trim();
+    if (owner == null || owner <= 0) {
+      setState(() => _changesResult = '请输入有效 Owner ID');
+      return;
+    }
+    setState(() {
+      _syncingChanges = true;
+      _changesResult = '同步中';
+    });
+    final watch = Stopwatch()..start();
+    try {
+      final repo = ref.read(messageRepositoryProvider);
+      final before =
+          unit.isEmpty ? null : await repo.changeSyncCursor(owner, unit);
+      await repo.loadChanges(
+        ownerId: owner,
+        sessionUnitId: unit.isEmpty ? null : unit,
+      );
+      final after =
+          unit.isEmpty ? null : await repo.changeSyncCursor(owner, unit);
+      if (mounted) {
+        setState(
+          () =>
+              _changesResult =
+                  repo.isChangeSyncAvailable
+                      ? '同步完成 · ${watch.elapsedMilliseconds} ms\n范围：${unit.isEmpty ? '当前身份本地缓存会话' : unit}\n原游标：$before\n新游标：$after\nSQLite、摘要及引用已按返回状态更新；再次执行可验证幂等。'
+                      : '服务端尚未启用消息变更同步或接口未部署，现有消息恢复逻辑继续工作。',
+        );
+      }
+    } catch (error, stack) {
+      if (mounted) setState(() => _changesResult = '失败：$error\n$stack');
+    } finally {
+      if (mounted) setState(() => _syncingChanges = false);
+    }
+  }
 
   Future<void> _recall() async {
     final owner = int.tryParse(ownerId.text);
@@ -169,6 +210,24 @@ class _ChatDiagnosticsPageState extends ConsumerState<ChatDiagnosticsPage> {
           child: const Text('恢复撤回诊断默认值'),
         ),
         const Divider(),
+        const Text('持久化消息变更同步 · 全平台共用。会话为空时同步当前身份的本地缓存会话；首次自动校准，后续只拉增量。'),
+        FilledButton(
+          onPressed: _syncingChanges ? null : _syncChanges,
+          child: Text(_syncingChanges ? '同步中…' : '执行消息变更同步'),
+        ),
+        SelectableText(_changesResult),
+        TextButton(
+          onPressed:
+              () => ref.read(clipboardServiceProvider).copy(_changesResult),
+          child: const Text('复制增量同步结果'),
+        ),
+        TextButton(
+          onPressed:
+              _syncingChanges
+                  ? null
+                  : () => setState(() => _changesResult = '未执行增量同步'),
+          child: const Text('重置同步诊断结果'),
+        ),
         const Text(
           '撤回同步诊断 · Android / iOS / 平板 / Windows / macOS / Linux / Web',
         ),

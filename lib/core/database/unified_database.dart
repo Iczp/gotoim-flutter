@@ -4,6 +4,8 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter/foundation.dart';
 
+part 'message_sync_database.dart';
+
 /// Cross-platform application database.
 ///
 /// Every supported platform uses SQLite SQL and this migration set. On native
@@ -26,7 +28,7 @@ class UnifiedDatabase {
   );
 
   static const databaseName = 'gotoim';
-  static const schemaVersion = 1;
+  static const schemaVersion = 2;
   static const diagnosticsTable = 'diagnostic_records';
   static const diagnosticsScratchTable = 'diagnostic_scratch';
 
@@ -38,6 +40,7 @@ class UnifiedDatabase {
     'Friends',
     'Members',
     'Messages',
+    'MessageLocalStates',
     diagnosticsTable,
     'StatisticEventQueue',
   };
@@ -587,6 +590,7 @@ class UnifiedDatabase {
         ],
       );
     }
+    await _protectSyncedFriendSummaries(rows);
   }
 
   Future<List<Map<String, Object?>>> readMessageRows({
@@ -685,37 +689,46 @@ class UnifiedDatabase {
   Future<void> upsertMessageRows(List<Map<String, Object?>> rows) async {
     if (rows.isEmpty) return;
     await initialize();
-    for (final row in rows) {
-      await _connection.runInsert(
-        'INSERT INTO Messages (id, serverId, score, clientMessageId, ownerId, '
-        'sessionUnitId, senderSessionUnitId, messageType, state, createTime, raw) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET '
-        'serverId = COALESCE(excluded.serverId, Messages.serverId), '
-        'score = excluded.score, '
-        'clientMessageId = COALESCE(excluded.clientMessageId, Messages.clientMessageId), '
-        'ownerId = excluded.ownerId, '
-        'sessionUnitId = excluded.sessionUnitId, '
-        'state = excluded.state, '
-        "raw = CASE WHEN json_extract(Messages.raw, '\$.isRollbacked') = 1 "
-        "OR json_extract(Messages.raw, '\$.rollbackTime') IS NOT NULL "
-        "THEN json_set(excluded.raw, '\$.isRollbacked', json('true'), "
-        "'\$.rollbackTime', json_extract(Messages.raw, '\$.rollbackTime')) "
-        'ELSE excluded.raw END, '
-        'updateTime = excluded.createTime',
-        <Object?>[
-          row['id'],
-          row['serverId'],
-          row['score'],
-          row['clientMessageId'],
-          row['ownerId'],
-          row['sessionUnitId'],
-          row['senderSessionUnitId'],
-          row['messageType'],
-          row['state'],
-          row['createTime'],
-          row['raw'],
-        ],
-      );
+    final tx = _connection.beginTransaction();
+    await tx.ensureOpen(_UnifiedDatabaseUser());
+    try {
+      rows = await _mergeMessageSyncStates(rows, tx);
+      for (final row in rows) {
+        await tx.runInsert(
+          'INSERT INTO Messages (id, serverId, score, clientMessageId, ownerId, '
+          'sessionUnitId, senderSessionUnitId, messageType, state, createTime, raw) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET '
+          'serverId = COALESCE(excluded.serverId, Messages.serverId), '
+          'score = excluded.score, '
+          'clientMessageId = COALESCE(excluded.clientMessageId, Messages.clientMessageId), '
+          'ownerId = excluded.ownerId, '
+          'sessionUnitId = excluded.sessionUnitId, '
+          'state = excluded.state, '
+          "raw = CASE WHEN json_extract(Messages.raw, '\$.isRollbacked') = 1 "
+          "OR json_extract(Messages.raw, '\$.rollbackTime') IS NOT NULL "
+          "THEN json_set(excluded.raw, '\$.isRollbacked', json('true'), "
+          "'\$.rollbackTime', json_extract(Messages.raw, '\$.rollbackTime')) "
+          'ELSE excluded.raw END, '
+          'updateTime = excluded.createTime',
+          <Object?>[
+            row['id'],
+            row['serverId'],
+            row['score'],
+            row['clientMessageId'],
+            row['ownerId'],
+            row['sessionUnitId'],
+            row['senderSessionUnitId'],
+            row['messageType'],
+            row['state'],
+            row['createTime'],
+            row['raw'],
+          ],
+        );
+      }
+      await tx.send();
+    } catch (_) {
+      await tx.rollback();
+      rethrow;
     }
   }
 
@@ -831,6 +844,7 @@ class UnifiedDatabase {
   Future<Map<String, int>> clearAllLocalData() async {
     await initialize();
     const clearOrder = <String>[
+      'MessageLocalStates',
       'Messages',
       'Members',
       'Friends',
@@ -1090,6 +1104,12 @@ class DatabaseDiagnosticRecord {
 }
 
 const _version1Schema = <String>[
+  '''CREATE TABLE IF NOT EXISTS MessageLocalStates (
+    namespace TEXT NOT NULL, ownerId INTEGER NOT NULL, sessionUnitId TEXT NOT NULL,
+    messageId INTEGER NOT NULL, version INTEGER NOT NULL, rollbackTime TEXT,
+    PRIMARY KEY (namespace, ownerId, sessionUnitId, messageId)
+  )''',
+  'CREATE INDEX IF NOT EXISTS idx_message_local_states_scope ON MessageLocalStates (ownerId, sessionUnitId, messageId, version DESC)',
   '''CREATE TABLE IF NOT EXISTS Settings (
     id TEXT PRIMARY KEY, [group] TEXT, type TEXT, value TEXT,
     createTime INTEGER, updateTime INTEGER, expireTime INTEGER, raw TEXT

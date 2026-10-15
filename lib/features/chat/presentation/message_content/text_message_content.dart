@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
-import '../../../../core/browser/app_webview_page.dart';
+import '../../../../core/security/url_security_service.dart';
 
 import '../../../../core/native/native.dart';
 import '../../../../core/theme/app_theme_tokens.dart';
@@ -73,7 +73,7 @@ class TextMessageContent extends StatelessWidget {
     }
 
     if (link.startsWith('http://') || link.startsWith('https://')) {
-      await AppWebViewPage.open(context, url: link);
+      await UrlSecurityService.instance.openUrl(context, url: link);
       return;
     }
 

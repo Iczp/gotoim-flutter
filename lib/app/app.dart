@@ -60,6 +60,9 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ref.read(realtimeSyncCoordinatorProvider).syncCurrentOwner());
+    }
     ref.read(activeChatRegistryProvider).updateLifecycle(state);
     ref
         .read(networkConnectivityCoordinatorProvider)

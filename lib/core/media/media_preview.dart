@@ -1,10 +1,17 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_navigation.dart';
+import '../../features/session/application/session_list_controller.dart';
 import '../services/media/media_gallery_saver.dart';
+import '../services/scan/image_qr_detector.dart';
+import '../services/scan/qr_action_resolver.dart';
+import '../widgets/app_modal.dart';
 import '../widgets/app_toast.dart';
+import '../widgets/target_picker/target_picker.dart';
 import 'image_provider_factory.dart';
 import 'image_viewer.dart';
 import 'media_downloader.dart';
@@ -140,9 +147,227 @@ abstract class MediaPreview {
       ),
     );
   }
+  static Future<void> showActionSheet(
+    BuildContext context, {
+    required WidgetRef ref,
+    required MediaPreviewItem item,
+    MediaDownloader? downloader,
+    VoidCallback? onShare,
+    VoidCallback? onDownload,
+  }) async {
+    HapticFeedback.mediumImpact();
+    final effectiveDownloader = downloader ?? DefaultMediaDownloader.instance;
+
+    QrParsedAction? qrAction;
+    if (item.type == MediaPreviewType.image) {
+      final detector = ref.read(imageQrDetectorProvider);
+      final cacheKey = item.localPath ?? item.source;
+      var qrResult = detector.getCached(cacheKey);
+
+      if (qrResult == null && !detector.hasCache(cacheKey)) {
+        Uint8List? bytes = item.bytes;
+        if (bytes == null && item.localPath != null && item.localPath!.isNotEmpty) {
+          try {
+            final f = File(item.localPath!);
+            if (await f.exists()) bytes = await f.readAsBytes();
+          } catch (_) {}
+        }
+        if (bytes == null) {
+          final cached = await effectiveDownloader.getCachedPath(item);
+          if (cached != null) {
+            try {
+              final f = File(cached);
+              if (await f.exists()) bytes = await f.readAsBytes();
+            } catch (_) {}
+          }
+        }
+        if (bytes == null &&
+            (item.source.startsWith('http://') || item.source.startsWith('https://'))) {
+          try {
+            final path = await effectiveDownloader.download(item);
+            if (path.isNotEmpty) {
+              final f = File(path);
+              if (await f.exists()) bytes = await f.readAsBytes();
+            }
+          } catch (_) {}
+        }
+        if (bytes != null) {
+          qrResult = await detector.detectFromBytes(bytes, cacheKey: cacheKey);
+        }
+      }
+
+      if (qrResult != null && qrResult.content.isNotEmpty) {
+        qrAction = await QrActionResolver.resolve(
+          ref: ref,
+          rawText: qrResult.content,
+        );
+      }
+    }
+
+    if (!context.mounted) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF222222) : Colors.white;
+    final itemBgColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final dividerColor = isDark ? const Color(0xFF333333) : const Color(0xFFF2F2F2);
+    final gapColor = isDark ? const Color(0xFF181818) : const Color(0xFFF7F7F7);
+    final textColor = isDark ? Colors.white : const Color(0xFF191919);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1. 发送给朋友 / 转发
+                ListTile(
+                  tileColor: itemBgColor,
+                  leading: Icon(Icons.send_rounded, color: textColor),
+                  title: Text(
+                    '发送给朋友',
+                    style: TextStyle(color: textColor, fontSize: 16),
+                  ),
+                  onTap: () async {
+                    Navigator.of(sheetCtx).pop();
+                    if (onShare != null) {
+                      onShare();
+                    } else {
+                      await _handleForwardMedia(
+                        context: context,
+                        ref: ref,
+                        item: item,
+                      );
+                    }
+                  },
+                ),
+                Divider(height: 1, thickness: 0.5, color: dividerColor),
+
+                // 2. 保存图片 / 保存视频
+                ListTile(
+                  tileColor: itemBgColor,
+                  leading: Icon(Icons.download_rounded, color: textColor),
+                  title: Text(
+                    item.type == MediaPreviewType.video ? '保存视频' : '保存图片',
+                    style: TextStyle(color: textColor, fontSize: 16),
+                  ),
+                  onTap: () async {
+                    Navigator.of(sheetCtx).pop();
+                    if (onDownload != null) {
+                      onDownload();
+                    } else {
+                      try {
+                        final cached = await effectiveDownloader.getCachedPath(item);
+                        final targetPath = (cached != null && cached.isNotEmpty)
+                            ? cached
+                            : await effectiveDownloader.download(item);
+                        if (targetPath.isNotEmpty) {
+                          if (item.type == MediaPreviewType.image) {
+                            await MediaGallerySaver.saveImage(targetPath);
+                            showToast('已保存到系统相册', type: ToastType.success);
+                          } else {
+                            await MediaGallerySaver.saveVideo(targetPath);
+                            showToast('已保存到系统相册', type: ToastType.success);
+                          }
+                        }
+                      } catch (e) {
+                        showToast('保存相册失败: $e', type: ToastType.error);
+                      }
+                    }
+                  },
+                ),
+
+                // 3. ⭐ 如果识别到了二维码，显示识别项（微信同款高亮）
+                if (qrAction != null) ...[
+                  Divider(height: 1, thickness: 0.5, color: dividerColor),
+                  ListTile(
+                    tileColor: itemBgColor,
+                    leading: Icon(
+                      qrAction.icon,
+                      color: const Color(0xFF07C160), // 微信经典品牌绿
+                    ),
+                    title: Text(
+                      qrAction.title,
+                      style: const TextStyle(
+                        color: Color(0xFF07C160),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onTap: () async {
+                      final act = qrAction;
+                      Navigator.of(sheetCtx).pop();
+                      if (act != null) {
+                        await act.onExecute(context, ref);
+                      }
+                    },
+                  ),
+                ],
+
+                // 灰色间隔条
+                Container(height: 8, color: gapColor),
+
+                // 4. 取消按钮
+                ListTile(
+                  tileColor: itemBgColor,
+                  title: const Center(
+                    child: Text(
+                      '取消',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  onTap: () => Navigator.of(sheetCtx).pop(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 唤起会话选择器转发当前媒体
+  static Future<void> _handleForwardMedia({
+    required BuildContext context,
+    required WidgetRef ref,
+    required MediaPreviewItem item,
+  }) async {
+    final targets = await ForwardTargetPicker.pickTargets(
+      context: context,
+      sessionLoader: () async {
+        final sessionList = ref.read(sessionListControllerProvider);
+        return sessionList.sessions;
+      },
+      title: '发送给朋友',
+    );
+    if (targets == null || targets.isEmpty || !context.mounted) return;
+
+    final targetNames = targets.map((t) => t.title).join('、');
+    final confirmed = await showConfirmModal(
+      context: context,
+      title: '确认发送',
+      message: '确定要将此${item.type == MediaPreviewType.video ? "视频" : "图片"}发送给：$targetNames？',
+      confirmText: '发送',
+    );
+    if (!confirmed || !context.mounted) return;
+
+    showToast('已发送给 $targetNames', type: ToastType.success);
+  }
 }
 
-class _MediaPreviewPage extends StatefulWidget {
+class _MediaPreviewPage extends ConsumerStatefulWidget {
   const _MediaPreviewPage({
     required this.items,
     required this.initialIndex,
@@ -152,10 +377,10 @@ class _MediaPreviewPage extends StatefulWidget {
   final int initialIndex;
   final MediaDownloader downloader;
   @override
-  State<_MediaPreviewPage> createState() => _MediaPreviewPageState();
+  ConsumerState<_MediaPreviewPage> createState() => _MediaPreviewPageState();
 }
 
-class _MediaPreviewPageState extends State<_MediaPreviewPage>
+class _MediaPreviewPageState extends ConsumerState<_MediaPreviewPage>
     with SingleTickerProviderStateMixin {
   late final PageController _pages = PageController(
     initialPage: widget.initialIndex,
@@ -183,6 +408,54 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
           });
         }
       });
+
+    // 预扫描初始当前大图中的二维码
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _preloadQrCode(_index);
+    });
+  }
+
+  /// 后台轻量预扫描指定索引大图中的二维码
+  Future<void> _preloadQrCode(int index) async {
+    if (index < 0 || index >= widget.items.length) return;
+    final item = widget.items[index];
+    if (item.type != MediaPreviewType.image) return;
+
+    final detector = ref.read(imageQrDetectorProvider);
+    final cacheKey = item.localPath ?? item.source;
+    if (detector.hasCache(cacheKey)) return;
+
+    Uint8List? bytes = item.bytes;
+    if (bytes == null && item.localPath != null && item.localPath!.isNotEmpty) {
+      try {
+        final f = File(item.localPath!);
+        if (await f.exists()) bytes = await f.readAsBytes();
+      } catch (_) {}
+    }
+    if (bytes == null) {
+      final cached = await widget.downloader.getCachedPath(item);
+      if (cached != null) {
+        try {
+          final f = File(cached);
+          if (await f.exists()) bytes = await f.readAsBytes();
+        } catch (_) {}
+      }
+    }
+    if (bytes != null) {
+      await detector.detectFromBytes(bytes, cacheKey: cacheKey);
+    }
+  }
+
+  /// 长按媒体：委托给 MediaPreview.showActionSheet 处理
+  Future<void> _handleMediaLongPress(MediaPreviewItem item) async {
+    await MediaPreview.showActionSheet(
+      context,
+      ref: ref,
+      item: item,
+      downloader: widget.downloader,
+      onShare: _shareCurrent,
+      onDownload: _downloadCurrent,
+    );
   }
 
   @override
@@ -338,6 +611,11 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                     setState(() => _chrome = !_chrome);
                   }
                 },
+                onLongPress: () {
+                  if (_dragOffset == Offset.zero && _pointerCount <= 1) {
+                    _handleMediaLongPress(widget.items[_index]);
+                  }
+                },
                 onVerticalDragStart:
                     widget.items[_index].type == MediaPreviewType.video
                         ? _onVerticalDragStart
@@ -372,6 +650,7 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                                 _index = value;
                                 _currentScale = 1.0;
                                 _dragOffset = Offset.zero;
+                                _preloadQrCode(value);
                               }),
                           itemBuilder: (context, index) {
                             final item = widget.items[index];
@@ -392,6 +671,7 @@ class _MediaPreviewPageState extends State<_MediaPreviewPage>
                                 });
                               },
                               onDismissEnd: () => Navigator.of(context).pop(),
+                              onLongPress: () => _handleMediaLongPress(item),
                             );
                           },
                         ),
@@ -532,6 +812,7 @@ class _MediaPreviewItemView extends StatefulWidget {
     required this.onScaleChanged,
     required this.onDismissProgress,
     required this.onDismissEnd,
+    this.onLongPress,
     this.isDragging = false,
   });
 
@@ -543,6 +824,7 @@ class _MediaPreviewItemView extends StatefulWidget {
   final ValueChanged<double> onScaleChanged;
   final ValueChanged<Offset> onDismissProgress;
   final VoidCallback onDismissEnd;
+  final VoidCallback? onLongPress;
   final bool isDragging;
 
   @override
@@ -559,11 +841,28 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
   double _progress = 0.0;
   Object? _error;
 
+  String? _resolveLocalFile(String? path) {
+    if (path == null || path.isEmpty) return null;
+    if (kIsWeb) return null;
+    try {
+      var p = path;
+      if (p.startsWith('file://')) {
+        p = Uri.tryParse(p)?.toFilePath() ?? p.substring(7);
+      }
+      if (File(p).existsSync()) return p;
+    } catch (_) {}
+    return null;
+  }
+
   bool _fileExists(String? path) {
     if (path == null || path.isEmpty) return false;
     if (kIsWeb) return true;
     try {
-      return File(path).existsSync();
+      var p = path;
+      if (p.startsWith('file://')) {
+        p = Uri.tryParse(p)?.toFilePath() ?? p.substring(7);
+      }
+      return File(p).existsSync();
     } catch (_) {
       return false;
     }
@@ -572,16 +871,18 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
   @override
   void initState() {
     super.initState();
-    if (widget.item.localPath != null &&
-        widget.item.localPath!.isNotEmpty &&
-        _fileExists(widget.item.localPath)) {
-      _localPath = widget.item.localPath;
+    final local = _resolveLocalFile(widget.item.localPath) ??
+        _resolveLocalFile(widget.item.source);
+    if (local != null) {
+      _localPath = local;
       _isReady = true;
-    } else if (widget.item.bytes != null &&
-        widget.item.type == MediaPreviewType.image) {
+    } else if (widget.item.type == MediaPreviewType.image) {
+      // 图片直接由 ImageViewer 结合 CachedNetworkImage / MemoryImage 渲染并支持缩放手势，直接标记 ready
       _isReady = true;
     } else {
-      _checkStatus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _checkStatus();
+      });
     }
   }
 
@@ -589,30 +890,42 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
   void didUpdateWidget(_MediaPreviewItemView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.item.source != oldWidget.item.source ||
-        widget.item.id != oldWidget.item.id) {
-      _checkStatus();
+        widget.item.id != oldWidget.item.id ||
+        widget.item.localPath != oldWidget.item.localPath) {
+      if (widget.item.type != MediaPreviewType.image) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _checkStatus();
+        });
+      }
     } else if (widget.active && !_isReady && !_isDownloading && _error == null) {
-      _startDownload();
+      if (widget.item.type != MediaPreviewType.image) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && widget.active && !_isReady && !_isDownloading && _error == null) {
+            _startDownload();
+          }
+        });
+      }
     }
   }
 
   Future<void> _checkStatus() async {
-    if (widget.item.localPath != null &&
-        widget.item.localPath!.isNotEmpty &&
-        _fileExists(widget.item.localPath)) {
+    final local = _resolveLocalFile(widget.item.localPath) ??
+        _resolveLocalFile(widget.item.source);
+    if (local != null) {
       if (mounted) {
         setState(() {
-          _localPath = widget.item.localPath;
+          _localPath = local;
           _isReady = true;
+          _error = null;
         });
       }
       return;
     }
-    if (widget.item.bytes != null &&
-        widget.item.type == MediaPreviewType.image) {
+    if (widget.item.type == MediaPreviewType.image) {
       if (mounted) {
         setState(() {
           _isReady = true;
+          _error = null;
         });
       }
       return;
@@ -624,14 +937,36 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
       setState(() {
         _localPath = cached;
         _isReady = true;
+        _error = null;
       });
-    } else {
+    } else if (widget.active) {
       _startDownload();
     }
   }
 
   void _startDownload() {
-    if (_isDownloading) return;
+    if (!mounted || _isDownloading) return;
+    final local = _resolveLocalFile(widget.item.localPath) ??
+        _resolveLocalFile(widget.item.source);
+    if (local != null) {
+      setState(() {
+        _localPath = local;
+        _isReady = true;
+        _isDownloading = false;
+        _error = null;
+      });
+      return;
+    }
+
+    if (widget.item.type == MediaPreviewType.image) {
+      setState(() {
+        _isReady = true;
+        _isDownloading = false;
+        _error = null;
+      });
+      return;
+    }
+
     final source = widget.item.source;
     if (source.isEmpty ||
         (!source.startsWith('http://') && !source.startsWith('https://'))) {
@@ -718,6 +1053,7 @@ class _MediaPreviewItemViewState extends State<_MediaPreviewItemView>
             onScaleChanged: widget.onScaleChanged,
             onDismissProgress: widget.onDismissProgress,
             onDismissEnd: widget.onDismissEnd,
+            onLongPress: widget.onLongPress,
           ),
           if (_isDownloading && !_isReady)
             Center(

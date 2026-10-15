@@ -6,6 +6,27 @@ class MessageApi {
   MessageApi(this._client);
   final ApiClient _client;
 
+  Future<List<Map<String, dynamic>>> changes(
+    List<Map<String, Object?>> sessions,
+  ) async {
+    final result = await _client.post<List<dynamic>>(
+      '/api/chat/message/changes/query',
+      data: {'sessions': sessions, 'maxResultCount': 200},
+    );
+    return result.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> syncItems(
+    String unit,
+    List<int> ids,
+  ) async {
+    final result = await _client.post<List<dynamic>>(
+      '/api/chat/message/sync-items',
+      data: {'sessionUnitId': unit, 'messageIds': ids},
+    );
+    return result.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+  }
+
   Future<PagedResultDto<ChatMessage>> history({
     required int ownerId,
     required String sessionUnitId,
@@ -88,7 +109,8 @@ class MessageApi {
       'content': <String, Object?>{
         'url': url,
         if (title != null && title.isNotEmpty) 'title': title,
-        if (description != null && description.isNotEmpty) 'description': description,
+        if (description != null && description.isNotEmpty)
+          'description': description,
         if (image != null && image.isNotEmpty) 'image': image,
       },
     },

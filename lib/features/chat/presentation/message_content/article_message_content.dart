@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/browser/app_webview_page.dart';
+import '../../../../core/security/url_security_service.dart';
 import '../../../../core/utils/api_url_resolver.dart';
 import '../../data/models/article_message_item.dart';
 import '../../data/models/chat_message.dart';
@@ -49,7 +49,7 @@ class ArticleMessageContent extends StatelessWidget {
     if (onArticleTap != null) {
       await onArticleTap!(item);
     } else {
-      await AppWebViewPage.open(context, url: url, title: item.title);
+      await UrlSecurityService.instance.openUrl(context, url: url, title: item.title);
     }
   }
 

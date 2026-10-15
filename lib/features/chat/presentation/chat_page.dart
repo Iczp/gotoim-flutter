@@ -7,8 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../session/application/active_chat_registry.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/browser/app_webview_page.dart';
 import '../../../core/floating_window/floating_window.dart';
+import '../../../core/security/url_security_service.dart';
+import '../../../core/security/widgets/report_dialog.dart';
 
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
@@ -1077,7 +1078,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _openLink(ChatMessage message) async {
     if (message.linkUrl.isEmpty) return;
-    await AppWebViewPage.open(
+    await UrlSecurityService.instance.openUrl(
       context,
       url: message.linkUrl,
       title: message.linkTitle.isNotEmpty ? message.linkTitle : null,
@@ -1259,6 +1260,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       case 'playVideo':
       case 'play':
         _playVideoInFloatingWindow(message);
+        return;
+      case 'report':
+        ReportDialog.showForMessage(context, message: message);
         return;
     }
   }

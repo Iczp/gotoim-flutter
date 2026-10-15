@@ -139,6 +139,13 @@ class ChatMessageMenuBuilder {
       );
     }
 
+    // 非自己发送的消息，支持投诉/举报（反诈与合规监管要件）
+    if (!message.isMine) {
+      items.add(
+        _item('report', '投诉', Icons.report_problem_outlined, context),
+      );
+    }
+
     return items;
   }
 

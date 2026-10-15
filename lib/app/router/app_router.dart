@@ -65,6 +65,7 @@ import '../../features/group/presentation/create_group_page.dart';
 import '../../features/contact/presentation/add_friend_page.dart';
 import '../../features/diagnostics/presentation/search_and_group_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/privacy_and_update_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/url_security_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/badge_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/app_statistic_diagnostics_page.dart';
 import '../app_navigation.dart';
@@ -299,6 +300,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       _buildAppRoute(
         path: '/diagnostics/js-bridge',
         builder: (context, state) => const JsBridgeDiagnosticsPage(),
+      ),
+      _buildAppRoute(
+        path: '/diagnostics/url-security',
+        builder: (context, state) => const UrlSecurityDiagnosticsPage(),
       ),
       _buildAppRoute(
         path: '/diagnostics/media',

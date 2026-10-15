@@ -18,6 +18,7 @@ class ImageViewer extends StatefulWidget {
     this.onScaleChanged,
     this.onDismissProgress,
     this.onDismissEnd,
+    this.onLongPress,
     this.scaleSensitivity = 1.0,
     this.rotationSensitivity = 1.0,
     this.minScale = 1.0,
@@ -34,6 +35,7 @@ class ImageViewer extends StatefulWidget {
   final ValueChanged<double>? onScaleChanged;
   final ValueChanged<Offset>? onDismissProgress;
   final VoidCallback? onDismissEnd;
+  final VoidCallback? onLongPress;
 
   /// Sensitivity factor for two-finger distance zoom (default 1.0).
   final double scaleSensitivity;
@@ -428,6 +430,7 @@ class _ImageViewerState extends State<ImageViewer>
         onScaleEnd: _onScaleEnd,
         onDoubleTapDown: _onDoubleTapDown,
         onDoubleTap: _onDoubleTap,
+        onLongPress: widget.onLongPress,
         child: Container(
           color: Colors.transparent,
           width: double.infinity,

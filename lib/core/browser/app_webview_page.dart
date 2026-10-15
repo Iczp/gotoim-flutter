@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../floating_window/floating_window.dart';
+import '../media/media_preview.dart';
 import '../widgets/app_toast.dart';
 import 'floating_web_bubble.dart';
 import 'browser_more_sheet.dart';
@@ -14,6 +16,9 @@ import '../config/app_environment.dart';
 import '../utils/api_url_resolver.dart';
 import '../../app/application_providers.dart';
 import '../jsbridge/js_bridge_models.dart';
+import '../security/pages/url_interstitial_page.dart';
+import '../security/url_security_service.dart';
+import '../widgets/app_modal.dart';
 
 /// 解析 CSS 颜色值（支持 hex、rgb、rgba、hsl、hsla 及常见命名颜色）
 Color? parseCssColor(String? raw) {
@@ -143,6 +148,123 @@ const String _kThemeDetectJs = r'''
   }
 
   return getThemeColor();
+})();
+''';
+
+const String _kImagePreviewInjectJs = r'''
+(function() {
+  if (window.__gotoim_preview_injected) return;
+  window.__gotoim_preview_injected = true;
+
+  window.openImage = function(current, urls, index) {
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+      if (typeof current === 'object' && current !== null && !Array.isArray(current)) {
+        window.flutter_inappwebview.callHandler('openImage', current);
+      } else {
+        window.flutter_inappwebview.callHandler('openImage', current, urls, index);
+      }
+    }
+  };
+  window.previewImage = window.openImage;
+
+  if (!window.wx) window.wx = {};
+  if (!window.wx.previewImage) {
+    window.wx.previewImage = function(opt) {
+      window.openImage(opt);
+    };
+  }
+
+  // 微信公众号/常规网页文章：点击 <img> 标签自动唤起全屏图片预览画廊
+  document.addEventListener('click', function(e) {
+    var t = e.target;
+    if (t && t.tagName === 'IMG') {
+      var src = t.currentSrc || t.getAttribute('data-src') || t.src;
+      if (!src || src.startsWith('data:image/svg')) return;
+      var imgs = Array.from(document.querySelectorAll('img'));
+      var urls = [];
+      for (var i = 0; i < imgs.length; i++) {
+        var s = imgs[i].currentSrc || imgs[i].getAttribute('data-src') || imgs[i].src;
+        if (s && !s.startsWith('data:image/svg')) {
+          urls.push(s);
+        }
+      }
+      var idx = urls.indexOf(src);
+      if (idx === -1) {
+        urls.push(src);
+        idx = urls.length - 1;
+      }
+      window.openImage({ current: src, urls: urls, index: idx });
+    }
+  }, true);
+
+  // 微信同款：网页内长按 <img> 标签唤起操作菜单与二维码智能识别
+  var _imgPressTimer = null;
+  document.addEventListener('touchstart', function(e) {
+    var t = e.target;
+    if (t && t.tagName === 'IMG') {
+      var src = t.currentSrc || t.getAttribute('data-src') || t.src;
+      if (src && !src.startsWith('data:image/svg')) {
+        _imgPressTimer = setTimeout(function() {
+          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+            window.flutter_inappwebview.callHandler('onImageLongPress', { src: src });
+          }
+        }, 500);
+      }
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', function() {
+    if (_imgPressTimer) { clearTimeout(_imgPressTimer); _imgPressTimer = null; }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function() {
+    if (_imgPressTimer) { clearTimeout(_imgPressTimer); _imgPressTimer = null; }
+  }, { passive: true });
+
+  document.addEventListener('contextmenu', function(e) {
+    if (e.target && e.target.tagName === 'IMG') {
+      var src = e.target.currentSrc || e.target.getAttribute('data-src') || e.target.src;
+      if (src && !src.startsWith('data:image/svg')) {
+        e.preventDefault();
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+          window.flutter_inappwebview.callHandler('onImageLongPress', { src: src });
+        }
+      }
+    }
+  });
+
+  // 注入通用扫码快捷方法 (兼容标准与微信格式)
+  window.scanCode = function(options) {
+    options = options || {};
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+      return window.flutter_inappwebview.callHandler('scanCode', options).then(function(res) {
+        var content = res && res.result ? res.result.content : (res ? (res.content || '') : '');
+        if (typeof options.success === 'function') {
+          options.success({ result: content, raw: res });
+        }
+        return res;
+      }).catch(function(err) {
+        if (typeof options.fail === 'function') options.fail(err);
+        throw err;
+      });
+    }
+    return Promise.reject(new Error('Bridge not ready'));
+  };
+
+  if (!window.wx) window.wx = {};
+  if (!window.wx.scanQRCode) {
+    window.wx.scanQRCode = function(opt) {
+      opt = opt || {};
+      window.scanCode({
+        success: function(res) {
+          if (typeof opt.success === 'function') {
+            opt.success({ resultStr: res.result });
+          }
+        },
+        fail: opt.fail
+      });
+    };
+  }
 })();
 ''';
 
@@ -515,6 +637,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
         mediaPlaybackRequiresUserGesture: false,
         mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
         useShouldOverrideUrlLoading: false,
+        useOnDownloadStart: true,
         supportZoom: true,
         builtInZoomControls: true,
         displayZoomControls: false,
@@ -532,6 +655,18 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
             if (args.isEmpty || args[0] == null) return null;
             final raw = args[0].toString();
             try {
+              // 安全风控沙箱：非官方受信白名单域名，阻断调用特权 Native JSBridge 敏感接口
+              final securityService = ref.read(urlSecurityServiceProvider);
+              if (!securityService.isTrustedDomain(_currentUrl)) {
+                debugPrint('[GotoIMBridge] 阻断非受信任域名的 Native JSBridge 调用: $_currentUrl');
+                return jsonEncode({
+                  'success': false,
+                  'error': {
+                    'code': 'UNAUTHORIZED_ORIGIN',
+                    'message': '当前网页未获得 GotoIM Native JSBridge 权限',
+                  },
+                });
+              }
               final dispatcher = ref.read(jsApiDispatcherProvider);
               return await dispatcher.handleRaw(raw);
             } catch (e) {
@@ -541,66 +676,266 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           },
         );
 
-        // 快捷兼容通道：openImage (直接映射至 media.previewImage)
+        // 统一图片预览处理器（支持 openImage、previewImage、media.previewImage）
+        Future<bool> handlePreviewImage(List<dynamic> args) async {
+          if (args.isEmpty || !mounted) return false;
+          try {
+            final dispatcher = ref.read(jsApiDispatcherProvider);
+            final data = <String, dynamic>{};
+            if (args[0] is Map) {
+              data.addAll(Map<String, dynamic>.from(args[0] as Map));
+            } else if (args[0] is String) {
+              data['current'] = args[0].toString();
+              if (args.length > 1 && args[1] is List) {
+                data['urls'] = (args[1] as List).map((e) => e.toString()).toList();
+              }
+              if (args.length > 2 && args[2] is int) {
+                data['index'] = args[2];
+              }
+            } else if (args[0] is List) {
+              data['urls'] = (args[0] as List).map((e) => e.toString()).toList();
+              if (args.length > 1 && args[1] != null) {
+                if (args[1] is int) {
+                  data['index'] = args[1];
+                } else if (args[1] is String) {
+                  data['current'] = args[1].toString();
+                }
+              }
+            }
+
+            // URL 补全规范化（支持相对路径、协议相对路径、data:image 等）
+            String normalizeUrl(String raw) {
+              final trimmed = raw.trim();
+              if (trimmed.isEmpty ||
+                  trimmed.startsWith('data:image/') ||
+                  trimmed.startsWith('file:') ||
+                  trimmed.startsWith('http://') ||
+                  trimmed.startsWith('https://')) {
+                return trimmed;
+              }
+              if (trimmed.startsWith('//')) {
+                final pageUri = Uri.tryParse(_currentUrl);
+                final scheme = (pageUri != null && pageUri.scheme.isNotEmpty)
+                    ? pageUri.scheme
+                    : 'https';
+                return '$scheme:$trimmed';
+              }
+              final pageUri = Uri.tryParse(_currentUrl);
+              if (pageUri != null && pageUri.hasScheme && pageUri.host.isNotEmpty) {
+                try {
+                  return pageUri.resolve(trimmed).toString();
+                } catch (_) {}
+              }
+              final env = ref.read(appEnvironmentProvider);
+              return resolveApiUrl(trimmed, env.apiBaseUrl);
+            }
+
+            if (data['current'] != null) {
+              data['current'] = normalizeUrl(data['current'].toString());
+            }
+            if (data['urls'] is List) {
+              data['urls'] = (data['urls'] as List)
+                  .map((e) => normalizeUrl(e?.toString() ?? ''))
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+            }
+
+            final resp = await dispatcher.dispatch(
+              JsBridgeRequest(
+                id: 'shim_open_image_${DateTime.now().millisecondsSinceEpoch}',
+                action: 'media.previewImage',
+                data: data,
+              ),
+            );
+            return resp.success;
+          } catch (e) {
+            debugPrint('[WebViewBridge] previewImage error: $e');
+            return false;
+          }
+        }
+
         controller.addJavaScriptHandler(
           handlerName: 'openImage',
+          callback: handlePreviewImage,
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'previewImage',
+          callback: handlePreviewImage,
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'media.previewImage',
+          callback: handlePreviewImage,
+        );
+
+        // 网页内直接长按图片处理器（微信同款识别二维码与快捷操作）
+        controller.addJavaScriptHandler(
+          handlerName: 'onImageLongPress',
           callback: (args) async {
             if (args.isEmpty || !mounted) return false;
             try {
-              final dispatcher = ref.read(jsApiDispatcherProvider);
-              final data = <String, dynamic>{};
-              if (args[0] is Map) {
-                data.addAll(Map<String, dynamic>.from(args[0] as Map));
-              } else if (args[0] is String) {
-                data['current'] = args[0].toString();
-                if (args.length > 1 && args[1] is List) {
-                  data['urls'] = (args[1] as List).map((e) => e.toString()).toList();
+              final map = args[0] is Map ? (args[0] as Map) : <dynamic, dynamic>{};
+              final rawSrc = map['src']?.toString() ?? '';
+              if (rawSrc.isEmpty) return false;
+
+              String normalizeUrl(String raw) {
+                final trimmed = raw.trim();
+                if (trimmed.isEmpty ||
+                    trimmed.startsWith('data:image/') ||
+                    trimmed.startsWith('file:') ||
+                    trimmed.startsWith('http://') ||
+                    trimmed.startsWith('https://')) {
+                  return trimmed;
+                }
+                if (trimmed.startsWith('//')) {
+                  final pageUri = Uri.tryParse(_currentUrl);
+                  final scheme = (pageUri != null && pageUri.scheme.isNotEmpty)
+                      ? pageUri.scheme
+                      : 'https';
+                  return '$scheme:$trimmed';
+                }
+                final pageUri = Uri.tryParse(_currentUrl);
+                if (pageUri != null && pageUri.hasScheme && pageUri.host.isNotEmpty) {
+                  try {
+                    return pageUri.resolve(trimmed).toString();
+                  } catch (_) {}
+                }
+                final env = ref.read(appEnvironmentProvider);
+                return resolveApiUrl(trimmed, env.apiBaseUrl);
+              }
+
+              final src = normalizeUrl(rawSrc);
+              Uint8List? dataBytes;
+              if (src.startsWith('data:image/')) {
+                final commaIdx = src.indexOf(',');
+                if (commaIdx != -1) {
+                  try {
+                    dataBytes = base64Decode(src.substring(commaIdx + 1));
+                  } catch (_) {}
                 }
               }
-              final resp = await dispatcher.dispatch(
-                JsBridgeRequest(
-                  id: 'shim_open_image_${DateTime.now().millisecondsSinceEpoch}',
-                  action: 'media.previewImage',
-                  data: data,
-                ),
+
+              final item = MediaPreviewItem(
+                id: src,
+                messageId: 'h5_img_${src.hashCode}',
+                type: MediaPreviewType.image,
+                source: src,
+                bytes: dataBytes,
+                heroTag: 'h5-image-$src',
               );
-              return resp.success;
+
+              await MediaPreview.showActionSheet(
+                context,
+                ref: ref,
+                item: item,
+                onShare: () async {
+                  await Clipboard.setData(ClipboardData(text: src));
+                  showToast('图片链接已复制到剪贴板', type: ToastType.success);
+                },
+              );
+              return true;
             } catch (e) {
-              debugPrint('[WebViewBridge] openImage error: $e');
+              debugPrint('[WebViewBridge] onImageLongPress error: $e');
               return false;
             }
           },
         );
 
-        // 快捷兼容通道：openVideo (直接映射至 media.previewVideo)
+        // 统一扫码处理器（支持 H5/JS-SDK/微信直接调用）
         controller.addJavaScriptHandler(
-          handlerName: 'openVideo',
+          handlerName: 'scanCode',
           callback: (args) async {
-            if (args.isEmpty || !mounted) return false;
             try {
               final dispatcher = ref.read(jsApiDispatcherProvider);
-              final data = <String, dynamic>{};
-              if (args[0] is Map) {
-                data.addAll(Map<String, dynamic>.from(args[0] as Map));
-              } else if (args[0] is String) {
-                data['url'] = args[0].toString();
-                if (args.length > 1 && args[1] != null) {
-                  data['poster'] = args[1].toString();
-                }
-              }
+              final map = args.isNotEmpty && args[0] is Map
+                  ? (args[0] as Map).cast<String, dynamic>()
+                  : <String, dynamic>{};
               final resp = await dispatcher.dispatch(
                 JsBridgeRequest(
-                  id: 'shim_open_video_${DateTime.now().millisecondsSinceEpoch}',
-                  action: 'media.previewVideo',
-                  data: data,
+                  id: 'shim_scan_code_${DateTime.now().millisecondsSinceEpoch}',
+                  action: 'scan.scanCode',
+                  data: map,
                 ),
               );
-              return resp.success;
+              return resp.data;
             } catch (e) {
-              debugPrint('[WebViewBridge] openVideo error: $e');
-              return false;
+              debugPrint('[WebViewBridge] scanCode error: $e');
+              return null;
             }
           },
+        );
+
+        // 统一视频预览处理器（支持 openVideo、previewVideo、media.previewVideo）
+        Future<bool> handlePreviewVideo(List<dynamic> args) async {
+          if (args.isEmpty || !mounted) return false;
+          try {
+            final dispatcher = ref.read(jsApiDispatcherProvider);
+            final data = <String, dynamic>{};
+            if (args[0] is Map) {
+              data.addAll(Map<String, dynamic>.from(args[0] as Map));
+            } else if (args[0] is String) {
+              data['url'] = args[0].toString();
+              if (args.length > 1 && args[1] != null) {
+                data['poster'] = args[1].toString();
+              }
+            }
+
+            String normalizeUrl(String raw) {
+              final trimmed = raw.trim();
+              if (trimmed.isEmpty ||
+                  trimmed.startsWith('file:') ||
+                  trimmed.startsWith('http://') ||
+                  trimmed.startsWith('https://')) {
+                return trimmed;
+              }
+              if (trimmed.startsWith('//')) {
+                final pageUri = Uri.tryParse(_currentUrl);
+                final scheme = (pageUri != null && pageUri.scheme.isNotEmpty)
+                    ? pageUri.scheme
+                    : 'https';
+                return '$scheme:$trimmed';
+              }
+              final pageUri = Uri.tryParse(_currentUrl);
+              if (pageUri != null && pageUri.hasScheme && pageUri.host.isNotEmpty) {
+                try {
+                  return pageUri.resolve(trimmed).toString();
+                } catch (_) {}
+              }
+              final env = ref.read(appEnvironmentProvider);
+              return resolveApiUrl(trimmed, env.apiBaseUrl);
+            }
+
+            if (data['url'] != null) {
+              data['url'] = normalizeUrl(data['url'].toString());
+            }
+            if (data['poster'] != null) {
+              data['poster'] = normalizeUrl(data['poster'].toString());
+            }
+
+            final resp = await dispatcher.dispatch(
+              JsBridgeRequest(
+                id: 'shim_open_video_${DateTime.now().millisecondsSinceEpoch}',
+                action: 'media.previewVideo',
+                data: data,
+              ),
+            );
+            return resp.success;
+          } catch (e) {
+            debugPrint('[WebViewBridge] openVideo error: $e');
+            return false;
+          }
+        }
+
+        controller.addJavaScriptHandler(
+          handlerName: 'openVideo',
+          callback: handlePreviewVideo,
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'previewVideo',
+          callback: handlePreviewVideo,
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'media.previewVideo',
+          callback: handlePreviewVideo,
         );
 
         controller.addJavaScriptHandler(
@@ -707,7 +1042,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           },
         );
       },
-      onLoadStart: (controller, url) {
+      onLoadStart: (controller, url) async {
         if (!mounted) return;
         setState(() {
           _isLoading = true;
@@ -716,6 +1051,43 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
             _currentUrl = url.toString();
           }
         });
+        if (url != null) {
+          final targetStr = url.toString();
+          final securityService = ref.read(urlSecurityServiceProvider);
+          final res = await securityService.checkUrl(targetStr);
+          if (res.isBlocked && mounted) {
+            // 阻断重定向：停止加载并转入红盾阻断拦截页
+            controller.stopLoading();
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute<void>(
+                builder: (_) => UrlInterstitialPage(checkResult: res),
+              ),
+            );
+          }
+        }
+      },
+      onDownloadStarting: (controller, downloadRequest) async {
+        final downloadUrl = downloadRequest.url.toString();
+        final securityService = ref.read(urlSecurityServiceProvider);
+        if (securityService.isDangerousDownload(downloadUrl)) {
+          final confirmed = await showConfirmModal(
+            context: context,
+            title: '文件下载安全提示',
+            message:
+                '网页正尝试下载应用安装包/可执行文件：\n$downloadUrl\n\n来源不明的安装文件可能存在病毒木马或恶意扣费，是否仍使用系统浏览器继续下载？',
+            confirmText: '风险自担，继续',
+            cancelText: '取消下载',
+          );
+          if (!confirmed) {
+            return DownloadStartResponse(handled: true);
+          }
+        }
+        try {
+          await InAppBrowser.openWithSystemBrowser(url: downloadRequest.url);
+        } catch (e) {
+          showToast('无法启动下载: $e', type: ToastType.error);
+        }
+        return DownloadStartResponse(handled: true);
       },
       onProgressChanged: (controller, progress) {
         if (!mounted) return;
@@ -741,6 +1113,9 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           }
         });
         _detectHtmlTheme();
+        try {
+          await controller.evaluateJavascript(source: _kImagePreviewInjectJs);
+        } catch (_) {}
       },
       onReceivedError: (controller, request, error) {
         if (!mounted) return;
