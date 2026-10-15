@@ -138,6 +138,8 @@ class ChatController extends ChangeNotifier {
   Timer? _aiRunRecoveryTimer;
   bool _isRecoveringAfterRealtimeReconnect = false;
   bool _isDisposed = false;
+  bool _initialized = false;
+  final Set<int> _deletedMessageIds = {};
   bool get isDisposed => _isDisposed;
 
   @override
@@ -227,15 +229,26 @@ class ChatController extends ChangeNotifier {
     asMap(friend?.raw['destination'])['name'],
     title,
   ]);
-  String? get peerAvatarUrl =>
-      (asMap(friend?.raw['destination'])['thumbnail'] ??
-              asMap(friend?.raw['destination'])['portrait'])
-          ?.toString();
+  String? get peerAvatarUrl {
+    final destination = asMap(
+      friend?.raw['destination'] ?? friend?.raw['Destination'],
+    );
+    final value = firstNonEmpty([
+      destination['thumbnail'],
+      destination['Thumbnail'],
+      destination['portrait'],
+      destination['Portrait'],
+    ]);
+    return value.isEmpty ? null : value;
+  }
+
   String? get myAvatarUrl {
     final owner = asMap(friend?.raw['owner'] ?? friend?.raw['Owner']);
     final value = firstNonEmpty(<Object?>[
       owner['thumbnail'],
+      owner['Thumbnail'],
       owner['portrait'],
+      owner['Portrait'],
     ]);
     return value.isEmpty ? null : value;
   }
@@ -302,6 +315,8 @@ class ChatController extends ChangeNotifier {
   final Stopwatch _traceStopwatch = Stopwatch();
 
   Future<void> initialize() async {
+    if (_initialized || _isDisposed) return;
+    _initialized = true;
     _traceStopwatch.start();
     debugPrint(
       '[ChatTrace] ▶ [1/5] initialize started | session=$sessionUnitId',
@@ -310,6 +325,14 @@ class ChatController extends ChangeNotifier {
     _sessionChangeSubscription = _sessionChangeBus.events.listen((event) {
       if (event.ownerId == effectiveOwnerId &&
           event.sessionUnitId == sessionUnitId) {
+        _deletedMessageIds.addAll(event.deletedMessageIds ?? const []);
+        if (_deletedMessageIds.contains(quoting?.serverId)) quoting = null;
+        _messages.removeWhere(
+          (message) => _deletedMessageIds.contains(message.serverId),
+        );
+        selectedLocalIds.removeWhere(
+          (id) => !_messages.any((message) => message.localId == id),
+        );
         unawaited(
           _reloadFromLocalChange(
             messageId: event.messageId,
@@ -626,19 +649,32 @@ class ChatController extends ChangeNotifier {
     // page.  A new chat controller is created on re-entry, so only the local
     // database can reliably carry forward the newest persisted server ID.
     try {
+      if (refreshRecent) {
+        try {
+          await _repository.loadChanges(
+            ownerId: effectiveOwnerId,
+            sessionUnitId: sessionUnitId,
+          );
+        } catch (exception) {
+          // Retain the checkpoint for retry without blocking ordinary new messages.
+          debugPrint(
+            '[loadMessages][changes-failed] session=$sessionUnitId error=$exception',
+          );
+        }
+      }
       final minMessageId = await _repository.maxLocalServerId(
         ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
       );
       if (_isDisposed) return;
-      if (minMessageId <= 0 && !refreshRecent) {
+      if (minMessageId <= 0) {
         return;
       }
       final latest = await _repository.loadLatest(
         ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
         minMessageId: minMessageId,
-        refreshRecent: refreshRecent,
+        refreshRecent: refreshRecent && !_repository.isChangeSyncAvailable,
       );
       if (_isDisposed) return;
       final byId = <String, ChatMessage>{
@@ -652,12 +688,6 @@ class ChatController extends ChangeNotifier {
         ..addAll(byId.values);
       _deduplicateMessages();
       _messages.sort((a, b) => b.score.compareTo(a.score));
-      if (refreshRecent) {
-        await _repository.loadChanges(
-          ownerId: effectiveOwnerId,
-          sessionUnitId: sessionUnitId,
-        );
-      }
     } catch (exception) {
       if (_isDisposed) return;
       debugPrint(
@@ -1476,6 +1506,7 @@ class ChatController extends ChangeNotifier {
   }
 
   void _replaceMessage(ChatMessage value) {
+    if (_deletedMessageIds.contains(value.serverId)) return;
     final index = _messages.indexWhere(
       (message) =>
           message.localId == value.localId ||
@@ -1505,6 +1536,15 @@ class ChatController extends ChangeNotifier {
     final quoteId = asInt(incoming.quoteMessage['id']);
     if (quoteId != null &&
         quoteId == asInt(known.quoteMessage['id']) &&
+        known.quoteMessage['isDeleted'] == true) {
+      raw['quoteMessage'] = {
+        ...incoming.quoteMessage,
+        'isDeleted': true,
+        'content': null,
+      };
+    }
+    if (quoteId != null &&
+        quoteId == asInt(known.quoteMessage['id']) &&
         (known.quoteMessage['isRollbacked'] == true ||
             known.quoteMessage['rollbackTime'] != null)) {
       raw['quoteMessage'] = {
@@ -1521,6 +1561,7 @@ class ChatController extends ChangeNotifier {
     final seenServerIds = <int>{};
     final seenClientIds = <String>{};
     _messages.removeWhere((item) {
+      if (_deletedMessageIds.contains(item.serverId)) return true;
       if (!seenLocalIds.add(item.localId)) return true;
       if (item.serverId != null && !seenServerIds.add(item.serverId!)) {
         return true;

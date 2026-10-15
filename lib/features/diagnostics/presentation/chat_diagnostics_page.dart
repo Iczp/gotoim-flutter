@@ -23,6 +23,56 @@ class _ChatDiagnosticsPageState extends ConsumerState<ChatDiagnosticsPage> {
   String? _recallStack;
   bool _syncingChanges = false;
   String _changesResult = '未执行增量同步';
+  bool _deleting = false;
+  String _deleteResult = '未执行单条删除';
+
+  Future<void> _delete() async {
+    final owner = int.tryParse(ownerId.text);
+    final id = int.tryParse(messageId.text);
+    final unit = sessionUnitId.text.trim();
+    if (owner == null || owner <= 0 || id == null || id <= 0 || unit.isEmpty) {
+      setState(
+        () => _deleteResult = '请输入有效 Owner ID、SessionUnit ID、Message ID',
+      );
+      return;
+    }
+    setState(() {
+      _deleting = true;
+      _deleteResult = '执行中';
+    });
+    final watch = Stopwatch()..start();
+    try {
+      final repo = ref.read(messageRepositoryProvider);
+      final original = await repo.findLocalByServerId(
+        ownerId: owner,
+        sessionUnitId: unit,
+        serverId: id,
+      );
+      if (original == null) throw StateError('本地未找到消息，请先打开聊天加载目标消息');
+      await repo.deleteRemote(original);
+      await repo.loadChanges(ownerId: owner, sessionUnitId: unit);
+      final remaining = await repo.findLocalByServerId(
+        ownerId: owner,
+        sessionUnitId: unit,
+        serverId: id,
+      );
+      if (mounted) {
+        setState(
+          () =>
+              _deleteResult =
+                  '完成 · ${watch.elapsedMilliseconds} ms\nMessage ID: $id\n本地消息仍存在：${remaining != null}\n删除仅对当前身份生效；其他设备请执行增量同步验证。',
+        );
+      }
+    } catch (error, stack) {
+      if (mounted) {
+        setState(
+          () => _deleteResult = '失败：${error.runtimeType}\n$error\n$stack',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
 
   Future<void> _syncChanges() async {
     final owner = int.tryParse(ownerId.text);
@@ -211,6 +261,16 @@ class _ChatDiagnosticsPageState extends ConsumerState<ChatDiagnosticsPage> {
         ),
         const Divider(),
         const Text('持久化消息变更同步 · 全平台共用。会话为空时同步当前身份的本地缓存会话；首次自动校准，后续只拉增量。'),
+        FilledButton(
+          onPressed: _deleting ? null : _delete,
+          child: Text(_deleting ? '删除中…' : '执行：仅对当前身份删除这条消息'),
+        ),
+        SelectableText(_deleteResult),
+        TextButton(
+          onPressed:
+              () => ref.read(clipboardServiceProvider).copy(_deleteResult),
+          child: const Text('复制删除诊断结果'),
+        ),
         FilledButton(
           onPressed: _syncingChanges ? null : _syncChanges,
           child: Text(_syncingChanges ? '同步中…' : '执行消息变更同步'),

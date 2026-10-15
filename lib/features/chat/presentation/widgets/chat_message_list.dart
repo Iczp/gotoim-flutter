@@ -65,6 +65,10 @@ class ChatMessageList extends StatelessWidget {
             // Trigger loading earlier (300px threshold) without requiring active finger drag
             // so fling/momentum scrolling loads smoothly.
             if (hasMore &&
+                notification.depth == 0 &&
+                (notification is ScrollUpdateNotification ||
+                    notification is OverscrollNotification) &&
+                notification.metrics.pixels > 0 &&
                 !isLoading &&
                 error == null &&
                 notification.metrics.extentAfter < 300) {
@@ -110,16 +114,12 @@ class ChatMessageList extends StatelessWidget {
                               : transientItems.length + index;
                         },
                         padding: padding,
-                        itemCount:
-                            transientItems.length +
-                            messages.length +
-                            1,
+                        itemCount: transientItems.length + messages.length + 1,
                         itemBuilder: (context, index) {
                           if (index < transientItems.length) {
                             return transientItems[index];
                           }
-                          final messageIndex =
-                              index - transientItems.length;
+                          final messageIndex = index - transientItems.length;
                           if (messageIndex == messages.length) {
                             return _ChatHistoryFooter(
                               isLoading: isLoading,
@@ -138,11 +138,7 @@ class ChatMessageList extends StatelessWidget {
                             onAnimationEnd: () {
                               onMessageAnimated?.call(message.localId);
                             },
-                            child: itemBuilder(
-                              context,
-                              message,
-                              messageIndex,
-                            ),
+                            child: itemBuilder(context, message, messageIndex),
                           );
                         },
                       ),
@@ -235,7 +231,7 @@ class _EmptyMessagesState extends StatelessWidget {
   }
 }
 
-class _ChatHistoryFooter extends StatefulWidget {
+class _ChatHistoryFooter extends StatelessWidget {
   const _ChatHistoryFooter({
     required this.isLoading,
     required this.hasMore,
@@ -249,38 +245,8 @@ class _ChatHistoryFooter extends StatefulWidget {
   final Future<void> Function() onLoadMore;
 
   @override
-  State<_ChatHistoryFooter> createState() => _ChatHistoryFooterState();
-}
-
-class _ChatHistoryFooterState extends State<_ChatHistoryFooter> {
-  @override
-  void initState() {
-    super.initState();
-    _checkAutoLoad();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ChatHistoryFooter oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _checkAutoLoad();
-  }
-
-  void _checkAutoLoad() {
-    if (widget.hasMore && !widget.isLoading && widget.error == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            widget.hasMore &&
-            !widget.isLoading &&
-            widget.error == null) {
-          widget.onLoadMore();
-        }
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (widget.isLoading || (widget.hasMore && widget.error == null)) {
+    if (isLoading) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(16),
@@ -292,16 +258,21 @@ class _ChatHistoryFooterState extends State<_ChatHistoryFooter> {
         ),
       );
     }
-    if (widget.error != null) {
+    if (error != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: TextButton.icon(
-            onPressed: widget.onLoadMore,
+            onPressed: onLoadMore,
             icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: Text('加载失败，点击重试：${widget.error}'),
+            label: Text('加载失败，点击重试：$error'),
           ),
         ),
+      );
+    }
+    if (hasMore) {
+      return Center(
+        child: TextButton(onPressed: onLoadMore, child: const Text('加载更早的消息')),
       );
     }
     return const Center(
@@ -384,10 +355,7 @@ class _MessageEntryTransitionState extends State<_MessageEntryTransition>
           begin: const Offset(0, 0.22), // 从下方 22% 处平滑向上滑入
           end: Offset.zero,
         ).animate(animation),
-        child: FadeTransition(
-          opacity: animation,
-          child: widget.child,
-        ),
+        child: FadeTransition(opacity: animation, child: widget.child),
       ),
     );
   }

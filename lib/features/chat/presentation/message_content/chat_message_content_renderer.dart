@@ -61,6 +61,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (message.messageType) {
+    _ when message.isDeleted => const Text('引用的消息已删除'),
     _ when message.isRollbacked => const Text('消息已撤回'),
     5 => FileMessageContent(
       message: message,

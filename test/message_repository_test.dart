@@ -458,6 +458,97 @@ void main() {
     expect(remaining.map((item) => item.serverId), <int?>[2]);
   });
 
+  test(
+    'paging beyond a completed history does not reset the flag or call HTTP again',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      await SessionDao(database).upsertAll([
+        SessionSummary.fromJson({'id': 'session', 'ownerId': 7}),
+      ]);
+      await dao.upsertAll([message(1)]);
+      await dao.markLoadedAll('session', true);
+      final client = _FakeApiClient();
+      final repository = MessageRepository(api: MessageApi(client), dao: dao);
+      for (var i = 0; i < 3; i++) {
+        final page = await repository.loadHistory(
+          ownerId: 7,
+          sessionUnitId: 'session',
+          beforeScore: message(1).score,
+        );
+        expect(page.items, isEmpty);
+        expect(page.hasMore, isFalse);
+      }
+      expect(await dao.isLoadedAll('session'), isTrue);
+      expect(client.paths, isEmpty);
+    },
+  );
+
+  test(
+    'server hasMore=false is respected when a history page is exactly full',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      await SessionDao(database).upsertAll([
+        SessionSummary.fromJson({'id': 'session', 'ownerId': 7}),
+      ]);
+      final client = _FakeApiClient({
+        '/api/chat/message/history': {
+          'items': [message(1).raw],
+          'totalCount': 1,
+          'extra': {'hasMore': false},
+        },
+      });
+      final repository = MessageRepository(api: MessageApi(client), dao: dao);
+      expect(
+        (await repository.loadHistory(
+          ownerId: 7,
+          sessionUnitId: 'session',
+          limit: 1,
+        )).hasMore,
+        isFalse,
+      );
+      expect(await dao.isLoadedAll('session'), isTrue);
+    },
+  );
+
+  test(
+    'a successful remote delete persists a tombstone before notifying open views',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      final bus = SessionChangeBus();
+      addTearDown(bus.dispose);
+      final client = _FakeApiClient()..postResponse = <String, dynamic>{};
+      final repository = MessageRepository(
+        api: MessageApi(client),
+        dao: dao,
+        sessionChangeBus: bus,
+      );
+      await dao.upsertAll([message(1), message(2)]);
+      final changes = bus.events.first;
+      await repository.deleteRemote(message(1));
+      expect((await changes).deletedMessageIds, [1]);
+      await dao.upsertAll([message(1)]);
+      expect(
+        (await dao.readPage(
+          ownerId: 7,
+          sessionUnitId: 'session',
+        )).single.serverId,
+        2,
+      );
+    },
+  );
+
   test('message operations use paths captured from Swagger', () async {
     final client =
         _FakeApiClient()

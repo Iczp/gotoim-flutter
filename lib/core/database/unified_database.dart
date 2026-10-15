@@ -28,7 +28,7 @@ class UnifiedDatabase {
   );
 
   static const databaseName = 'gotoim';
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
   static const diagnosticsTable = 'diagnostic_records';
   static const diagnosticsScratchTable = 'diagnostic_scratch';
 
@@ -64,20 +64,53 @@ class UnifiedDatabase {
 
   Future<void> _initialize() async {
     try {
-      await _connection.ensureOpen(_UnifiedDatabaseUser());
-      await _connection.runCustom('PRAGMA foreign_keys = ON');
-      for (final statement in _version1Schema) {
-        await _connection.runCustom(statement);
-      }
-      final rows = await _connection.runSelect('PRAGMA user_version', const []);
-      final current = (rows.single['user_version'] as num?)?.toInt() ?? 0;
-      if (current < schemaVersion) {
-        await _connection.runCustom('PRAGMA user_version = $schemaVersion');
-      }
+      await _connection.ensureOpen(
+        _UnifiedDatabaseUser(onOpen: _initializeSchema),
+      );
     } catch (error) {
       _initializationError = error.toString();
       debugPrint('UnifiedDatabase initialization error: $error');
       rethrow;
+    }
+  }
+
+  Future<void> _initializeSchema(
+    QueryExecutor executor,
+    OpeningDetails details,
+  ) async {
+    await executor.ensureOpen(_UnifiedDatabaseUser());
+    // Drift advances user_version after beforeOpen. Migrate inside this
+    // callback, using the original version, before it marks the upgrade done.
+    await executor.runCustom('PRAGMA foreign_keys = ON');
+    for (final statement in _version1Schema) {
+      await executor.runCustom(statement);
+    }
+    final current = details.versionBefore ?? 0;
+    final stateColumns = await executor.runSelect(
+      'PRAGMA table_info(MessageLocalStates)',
+      const [],
+    );
+    if (!stateColumns.any((column) => column['name'] == 'isDeleted')) {
+      await executor.runCustom(
+        'ALTER TABLE MessageLocalStates ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (current < schemaVersion) {
+      if (current < 3) {
+        // Existing cursors covered rollback-only sync. Recalibrate once so
+        // legacy DeletedRecorder entries are also applied after upgrade.
+        await executor.runDelete(
+          "DELETE FROM Settings WHERE [group] = 'message-sync'",
+          const [],
+        );
+      }
+      // Older responses could be cached before the current owner was known.
+      // SessionUnit IDs identify one member, so the Friend is authoritative.
+      await executor.runUpdate(
+        'UPDATE Messages SET ownerId = (SELECT ownerId FROM Friends f WHERE f.id = Messages.sessionUnitId) '
+        'WHERE ownerId = 0 AND EXISTS (SELECT 1 FROM Friends f WHERE f.id = Messages.sessionUnitId AND f.ownerId > 0)',
+        const [],
+      );
     }
   }
 
@@ -703,6 +736,7 @@ class UnifiedDatabase {
           'clientMessageId = COALESCE(excluded.clientMessageId, Messages.clientMessageId), '
           'ownerId = excluded.ownerId, '
           'sessionUnitId = excluded.sessionUnitId, '
+          'senderSessionUnitId = COALESCE(excluded.senderSessionUnitId, Messages.senderSessionUnitId), '
           'state = excluded.state, '
           "raw = CASE WHEN json_extract(Messages.raw, '\$.isRollbacked') = 1 "
           "OR json_extract(Messages.raw, '\$.rollbackTime') IS NOT NULL "
@@ -1182,6 +1216,8 @@ const _version1Schema = <String>[
 ];
 
 class _UnifiedDatabaseUser extends QueryExecutorUser {
+  _UnifiedDatabaseUser({this.onOpen});
+  final Future<void> Function(QueryExecutor, OpeningDetails)? onOpen;
   @override
   int get schemaVersion => UnifiedDatabase.schemaVersion;
 
@@ -1189,5 +1225,7 @@ class _UnifiedDatabaseUser extends QueryExecutorUser {
   Future<void> beforeOpen(
     QueryExecutor executor,
     OpeningDetails details,
-  ) async {}
+  ) async {
+    await onOpen?.call(executor, details);
+  }
 }

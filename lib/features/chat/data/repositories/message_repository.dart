@@ -150,21 +150,15 @@ class MessageRepository {
       sessionUnitId: message.sessionUnitId,
       messageId: message.serverId!,
     );
-    await _dao.deleteAll(<String>[message.localId]);
-    final newest = await _dao.readPage(
+    await _dao.applySyncPage(message.ownerId, message.sessionUnitId, [
+      {'messageId': message.serverId, 'syncVersion': 0, 'isDeleted': true},
+    ]);
+    _sessionChangeBus?.publish(
       ownerId: message.ownerId,
       sessionUnitId: message.sessionUnitId,
-      limit: 1,
+      messageIds: [message.serverId!],
+      deletedMessageIds: [message.serverId!],
     );
-    if (newest.isNotEmpty) {
-      await _updateSessionSummary(newest.first);
-    } else {
-      await _sessionDao?.resetMessages(message.ownerId, message.sessionUnitId);
-      _sessionChangeBus?.publish(
-        ownerId: message.ownerId,
-        sessionUnitId: message.sessionUnitId,
-      );
-    }
   }
 
   Future<ChatMessage> rollback(ChatMessage message) async {
@@ -353,7 +347,7 @@ class MessageRepository {
       '[loadMessages][loaded-all-check] session=$sessionUnitId '
       'loadedAll=$loadedAll localAdded=${local.length}',
     );
-    if (local.isEmpty && loadedAll) {
+    if (local.isEmpty && loadedAll && beforeScore == null) {
       debugPrint(
         '[loadMessages][loaded-all-reset] session=$sessionUnitId '
         'local is empty but loadedAll was true; resetting to false',
@@ -373,7 +367,8 @@ class MessageRepository {
       );
       await _dao.upsertAll(remote.items);
       final requestedRemoteCount = limit - local.length;
-      final hasMore = remote.items.length >= requestedRemoteCount;
+      final hasMore =
+          remote.hasMore ?? remote.items.length >= requestedRemoteCount;
       if (!hasMore) {
         await _dao.markLoadedAll(sessionUnitId, true);
         debugPrint(
@@ -454,7 +449,11 @@ class MessageRepository {
                   sessionUnitId: sessionUnitId,
                   limit: limit + items.length,
                 ))
-                .where((item) => collected.containsKey(item.localId))
+                .where(
+                  (item) => collected.values.any(
+                    (incoming) => incoming.serverId == item.serverId,
+                  ),
+                )
                 .toList(growable: false);
     final persistedMaxMessageId = await _dao.maxServerId(
       ownerId,

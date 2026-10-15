@@ -84,6 +84,9 @@ class RealtimeSyncCoordinator {
       case SignalRCommand.messageBadgeUpdated:
         unawaited(_scheduleTargetedSync(event));
         break;
+      case SignalRCommand.messageDeleted:
+        unawaited(_handleMessageDeletion(event));
+        break;
       case SignalRCommand.sessionUnitChanged:
         // Read/badge updates do not necessarily change the conversation
         // watermark. Sync the exact affected unit instead of re-querying the
@@ -138,6 +141,29 @@ class RealtimeSyncCoordinator {
       return;
     }
     _aiStreamChangeBus.publish(event);
+  }
+
+  Future<void> _handleMessageDeletion(SignalRCommandEvent event) async {
+    try {
+      for (final scope in event.scopes.whereType<Map>()) {
+        final unit =
+            '${scope['sessionUnitId'] ?? scope['SessionUnitId'] ?? ''}';
+        if (unit.isEmpty) continue;
+        final friend = await _sessionRepository.loadLocalFriendDetail(unit);
+        final owner = friend?.ownerId;
+        if (owner != null) {
+          await _messageRepository.loadChanges(
+            ownerId: owner,
+            sessionUnitId: unit,
+          );
+        } else {
+          _scheduleCurrentOwnerSync();
+        }
+      }
+    } catch (error) {
+      debugPrint('[realtimeSync][delete-sync-failed] error=$error');
+      _scheduleCurrentOwnerSync();
+    }
   }
 
   Future<void> _handleRealtimeMessage(SignalRCommandEvent event) async {

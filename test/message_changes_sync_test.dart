@@ -78,6 +78,205 @@ void main() {
   tearDown(() => db.close());
 
   test(
+    'delete replay removes only the affected identity and cannot be resurrected by old history',
+    () async {
+      await dao.upsertAll([
+        message(5),
+        message(6),
+        message(5, owner: 2, unit: 'peer'),
+      ]);
+      final sessions = SessionDao(db);
+      await sessions.upsertAll([
+        SessionSummary.fromJson({
+          'id': 'unit',
+          'ownerId': 1,
+          'lastMessage': message(6).raw,
+        }),
+      ]);
+      await dao.applySyncPage(1, 'unit', [], cursor: 'start');
+      client.respond =
+          (_, _) async => [
+            page(
+              'unit',
+              'done',
+              items: [
+                {
+                  'messageId': '6',
+                  'syncVersion': '7',
+                  'changeType': 2,
+                  'isDeleted': true,
+                },
+                {
+                  'messageId': '5',
+                  'syncVersion': '8',
+                  'changeType': 2,
+                  'isDeleted': true,
+                },
+              ],
+            ),
+          ];
+      await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
+      await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
+      await dao.upsertAll([message(5), message(6)]);
+      expect(await dao.readPage(ownerId: 1, sessionUnitId: 'unit'), isEmpty);
+      expect(
+        (await dao.readPage(ownerId: 2, sessionUnitId: 'peer')).single.serverId,
+        5,
+      );
+      expect((await sessions.readById('unit'))!.preview, isEmpty);
+      // A stale Friend response must not restore a deleted preview either.
+      await sessions.upsertAll([
+        SessionSummary.fromJson({
+          'id': 'unit',
+          'ownerId': 1,
+          'lastMessage': message(6).raw,
+        }),
+      ]);
+      expect((await sessions.readById('unit'))!.preview, isEmpty);
+      expect(await dao.syncCursor(1, 'unit'), 'done');
+    },
+  );
+
+  test(
+    'calibration deletes only explicit tombstones and preserves omitted messages',
+    () async {
+      await dao.upsertAll([message(5), message(6)]);
+      var query = 0;
+      client.respond = (path, _) async {
+        if (path.endsWith('/sync-items')) {
+          return [
+            {'messageId': '5', 'syncVersion': '7', 'isDeleted': true},
+          ];
+        }
+        return [page('unit', 'baseline', reset: ++query == 1)];
+      };
+      await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
+      expect(
+        (await dao.readPage(ownerId: 1, sessionUnitId: 'unit')).single.serverId,
+        6,
+      );
+    },
+  );
+
+  test(
+    'delete redacts quotes and moves the summary to the next cached message',
+    () async {
+      final sessions = SessionDao(db);
+      final quoting = message(7).copyWith(
+        raw: {
+          ...message(7).raw,
+          'quoteMessageId': 5,
+          'quoteMessage': message(5).raw,
+        },
+      );
+      await dao.upsertAll([message(5), quoting]);
+      await sessions.upsertAll([
+        SessionSummary.fromJson({
+          'id': 'unit',
+          'ownerId': 1,
+          'lastMessage': message(5).raw,
+        }),
+      ]);
+      await dao.applySyncPage(1, 'unit', [
+        {'messageId': '5', 'syncVersion': '8', 'isDeleted': true},
+      ], cursor: 'done');
+      final row =
+          (await dao.readPage(ownerId: 1, sessionUnitId: 'unit')).single;
+      expect(row.quoteMessage['isDeleted'], isTrue);
+      expect(row.quoteMessage['content'], isNull);
+      expect((await sessions.readById('unit'))!.raw['lastMessage']['id'], 7);
+      await dao.upsertAll([quoting]);
+      expect(
+        (await dao.readPage(
+          ownerId: 1,
+          sessionUnitId: 'unit',
+        )).single.quoteMessage['isDeleted'],
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'failed mixed deletion page rolls back removed rows and cursor',
+    () async {
+      await dao.upsertAll([message(5), message(6)]);
+      await dao.applySyncPage(1, 'unit', [], cursor: 'start');
+      await expectLater(
+        dao.applySyncPage(1, 'unit', [
+          {'messageId': '5', 'syncVersion': '7', 'isDeleted': true},
+          {...recalled(6, 8), 'rollbackTime': <String, Object>{}},
+        ], cursor: 'done'),
+        throwsA(anything),
+      );
+      expect((await dao.readPage(ownerId: 1, sessionUnitId: 'unit')).length, 2);
+      expect(await dao.syncCursor(1, 'unit'), 'start');
+    },
+  );
+
+  test(
+    'the same server and client IDs coexist in different member caches',
+    () async {
+      final payload = {
+        'id': 5,
+        'clientMessageId': 'same-client',
+        'content': {'text': 'hello'},
+      };
+      await dao.upsertAll([
+        ChatMessage.fromJson(payload, ownerId: 1, sessionUnitId: 'unit'),
+        ChatMessage.fromJson(payload, ownerId: 2, sessionUnitId: 'peer'),
+      ]);
+      expect(
+        (await dao.readPage(ownerId: 1, sessionUnitId: 'unit')).single.text,
+        'hello',
+      );
+      expect(
+        (await dao.readPage(ownerId: 2, sessionUnitId: 'peer')).single.text,
+        'hello',
+      );
+    },
+  );
+
+  test(
+    'compact responses retain legacy local identity and sender avatar metadata',
+    () async {
+      final original = ChatMessage(
+        localId: 'old-local-id',
+        serverId: 5,
+        clientMessageId: 'client-5',
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        senderSessionUnitId: 'peer',
+        messageType: 0,
+        state: 'received',
+        score: 5000000,
+        createdAt: DateTime(2026, 10, 1),
+        raw: {
+          'id': 5,
+          'senderSessionUnit': {
+            'id': 'peer',
+            'owner': {'thumbnail': '/avatar.png', 'displayName': '张三'},
+          },
+          'content': {'text': 'hello'},
+        },
+      );
+      await dao.upsertAll([original]);
+      await dao.upsertAll([
+        ChatMessage.fromJson(
+          {'id': 5, 'clientMessageId': 'client-5', 'senderSessionUnit': null},
+          ownerId: 1,
+          sessionUnitId: 'unit',
+        ),
+      ]);
+      final current =
+          (await dao.readPage(ownerId: 1, sessionUnitId: 'unit')).single;
+      expect(current.localId, 'old-local-id');
+      expect(current.senderAvatarUrl, '/avatar.png');
+      expect(current.senderSessionUnitId, 'peer');
+      expect(current.text, 'hello');
+    },
+  );
+
+  test(
     'bootstrap calibrates cached ids then replays changes committed during calibration',
     () async {
       await dao.upsertAll([message(5), message(700)]);

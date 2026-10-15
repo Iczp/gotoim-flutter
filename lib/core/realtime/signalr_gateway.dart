@@ -96,6 +96,7 @@ enum SignalRCommand {
   messageUpdated('updated@message'),
   messageBadgeUpdated('updated-badge@message'),
   messageRollbacked('rollbacked@message'),
+  messageDeleted('deleted@message'),
   aiStarted('started@ai'),
   aiDelta('delta@ai'),
   aiCompleted('completed@ai'),

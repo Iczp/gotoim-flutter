@@ -11,7 +11,13 @@ extension MessageSyncDatabase on UnifiedDatabase {
       await _connection.runUpdate(
         "UPDATE Friends SET raw = json_set(raw, '\$.lastMessage.isRollbacked', json('true'), '\$.lastMessage.rollbackTime', "
         "(SELECT rollbackTime FROM MessageLocalStates s WHERE $match ORDER BY version DESC LIMIT 1)) "
-        'WHERE id IN (${List.filled(ids.length, '?').join(',')}) AND EXISTS (SELECT 1 FROM MessageLocalStates s WHERE $match)',
+        'WHERE id IN (${List.filled(ids.length, '?').join(',')}) AND EXISTS (SELECT 1 FROM MessageLocalStates s WHERE $match AND s.isDeleted = 0)',
+        ids,
+      );
+      await _connection.runUpdate(
+        "UPDATE Friends SET raw = json_set(raw, '\$.lastMessage', json((SELECT raw FROM Messages m "
+        "WHERE m.ownerId = Friends.ownerId AND m.sessionUnitId = Friends.id AND m.serverId IS NOT NULL ORDER BY m.score DESC LIMIT 1))) "
+        'WHERE id IN (${List.filled(ids.length, '?').join(',')}) AND EXISTS (SELECT 1 FROM MessageLocalStates s WHERE $match AND s.isDeleted = 1)',
         ids,
       );
     }
@@ -37,6 +43,32 @@ extension MessageSyncDatabase on UnifiedDatabase {
     final merged = <Map<String, Object?>>[];
     for (var offset = 0; offset < rows.length; offset += 100) {
       final batch = rows.skip(offset).take(100).toList();
+      final conditions = List.filled(
+        batch.length,
+        '(ownerId = ? AND sessionUnitId = ? AND ((serverId IS NOT NULL AND serverId = ?) OR (clientMessageId IS NOT NULL AND clientMessageId = ?)))',
+      ).join(' OR ');
+      final existingRows = await executor.runSelect(
+        'SELECT * FROM Messages WHERE $conditions',
+        [
+          for (final row in batch) ...[
+            row['ownerId'],
+            row['sessionUnitId'],
+            row['serverId'],
+            row['clientMessageId'],
+          ],
+        ],
+      );
+      final byServer = {
+        for (final row in existingRows)
+          if (row['serverId'] != null)
+            '${row['ownerId']}:${row['sessionUnitId']}:${row['serverId']}': row,
+      };
+      final byClient = {
+        for (final row in existingRows)
+          if (row['clientMessageId'] != null)
+            '${row['ownerId']}:${row['sessionUnitId']}:${row['clientMessageId']}':
+                row,
+      };
       final tuples = <String>[];
       final args = <Object?>[];
       for (final row in batch) {
@@ -71,9 +103,48 @@ extension MessageSyncDatabase on UnifiedDatabase {
       for (final row in batch) {
         final state =
             byKey['${row['syncNamespace'] ?? ''}:${row['ownerId']}:${row['sessionUnitId']}:${row['serverId']}'];
-        final raw = Map<String, dynamic>.from(
+        if (state?['isDeleted'] == 1) continue;
+        final existing =
+            byServer['${row['ownerId']}:${row['sessionUnitId']}:${row['serverId']}'] ??
+            byClient['${row['ownerId']}:${row['sessionUnitId']}:${row['clientMessageId']}'];
+        final oldRaw =
+            existing == null
+                ? <String, dynamic>{}
+                : Map<String, dynamic>.from(
+                  jsonDecode(existing['raw'] as String) as Map,
+                );
+        final incoming = Map<String, dynamic>.from(
           jsonDecode(row['raw'] as String) as Map,
         );
+        final raw = <String, dynamic>{
+          ...oldRaw,
+          ...Map.fromEntries(
+            incoming.entries.where((entry) => entry.value != null),
+          ),
+        };
+        final oldSender = oldRaw['senderSessionUnit'];
+        final newSender = incoming['senderSessionUnit'];
+        if (oldSender is Map || newSender is Map) {
+          raw['senderSessionUnit'] = {
+            if (oldSender is Map) ...oldSender,
+            if (newSender is Map)
+              ...Map.fromEntries(
+                newSender.entries.where((entry) => entry.value != null),
+              ),
+            if ((oldSender is Map && oldSender['owner'] is Map) ||
+                (newSender is Map && newSender['owner'] is Map))
+              'owner': {
+                if (oldSender is Map && oldSender['owner'] is Map)
+                  ...(oldSender['owner'] as Map),
+                if (newSender is Map && newSender['owner'] is Map)
+                  ...Map.fromEntries(
+                    (newSender['owner'] as Map).entries.where(
+                      (entry) => entry.value != null,
+                    ),
+                  ),
+              },
+          };
+        }
         if (state != null) {
           raw['isRollbacked'] = true;
           raw['rollbackTime'] = state['rollbackTime'];
@@ -83,7 +154,13 @@ extension MessageSyncDatabase on UnifiedDatabase {
         if (quote is Map) {
           final quoteState =
               byKey['${row['syncNamespace'] ?? ''}:${row['ownerId']}:${row['sessionUnitId']}:${quote['id']}'];
-          if (quoteState != null) {
+          if (quoteState?['isDeleted'] == 1) {
+            raw['quoteMessage'] = {
+              ...quote,
+              'isDeleted': true,
+              'content': null,
+            };
+          } else if (quoteState != null) {
             raw['quoteMessage'] = {
               ...quote,
               'isRollbacked': true,
@@ -91,10 +168,44 @@ extension MessageSyncDatabase on UnifiedDatabase {
             };
           }
         }
-        merged.add({...row, 'raw': jsonEncode(raw)});
+        merged.add({
+          ...row,
+          if (existing != null) 'id': existing['id'],
+          'senderSessionUnitId':
+              row['senderSessionUnitId'] ?? existing?['senderSessionUnitId'],
+          'createTime': row['createTime'] ?? existing?['createTime'],
+          'raw': jsonEncode(raw),
+        });
       }
     }
     return merged;
+  }
+
+  Future<void> _repairDeletedSummary(
+    QueryExecutor executor,
+    int owner,
+    String unit,
+  ) async {
+    final friends = await executor.runSelect(
+      "SELECT raw FROM Friends f WHERE ownerId = ? AND id = ? AND EXISTS ("
+      "SELECT 1 FROM MessageLocalStates s WHERE s.ownerId = f.ownerId AND s.sessionUnitId = f.id "
+      "AND s.messageId = CAST(json_extract(f.raw, '\$.lastMessage.id') AS INTEGER) AND s.isDeleted = 1)",
+      [owner, unit],
+    );
+    if (friends.isEmpty) return;
+    final next = await executor.runSelect(
+      'SELECT raw FROM Messages WHERE ownerId = ? AND sessionUnitId = ? AND serverId IS NOT NULL ORDER BY score DESC LIMIT 1',
+      [owner, unit],
+    );
+    final raw = Map<String, dynamic>.from(
+      jsonDecode(friends.single['raw'] as String) as Map,
+    );
+    raw['lastMessage'] =
+        next.isEmpty ? null : jsonDecode(next.single['raw'] as String);
+    await executor.runUpdate(
+      'UPDATE Friends SET raw = ? WHERE ownerId = ? AND id = ?',
+      [jsonEncode(raw), owner, unit],
+    );
   }
 
   String _cursorKey(String namespace, int owner, String unit) =>
@@ -164,8 +275,29 @@ extension MessageSyncDatabase on UnifiedDatabase {
       for (final item in items) {
         final id = int.tryParse('${item['messageId']}');
         final version = int.tryParse('${item['syncVersion'] ?? 0}') ?? 0;
+        final isDeleted = item['isDeleted'] == true;
         if (id == null ||
-            !(item['isRollbacked'] == true || item['rollbackTime'] != null)) {
+            !(isDeleted ||
+                item['isRollbacked'] == true ||
+                item['rollbackTime'] != null)) {
+          continue;
+        }
+        if (isDeleted) {
+          await tx.runInsert(
+            'INSERT INTO MessageLocalStates (namespace, ownerId, sessionUnitId, messageId, version, isDeleted) '
+            'VALUES (?, ?, ?, ?, ?, 1) ON CONFLICT(namespace, ownerId, sessionUnitId, messageId) DO UPDATE SET '
+            'version = MAX(MessageLocalStates.version, excluded.version), isDeleted = 1',
+            [namespace, owner, unit, id, version],
+          );
+          await tx.runDelete(
+            'DELETE FROM Messages WHERE ownerId = ? AND sessionUnitId = ? AND serverId = ?',
+            [owner, unit, id],
+          );
+          await tx.runUpdate(
+            "UPDATE Messages SET raw = json_set(raw, '\$.quoteMessage.isDeleted', json('true'), '\$.quoteMessage.content', NULL) "
+            "WHERE ownerId = ? AND sessionUnitId = ? AND CAST(json_extract(raw, '\$.quoteMessage.id') AS INTEGER) = ?",
+            [owner, unit, id],
+          );
           continue;
         }
         final time = item['rollbackTime'] ?? item['changedAt'];
@@ -192,6 +324,7 @@ extension MessageSyncDatabase on UnifiedDatabase {
           [time, owner, unit, id],
         );
       }
+      await _repairDeletedSummary(tx, owner, unit);
       if (cursor != null) {
         await tx.runInsert(
           'INSERT INTO Settings (id, [group], type, value) VALUES (?, ?, ?, ?) '

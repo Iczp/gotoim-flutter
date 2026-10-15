@@ -30,11 +30,12 @@ class ChatMessage {
             ? null
             : rawClientMessageId;
     final sender = asMap(json['senderSessionUnit']);
-    final effectiveLocalId =
-        clientId ??
-        (serverId != null
-            ? 'server-$serverId'
-            : '${DateTime.now().microsecondsSinceEpoch}');
+    final remoteIdentity =
+        (clientId ??
+            (serverId != null
+                ? 'server-$serverId'
+                : '${DateTime.now().microsecondsSinceEpoch}'));
+    final effectiveLocalId = 'scope:$ownerId:$sessionUnitId:$remoteIdentity';
     return ChatMessage(
       localId: effectiveLocalId,
       serverId: serverId,
@@ -145,6 +146,7 @@ class ChatMessage {
   Map<String, dynamic> get content => asMap(raw['content']);
   bool get isRollbacked =>
       raw['isRollbacked'] == true || raw['rollbackTime'] != null;
+  bool get isDeleted => raw['isDeleted'] == true;
   int? get quoteMessageId => asInt(raw['quoteMessageId']);
   Map<String, dynamic> get quoteMessage => asMap(raw['quoteMessage']);
   String get quoteSenderName {

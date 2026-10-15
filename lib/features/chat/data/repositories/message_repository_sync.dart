@@ -122,8 +122,14 @@ extension MessageRepositorySync on MessageRepository {
                     .where(
                       (row) =>
                           row['isRollbacked'] == true ||
-                          row['rollbackTime'] != null,
+                          row['rollbackTime'] != null ||
+                          row['isDeleted'] == true,
                     )
+                    .map((row) => int.parse('${row['messageId']}'))
+                    .toList(),
+            deletedMessageIds:
+                states
+                    .where((row) => row['isDeleted'] == true)
                     .map((row) => int.parse('${row['messageId']}'))
                     .toList(),
           );
@@ -139,10 +145,10 @@ extension MessageRepositorySync on MessageRepository {
           (page['items'] as List? ?? const [])
               .map((row) => Map<String, dynamic>.from(row as Map))
               .toList();
-      // This release applies rollback only. Never acknowledge unknown future
+      // Never acknowledge unknown future
       // mutation types until the client can apply their semantics.
       if (items.any(
-        (row) => row['changeType'] != 1 && row['changeType'] != 'Rollback',
+        (row) => ![1, 2, 'Rollback', 'Delete'].contains(row['changeType']),
       )) {
         throw UnsupportedError('当前客户端尚不支持该消息变更类型');
       }
@@ -150,7 +156,10 @@ extension MessageRepositorySync on MessageRepository {
         (row) =>
             (int.tryParse('${row['messageId']}') ?? 0) <= 0 ||
             (int.tryParse('${row['syncVersion']}') ?? -1) < 0 ||
-            !(row['isRollbacked'] == true || row['rollbackTime'] != null),
+            ([2, 'Delete'].contains(row['changeType'])
+                ? row['isDeleted'] != true
+                : !(row['isRollbacked'] == true ||
+                    row['rollbackTime'] != null)),
       )) {
         throw const FormatException('消息撤回变更缺少有效的标识、版本或状态');
       }
@@ -166,6 +175,11 @@ extension MessageRepositorySync on MessageRepository {
           sessionUnitId: unit,
           messageIds:
               items.map((row) => int.parse('${row['messageId']}')).toList(),
+          deletedMessageIds:
+              items
+                  .where((row) => row['isDeleted'] == true)
+                  .map((row) => int.parse('${row['messageId']}'))
+                  .toList(),
         );
       }
       if (page['hasMore'] != true) return;

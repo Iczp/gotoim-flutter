@@ -47,6 +47,40 @@ void main() {
   });
 
   group('ChatMessageList Entry Transition Tests', () {
+    testWidgets(
+      'a short cached list does not fetch more history on layout or rebuild',
+      (tester) async {
+        final scroll = ScrollController();
+        addTearDown(scroll.dispose);
+        var calls = 0;
+        Widget view() => MaterialApp(
+          home: Scaffold(
+            body: ChatMessageList(
+              messages: [createMessage('1', 'cached')],
+              scrollController: scroll,
+              isLoading: false,
+              hasMore: true,
+              error: null,
+              onViewingLatestChanged: (_) {},
+              onLoadMore: () async {
+                calls++;
+              },
+              onTapOutside: () {},
+              itemBuilder: (_, message, _) => Text(message.text),
+            ),
+          ),
+        );
+        await tester.pumpWidget(view());
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(view());
+        await tester.pumpAndSettle();
+        expect(calls, 0);
+        await tester.tap(find.text('加载更早的消息'));
+        await tester.pumpAndSettle();
+        expect(calls, 1);
+      },
+    );
+
     testWidgets('Initial history messages do not trigger entry animation and render directly', (tester) async {
       final initialMessages = [
         createMessage('1', '历史消息 1'),

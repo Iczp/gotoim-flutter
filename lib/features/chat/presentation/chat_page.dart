@@ -752,6 +752,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
       showPeerAvatar: showPeer,
       showArticleAvatar: widget.showArticleAvatar,
       myAvatarUrl: controller.myAvatarUrl,
+      peerAvatarUrl:
+          [1, 6, 9].contains(controller.destinationObjectType)
+              ? controller.peerAvatarUrl
+              : null,
+      peerChatObjectId:
+          [1, 6, 9].contains(controller.destinationObjectType)
+              ? controller.peerChatObjectId
+              : null,
       myChatObjectId: controller.effectiveOwnerId,
       onUserTap: () => _showSenderProfile(message),
       onSessionUnitTap: _showSessionUnitProfile,
@@ -1027,7 +1035,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (owner.quoteMessage.isEmpty) return null;
     final serverId = owner.quoteMessageId;
     final canonical =
-        controller.messageByServerId(serverId) ?? _quotedMessageCache[serverId];
+        owner.quoteMessage['isDeleted'] == true ||
+                owner.quoteMessage['isRollbacked'] == true
+            ? null
+            : controller.messageByServerId(serverId) ??
+                _quotedMessageCache[serverId];
     if (canonical != null) return canonical;
     final raw = <String, dynamic>{...owner.quoteMessage};
     raw['id'] ??= serverId;

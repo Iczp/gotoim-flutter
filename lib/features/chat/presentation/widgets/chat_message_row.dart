@@ -54,6 +54,8 @@ class ChatMessageRow extends StatelessWidget {
     this.showPeerAvatar,
     this.showArticleAvatar,
     this.myAvatarUrl,
+    this.peerAvatarUrl,
+    this.peerChatObjectId,
     this.myChatObjectId,
     super.key,
   });
@@ -78,6 +80,8 @@ class ChatMessageRow extends StatelessWidget {
 
   /// 当前登录用户的头像 URL（确保本地发送中的消息即时渲染头像）
   final String? myAvatarUrl;
+  final String? peerAvatarUrl;
+  final int? peerChatObjectId;
 
   /// 当前登录用户的 ChatObjectId
   final int? myChatObjectId;
@@ -264,9 +268,10 @@ class ChatMessageRow extends StatelessWidget {
                 // 2. 平板与桌面宽屏（>= 600px）：限制在 68% 且设定上限 620px，保证舒适阅读视线，防止单行文字过长。
                 final double bubbleWidth;
                 if (constraints.maxWidth < 600) {
-                  bubbleWidth = effectiveShowAvatar
-                      ? contentMaxWidth * 0.78
-                      : (contentMaxWidth - 24.0).clamp(0.0, 480.0);
+                  bubbleWidth =
+                      effectiveShowAvatar
+                          ? contentMaxWidth * 0.78
+                          : (contentMaxWidth - 24.0).clamp(0.0, 480.0);
                 } else {
                   bubbleWidth = (contentMaxWidth * 0.68).clamp(360.0, 620.0);
                 }
@@ -276,7 +281,7 @@ class ChatMessageRow extends StatelessWidget {
                   final avatarUrl =
                       message.isMine
                           ? (message.senderAvatarUrl ?? myAvatarUrl)
-                          : message.senderAvatarUrl;
+                          : (message.senderAvatarUrl ?? peerAvatarUrl);
                   final avatarName =
                       message.isMine
                           ? (message.senderName != '未知用户'
@@ -286,7 +291,7 @@ class ChatMessageRow extends StatelessWidget {
                   final avatarObjectId =
                       message.isMine
                           ? (message.senderChatObjectId ?? myChatObjectId)
-                          : message.senderChatObjectId;
+                          : (message.senderChatObjectId ?? peerChatObjectId);
                   Widget av = ChatObjectAvatar(
                     name: avatarName,
                     imageUrl: avatarUrl,
@@ -353,7 +358,9 @@ class ChatMessageRow extends StatelessWidget {
                             : CrossAxisAlignment.start,
                     children: <Widget>[
                       // 发送人名称 (各自加 padding: 12)
-                      if (effectiveShowAvatar && !message.isMine && _senderLabel.isNotEmpty)
+                      if (effectiveShowAvatar &&
+                          !message.isMine &&
+                          _senderLabel.isNotEmpty)
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Padding(

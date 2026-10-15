@@ -1,7 +1,9 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/database/unified_database.dart';
+import 'package:gotoim_flutter/features/chat/data/datasources/message_dao.dart';
+import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
 
 void main() {
   UnifiedDatabase createDatabase() {
@@ -12,14 +14,14 @@ void main() {
     return database;
   }
 
-  test('version 1 migrates the unified chat schema and indexes', () async {
+  test('current schema creates the unified chat tables and indexes', () async {
     final database = createDatabase();
 
     final overview = await database.inspect();
     final tableNames = overview.tables.map((table) => table.name).toSet();
 
     expect(overview.name, UnifiedDatabase.databaseName);
-    expect(overview.schemaVersion, 1);
+    expect(overview.schemaVersion, UnifiedDatabase.schemaVersion);
     expect(
       tableNames,
       containsAll(<String>[
@@ -41,6 +43,66 @@ void main() {
     );
     expect(owners.createSql, contains('CREATE TABLE'));
     expect(chatObjects.createSql, contains('CREATE TABLE'));
+  });
+
+  test('version 2 rollback markers survive the additive deletion upgrade', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(
+        NativeDatabase.memory(
+          setup: (sqlite) {
+            sqlite.execute(
+              'CREATE TABLE MessageLocalStates (namespace TEXT NOT NULL, ownerId INTEGER NOT NULL, '
+              'sessionUnitId TEXT NOT NULL, messageId INTEGER NOT NULL, version INTEGER NOT NULL, rollbackTime TEXT, '
+              'PRIMARY KEY(namespace, ownerId, sessionUnitId, messageId))',
+            );
+            sqlite.execute(
+              "INSERT INTO MessageLocalStates VALUES ('', 1, 'unit', 5, 7, '2026-10-14T02:00:00Z')",
+            );
+            sqlite.execute('PRAGMA user_version=2');
+            sqlite.execute(
+              'CREATE TABLE Settings (id TEXT PRIMARY KEY, [group] TEXT, type TEXT, value TEXT, createTime INTEGER, updateTime INTEGER)',
+            );
+            sqlite.execute(
+              "INSERT INTO Settings (id, [group], value) VALUES ('message-sync:v1::1:unit', 'message-sync', 'old-cursor')",
+            );
+          },
+        ),
+      ),
+    );
+    addTearDown(database.close);
+    final overview = await database.inspect();
+    expect(overview.schemaVersion, 3);
+    expect(
+      overview.tables
+          .singleWhere((table) => table.name == 'MessageLocalStates')
+          .createSql,
+      contains('isDeleted'),
+    );
+    // Replaying the old marker and adding a deletion use the same upgraded table.
+    final dao = MessageDao(database);
+    expect(await dao.syncCursor(1, 'unit'), isNull);
+    await dao.upsertAll([
+      ChatMessage.fromJson(
+        {
+          'id': 5,
+          'content': {'text': 'old'},
+        },
+        ownerId: 1,
+        sessionUnitId: 'unit',
+      ),
+    ]);
+    expect(
+      (await dao.readPage(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+      )).single.isRollbacked,
+      isTrue,
+    );
+    await dao.applySyncPage(1, 'unit', [
+      {'messageId': 6, 'syncVersion': 8, 'isDeleted': true},
+    ], cursor: 'done');
+    expect(await dao.syncCursor(1, 'unit'), 'done');
+    expect(await dao.syncIds(1, 'unit', 0, 200), [5]);
   });
 
   test(

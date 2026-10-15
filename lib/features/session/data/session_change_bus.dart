@@ -8,11 +8,13 @@ class SessionChangeEvent {
     required this.sessionUnitId,
     this.messageId,
     this.messageIds,
+    this.deletedMessageIds,
   });
   final int ownerId;
   final String sessionUnitId;
   final int? messageId;
   final List<int>? messageIds;
+  final List<int>? deletedMessageIds;
 }
 
 class SessionChangeBus {
@@ -26,6 +28,7 @@ class SessionChangeBus {
     required String sessionUnitId,
     int? messageId,
     List<int>? messageIds,
+    List<int>? deletedMessageIds,
   }) {
     if (!_controller.isClosed) {
       _controller.add(
@@ -34,6 +37,10 @@ class SessionChangeBus {
           sessionUnitId: sessionUnitId,
           messageId: messageId,
           messageIds: messageIds == null ? null : List.unmodifiable(messageIds),
+          deletedMessageIds:
+              deletedMessageIds == null
+                  ? null
+                  : List.unmodifiable(deletedMessageIds),
         ),
       );
     }

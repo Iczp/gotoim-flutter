@@ -65,6 +65,7 @@ void main() {
     bool selectionMode = false,
     bool selected = false,
     VoidCallback? onRetry,
+    String? peerAvatarUrl,
   }) {
     return ProviderScope(
       overrides: [
@@ -82,6 +83,7 @@ void main() {
             message: message,
             showTime: false,
             showAvatar: showAvatar,
+            peerAvatarUrl: peerAvatarUrl,
             onUserTap: () {},
             onVoiceOpened: () async {},
             onLinkTap: () async {},
@@ -163,6 +165,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ChatObjectAvatar), findsNothing);
+  });
+
+  testWidgets('compact direct messages use the cached peer avatar', (
+    tester,
+  ) async {
+    final message = makeMessage(id: 20, messageType: 0, text: 'peer');
+    await tester.pumpWidget(
+      buildRow(message, peerAvatarUrl: '/avatars/peer.png'),
+    );
+    final avatar = tester.widget<ChatObjectAvatar>(
+      find.byType(ChatObjectAvatar),
+    );
+    expect(avatar.imageUrl, '/avatars/peer.png');
+    await tester.pumpAndSettle();
   });
 
   testWidgets('ChatMessageRow renders Checkbox when selectionMode is true', (
