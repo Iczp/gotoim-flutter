@@ -28,7 +28,7 @@ class UnifiedDatabase {
   );
 
   static const databaseName = 'gotoim';
-  static const schemaVersion = 3;
+  static const schemaVersion = 4;
   static const diagnosticsTable = 'diagnostic_records';
   static const diagnosticsScratchTable = 'diagnostic_scratch';
 
@@ -85,6 +85,24 @@ class UnifiedDatabase {
     for (final statement in _version1Schema) {
       await executor.runCustom(statement);
     }
+    // Ensure idx_messages_client_id is NOT a unique index (legacy versions created it as UNIQUE)
+    final messageIndexes = await executor.runSelect(
+      "PRAGMA index_list('Messages')",
+      const [],
+    );
+    for (final idx in messageIndexes) {
+      final name = idx['name']?.toString();
+      final isUnique =
+          idx['unique'] == 1 || idx['unique'] == true || idx['unique'] == '1';
+      if (name == 'idx_messages_client_id' && isUnique) {
+        await executor.runCustom('DROP INDEX IF EXISTS idx_messages_client_id');
+        break;
+      }
+    }
+    await executor.runCustom(
+      'CREATE INDEX IF NOT EXISTS idx_messages_client_id ON Messages (clientMessageId)',
+    );
+
     final current = details.versionBefore ?? 0;
     final stateColumns = await executor.runSelect(
       'PRAGMA table_info(MessageLocalStates)',
@@ -102,6 +120,12 @@ class UnifiedDatabase {
         await executor.runDelete(
           "DELETE FROM Settings WHERE [group] = 'message-sync'",
           const [],
+        );
+      }
+      if (current < 4) {
+        await executor.runCustom('DROP INDEX IF EXISTS idx_messages_client_id');
+        await executor.runCustom(
+          'CREATE INDEX IF NOT EXISTS idx_messages_client_id ON Messages (clientMessageId)',
         );
       }
       // Older responses could be cached before the current owner was known.
@@ -727,6 +751,14 @@ class UnifiedDatabase {
     try {
       rows = await _mergeMessageSyncStates(rows, tx);
       for (final row in rows) {
+        final clientMessageId = row['clientMessageId'];
+        final rowId = row['id'];
+        if (clientMessageId != null && rowId != null) {
+          await tx.runDelete(
+            'DELETE FROM Messages WHERE clientMessageId = ? AND id != ? AND sessionUnitId = ? COLLATE NOCASE',
+            [clientMessageId, rowId, row['sessionUnitId']],
+          );
+        }
         await tx.runInsert(
           'INSERT INTO Messages (id, serverId, score, clientMessageId, ownerId, '
           'sessionUnitId, senderSessionUnitId, messageType, state, createTime, raw) '

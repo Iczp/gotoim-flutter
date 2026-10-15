@@ -607,6 +607,9 @@ class SessionListController extends ChangeNotifier {
     if (updatedMap.isNotEmpty) {
       _sessions.addAll(updatedMap.values);
     }
+    if (_totalCount != null && _sessions.length > _totalCount!) {
+      _totalCount = _sessions.length;
+    }
     _sessions.sort((a, b) {
       final score = b.score.compareTo(a.score);
       if (score != 0) return score;
@@ -759,8 +762,10 @@ class SessionListController extends ChangeNotifier {
     final known = _sessions.map((item) => item.id).toSet();
     _sessions.addAll(result.items.where((item) => known.add(item.id)));
     _hasMore = result.hasMore;
-    if (result.totalCount != null) {
+    if (result.totalCount != null && result.totalCount! >= _sessions.length) {
       _totalCount = result.totalCount;
+    } else if (!_hasMore) {
+      _totalCount = _sessions.length;
     }
     _syncCurrentOwnerUnread();
   }

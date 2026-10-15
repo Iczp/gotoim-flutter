@@ -71,7 +71,7 @@ void main() {
     );
     addTearDown(database.close);
     final overview = await database.inspect();
-    expect(overview.schemaVersion, 3);
+    expect(overview.schemaVersion, UnifiedDatabase.schemaVersion);
     expect(
       overview.tables
           .singleWhere((table) => table.name == 'MessageLocalStates')
@@ -184,6 +184,58 @@ void main() {
         containsAll(<String>['Settings', 'Messages', 'Friends']),
       );
       expect(overview.tables.every((table) => table.rowCount == 0), isTrue);
+    },
+  );
+
+  test(
+    'version 3 database with unique idx_messages_client_id migrates to non-unique and allows upsert without collision',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(
+          NativeDatabase.memory(
+            setup: (sqlite) {
+              sqlite.execute('''CREATE TABLE Messages (
+                id TEXT PRIMARY KEY, serverId INTEGER, score INTEGER NOT NULL,
+                clientMessageId TEXT, sessionId TEXT, ownerId INTEGER, sessionUnitId TEXT,
+                senderId INTEGER, senderSessionUnitId TEXT, messageType INTEGER, state TEXT,
+                quoteMessageId INTEGER, renderHeight INTEGER, createTime INTEGER,
+                updateTime INTEGER, expireTime INTEGER, raw TEXT
+              )''');
+              sqlite.execute(
+                'CREATE UNIQUE INDEX idx_messages_client_id ON Messages (clientMessageId)',
+              );
+              sqlite.execute(
+                "INSERT INTO Messages (id, serverId, score, clientMessageId, ownerId, sessionUnitId, state, createTime, raw) "
+                "VALUES ('1792032139175789', NULL, 1000, '1792032139175789', 14, '74c449de-ff99-2b65-e92d-3a0aab0196c9', 'sending', 1000, '{}')",
+              );
+              sqlite.execute('PRAGMA user_version=3');
+            },
+          ),
+        ),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+
+      await dao.upsertAll([
+        ChatMessage.fromJson(
+          {
+            'id': 7307894,
+            'clientMessageId': '1792032139175789',
+            'creationTime': '2026-10-15T06:00:00Z',
+            'content': {'text': 'hello'},
+          },
+          ownerId: 14,
+          sessionUnitId: '74c449de-ff99-2b65-e92d-3a0aab0196c9',
+        ),
+      ]);
+
+      final messages = await dao.readPage(
+        ownerId: 14,
+        sessionUnitId: '74c449de-ff99-2b65-e92d-3a0aab0196c9',
+      );
+      expect(messages.length, 1);
+      expect(messages.single.serverId, 7307894);
+      expect(messages.single.clientMessageId, '1792032139175789');
     },
   );
 }

@@ -2,6 +2,7 @@ class PagedResultDto<T> {
   const PagedResultDto({
     required this.items,
     required this.totalCount,
+    this.hasServerTotalCount = false,
     this.hasMore,
     this.nextCursorTicks,
     this.nextCursorId,
@@ -20,6 +21,10 @@ class PagedResultDto<T> {
                 .toList(growable: false)
             : List<T>.empty(growable: false);
     final rawCount = json['totalCount'];
+    final parsedCount =
+        rawCount is num
+            ? rawCount.toInt()
+            : (rawCount is String ? int.tryParse(rawCount) : null);
     final extra = json['extra'];
     final nextCursor = extra is Map && extra['nextCursor'] is Map
         ? (extra['nextCursor'] as Map)
@@ -37,10 +42,8 @@ class PagedResultDto<T> {
         : (extra is Map ? extra['nextCursorId']?.toString() : null);
     return PagedResultDto<T>(
       items: items,
-      totalCount:
-          rawCount is num
-              ? rawCount.toInt()
-              : int.tryParse('$rawCount') ?? items.length,
+      totalCount: parsedCount ?? 0,
+      hasServerTotalCount: parsedCount != null,
       hasMore: rawHasMore is bool ? rawHasMore : null,
       nextCursorTicks: cursorTicks,
       nextCursorId: cursorId,
@@ -49,6 +52,7 @@ class PagedResultDto<T> {
 
   final List<T> items;
   final int totalCount;
+  final bool hasServerTotalCount;
   final bool? hasMore;
   final int? nextCursorTicks;
   final String? nextCursorId;

@@ -30,9 +30,10 @@ extension MessageSyncDatabase on UnifiedDatabase {
   ) async {
     await initialize();
     if (ids.isEmpty) return [];
+    final whereOwner = owner > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
     return _connection.runSelect(
-      'SELECT * FROM Messages WHERE ownerId = ? AND sessionUnitId = ? AND serverId IN (${List.filled(ids.length, '?').join(',')})',
-      [owner, unit, ...ids],
+      'SELECT * FROM Messages WHERE ${whereOwner}sessionUnitId = ? COLLATE NOCASE AND serverId IN (${List.filled(ids.length, '?').join(',')})',
+      [if (owner > 0) owner, unit, ...ids],
     );
   }
 
@@ -45,7 +46,7 @@ extension MessageSyncDatabase on UnifiedDatabase {
       final batch = rows.skip(offset).take(100).toList();
       final conditions = List.filled(
         batch.length,
-        '(ownerId = ? AND sessionUnitId = ? AND ((serverId IS NOT NULL AND serverId = ?) OR (clientMessageId IS NOT NULL AND clientMessageId = ?)))',
+        '((ownerId = ? OR ownerId = 0) AND sessionUnitId = ? COLLATE NOCASE AND ((serverId IS NOT NULL AND serverId = ?) OR (clientMessageId IS NOT NULL AND clientMessageId = ?)))',
       ).join(' OR ');
       final existingRows = await executor.runSelect(
         'SELECT * FROM Messages WHERE $conditions',
@@ -61,13 +62,18 @@ extension MessageSyncDatabase on UnifiedDatabase {
       final byServer = {
         for (final row in existingRows)
           if (row['serverId'] != null)
-            '${row['ownerId']}:${row['sessionUnitId']}:${row['serverId']}': row,
+            '${row['sessionUnitId']?.toString().toLowerCase()}:${row['serverId']}':
+                row,
       };
       final byClient = {
         for (final row in existingRows)
           if (row['clientMessageId'] != null)
-            '${row['ownerId']}:${row['sessionUnitId']}:${row['clientMessageId']}':
+            '${row['sessionUnitId']?.toString().toLowerCase()}:${row['clientMessageId']}':
                 row,
+      };
+      final byClientIdOnly = {
+        for (final row in existingRows)
+          if (row['clientMessageId'] != null) '${row['clientMessageId']}': row,
       };
       final tuples = <String>[];
       final args = <Object?>[];
@@ -104,9 +110,13 @@ extension MessageSyncDatabase on UnifiedDatabase {
         final state =
             byKey['${row['syncNamespace'] ?? ''}:${row['ownerId']}:${row['sessionUnitId']}:${row['serverId']}'];
         if (state?['isDeleted'] == 1) continue;
+        final unitKey = row['sessionUnitId']?.toString().toLowerCase();
         final existing =
-            byServer['${row['ownerId']}:${row['sessionUnitId']}:${row['serverId']}'] ??
-            byClient['${row['ownerId']}:${row['sessionUnitId']}:${row['clientMessageId']}'];
+            byServer['$unitKey:${row['serverId']}'] ??
+            byClient['$unitKey:${row['clientMessageId']}'] ??
+            (row['clientMessageId'] != null
+                ? byClientIdOnly['${row['clientMessageId']}']
+                : null);
         final oldRaw =
             existing == null
                 ? <String, dynamic>{}

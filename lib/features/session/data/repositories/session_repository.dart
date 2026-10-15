@@ -144,7 +144,8 @@ class SessionRepository {
       remote: remote.items,
     );
     await _dao.upsertAll(remoteItems);
-    final hasMore = remoteItems.length == limit - localItems.length;
+    final hasMore =
+        remote.hasMore ?? (remoteItems.length == limit - localItems.length);
     debugPrint(
       '[loadFriends][remote] ownerId=$ownerId received=${remoteItems.length} '
       'persisted=${remoteItems.length} hasMore=$hasMore '
@@ -155,15 +156,23 @@ class SessionRepository {
       for (final item in localItems) item.id: item,
       for (final item in remoteItems) item.id: item,
     };
+    final resolvedTotalCount = !hasMore
+        ? (remote.hasServerTotalCount && remote.totalCount > 0
+            ? remote.totalCount
+            : await _dao.count(ownerId))
+        : (remote.hasServerTotalCount && remote.totalCount > 0
+            ? remote.totalCount
+            : null);
     debugPrint(
       '[loadFriends][result] source=local+remote ownerId=$ownerId '
       'localAdded=${localItems.length} remoteAdded=${remote.items.length} '
-      'pageAdded=${unique.length} hasMore=$hasMore',
+      'pageAdded=${unique.length} hasMore=$hasMore '
+      'totalCount=$resolvedTotalCount',
     );
     return LoadFriendsResult(
       items: unique.values.toList(),
       hasMore: hasMore,
-      totalCount: remote.totalCount,
+      totalCount: resolvedTotalCount,
     );
   }
 

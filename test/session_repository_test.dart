@@ -296,6 +296,45 @@ void main() {
     expect(result.items.single.id, 'remote');
   });
 
+  test(
+    'loadFriends uses local count when remote cursor endpoint omits totalCount and reaches end',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = SessionDao(database);
+      final client = _FakeApiClient(
+        responses: {
+          '/api/chat/session-unit-cache/friends': {
+            'items': [
+              {
+                'id': 'remote-1',
+                'ownerId': 7,
+                'score': 10,
+                'ticks': 10,
+                'destination': {'name': 'remote 1'},
+              },
+            ],
+            // totalCount is null/omitted by cursor endpoint
+          },
+        },
+      );
+      final repository = SessionRepository(
+        api: SessionUnitApi(client),
+        aiApi: AiApi(client),
+        dao: dao,
+      );
+
+      // Limit is 10, remote returned 1 item so hasMore is false
+      final result = await repository.loadFriends(ownerId: 7, limit: 10);
+
+      expect(result.hasMore, isFalse);
+      expect(result.totalCount, 1);
+      expect(await dao.isLoadedAll(7), isTrue);
+    },
+  );
+
   test('loadFriends sends the last local maxMessageId to HTTP', () async {
     final database = UnifiedDatabase(
       DatabaseConnection(NativeDatabase.memory()),
