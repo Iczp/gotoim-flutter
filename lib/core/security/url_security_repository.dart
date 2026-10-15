@@ -279,10 +279,11 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
           '/api/chat/security/check-url',
           data: {'url': trimmed, 'domain': domain},
         );
-        final levelStr = res['level']?.toString().toLowerCase();
-        final level = levelStr == 'safe'
+        final rawLevel = res['level'];
+        final levelStr = rawLevel?.toString().toLowerCase();
+        final level = (levelStr == 'safe' || levelStr == '0')
             ? UrlSecurityLevel.safe
-            : (levelStr == 'blocked'
+            : ((levelStr == 'blocked' || levelStr == '2')
                 ? UrlSecurityLevel.blocked
                 : UrlSecurityLevel.warning);
         final result = UrlSecurityCheckResult(
@@ -379,10 +380,18 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
     return host.endsWith('.$pattern');
   }
 
-  UrlRiskCategory _parseCategory(String? raw) {
+  UrlRiskCategory _parseCategory(dynamic raw) {
     if (raw == null) return UrlRiskCategory.unknownThirdParty;
+    if (raw is int && raw >= 0 && raw < UrlRiskCategory.values.length) {
+      return UrlRiskCategory.values[raw];
+    }
+    final rawStr = raw.toString().toLowerCase();
+    final intVal = int.tryParse(rawStr);
+    if (intVal != null && intVal >= 0 && intVal < UrlRiskCategory.values.length) {
+      return UrlRiskCategory.values[intVal];
+    }
     return UrlRiskCategory.values.firstWhere(
-      (e) => e.name.toLowerCase() == raw.toLowerCase(),
+      (e) => e.name.toLowerCase() == rawStr,
       orElse: () => UrlRiskCategory.unknownThirdParty,
     );
   }

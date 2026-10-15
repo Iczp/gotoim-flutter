@@ -17,10 +17,11 @@ class ChatOwner {
       throw const FormatException('ChatObjectDto.id is missing');
     }
     final name = (json['displayName'] ?? json['name'] ?? '').toString().trim();
+    final avatar = firstNonEmpty([json['thumbnail'], json['portrait']]);
     return ChatOwner(
       id: id,
       name: name,
-      imageUrl: (json['thumbnail'] ?? json['portrait'])?.toString(),
+      imageUrl: avatar.isEmpty ? null : avatar,
       typeDescription: json['objectTypeDescription']?.toString() ?? '',
     );
   }

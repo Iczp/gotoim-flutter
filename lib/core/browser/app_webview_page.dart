@@ -174,29 +174,6 @@ const String _kImagePreviewInjectJs = r'''
     };
   }
 
-  // 微信公众号/常规网页文章：点击 <img> 标签自动唤起全屏图片预览画廊
-  document.addEventListener('click', function(e) {
-    var t = e.target;
-    if (t && t.tagName === 'IMG') {
-      var src = t.currentSrc || t.getAttribute('data-src') || t.src;
-      if (!src || src.startsWith('data:image/svg')) return;
-      var imgs = Array.from(document.querySelectorAll('img'));
-      var urls = [];
-      for (var i = 0; i < imgs.length; i++) {
-        var s = imgs[i].currentSrc || imgs[i].getAttribute('data-src') || imgs[i].src;
-        if (s && !s.startsWith('data:image/svg')) {
-          urls.push(s);
-        }
-      }
-      var idx = urls.indexOf(src);
-      if (idx === -1) {
-        urls.push(src);
-        idx = urls.length - 1;
-      }
-      window.openImage({ current: src, urls: urls, index: idx });
-    }
-  }, true);
-
   // 微信同款：网页内长按 <img> 标签唤起操作菜单与二维码智能识别
   var _imgPressTimer = null;
   document.addEventListener('touchstart', function(e) {

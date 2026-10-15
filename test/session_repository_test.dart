@@ -6,10 +6,55 @@ import 'package:gotoim_flutter/core/network/api_client.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/ai_api.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_dao.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_unit_api.dart';
+import 'package:gotoim_flutter/features/session/data/models/chat_owner.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
 import 'package:gotoim_flutter/features/session/data/repositories/session_repository.dart';
 
 void main() {
+  test(
+    'owner avatar falls back to portrait and survives local persistence',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = SessionDao(database);
+
+      final owners = [
+        ChatOwner.fromJson({
+          'id': 1,
+          'thumbnail': '',
+          'portrait': '/portrait-1.jpg',
+        }),
+        ChatOwner.fromJson({
+          'id': 2,
+          'thumbnail': '  ',
+          'portrait': ' /portrait-2.jpg ',
+        }),
+        ChatOwner.fromJson({
+          'id': 3,
+          'thumbnail': null,
+          'portrait': '/portrait-3.jpg',
+        }),
+        ChatOwner.fromJson({
+          'id': 4,
+          'thumbnail': ' /thumb.jpg ',
+          'portrait': '/portrait.jpg',
+        }),
+        ChatOwner.fromJson({'id': 5, 'thumbnail': '', 'portrait': ' '}),
+      ];
+      await dao.upsertOwners(owners);
+
+      expect((await dao.readOwners()).map((owner) => owner.imageUrl), [
+        '/portrait-1.jpg',
+        '/portrait-2.jpg',
+        '/portrait-3.jpg',
+        '/thumb.jpg',
+        null,
+      ]);
+    },
+  );
+
   test(
     'loadChanges drains equal-tick pages and replays the boundary',
     () async {
