@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_theme_tokens.dart';
 import '../../../../core/widgets/app_toast.dart';
@@ -31,6 +32,7 @@ class ChatComposer extends StatefulWidget {
     this.onOpenAppearancePanel,
     this.useGlass = false,
     this.hasBackground = false,
+    this.isDesktop = false,
     super.key,
   });
 
@@ -45,6 +47,7 @@ class ChatComposer extends StatefulWidget {
   final Future<void> Function()? onOpenAppearancePanel;
   final bool useGlass;
   final bool hasBackground;
+  final bool isDesktop;
 
   @override
   State<ChatComposer> createState() => ChatComposerState();
@@ -495,6 +498,9 @@ class ChatComposerState extends State<ChatComposer>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isDesktop) {
+      return _buildDesktopComposer(context);
+    }
     final tokens = context.appTokens;
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -828,5 +834,317 @@ class ChatComposerState extends State<ChatComposer>
     }
 
     return content;
+  }
+
+  void insertText(String text) {
+    focusText();
+    final currentText = widget.input.text;
+    final selection = widget.input.selection;
+    if (selection.isValid && selection.start >= 0) {
+      final newText = currentText.replaceRange(
+        selection.start,
+        selection.end,
+        text,
+      );
+      widget.input.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(
+          offset: selection.start + text.length,
+        ),
+      );
+    } else {
+      final newText = '$currentText$text';
+      widget.input.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: newText.length),
+      );
+    }
+  }
+
+  void _openDesktopEmojiPicker(BuildContext context) {
+    const emojis = <String>[
+      '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆',
+      '😉', '😊', '😋', '😎', '😍', '😘', '🥰', '😗',
+      '😙', '😚', '🙂', '🤗', '🤩', '🤔', '🤨', '😐',
+      '😑', '😶', '🙄', '😏', '😣', '😥', '😮', '🤐',
+      '😯', '😪', '😫', '🥱', '😴', '😌', '😛', '😜',
+      '😝', '🤤', '😒', '😓', '😔', '😕', '🙃', '🤑',
+      '😲', '🙁', '😖', '😞', '😟', '😤', '😢', '😭',
+      '👍', '👎', '👏', '🙏', '🤝', '🎉', '🔥', '❤️',
+      '💯', '🚀', '💡', '🎂', '🎁', '✨', '⭐', '☕',
+    ];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.transparent,
+      builder: (dialogContext) {
+        return Stack(
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => Navigator.of(dialogContext).pop(),
+            ),
+            Positioned(
+              left: 360,
+              bottom: 180,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(10),
+                color: isDark ? const Color(0xFF282828) : Colors.white,
+                child: Container(
+                  width: 290,
+                  height: 220,
+                  padding: const EdgeInsets.all(8),
+                  child: GridView.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 8,
+                          mainAxisSpacing: 4,
+                          crossAxisSpacing: 4,
+                        ),
+                    itemCount: emojis.length,
+                    itemBuilder: (context, index) {
+                      final emoji = emojis[index];
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () {
+                          insertText(emoji);
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: Center(
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 18),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopComposer(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF7F7F7);
+    final borderColor =
+        isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000);
+    final quoted = widget.controller.quotedMessage;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border(top: BorderSide(color: borderColor, width: 0.5)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. 引用消息展示
+          if (quoted != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.black.withValues(alpha: 0.03),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: widget.quoteContentBuilder(quoted),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                    onPressed: widget.controller.clearQuote,
+                    tooltip: '移除引用',
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+            ),
+
+          // 2. 顶部工具栏
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              children: [
+                _DesktopToolIcon(
+                  icon: Icons.sentiment_satisfied_alt_outlined,
+                  tooltip: '表情',
+                  onPressed: () => _openDesktopEmojiPicker(context),
+                ),
+                const SizedBox(width: 4),
+                _DesktopToolIcon(
+                  icon: Icons.image_outlined,
+                  tooltip: '发送图片',
+                  onPressed: widget.controller.chooseAndSendImages,
+                ),
+                const SizedBox(width: 4),
+                _DesktopToolIcon(
+                  icon: Icons.folder_open_outlined,
+                  tooltip: '发送文件',
+                  onPressed: widget.controller.chooseAndSendFile,
+                ),
+                const SizedBox(width: 4),
+                if (widget.onOpenAppearancePanel != null)
+                  _DesktopToolIcon(
+                    icon: Icons.wallpaper_rounded,
+                    tooltip: '设置聊天背景',
+                    onPressed: widget.onOpenAppearancePanel!,
+                  ),
+              ],
+            ),
+          ),
+
+          // 3. 多行输入区域与快捷键拦截 (Enter 发送, Shift/Ctrl+Enter 换行)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.enter) {
+                  if (HardwareKeyboard.instance.isShiftPressed ||
+                      HardwareKeyboard.instance.isControlPressed ||
+                      HardwareKeyboard.instance.isMetaPressed) {
+                    return KeyEventResult.ignored;
+                  } else {
+                    final text = widget.input.text.trim();
+                    if (text.isNotEmpty &&
+                        !widget.controller.isSending &&
+                        !widget.controller.isMuted) {
+                      widget.input.clear();
+                      widget.controller.send(text);
+                    }
+                    return KeyEventResult.handled;
+                  }
+                }
+                return KeyEventResult.ignored;
+              },
+              child: TextField(
+                controller: widget.input,
+                focusNode: _focusNode,
+                maxLines: 4,
+                minLines: 3,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                  hintText: widget.controller.isMuted ? '全员禁言中' : '输入消息...',
+                  hintStyle: TextStyle(
+                    fontSize: 13.5,
+                    color: isDark
+                        ? const Color(0xFF757575)
+                        : const Color(0xFF9E9E9E),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 4. 底部状态与发送按钮栏
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Enter 发送，Shift+Enter 换行',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark
+                        ? const Color(0xFF666666)
+                        : const Color(0xFFAAAAAA),
+                  ),
+                ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: widget.input,
+                  builder: (context, value, _) {
+                    final canSend = value.text.trim().isNotEmpty &&
+                        !widget.controller.isSending &&
+                        !widget.controller.isMuted;
+                    return FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: canSend
+                            ? const Color(0xFF07C160)
+                            : (isDark
+                                ? const Color(0xFF2E2E2E)
+                                : const Color(0xFFE5E5E5)),
+                        foregroundColor: canSend
+                            ? Colors.white
+                            : (isDark
+                                ? const Color(0xFF666666)
+                                : const Color(0xFFAAAAAA)),
+                        minimumSize: const Size(68, 28),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        elevation: 0,
+                      ),
+                      onPressed: canSend
+                          ? () {
+                              final text = widget.input.text.trim();
+                              widget.input.clear();
+                              widget.controller.send(text);
+                            }
+                          : null,
+                      child: const Text(
+                        '发送',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopToolIcon extends StatelessWidget {
+  const _DesktopToolIcon({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = isDark ? const Color(0xFFB0B0B0) : const Color(0xFF555555);
+
+    return Tooltip(
+      message: tooltip,
+      preferBelow: false,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onPressed,
+        hoverColor: isDark ? Colors.white10 : Colors.black12,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, size: 20, color: color),
+        ),
+      ),
+    );
   }
 }

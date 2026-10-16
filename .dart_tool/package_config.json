@@ -164,8 +164,14 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "cnativeapi",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/cnativeapi-0.5.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.13"
+    },
+    {
       "name": "code_assets",
-      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/code_assets-1.2.1",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/code_assets-2.1.0",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -801,9 +807,21 @@
     },
     {
       "name": "native_toolchain_c",
-      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/native_toolchain_c-0.19.3",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/native_toolchain_c-0.19.5",
       "packageUri": "lib/",
       "languageVersion": "3.10"
+    },
+    {
+      "name": "nativeapi",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/nativeapi-0.5.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.13"
+    },
+    {
+      "name": "nativeapi_flutter",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/nativeapi_flutter-0.5.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.13"
     },
     {
       "name": "nested",
@@ -837,7 +855,7 @@
     },
     {
       "name": "objective_c",
-      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/objective_c-9.5.0",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/objective_c-9.6.2",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -1266,6 +1284,12 @@
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/timezone-0.11.1",
       "packageUri": "lib/",
       "languageVersion": "3.10"
+    },
+    {
+      "name": "tray_manager",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/tray_manager-0.8.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.13"
     },
     {
       "name": "tuple",

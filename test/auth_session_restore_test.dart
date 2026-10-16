@@ -10,54 +10,76 @@ import 'package:gotoim_flutter/core/network/token_refresher.dart';
 import 'package:gotoim_flutter/features/auth/data/openid_connect_auth_repository.dart';
 
 void main() {
-  test(
-    'a refresh completing after device logout cannot restore credentials',
-    () async {
-      dotenv.loadFromString(envString: 'AUTH_BASE_URL=https://example.test');
-      final storage = _MemoryTokenStorage(
-        accessToken: 'old',
-        refreshToken: 'refresh',
-      );
-      final dio = Dio();
-      final received = Completer<(RequestOptions, RequestInterceptorHandler)>();
-      dio.interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            received.complete((options, handler));
-          },
-        ),
-      );
-      final repository = OpenIdConnectAuthRepository(
-        dio: dio,
-        environment: AppEnvironment.fromDotEnv(AppFlavor.development),
-        tokenStorage: storage,
-        clientCredentialsTokenStorage: ClientCredentialsTokenStorage(),
-        deviceContext: _deviceContext,
-      );
-      final refresh = repository.refreshSession();
-      final rejected = expectLater(
-        refresh,
-        throwsA(isA<TokenRefreshRejectedException>()),
-      );
-      final (request, handler) = await received.future;
-      await repository.clearSession();
-      handler.resolve(
-        Response<dynamic>(
-          requestOptions: request,
-          statusCode: 200,
-          data: {
-            'access_token': 'late-token',
-            'refresh_token': 'late-refresh',
-            'expires_in': 3600,
-            'token_type': 'Bearer',
-          },
-        ),
-      );
-      await rejected;
-      expect(storage.accessToken, isNull);
-      expect(storage.refreshToken, isNull);
-    },
-  );
+  for (final status in [200, 400]) {
+    test(
+      'a $status refresh completing after device logout cannot restore credentials',
+      () async {
+        dotenv.loadFromString(envString: 'AUTH_BASE_URL=https://example.test');
+        final storage = _MemoryTokenStorage(
+          accessToken: 'old',
+          refreshToken: 'refresh',
+        );
+        final dio = Dio();
+        final received =
+            Completer<(RequestOptions, RequestInterceptorHandler)>();
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              received.complete((options, handler));
+            },
+          ),
+        );
+        final repository = OpenIdConnectAuthRepository(
+          dio: dio,
+          environment: AppEnvironment.fromDotEnv(AppFlavor.development),
+          tokenStorage: storage,
+          clientCredentialsTokenStorage: ClientCredentialsTokenStorage(),
+          deviceContext: _deviceContext,
+        );
+        final refresh = repository.refreshSession();
+        final rejected = expectLater(
+          refresh,
+          throwsA(
+            isA<TokenRefreshRejectedException>().having(
+              (error) => error.code,
+              'code',
+              'session_signed_out',
+            ),
+          ),
+        );
+        final (request, handler) = await received.future;
+        await repository.clearSession();
+        if (status == 200) {
+          handler.resolve(
+            Response<dynamic>(
+              requestOptions: request,
+              statusCode: 200,
+              data: {
+                'access_token': 'late-token',
+                'refresh_token': 'late-refresh',
+                'expires_in': 3600,
+                'token_type': 'Bearer',
+              },
+            ),
+          );
+        } else {
+          handler.reject(
+            DioException(
+              requestOptions: request,
+              response: Response<dynamic>(
+                requestOptions: request,
+                statusCode: 400,
+                data: {'error': 'invalid_grant'},
+              ),
+            ),
+          );
+        }
+        await rejected;
+        expect(storage.accessToken, isNull);
+        expect(storage.refreshToken, isNull);
+      },
+    );
+  }
 
   test(
     'logout uses device identity and always removes local tokens after a network failure',

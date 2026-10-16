@@ -56,75 +56,7 @@ class DesktopDockRail extends ConsumerWidget {
       ),
       child: Column(
         children: [
-          const SizedBox(height: 18),
-
-          // ── 顶部：当前身份头像与多身份切换入口 ──────────────────────────────
-          Builder(
-            builder: (avatarContext) {
-              return Tooltip(
-                message:
-                    currentOwner != null
-                        ? '当前身份：${currentOwner.name}\n(点击切换其它聊天身份)'
-                        : '点击切换聊天身份',
-                preferBelow: false,
-                verticalOffset: 24,
-                child: GestureDetector(
-                  onTap: () {
-                    final renderBox =
-                        avatarContext.findRenderObject() as RenderBox?;
-                    final offset = renderBox?.localToGlobal(Offset.zero);
-                    DesktopChatOwnerPopover.show(
-                      avatarContext,
-                      controller: sessionController,
-                      anchorOffset: Offset(railWidth + 8, offset?.dy ?? 20.0),
-                    );
-                  },
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // 主头像
-                        Container(
-                          padding: const EdgeInsets.all(1.5),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color:
-                                  otherUnread > 0
-                                      ? colorScheme.error
-                                      : colorScheme.primary.withValues(
-                                        alpha: 0.6,
-                                      ),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: AppAvatar(
-                            name: currentOwner?.name ?? '我',
-                            imageUrl: currentOwner?.imageUrl,
-                            radius: 17,
-                          ),
-                        ),
-                        // 跨身份未读总数角标（其他身份有消息时呈现）
-                        if (otherUnread > 0 || otherImmersed > 0)
-                          Positioned(
-                            right: -4,
-                            top: -4,
-                            child: AppBadge(
-                              count: otherUnread,
-                              dot: otherUnread == 0 && otherImmersed > 0,
-                              size: AppBadgeSize.small,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 22),
+          const SizedBox(height: 16),
 
           // ── 中部导航菜单项 ────────────────────────────────────────────────
           _DockNavItem(
@@ -227,7 +159,76 @@ class DesktopDockRail extends ConsumerWidget {
               onTap: () => context.push('/settings'),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+          const Divider(height: 1, thickness: 0.5, indent: 12, endIndent: 12),
+          const SizedBox(height: 12),
+
+          // ── 最底部：当前身份头像与多身份切换入口 ────────────────────────
+          Builder(
+            builder: (avatarContext) {
+              return Tooltip(
+                message:
+                    currentOwner != null
+                        ? '当前身份：${currentOwner.name}\n(点击切换其它聊天身份)'
+                        : '点击切换聊天身份',
+                preferBelow: false,
+                verticalOffset: 24,
+                child: GestureDetector(
+                  onTap: () {
+                    final renderBox =
+                        avatarContext.findRenderObject() as RenderBox?;
+                    final offset = renderBox?.localToGlobal(Offset.zero);
+                    DesktopChatOwnerPopover.show(
+                      avatarContext,
+                      controller: sessionController,
+                      anchorOffset: Offset(railWidth + 8, offset?.dy ?? 20.0),
+                    );
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        // 主头像
+                        Container(
+                          padding: const EdgeInsets.all(1.5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color:
+                                  otherUnread > 0
+                                      ? colorScheme.error
+                                      : colorScheme.primary.withValues(
+                                        alpha: 0.6,
+                                      ),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: AppAvatar(
+                            name: currentOwner?.name ?? '我',
+                            imageUrl: currentOwner?.imageUrl,
+                            radius: 17,
+                          ),
+                        ),
+                        // 跨身份未读总数角标（其他身份有消息时呈现）
+                        if (otherUnread > 0 || otherImmersed > 0)
+                          Positioned(
+                            right: -4,
+                            top: -4,
+                            child: AppBadge(
+                              count: otherUnread,
+                              dot: otherUnread == 0 && otherImmersed > 0,
+                              size: AppBadgeSize.small,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 14),
         ],
       ),
     );

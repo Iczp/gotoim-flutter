@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -10,6 +11,36 @@ import 'package:gotoim_flutter/core/network/token_storage.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_unit_api.dart';
 
 void main() {
+  test(
+    'a stale refresh from a logged-out session cannot clear a newer login',
+    () async {
+      final storage = _MemoryTokenStorage('old-token', 'refresh');
+      final refresher = _StaleSessionRefresher(storage);
+      var invalidated = 0;
+      final client = DioApiClient(
+        dio: _tokenDio([]),
+        tokenStorage: storage,
+        tokenRefresher: refresher,
+        deviceContext: _device,
+        onSessionInvalidated: () => invalidated++,
+      );
+      final request = client.get<Map<String, dynamic>>('/old-session');
+      final rejected = expectLater(
+        request,
+        throwsA(isA<TokenRefreshRejectedException>()),
+      );
+      await refresher.started.future;
+      await storage.save(
+        accessToken: 'new-login-token',
+        refreshToken: 'new-login-refresh',
+      );
+      refresher.complete.complete();
+      await rejected;
+      expect(storage.accessToken, 'new-login-token');
+      expect(invalidated, 0);
+    },
+  );
+
   test(
     'online abort accepts the backend 204 response without a JSON map',
     () async {
@@ -328,4 +359,22 @@ Dio _tokenDio(List<String?> tokens) {
     ),
   );
   return dio;
+}
+
+class _StaleSessionRefresher implements TokenRefresher {
+  _StaleSessionRefresher(this.storage);
+  final _MemoryTokenStorage storage;
+  final started = Completer<void>();
+  final complete = Completer<void>();
+  @override
+  Future<void> clearSession() => storage.clear();
+  @override
+  Future<void> refreshAccessToken() async {
+    started.complete();
+    await complete.future;
+    throw const TokenRefreshRejectedException(
+      'Session changed.',
+      code: 'session_signed_out',
+    );
+  }
 }

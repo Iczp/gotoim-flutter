@@ -19,11 +19,11 @@ class DioApiClient implements ApiClient {
     required TokenRefresher tokenRefresher,
     required ClientDeviceContext deviceContext,
     FutureOr<void> Function()? onSessionInvalidated,
-  })  : _dio = dio,
-        _tokenStorage = tokenStorage,
-        _tokenRefresher = tokenRefresher,
-        _deviceContext = deviceContext,
-        _onSessionInvalidated = onSessionInvalidated;
+  }) : _dio = dio,
+       _tokenStorage = tokenStorage,
+       _tokenRefresher = tokenRefresher,
+       _deviceContext = deviceContext,
+       _onSessionInvalidated = onSessionInvalidated;
 
   final Dio _dio;
   final TokenStorage _tokenStorage;
@@ -58,14 +58,13 @@ class DioApiClient implements ApiClient {
     String path, {
     Object? cancelTag,
     void Function(int received, int total)? onProgress,
-  }) =>
-      _request<List<int>>(
-        path: path,
-        method: 'GET',
-        responseType: ResponseType.bytes,
-        cancelTag: cancelTag,
-        onReceiveProgress: onProgress,
-      );
+  }) => _request<List<int>>(
+    path: path,
+    method: 'GET',
+    responseType: ResponseType.bytes,
+    cancelTag: cancelTag,
+    onReceiveProgress: onProgress,
+  );
 
   @override
   Future<T> post<T>(
@@ -94,12 +93,12 @@ class DioApiClient implements ApiClient {
     String fieldName = 'file',
     void Function(int sent, int total)? onProgress,
     bool retryOnUnauthorized = true,
-  }) =>
-      _request<T>(
-        path: path,
-        method: 'POST',
-        query: query,
-        dataFactory: () => FormData.fromMap(<String, Object>{
+  }) => _request<T>(
+    path: path,
+    method: 'POST',
+    query: query,
+    dataFactory:
+        () => FormData.fromMap(<String, Object>{
           fieldName: MultipartFile.fromStream(
             file.openRead,
             file.length,
@@ -109,9 +108,9 @@ class DioApiClient implements ApiClient {
             for (final entry in extraFields.entries)
               if (entry.value != null) entry.key: entry.value!,
         }),
-        retryOnUnauthorized: retryOnUnauthorized,
-        onSendProgress: onProgress,
-      );
+    retryOnUnauthorized: retryOnUnauthorized,
+    onSendProgress: onProgress,
+  );
 
   Future<T> _request<T>({
     required String path,
@@ -158,9 +157,10 @@ class DioApiClient implements ApiClient {
               'Authorization': 'Bearer $accessToken',
           },
         ),
-        cancelToken: cancelTag == null
-            ? null
-            : (_cancelTokens[cancelTag] = CancelToken()),
+        cancelToken:
+            cancelTag == null
+                ? null
+                : (_cancelTokens[cancelTag] = CancelToken()),
         onReceiveProgress: onReceiveProgress,
         onSendProgress: onSendProgress,
       );
@@ -192,8 +192,8 @@ class DioApiClient implements ApiClient {
           if (currentToken == accessToken) {
             await _refreshOnce();
           }
-        } on TokenRefreshRejectedException {
-          await _invalidateSession();
+        } on TokenRefreshRejectedException catch (error) {
+          if (error.code != 'session_signed_out') await _invalidateSession();
           rethrow;
         }
         return _request<T>(
@@ -251,8 +251,9 @@ class DioApiClient implements ApiClient {
   Future<void> _refreshOrClear() async {
     try {
       await _refreshOnce();
-    } on TokenRefreshRejectedException {
-      await _invalidateSession();
+    } on TokenRefreshRejectedException catch (error) {
+      // A stale refresh belongs to a session already cleared by logout. It must not clear a newer login.
+      if (error.code != 'session_signed_out') await _invalidateSession();
       rethrow;
     }
   }
@@ -275,26 +276,29 @@ class DioApiClient implements ApiClient {
   T _unwrap<T>(dynamic data) {
     if (data is Map && (data['success'] == false || data['error'] is Map)) {
       final error = data['error'];
-      final message = error is Map
-          ? (error['message'] ?? 'Request failed').toString()
-          : 'Request failed';
+      final message =
+          error is Map
+              ? (error['message'] ?? 'Request failed').toString()
+              : 'Request failed';
       throw ApiException(
         message,
         code: error is Map ? error['code']?.toString() : null,
       );
     }
-    final value = data is Map<String, dynamic> && data.containsKey('result')
-        ? data['result']
-        : data;
+    final value =
+        data is Map<String, dynamic> && data.containsKey('result')
+            ? data['result']
+            : data;
     return value as T;
   }
 
   ApiException _toApiException(DioException error) {
     final data = error.response?.data;
     final responseError = data is Map ? data['error'] : null;
-    final message = responseError is Map && responseError['message'] != null
-        ? responseError['message'].toString()
-        : data is Map && data['error_description'] != null
+    final message =
+        responseError is Map && responseError['message'] != null
+            ? responseError['message'].toString()
+            : data is Map && data['error_description'] != null
             ? data['error_description'].toString()
             : error.message ?? 'Network request failed';
     return ApiException(

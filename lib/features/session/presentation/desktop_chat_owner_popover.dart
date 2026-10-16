@@ -32,14 +32,26 @@ class DesktopChatOwnerPopover extends ConsumerWidget {
       builder: (dialogContext) {
         final theme = Theme.of(dialogContext);
         final isDark = theme.brightness == Brightness.dark;
+        final screenSize = MediaQuery.of(dialogContext).size;
         final left = anchorOffset?.dx ?? 72.0;
-        final top = (anchorOffset?.dy ?? 20.0).clamp(16.0, 300.0);
+        final bool isNearBottom =
+            anchorOffset != null && anchorOffset.dy > screenSize.height * 0.55;
+        final double? top =
+            isNearBottom
+                ? null
+                : (anchorOffset?.dy ?? 20.0).clamp(16.0, screenSize.height - 120);
+        final double? bottom =
+            isNearBottom
+                ? (screenSize.height - (anchorOffset?.dy ?? screenSize.height) - 40)
+                    .clamp(16.0, screenSize.height - 200)
+                : null;
 
         return Stack(
           children: [
             Positioned(
               left: left,
               top: top,
+              bottom: bottom,
               child: Material(
                 color: Colors.transparent,
                 child: GlassContainer(
@@ -177,94 +189,95 @@ class _OwnerCard extends StatelessWidget {
             ? colorScheme.primary.withValues(alpha: 0.18)
             : colorScheme.primary.withValues(alpha: 0.12);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      decoration: BoxDecoration(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Material(
         color: isCurrent ? activeBg : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
-      ),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        leading: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AppAvatar(name: owner.name, imageUrl: owner.imageUrl, radius: 18),
-            if (owner.typeDescription.isNotEmpty)
-              Positioned(
-                right: -2,
-                bottom: -2,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surface,
-                    shape: BoxShape.circle,
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          leading: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              AppAvatar(name: owner.name, imageUrl: owner.imageUrl, radius: 18),
+              if (owner.typeDescription.isNotEmpty)
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      owner.typeDescription.contains('客服')
+                          ? Icons.support_agent_rounded
+                          : Icons.person_rounded,
+                      size: 11,
+                      color: colorScheme.primary,
+                    ),
                   ),
-                  child: Icon(
-                    owner.typeDescription.contains('客服')
-                        ? Icons.support_agent_rounded
-                        : Icons.person_rounded,
-                    size: 11,
-                    color: colorScheme.primary,
-                  ),
                 ),
-              ),
-          ],
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                owner.name,
-                style: TextStyle(
-                  fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
-                  fontSize: 13.5,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (isCurrent)
-              Icon(
-                Icons.check_circle_rounded,
-                size: 16,
-                color: colorScheme.primary,
-              ),
-          ],
-        ),
-        subtitle: Row(
-          children: [
-            if (owner.typeDescription.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(top: 2),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color:
-                      isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.black.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(4),
-                ),
+            ],
+          ),
+          title: Row(
+            children: [
+              Expanded(
                 child: Text(
-                  owner.typeDescription,
+                  owner.name,
                   style: TextStyle(
-                    fontSize: 10.5,
-                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 13.5,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            const Spacer(),
-            if (!isCurrent &&
-                (owner.unreadCount > 0 || owner.immersedCount > 0))
-              AppBadge(
-                count: owner.unreadCount,
-                dot: owner.unreadCount == 0 && owner.immersedCount > 0,
-                size: AppBadgeSize.small,
-              ),
-          ],
+              if (isCurrent)
+                Icon(
+                  Icons.check_circle_rounded,
+                  size: 16,
+                  color: colorScheme.primary,
+                ),
+            ],
+          ),
+          subtitle: Row(
+            children: [
+              if (owner.typeDescription.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color:
+                        isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    owner.typeDescription,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              const Spacer(),
+              if (!isCurrent &&
+                  (owner.unreadCount > 0 || owner.immersedCount > 0))
+                AppBadge(
+                  count: owner.unreadCount,
+                  dot: owner.unreadCount == 0 && owner.immersedCount > 0,
+                  size: AppBadgeSize.small,
+                ),
+            ],
+          ),
+          onTap: onSelect,
         ),
-        onTap: onSelect,
       ),
     );
   }

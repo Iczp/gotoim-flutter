@@ -16,6 +16,7 @@ import '../core/network/abp/abp_application_configuration_dto.dart';
 import '../core/network/abp/abp_configuration_api.dart';
 import '../core/network/abp/abp_configuration_repository.dart';
 import '../core/network/abp/abp_current_user.dart';
+import '../core/network/session_invalidator.dart';
 import '../features/auth/data/openid_connect_auth_repository.dart';
 
 /// Composition-root providers. Feature pages depend on repositories/use cases,
@@ -23,6 +24,7 @@ import '../features/auth/data/openid_connect_auth_repository.dart';
 final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((ref) {
   final environment = ref.watch(appEnvironmentProvider);
   final authRepository = ref.watch(authRepositoryProvider);
+  final sessionInvalidator = ref.watch(sessionInvalidatorProvider);
   return DioApiClient(
     dio: Dio(
       BaseOptions(
@@ -35,12 +37,8 @@ final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((ref) {
     tokenStorage: ref.watch(tokenStorageProvider),
     tokenRefresher: authRepository as OpenIdConnectAuthRepository,
     deviceContext: ref.watch(clientDeviceContextProvider),
-    // A request may discover an expired token while AuthController itself is
-    // still being constructed. Defer the read so invalidation cannot form an
-    // ApiClient -> AuthController -> ApiClient provider cycle.
     onSessionInvalidated: () async {
-      await Future<void>.delayed(Duration.zero);
-      await ref.read(authControllerProvider.notifier).sessionInvalidated();
+      await sessionInvalidator.invalidate();
     },
   );
 });

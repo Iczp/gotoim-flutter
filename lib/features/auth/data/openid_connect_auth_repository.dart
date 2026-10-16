@@ -317,28 +317,34 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
 
   Future<AuthSession> _refresh() async {
     final generation = _sessionGeneration;
-    final refreshToken = await _tokenStorage.readRefreshToken();
-    if (refreshToken == null || refreshToken.isEmpty) {
-      throw const TokenRefreshRejectedException(
-        'No refresh token is available.',
-        code: 'missing_refresh_token',
-      );
+    try {
+      final refreshToken = await _tokenStorage.readRefreshToken();
+      _checkSessionGeneration(generation);
+      if (refreshToken == null || refreshToken.isEmpty) {
+        throw const TokenRefreshRejectedException(
+          'No refresh token is available.',
+          code: 'missing_refresh_token',
+        );
+      }
+      final session = await _requestToken(<String, String>{
+        'grant_type': 'refresh_token',
+        'refresh_token': refreshToken,
+      });
+      // Some providers do not rotate refresh tokens. Keep the prior one then.
+      final completedSession =
+          session.refreshToken.isEmpty
+              ? AuthSession(
+                accessToken: session.accessToken,
+                refreshToken: refreshToken,
+                expiresIn: session.expiresIn,
+              )
+              : session;
+      await _save(completedSession, generation);
+      return completedSession;
+    } catch (_) {
+      _checkSessionGeneration(generation);
+      rethrow;
     }
-    final session = await _requestToken(<String, String>{
-      'grant_type': 'refresh_token',
-      'refresh_token': refreshToken,
-    });
-    // Some providers do not rotate refresh tokens. Keep the prior one then.
-    final completedSession =
-        session.refreshToken.isEmpty
-            ? AuthSession(
-              accessToken: session.accessToken,
-              refreshToken: refreshToken,
-              expiresIn: session.expiresIn,
-            )
-            : session;
-    await _save(completedSession, generation);
-    return completedSession;
   }
 
   Future<AuthSession> _requestToken(
@@ -387,13 +393,17 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     }
   }
 
-  Future<void> _save(AuthSession session, int generation) => _persist(() async {
+  void _checkSessionGeneration(int generation) {
     if (generation != _sessionGeneration) {
       throw const TokenRefreshRejectedException(
         '该设备已退出登录，请重新登录。',
         code: 'session_signed_out',
       );
     }
+  }
+
+  Future<void> _save(AuthSession session, int generation) => _persist(() async {
+    _checkSessionGeneration(generation);
     await _tokenStorage.save(
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,

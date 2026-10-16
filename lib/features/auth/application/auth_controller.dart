@@ -14,6 +14,7 @@ import '../../../core/network/abp/abp_configuration_repository.dart';
 import '../../../core/network/abp/abp_current_user.dart';
 import '../../../core/network/secure_token_storage.dart';
 import '../../../core/network/client_credentials_token_storage.dart';
+import '../../../core/network/session_invalidator.dart';
 import '../../../core/network/token_storage.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../../core/realtime/signalr_gateway_factory.dart';
@@ -380,6 +381,9 @@ final ChangeNotifierProvider<AuthController> authControllerProvider =
           abpConfigurationRepositoryProvider,
         ),
       );
+      final invalidator = ref.watch(sessionInvalidatorProvider);
+      invalidator.register(controller.sessionInvalidated);
+      ref.onDispose(() => invalidator.unregister(controller.sessionInvalidated));
       // 账号切换时 invalidate 所有已注册的账号级 Provider，确保新账号获得干净状态。
       controller._onAccountChanged = () => _runAccountChangedCallbacks(ref);
       return controller;

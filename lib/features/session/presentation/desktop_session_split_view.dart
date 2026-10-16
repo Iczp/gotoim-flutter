@@ -35,6 +35,29 @@ class _DesktopSessionSplitViewState
   bool _isPinnedExpanded = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchKeyword = '';
+  double _sessionPaneWidth = 290.0;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(() {
+      if (mounted) {
+        widget.controller.initialize();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(DesktopSessionSplitView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller.currentOwner?.id !=
+        widget.controller.currentOwner?.id) {
+      setState(() {
+        _selectedSessionUnitId = null;
+        _selectedTitle = null;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -94,9 +117,9 @@ class _DesktopSessionSplitViewState
 
     return Row(
       children: [
-        // ── 会话列表栏 (左列，宽 290) ──────────────────────────────────
+        // ── 会话列表栏 (左列，宽 _sessionPaneWidth) ──────────────────────────
         Container(
-          width: 290,
+          width: _sessionPaneWidth,
           color: listPaneBg,
           child: Column(
             children: [
@@ -363,8 +386,29 @@ class _DesktopSessionSplitViewState
           ),
         ),
 
-        // 分割线
-        VerticalDivider(width: 1, thickness: 0.5, color: dividerColor),
+        // ── 左右拖拽调节宽度的垂直分割手柄 ──────────────────────────
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragUpdate: (details) {
+            setState(() {
+              _sessionPaneWidth = (_sessionPaneWidth + details.delta.dx)
+                  .clamp(220.0, 480.0);
+            });
+          },
+          child: MouseRegion(
+            cursor: SystemMouseCursors.resizeColumn,
+            child: Container(
+              width: 5,
+              color: Colors.transparent,
+              child: Center(
+                child: Container(
+                  width: 0.5,
+                  color: dividerColor,
+                ),
+              ),
+            ),
+          ),
+        ),
 
         // ── 聊天工作区 (右列，自适应) ──────────────────────────────────
         Expanded(
@@ -375,6 +419,20 @@ class _DesktopSessionSplitViewState
                     ownerId: currentOwner?.id ?? 0,
                     sessionUnitId: _selectedSessionUnitId!,
                     title: _selectedTitle ?? '聊天',
+                    isDesktop: true,
+                    onPopOut: () {
+                      final s = allSessions.firstWhere(
+                        (item) => item.id == _selectedSessionUnitId,
+                        orElse:
+                            () => SessionSummary(
+                              id: _selectedSessionUnitId!,
+                              title: _selectedTitle ?? '聊天',
+                              ticks: 0,
+                              unreadCount: 0,
+                            ),
+                      );
+                      _openInStandaloneWindow(s);
+                    },
                   )
                   : const _DesktopEmptyChatCanvas(),
         ),

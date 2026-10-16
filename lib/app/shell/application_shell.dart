@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../core/compliance/privacy_consent_dialog.dart';
 import '../../core/compliance/privacy_service.dart';
 import '../../core/native/native.dart';
+import '../../core/services/tray_service.dart';
 import '../../core/theme/tab_glass_controller.dart';
 import '../../core/widgets/app_badge.dart';
 import '../../core/widgets/glass_container.dart';
@@ -50,6 +53,9 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       await ref
           .read(appUpdateServiceProvider)
           .checkUpdate(silent: true, context: context);
+      if (mounted) {
+        unawaited(ref.read(trayServiceProvider).initialize());
+      }
     });
   }
 
@@ -118,6 +124,20 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    // 桌面端系统托盘未读数与当前身份自动同步
+    ref.listen<int>(
+      sessionListControllerProvider.select((state) => state.totalUnreadCount),
+      (prev, next) {
+        ref.read(trayServiceProvider).setUnread(next);
+      },
+    );
+    ref.listen<String?>(
+      sessionListControllerProvider.select((state) => state.currentOwner?.name),
+      (prev, next) {
+        ref.read(trayServiceProvider).updateContextMenu(currentOwnerName: next);
+      },
+    );
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) => _handlePopScope(didPop),
@@ -130,9 +150,15 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
+            final isNativeDesktop =
+                !kIsWeb &&
+                (defaultTargetPlatform == TargetPlatform.windows ||
+                    defaultTargetPlatform == TargetPlatform.macOS ||
+                    defaultTargetPlatform == TargetPlatform.linux);
+
             final layout = AppBreakpoints.resolve(constraints.maxWidth);
-            final isDesktop = layout == WindowLayout.desktop;
-            final isCompact = layout == WindowLayout.mobile;
+            final isDesktop = isNativeDesktop || layout == WindowLayout.desktop;
+            final isCompact = !isNativeDesktop && layout == WindowLayout.mobile;
             final content = _LazyHomeSectionStack(
               selected: _section,
               visited: _visitedSections,

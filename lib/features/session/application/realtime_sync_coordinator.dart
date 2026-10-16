@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/app_navigation.dart';
+import '../../../core/network/session_invalidator.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../chat/application/chat_controller.dart';
@@ -399,8 +400,8 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
       }
       debugPrint('[realtimeSync][kicked] reason=$reason');
       await ref
-          .read(authControllerProvider.notifier)
-          .sessionInvalidated(reason: reason);
+          .read(sessionInvalidatorProvider)
+          .invalidate(reason: reason);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final context = rootNavigatorKey.currentContext;
         if (context == null || !context.mounted) return;

@@ -66,6 +66,7 @@ dependencies:
   gal: ^2.3.3
   flutter_native_splash: ^2.4.4
   package_info_plus: ^10.2.1
+  tray_manager: ^0.8.0
 
 dev_dependencies:
   integration_test:

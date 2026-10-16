@@ -107,6 +107,8 @@ class ChatPage extends ConsumerStatefulWidget {
     required this.title,
     this.showArticleAvatar,
     this.showMyAvatarInOfficialAccount = true,
+    this.onPopOut,
+    this.isDesktop = false,
     super.key,
   });
 
@@ -124,6 +126,12 @@ class ChatPage extends ConsumerStatefulWidget {
 
   /// 在公众号/服务号场景下是否显示自己发送消息的头像（默认为 true）
   final bool showMyAvatarInOfficialAccount;
+
+  /// 点击独立窗口按钮回调
+  final VoidCallback? onPopOut;
+
+  /// 是否以桌面端布局渲染
+  final bool isDesktop;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -319,15 +327,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
               onTransfer: _openTransferSheet,
               onOpenSettings: _openChatSettings,
               onOpenAiRuns: _openAiRunTimeline,
-              onPopOut: () {
-                ref
-                    .read(windowServiceProvider)
-                    .openChat(
-                      sessionUnitId: widget.sessionUnitId,
-                      ownerId: widget.ownerId,
-                      title: controller.title,
-                    );
-              },
+              onPopOut: widget.onPopOut ??
+                  () {
+                    ref
+                        .read(windowServiceProvider)
+                        .openChat(
+                          sessionUnitId: widget.sessionUnitId,
+                          ownerId: widget.ownerId,
+                          title: controller.title,
+                        );
+                  },
             ),
             extendBodyBehindAppBar: true,
             body: Stack(
@@ -339,6 +348,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     fit: BoxFit.cover,
                     gaplessPlayback: true,
                     errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  )
+                else if (widget.isDesktop)
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color:
+                          Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF1E1E1E)
+                              : const Color(0xFFF5F5F5),
+                    ),
                   )
                 else
                   DecoratedBox(
@@ -467,6 +485,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       input: input,
       useGlass: useGlass,
       hasBackground: hasBackground,
+      isDesktop: widget.isDesktop,
       quoteContentBuilder: (quote) => _buildQuotedContent(quote, _mediaItems),
       onOpenAppearancePanel: _openAppearancePanel,
     ),

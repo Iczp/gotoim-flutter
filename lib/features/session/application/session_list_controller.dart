@@ -645,12 +645,36 @@ class SessionListController extends ChangeNotifier {
     _currentOwner = owner;
     await _repository.saveCurrentOwnerId(owner.id);
     unawaited(_friendPresenceStore.activateOwner(owner.id));
-    _sessions.clear();
+
+    // 1. 离线优先：立即优先从本地读取并呈现该身份已有会话数据
+    final cached = await _repository.loadLocalFriends(
+      ownerId: owner.id,
+      limit: pageSize,
+    );
+    _sessions
+      ..clear()
+      ..addAll(cached);
     _hasMore = true;
     _totalCount = null;
     _error = null;
+    _syncCurrentOwnerUnread();
     notifyListeners();
-    await loadNextPage();
+
+    // 2. 异步同步线上最新会话与变更
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _loadNextPageInternal(reset: cached.isEmpty);
+    } catch (error) {
+      debugPrint('[selectOwner][remote-failed] ownerId=${owner.id} error=$error');
+      if (cached.isEmpty) {
+        _error = error;
+      }
+    } finally {
+      _isLoading = false;
+      _syncCurrentOwnerUnread();
+      notifyListeners();
+    }
   }
 
   Future<void> updateCurrentOwner(ChatOwner owner) async {
