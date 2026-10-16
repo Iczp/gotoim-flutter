@@ -157,8 +157,9 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
                     defaultTargetPlatform == TargetPlatform.linux);
 
             final layout = AppBreakpoints.resolve(constraints.maxWidth);
-            final isDesktop = isNativeDesktop || layout == WindowLayout.desktop;
+            // 侧边栏一般是不隐藏，除非是小屏（窄屏手机端）
             final isCompact = !isNativeDesktop && layout == WindowLayout.mobile;
+            final isDesktop = isNativeDesktop || !isCompact;
             final content = _LazyHomeSectionStack(
               selected: _section,
               visited: _visitedSections,
@@ -172,29 +173,20 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
               extendBody: true,
               resizeToAvoidBottomInset: false,
               drawer:
-                  isDesktop
-                      ? null
-                      : ChatOwnerDrawer(
+                  isCompact
+                      ? ChatOwnerDrawer(
                         controller: ref.watch(sessionListControllerProvider),
-                      ),
+                      )
+                      : null,
               body:
                   isCompact
                       ? content
                       : Row(
                         children: [
-                          if (isDesktop)
-                            DesktopDockRail(
-                              selected: _section,
-                              onSelected: _select,
-                            )
-                          else ...[
-                            _HomeNavigationRail(
-                              selected: _section,
-                              extended: false,
-                              onSelected: _select,
-                            ),
-                            const VerticalDivider(width: 1),
-                          ],
+                          DesktopDockRail(
+                            selected: _section,
+                            onSelected: _select,
+                          ),
                           Expanded(child: content),
                         ],
                       ),
@@ -352,65 +344,6 @@ class _HomeNavigationBar extends ConsumerWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _HomeNavigationRail extends ConsumerWidget {
-  const _HomeNavigationRail({
-    required this.selected,
-    required this.extended,
-    required this.onSelected,
-  });
-
-  final HomeSection selected;
-  final bool extended;
-  final ValueChanged<HomeSection> onSelected;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isGlass = ref.watch(tabGlassProvider);
-    final theme = Theme.of(context);
-    final totalUnread =
-        ref.watch(sessionListControllerProvider).totalUnreadCount;
-    return GlassContainer(
-      borderRadius: BorderRadius.zero,
-      borderWidth: 0,
-      blurSigma: isGlass ? null : 0.0,
-      backgroundColor: isGlass ? null : theme.colorScheme.surface,
-      child: NavigationRail(
-        backgroundColor: Colors.transparent,
-        extended: extended,
-        // A phone in landscape can provide less than the five destinations'
-        // natural height. Let the rail scroll instead of overflowing.
-        scrollable: true,
-        minExtendedWidth: 180,
-        selectedIndex: HomeSection.values.indexOf(selected),
-        onDestinationSelected: (index) => onSelected(HomeSection.values[index]),
-        labelType: extended ? null : NavigationRailLabelType.all,
-        destinations:
-            HomeSection.values.map((section) {
-              final icon = Icon(section.icon);
-              final selectedIcon = Icon(section.selectedIcon);
-              final unreadCount =
-                  section == HomeSection.messages ? totalUnread : 0;
-              return NavigationRailDestination(
-                icon: AppBadge(
-                  count: unreadCount,
-                  size: AppBadgeSize.small,
-                  offset: const Offset(4, -4),
-                  child: icon,
-                ),
-                selectedIcon: AppBadge(
-                  count: unreadCount,
-                  size: AppBadgeSize.small,
-                  offset: const Offset(4, -4),
-                  child: selectedIcon,
-                ),
-                label: Text(section.label),
-              );
-            }).toList(),
       ),
     );
   }

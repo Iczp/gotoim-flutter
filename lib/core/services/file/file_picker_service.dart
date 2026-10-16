@@ -93,7 +93,8 @@ class SelectedFile {
   };
 
   static Future<SelectedFile> fromXFile(XFile file, {Uuid? uuid}) async {
-    final name = file.name;
+    final rawName = file.name;
+    final name = rawName.split(RegExp(r'[\\/]')).last;
     final extension = _extensionOf(name);
     return SelectedFile._(
       id: (uuid ?? const Uuid()).v4(),

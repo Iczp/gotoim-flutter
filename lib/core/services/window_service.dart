@@ -5,10 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_navigation.dart';
+import '../browser/desktop_browser_window.dart';
+import '../media/media_preview.dart';
 import '../platform/platform_facade.dart';
+import '../../features/media/presentation/desktop_media_viewer_window.dart';
+import '../../features/settings/presentation/desktop_settings_window.dart';
 
 /// 独立窗口类型定义
-enum WindowType { chat, miniApp, fileServer, media, diagnostics, settings }
+enum WindowType { chat, miniApp, fileServer, media, diagnostics, settings, browser }
 
 /// 窗口记录，用于管理和防止重复创建相同会话/应用的窗口
 class WindowRecord {
@@ -79,11 +83,26 @@ abstract class WindowService {
     String? title,
   });
 
+  /// 打开或激活独立网页浏览器窗口 (打开链接)
+  Future<void> openWebBrowser({
+    required String url,
+    String? title,
+    String? fallbackContent,
+  });
+
+  /// 打开或激活独立多媒体/文档预览窗口 (查看图片/视频)
+  Future<void> openMediaViewer({
+    required String mediaUrl,
+    String? title,
+    List<MediaPreviewItem>? items,
+    int initialIndex = 0,
+  });
+
+  /// 打开或激活独立设置窗口
+  Future<void> openSettings();
+
   /// 打开或激活局域网快传独立控制台
   Future<void> openLocalFileServer();
-
-  /// 打开或激活独立多媒体/文档预览窗口
-  Future<void> openMediaViewer({required String mediaUrl, String? title});
 
   /// 打开或激活独立开发诊断中心窗口
   Future<void> openDiagnostics();
@@ -223,9 +242,47 @@ class DefaultWindowService implements WindowService {
   }
 
   @override
+  Future<void> openWebBrowser({
+    required String url,
+    String? title,
+    String? fallbackContent,
+  }) async {
+    final targetId = 'browser:$url';
+    if (isWindowOpen(targetId)) {
+      await bringToFront(targetId);
+      return;
+    }
+
+    _registerWindow(
+      targetId: targetId,
+      type: WindowType.browser,
+      title: title ?? '网页浏览',
+      extra: <String, dynamic>{'url': url},
+    );
+
+    final context = rootNavigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      if (platformFacade.supportsMultipleWindows) {
+        await DesktopBrowserWindow.open(
+          context,
+          url: url,
+          title: title,
+          fallbackContent: fallbackContent,
+        );
+      } else {
+        final effectiveTitle = Uri.encodeQueryComponent(title ?? '网页');
+        final effectiveUrl = Uri.encodeQueryComponent(url);
+        context.push('/webview?url=$effectiveUrl&title=$effectiveTitle');
+      }
+    }
+  }
+
+  @override
   Future<void> openMediaViewer({
     required String mediaUrl,
     String? title,
+    List<MediaPreviewItem>? items,
+    int initialIndex = 0,
   }) async {
     final targetId = 'media:$mediaUrl';
     if (isWindowOpen(targetId)) {
@@ -240,10 +297,61 @@ class DefaultWindowService implements WindowService {
       extra: <String, dynamic>{'url': mediaUrl},
     );
 
-    // 默认通过大图/视频全屏页展示
     final context = rootNavigatorKey.currentContext;
     if (context != null && context.mounted) {
-      context.push('/webview?url=${Uri.encodeQueryComponent(mediaUrl)}');
+      final previewItems =
+          items ??
+          [
+            MediaPreviewItem(
+              id: mediaUrl,
+              messageId: 'direct',
+              type:
+                  mediaUrl.toLowerCase().endsWith('.mp4') ||
+                          mediaUrl.toLowerCase().endsWith('.mov')
+                      ? MediaPreviewType.video
+                      : MediaPreviewType.image,
+              source: mediaUrl,
+              heroTag: 'media-$mediaUrl',
+            ),
+          ];
+
+      if (platformFacade.supportsMultipleWindows) {
+        await DesktopMediaViewerWindow.open(
+          context,
+          items: previewItems,
+          initialIndex: initialIndex,
+        );
+      } else {
+        await MediaPreview.open(
+          context,
+          items: previewItems,
+          initialIndex: initialIndex,
+        );
+      }
+    }
+  }
+
+  @override
+  Future<void> openSettings() async {
+    const targetId = 'tool:settings';
+    if (isWindowOpen(targetId)) {
+      await bringToFront(targetId);
+      return;
+    }
+
+    _registerWindow(
+      targetId: targetId,
+      type: WindowType.settings,
+      title: '设置',
+    );
+
+    final context = rootNavigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      if (platformFacade.supportsMultipleWindows) {
+        await DesktopSettingsWindow.open(context);
+      } else {
+        context.push('/settings');
+      }
     }
   }
 

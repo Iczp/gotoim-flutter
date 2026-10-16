@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/platform/platform_facade.dart';
+import '../../../../core/services/clipboard_service.dart';
+import '../../../../core/services/screen_capture_service.dart';
 import '../../../../core/theme/app_theme_tokens.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/glass_container.dart';
@@ -15,6 +18,8 @@ import 'chat_mention_panel.dart';
 import 'chat_public_account_menu.dart';
 import 'chat_quote_preview.dart';
 import 'chat_recording_panel.dart';
+import 'clipboard_files_confirm_dialog.dart';
+import 'clipboard_image_confirm_dialog.dart';
 
 /// 底部消息输入与操作区组件（ChatComposer）
 ///
@@ -507,9 +512,7 @@ class ChatComposerState extends State<ChatComposer>
     final hasBg = widget.hasBackground;
 
     final sendButtonBackground =
-        isDark
-            ? colorScheme.primary
-            : colorScheme.primary;
+        isDark ? colorScheme.primary : colorScheme.primary;
     final sendButtonForeground =
         isDark ? colorScheme.onPrimary : colorScheme.onPrimary;
     final disabledSendButtonBackground =
@@ -537,9 +540,7 @@ class ChatComposerState extends State<ChatComposer>
               : Colors.black.withValues(alpha: 0.08);
     } else {
       inputFillColor =
-          isDark
-              ? const Color(0xFF1E293B)
-              : const Color(0xFFF1F5F9);
+          isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
       inputBorderColor =
           isDark
               ? const Color(0xFF334155).withValues(alpha: 0.6)
@@ -548,10 +549,7 @@ class ChatComposerState extends State<ChatComposer>
 
     final inputPillBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(20),
-      borderSide: BorderSide(
-        color: inputBorderColor,
-        width: 0.8,
-      ),
+      borderSide: BorderSide(color: inputBorderColor, width: 0.8),
     );
     final inputFocusedBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(20),
@@ -650,11 +648,12 @@ class ChatComposerState extends State<ChatComposer>
                                   style: TextStyle(
                                     fontSize: 14.5,
                                     fontWeight: FontWeight.w500,
-                                    color: _recording
-                                        ? colorScheme.onPrimaryContainer
-                                        : (isDark
-                                            ? const Color(0xFFE2E8F0)
-                                            : const Color(0xFF334155)),
+                                    color:
+                                        _recording
+                                            ? colorScheme.onPrimaryContainer
+                                            : (isDark
+                                                ? const Color(0xFFE2E8F0)
+                                                : const Color(0xFF334155)),
                                   ),
                                 ),
                               ),
@@ -679,9 +678,10 @@ class ChatComposerState extends State<ChatComposer>
                                 textInputAction: TextInputAction.newline,
                                 style: TextStyle(
                                   fontSize: 15,
-                                  color: isDark
-                                      ? const Color(0xFFF8FAFC)
-                                      : const Color(0xFF0F172A),
+                                  color:
+                                      isDark
+                                          ? const Color(0xFFF8FAFC)
+                                          : const Color(0xFF0F172A),
                                 ),
                                 decoration: InputDecoration(
                                   hintText:
@@ -690,9 +690,10 @@ class ChatComposerState extends State<ChatComposer>
                                           : '输入消息',
                                   hintStyle: TextStyle(
                                     fontSize: 14.5,
-                                    color: isDark
-                                        ? const Color(0xFF64748B)
-                                        : const Color(0xFF94A3B8),
+                                    color:
+                                        isDark
+                                            ? const Color(0xFF64748B)
+                                            : const Color(0xFF94A3B8),
                                   ),
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(
@@ -863,15 +864,78 @@ class ChatComposerState extends State<ChatComposer>
 
   void _openDesktopEmojiPicker(BuildContext context) {
     const emojis = <String>[
-      '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆',
-      '😉', '😊', '😋', '😎', '😍', '😘', '🥰', '😗',
-      '😙', '😚', '🙂', '🤗', '🤩', '🤔', '🤨', '😐',
-      '😑', '😶', '🙄', '😏', '😣', '😥', '😮', '🤐',
-      '😯', '😪', '😫', '🥱', '😴', '😌', '😛', '😜',
-      '😝', '🤤', '😒', '😓', '😔', '😕', '🙃', '🤑',
-      '😲', '🙁', '😖', '😞', '😟', '😤', '😢', '😭',
-      '👍', '👎', '👏', '🙏', '🤝', '🎉', '🔥', '❤️',
-      '💯', '🚀', '💡', '🎂', '🎁', '✨', '⭐', '☕',
+      '😀',
+      '😁',
+      '😂',
+      '🤣',
+      '😃',
+      '😄',
+      '😅',
+      '😆',
+      '😉',
+      '😊',
+      '😋',
+      '😎',
+      '😍',
+      '😘',
+      '🥰',
+      '😗',
+      '😙',
+      '😚',
+      '🙂',
+      '🤗',
+      '🤩',
+      '🤔',
+      '🤨',
+      '😐',
+      '😑',
+      '😶',
+      '🙄',
+      '😏',
+      '😣',
+      '😥',
+      '😮',
+      '🤐',
+      '😯',
+      '😪',
+      '😫',
+      '🥱',
+      '😴',
+      '😌',
+      '😛',
+      '😜',
+      '😝',
+      '🤤',
+      '😒',
+      '😓',
+      '😔',
+      '😕',
+      '🙃',
+      '🤑',
+      '😲',
+      '🙁',
+      '😖',
+      '😞',
+      '😟',
+      '😤',
+      '😢',
+      '😭',
+      '👍',
+      '👎',
+      '👏',
+      '🙏',
+      '🤝',
+      '🎉',
+      '🔥',
+      '❤️',
+      '💯',
+      '🚀',
+      '💡',
+      '🎂',
+      '🎁',
+      '✨',
+      '⭐',
+      '☕',
     ];
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -930,13 +994,87 @@ class ChatComposerState extends State<ChatComposer>
     );
   }
 
+  /// 触发桌面端屏幕截图 (截图按钮或 Alt+A 快捷键触发)
+  Future<void> _handleDesktopScreenshot() async {
+    try {
+      showToast('正在启动截图工具，请截取选区...', type: ToastType.info);
+      final screenCapture = DesktopScreenCaptureService(
+        clipboardService: SystemClipboardService(),
+        platformFacade: createPlatformFacade(),
+      );
+      final imageBytes = await screenCapture.capture();
+      if (imageBytes != null && imageBytes.isNotEmpty && mounted) {
+        final result = await ClipboardImageConfirmDialog.show(
+          context,
+          imageBytes: imageBytes,
+        );
+        if (result != null && result.confirmed) {
+          await widget.controller.sendImageBytes(
+            imageBytes,
+            caption: result.caption,
+            fileName: 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[ChatComposer] 屏幕截图异常: $e');
+    }
+  }
+
+  /// 智能识别剪贴板内容（Ctrl+V 触发）
+  /// - 优先检测是否包含系统复制的文件（支持批量单文件或多文件）-> 弹出文件确认对话框；
+  /// - 其次检测是否包含剪贴板图像（截图或复制的图片）-> 弹出图片确认对话框；
+  /// - 若仅为纯文本，则返回 false，放行系统默认输入框粘贴行为。
+  Future<bool> _handleClipboardPaste() async {
+    try {
+      final clipboard = SystemClipboardService();
+
+      // 1. 优先检查是否存在系统文件列表 (例如在资源管理器中 Ctrl+C 复制的 1 个或多个文件)
+      final files = await clipboard.readFiles();
+      if (files.isNotEmpty) {
+        if (!mounted) return true;
+        final result = await ClipboardFilesConfirmDialog.show(
+          context,
+          filePaths: files,
+        );
+        if (result != null && result.confirmed && result.files.isNotEmpty) {
+          await widget.controller.sendDirectFiles(
+            result.files,
+            caption: result.caption,
+          );
+        }
+        return true; // 拦截默认文本粘贴
+      }
+
+      // 2. 检查是否存在图像数据 (例如截图工具写入剪贴板或浏览器复制图片)
+      final imageBytes = await clipboard.readImage();
+      if (imageBytes != null && imageBytes.isNotEmpty) {
+        if (!mounted) return true;
+        final result = await ClipboardImageConfirmDialog.show(
+          context,
+          imageBytes: imageBytes,
+        );
+        if (result != null && result.confirmed) {
+          await widget.controller.sendImageBytes(
+            imageBytes,
+            caption: result.caption,
+          );
+        }
+        return true; // 拦截默认文本粘贴
+      }
+    } catch (e) {
+      debugPrint('[ChatComposer] 剪贴板识别处理异常: $e');
+    }
+    return false; // 无文件或图像，放行常规纯文本粘贴
+  }
+
   Widget _buildDesktopComposer(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF7F7F7);
     final borderColor =
         isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000);
-    final quoted = widget.controller.quotedMessage;
+    final quoted = widget.controller.quoting;
 
     return Container(
       decoration: BoxDecoration(
@@ -951,17 +1089,16 @@ class ChatComposerState extends State<ChatComposer>
           if (quoted != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : Colors.black.withValues(alpha: 0.03),
+              color:
+                  isDark
+                      ? Colors.white.withValues(alpha: 0.04)
+                      : Colors.black.withValues(alpha: 0.03),
               child: Row(
                 children: [
-                  Expanded(
-                    child: widget.quoteContentBuilder(quoted),
-                  ),
+                  Expanded(child: widget.quoteContentBuilder(quoted)),
                   IconButton(
                     icon: const Icon(Icons.close_rounded, size: 16),
-                    onPressed: widget.controller.clearQuote,
+                    onPressed: widget.controller.cancelQuote,
                     tooltip: '移除引用',
                     visualDensity: VisualDensity.compact,
                   ),
@@ -986,6 +1123,13 @@ class ChatComposerState extends State<ChatComposer>
                   onPressed: widget.controller.chooseAndSendImages,
                 ),
                 const SizedBox(width: 4),
+                // 屏幕截图按钮 (Alt+A)
+                _DesktopToolIcon(
+                  icon: Icons.crop_free_rounded,
+                  tooltip: '屏幕截图 (Alt+A)',
+                  onPressed: _handleDesktopScreenshot,
+                ),
+                const SizedBox(width: 4),
                 _DesktopToolIcon(
                   icon: Icons.folder_open_outlined,
                   tooltip: '发送文件',
@@ -1002,26 +1146,49 @@ class ChatComposerState extends State<ChatComposer>
             ),
           ),
 
-          // 3. 多行输入区域与快捷键拦截 (Enter 发送, Shift/Ctrl+Enter 换行)
+          // 3. 多行输入区域与快捷键拦截 (Enter 发送, Shift/Ctrl+Enter 换行, Alt+A 截图, Ctrl+V 智能粘贴)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Focus(
               onKeyEvent: (node, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.enter) {
-                  if (HardwareKeyboard.instance.isShiftPressed ||
-                      HardwareKeyboard.instance.isControlPressed ||
-                      HardwareKeyboard.instance.isMetaPressed) {
-                    return KeyEventResult.ignored;
-                  } else {
-                    final text = widget.input.text.trim();
-                    if (text.isNotEmpty &&
-                        !widget.controller.isSending &&
-                        !widget.controller.isMuted) {
-                      widget.input.clear();
-                      widget.controller.send(text);
+                if (event is KeyDownEvent) {
+                  // 1. Enter 发送
+                  if (event.logicalKey == LogicalKeyboardKey.enter) {
+                    if (HardwareKeyboard.instance.isShiftPressed ||
+                        HardwareKeyboard.instance.isControlPressed ||
+                        HardwareKeyboard.instance.isMetaPressed) {
+                      return KeyEventResult.ignored;
+                    } else {
+                      final text = widget.input.text.trim();
+                      if (text.isNotEmpty &&
+                          !widget.controller.isSending &&
+                          !widget.controller.isMuted) {
+                        widget.input.clear();
+                        widget.controller.send(text);
+                      }
+                      return KeyEventResult.handled;
                     }
+                  }
+
+                  // 2. Alt + A 快捷截屏
+                  if (event.logicalKey == LogicalKeyboardKey.keyA &&
+                      HardwareKeyboard.instance.isAltPressed) {
+                    _handleDesktopScreenshot();
                     return KeyEventResult.handled;
+                  }
+
+                  // 3. Ctrl + V / Cmd + V 智能剪贴板粘贴
+                  if (event.logicalKey == LogicalKeyboardKey.keyV &&
+                      (HardwareKeyboard.instance.isControlPressed ||
+                          HardwareKeyboard.instance.isMetaPressed)) {
+                    final prevText = widget.input.text;
+                    _handleClipboardPaste().then((intercepted) {
+                      if (intercepted && mounted) {
+                        if (widget.input.text != prevText) {
+                          widget.input.text = prevText;
+                        }
+                      }
+                    });
                   }
                 }
                 return KeyEventResult.ignored;
@@ -1039,12 +1206,16 @@ class ChatComposerState extends State<ChatComposer>
                   isDense: true,
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                  hintText: widget.controller.isMuted ? '全员禁言中' : '输入消息...',
+                  hintText:
+                      widget.controller.isMuted
+                          ? '全员禁言中'
+                          : '输入消息，支持拖拽或 Ctrl+V 粘贴图片/文件...',
                   hintStyle: TextStyle(
                     fontSize: 13.5,
-                    color: isDark
-                        ? const Color(0xFF757575)
-                        : const Color(0xFF9E9E9E),
+                    color:
+                        isDark
+                            ? const Color(0xFF757575)
+                            : const Color(0xFF9E9E9E),
                   ),
                 ),
               ),
@@ -1061,29 +1232,33 @@ class ChatComposerState extends State<ChatComposer>
                   'Enter 发送，Shift+Enter 换行',
                   style: TextStyle(
                     fontSize: 11,
-                    color: isDark
-                        ? const Color(0xFF666666)
-                        : const Color(0xFFAAAAAA),
+                    color:
+                        isDark
+                            ? const Color(0xFF666666)
+                            : const Color(0xFFAAAAAA),
                   ),
                 ),
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: widget.input,
                   builder: (context, value, _) {
-                    final canSend = value.text.trim().isNotEmpty &&
+                    final canSend =
+                        value.text.trim().isNotEmpty &&
                         !widget.controller.isSending &&
                         !widget.controller.isMuted;
                     return FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: canSend
-                            ? const Color(0xFF07C160)
-                            : (isDark
-                                ? const Color(0xFF2E2E2E)
-                                : const Color(0xFFE5E5E5)),
-                        foregroundColor: canSend
-                            ? Colors.white
-                            : (isDark
-                                ? const Color(0xFF666666)
-                                : const Color(0xFFAAAAAA)),
+                        backgroundColor:
+                            canSend
+                                ? const Color(0xFF07C160)
+                                : (isDark
+                                    ? const Color(0xFF2E2E2E)
+                                    : const Color(0xFFE5E5E5)),
+                        foregroundColor:
+                            canSend
+                                ? Colors.white
+                                : (isDark
+                                    ? const Color(0xFF666666)
+                                    : const Color(0xFFAAAAAA)),
                         minimumSize: const Size(68, 28),
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         shape: RoundedRectangleBorder(
@@ -1091,13 +1266,14 @@ class ChatComposerState extends State<ChatComposer>
                         ),
                         elevation: 0,
                       ),
-                      onPressed: canSend
-                          ? () {
-                              final text = widget.input.text.trim();
-                              widget.input.clear();
-                              widget.controller.send(text);
-                            }
-                          : null,
+                      onPressed:
+                          canSend
+                              ? () {
+                                final text = widget.input.text.trim();
+                                widget.input.clear();
+                                widget.controller.send(text);
+                              }
+                              : null,
                       child: const Text(
                         '发送',
                         style: TextStyle(

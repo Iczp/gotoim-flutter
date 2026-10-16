@@ -88,5 +88,24 @@ void main() {
         expect(windowService.openWindows.length, 3);
       },
     );
+
+    test('openWebBrowser, openMediaViewer, and openSettings register correctly', () async {
+      await windowService.openWebBrowser(
+        url: 'https://news.qq.com/article/1',
+        title: '腾讯新闻',
+      );
+      expect(windowService.isWindowOpen('browser:https://news.qq.com/article/1'), isTrue);
+
+      await windowService.openMediaViewer(
+        mediaUrl: 'https://cdn.example.com/image.jpg',
+        title: '图片预览',
+      );
+      expect(windowService.isWindowOpen('media:https://cdn.example.com/image.jpg'), isTrue);
+
+      await windowService.openSettings();
+      expect(windowService.isWindowOpen('tool:settings'), isTrue);
+
+      expect(windowService.openWindows.length, 3);
+    });
   });
 }

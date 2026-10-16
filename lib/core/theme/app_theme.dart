@@ -118,6 +118,8 @@ abstract final class AppTheme {
   }) {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: AppTypography.primaryFontFamily,
+      fontFamilyFallback: AppTypography.fontFamilyFallback,
       brightness: isDark ? Brightness.dark : Brightness.light,
       colorScheme: colorScheme,
       textTheme: textTheme,

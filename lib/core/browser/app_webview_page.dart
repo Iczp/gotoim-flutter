@@ -1,9 +1,12 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'desktop_browser_window.dart';
 import '../floating_window/floating_window.dart';
 import '../media/media_preview.dart';
 import '../widgets/app_toast.dart';
@@ -278,6 +281,16 @@ class AppWebViewPage extends ConsumerStatefulWidget {
     String? title,
     String? fallbackContent,
   }) {
+    final isDesktop =
+        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    if (isDesktop) {
+      return DesktopBrowserWindow.open(
+        context,
+        url: url,
+        title: title,
+        fallbackContent: fallbackContent,
+      );
+    }
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => AppWebViewPage(

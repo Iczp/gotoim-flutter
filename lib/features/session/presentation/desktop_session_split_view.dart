@@ -421,17 +421,12 @@ class _DesktopSessionSplitViewState
                     title: _selectedTitle ?? '聊天',
                     isDesktop: true,
                     onPopOut: () {
-                      final s = allSessions.firstWhere(
-                        (item) => item.id == _selectedSessionUnitId,
-                        orElse:
-                            () => SessionSummary(
-                              id: _selectedSessionUnitId!,
-                              title: _selectedTitle ?? '聊天',
-                              ticks: 0,
-                              unreadCount: 0,
-                            ),
-                      );
-                      _openInStandaloneWindow(s);
+                      final ownerId = widget.controller.currentOwner?.id;
+                      ref.read(windowServiceProvider).openChat(
+                            sessionUnitId: _selectedSessionUnitId!,
+                            ownerId: ownerId,
+                            title: _selectedTitle,
+                          );
                     },
                   )
                   : const _DesktopEmptyChatCanvas(),

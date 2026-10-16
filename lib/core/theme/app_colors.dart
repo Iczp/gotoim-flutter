@@ -43,35 +43,35 @@ abstract final class AppColors {
   static const Color lightOutlineVariant = Color(0xFFCBD5E1);
 
   // Dark Primary & Secondary
-  static const Color darkPrimary = Color(0xFF60A5FA);
-  static const Color darkOnPrimary = Color(0xFF002B5C);
-  static const Color darkPrimaryContainer = Color(0xFF1E40AF);
-  static const Color darkOnPrimaryContainer = Color(0xFFDBEAFE);
+  static const Color darkPrimary = Color(0xFF07C160);
+  static const Color darkOnPrimary = Colors.white;
+  static const Color darkPrimaryContainer = Color(0xFF065F2F);
+  static const Color darkOnPrimaryContainer = Color(0xFFE8F9EE);
 
-  static const Color darkSecondary = Color(0xFF94A3B8);
-  static const Color darkOnSecondary = Color(0xFF0F172A);
-  static const Color darkSecondaryContainer = Color(0xFF334155);
-  static const Color darkOnSecondaryContainer = Color(0xFFE2E8F0);
+  static const Color darkSecondary = Color(0xFFA0A0A0);
+  static const Color darkOnSecondary = Color(0xFF1E1E1E);
+  static const Color darkSecondaryContainer = Color(0xFF2C2C2C);
+  static const Color darkOnSecondaryContainer = Color(0xFFEDEDED);
 
   static const Color darkTertiary = Color(0xFFC084FC);
   static const Color darkOnTertiary = Color(0xFF3B0764);
   static const Color darkTertiaryContainer = Color(0xFF581C87);
   static const Color darkOnTertiaryContainer = Color(0xFFF3E8FF);
 
-  // Dark Surfaces & Backgrounds (Deep Slate / Tech Navy)
-  // 工作台 AppBar、状态栏、各 Tab 标题栏、通讯录标题与分组标题共用的深色底色。
-  static const Color darkSurface = Color(0xFF0F172A);
-  static const Color darkOnSurface = Color(0xFFF8FAFC);
-  static const Color darkSurfaceDim = Color(0xFF0B1120);
-  static const Color darkSurfaceBright = Color(0xFF1E293B);
-  static const Color darkSurfaceContainerLowest = Color(0xFF090D16);
-  static const Color darkSurfaceContainerLow = Color(0xFF131D31);
-  static const Color darkSurfaceContainer = Color(0xFF1E293B);
-  static const Color darkSurfaceContainerHigh = Color(0xFF28354A);
-  static const Color darkSurfaceContainerHighest = Color(0xFF334155);
+  // Dark Surfaces & Backgrounds (Neutral Dark Gray 中性黑灰)
+  // 工作台 AppBar、状态栏、各 Tab 标题栏、通讯录标题与分组标题共用的中性黑灰色阶。
+  static const Color darkSurface = Color(0xFF1E1E1E);
+  static const Color darkOnSurface = Color(0xFFF0F0F0);
+  static const Color darkSurfaceDim = Color(0xFF141414);
+  static const Color darkSurfaceBright = Color(0xFF282828);
+  static const Color darkSurfaceContainerLowest = Color(0xFF121212);
+  static const Color darkSurfaceContainerLow = Color(0xFF181818);
+  static const Color darkSurfaceContainer = Color(0xFF232323);
+  static const Color darkSurfaceContainerHigh = Color(0xFF282828);
+  static const Color darkSurfaceContainerHighest = Color(0xFF303030);
 
-  static const Color darkOutline = Color(0xFF475569);
-  static const Color darkOutlineVariant = Color(0xFF334155);
+  static const Color darkOutline = Color(0xFF383838);
+  static const Color darkOutlineVariant = Color(0x1FFFFFFF);
 
   // Status & Semantic Colors
   static const Color success = Color(0xFF10B981);

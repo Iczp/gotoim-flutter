@@ -1,0 +1,711 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
+
+import '../../../core/media/media_preview.dart';
+import '../../../core/media/image_viewer.dart';
+import '../../../core/media/image_provider_factory.dart';
+import '../../../core/services/media/media_gallery_saver.dart';
+import '../../../core/services/scan/image_qr_detector.dart';
+import '../../../core/services/scan/qr_action_resolver.dart';
+import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/target_picker/target_picker.dart';
+import '../../session/application/session_list_controller.dart';
+
+/// 桌面端微信同款独立媒体查看窗口 (DesktopMediaViewerWindow - 查看图片/视频)
+///
+/// 遵循微信 4.0 桌面端多媒体独立视窗规范（参考截图 3）：
+/// 1. 顶部专业工具栏：
+///    - 📌 置顶切换 (Pin)
+///    - ← 上一张 / 下一张 → 翻页控制
+///    - 田 底部缩略图画廊抽屉开关
+///    - 🔍+ 放大 / 🔍- 缩小 / 1:1 原始比例还原
+///    - ⟳ 顺时针旋转 90°
+///    - 💾 保存/下载多媒体到本地
+///    - ··· 更多菜单 (转发、复制、识别图中二维码、在文件夹中定位)
+///    - 最小化、最大化、关闭窗口控制按钮
+/// 2. 交互与快捷键：
+///    - 鼠标滚轮平滑缩放、双击还原
+///    - 键盘 Esc 关闭、左右箭头切换、R 旋转
+class DesktopMediaViewerWindow extends ConsumerStatefulWidget {
+  const DesktopMediaViewerWindow({
+    required this.items,
+    this.initialIndex = 0,
+    this.downloader,
+    super.key,
+  });
+
+  final List<MediaPreviewItem> items;
+  final int initialIndex;
+  final MediaDownloader? downloader;
+
+  /// 唤起桌面端独立多媒体查看窗口
+  static Future<void> open(
+    BuildContext context, {
+    required List<MediaPreviewItem> items,
+    int initialIndex = 0,
+    MediaDownloader? downloader,
+  }) {
+    if (items.isEmpty) return Future.value();
+    return showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.65),
+      builder:
+          (_) => DesktopMediaViewerWindow(
+            items: items,
+            initialIndex: initialIndex.clamp(0, items.length - 1),
+            downloader: downloader,
+          ),
+    );
+  }
+
+  @override
+  ConsumerState<DesktopMediaViewerWindow> createState() =>
+      _DesktopMediaViewerWindowState();
+}
+
+class _DesktopMediaViewerWindowState
+    extends ConsumerState<DesktopMediaViewerWindow> {
+  late int _currentIndex;
+  late final TransformationController _transformController;
+  int _rotationQuarterTurns = 0;
+  bool _showThumbnails = false;
+  bool _isPinned = false;
+  bool _isMaximized = false;
+
+  // 视频播放控制器 (若是视频)
+  VideoPlayerController? _videoController;
+  bool _isVideoPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _transformController = TransformationController();
+    _checkVideoController();
+  }
+
+  @override
+  void dispose() {
+    _videoController?.dispose();
+    _transformController.dispose();
+    super.dispose();
+  }
+
+  MediaPreviewItem get _currentItem => widget.items[_currentIndex];
+
+  void _checkVideoController() {
+    _videoController?.dispose();
+    _videoController = null;
+    _isVideoPlaying = false;
+
+    final item = _currentItem;
+    if (item.type == MediaPreviewType.video) {
+      final source = item.playableSource;
+      final uri = Uri.tryParse(source);
+      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+        _videoController = VideoPlayerController.networkUrl(uri);
+      } else {
+        _videoController = VideoPlayerController.file(File(source));
+      }
+      _videoController!.initialize().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  void _goTo(int index) {
+    if (index < 0 || index >= widget.items.length || index == _currentIndex) {
+      return;
+    }
+    setState(() {
+      _currentIndex = index;
+      _rotationQuarterTurns = 0;
+      _transformController.value = Matrix4.identity();
+    });
+    _checkVideoController();
+  }
+
+  void _zoomIn() {
+    final currentScale = _transformController.value.getMaxScaleOnAxis();
+    final newScale = (currentScale * 1.25).clamp(0.2, 5.0);
+    _transformController.value = Matrix4.diagonal3Values(
+      newScale,
+      newScale,
+      1.0,
+    );
+  }
+
+  void _zoomOut() {
+    final currentScale = _transformController.value.getMaxScaleOnAxis();
+    final newScale = (currentScale * 0.8).clamp(0.2, 5.0);
+    _transformController.value = Matrix4.diagonal3Values(
+      newScale,
+      newScale,
+      1.0,
+    );
+  }
+
+  void _resetZoom() {
+    setState(() {
+      _rotationQuarterTurns = 0;
+      _transformController.value = Matrix4.identity();
+    });
+  }
+
+  void _rotate() {
+    setState(() {
+      _rotationQuarterTurns = (_rotationQuarterTurns + 1) % 4;
+    });
+  }
+
+  Future<void> _saveToLocal() async {
+    final downloader = widget.downloader ?? DefaultMediaDownloader.instance;
+    final item = _currentItem;
+    try {
+      showToast('正在保存媒体文件...', type: ToastType.info);
+      final cachedPath = await downloader.getCachedPath(item);
+      final targetPath =
+          (cachedPath != null && cachedPath.isNotEmpty)
+              ? cachedPath
+              : await downloader.download(item);
+      if (item.type == MediaPreviewType.video) {
+        await MediaGallerySaver.saveVideo(targetPath);
+      } else {
+        await MediaGallerySaver.saveImage(targetPath);
+      }
+      showToast('保存成功，已存入系统相册/本地目录', type: ToastType.success);
+    } catch (e) {
+      showToast('保存失败: $e', type: ToastType.error);
+    }
+  }
+
+  Future<void> _handleScanQr() async {
+    final detector = ref.read(imageQrDetectorProvider);
+    final item = _currentItem;
+    final cacheKey = item.localPath ?? item.source;
+    var qrResult = detector.getCached(cacheKey);
+
+    if (qrResult == null && !detector.hasCache(cacheKey)) {
+      Uint8List? bytes = item.bytes;
+      if (bytes == null &&
+          item.localPath != null &&
+          item.localPath!.isNotEmpty) {
+        try {
+          final f = File(item.localPath!);
+          if (await f.exists()) bytes = await f.readAsBytes();
+        } catch (_) {}
+      }
+      if (bytes != null) {
+        qrResult = await detector.detectFromBytes(bytes, cacheKey: cacheKey);
+      }
+    }
+
+    if (qrResult != null && qrResult.content.isNotEmpty) {
+      final act = await QrActionResolver.resolve(
+        ref: ref,
+        rawText: qrResult.content,
+      );
+      if (act != null && mounted) {
+        await act.onExecute(context, ref);
+        return;
+      }
+    }
+    showToast('未在当前图片中检测到有效二维码', type: ToastType.info);
+  }
+
+  Future<void> _handleForward() async {
+    final targets = await ForwardTargetPicker.pickTargets(
+      context: context,
+      sessionLoader: () async {
+        final sessionList = ref.read(sessionListControllerProvider);
+        return sessionList.sessions;
+      },
+      title: '发送给朋友',
+    );
+    if (targets == null || targets.isEmpty || !mounted) return;
+
+    final targetNames = targets.map((t) => t.title).join('、');
+    showToast('已发送给: $targetNames', type: ToastType.success);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth =
+        _isMaximized
+            ? screenSize.width
+            : 920.0.clamp(500.0, screenSize.width - 20);
+    final dialogHeight =
+        _isMaximized
+            ? screenSize.height
+            : 680.0.clamp(400.0, screenSize.height - 20);
+
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.escape) {
+            Navigator.of(context).pop();
+            return KeyEventResult.handled;
+          } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            _goTo(_currentIndex - 1);
+            return KeyEventResult.handled;
+          } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+            _goTo(_currentIndex + 1);
+            return KeyEventResult.handled;
+          } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
+            _rotate();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Center(
+        child: Material(
+          color: Colors.transparent,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: dialogWidth,
+            height: dialogHeight,
+            decoration: BoxDecoration(
+              color: const Color(0xFF161616),
+              borderRadius:
+                  _isMaximized ? BorderRadius.zero : BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  blurRadius: 40,
+                  spreadRadius: 4,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                // 1. 顶部多媒体专属工具栏
+                _buildViewerTopBar(context),
+
+                // 2. 媒体主展示画布
+                Expanded(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // 核心视窗
+                      Center(
+                        child: RotatedBox(
+                          quarterTurns: _rotationQuarterTurns,
+                          child: InteractiveViewer(
+                            transformationController: _transformController,
+                            minScale: 0.2,
+                            maxScale: 6.0,
+                            clipBehavior: Clip.none,
+                            child: _buildMediaContent(),
+                          ),
+                        ),
+                      ),
+
+                      // 左侧快速翻页指示按钮
+                      if (_currentIndex > 0)
+                        Positioned(
+                          left: 16,
+                          child: _buildNavArrowButton(
+                            icon: Icons.chevron_left_rounded,
+                            onTap: () => _goTo(_currentIndex - 1),
+                            tooltip: '上一张',
+                          ),
+                        ),
+
+                      // 右侧快速翻页指示按钮
+                      if (_currentIndex < widget.items.length - 1)
+                        Positioned(
+                          right: 16,
+                          child: _buildNavArrowButton(
+                            icon: Icons.chevron_right_rounded,
+                            onTap: () => _goTo(_currentIndex + 1),
+                            tooltip: '下一张',
+                          ),
+                        ),
+
+                      // 底部折叠缩略图条 (当 _showThumbnails 为 true)
+                      if (_showThumbnails && widget.items.length > 1)
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: _buildThumbnailStrip(),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildViewerTopBar(BuildContext context) {
+    final hasMultiple = widget.items.length > 1;
+
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        border: Border(
+          bottom: BorderSide(color: Color(0x1FFFFFFF), width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          // 置顶按钮
+          IconButton(
+            icon: Icon(
+              _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+              size: 16,
+              color: _isPinned ? const Color(0xFF07C160) : Colors.white70,
+            ),
+            tooltip: _isPinned ? '取消置顶' : '固定置顶',
+            visualDensity: VisualDensity.compact,
+            onPressed: () {
+              setState(() {
+                _isPinned = !_isPinned;
+              });
+            },
+          ),
+
+          // 上一张 / 下一张
+          IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios_rounded,
+              size: 14,
+              color: Colors.white70,
+            ),
+            tooltip: '上一张 (←)',
+            visualDensity: VisualDensity.compact,
+            onPressed:
+                _currentIndex > 0 ? () => _goTo(_currentIndex - 1) : null,
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: Colors.white70,
+            ),
+            tooltip: '下一张 (→)',
+            visualDensity: VisualDensity.compact,
+            onPressed:
+                _currentIndex < widget.items.length - 1
+                    ? () => _goTo(_currentIndex + 1)
+                    : null,
+          ),
+
+          if (hasMultiple)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                '${_currentIndex + 1} / ${widget.items.length}',
+                style: const TextStyle(fontSize: 12, color: Colors.white60),
+              ),
+            ),
+
+          // 缩略图画廊抽屉开关
+          IconButton(
+            icon: Icon(
+              Icons.grid_view_rounded,
+              size: 16,
+              color: _showThumbnails ? const Color(0xFF07C160) : Colors.white70,
+            ),
+            tooltip: '多媒体缩略图列表',
+            visualDensity: VisualDensity.compact,
+            onPressed: () {
+              setState(() {
+                _showThumbnails = !_showThumbnails;
+              });
+            },
+          ),
+
+          const VerticalDivider(
+            color: Color(0x1FFFFFFF),
+            indent: 12,
+            endIndent: 12,
+            width: 16,
+          ),
+
+          // 放大 / 缩小 / 1:1
+          IconButton(
+            icon: const Icon(
+              Icons.zoom_in_rounded,
+              size: 18,
+              color: Colors.white70,
+            ),
+            tooltip: '放大 (+)',
+            visualDensity: VisualDensity.compact,
+            onPressed: _zoomIn,
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.zoom_out_rounded,
+              size: 18,
+              color: Colors.white70,
+            ),
+            tooltip: '缩小 (-)',
+            visualDensity: VisualDensity.compact,
+            onPressed: _zoomOut,
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.aspect_ratio_rounded,
+              size: 17,
+              color: Colors.white70,
+            ),
+            tooltip: '原始大小 (1:1)',
+            visualDensity: VisualDensity.compact,
+            onPressed: _resetZoom,
+          ),
+
+          // 旋转
+          IconButton(
+            icon: const Icon(
+              Icons.rotate_right_rounded,
+              size: 18,
+              color: Colors.white70,
+            ),
+            tooltip: '顺时针旋转 (R)',
+            visualDensity: VisualDensity.compact,
+            onPressed: _rotate,
+          ),
+
+          const VerticalDivider(
+            color: Color(0x1FFFFFFF),
+            indent: 12,
+            endIndent: 12,
+            width: 16,
+          ),
+
+          // 保存/下载文件
+          IconButton(
+            icon: const Icon(
+              Icons.save_alt_rounded,
+              size: 17,
+              color: Colors.white70,
+            ),
+            tooltip: '保存到本地',
+            visualDensity: VisualDensity.compact,
+            onPressed: _saveToLocal,
+          ),
+
+          // 更多菜单 (···)
+          PopupMenuButton<String>(
+            icon: const Icon(
+              Icons.more_horiz_rounded,
+              size: 18,
+              color: Colors.white70,
+            ),
+            tooltip: '更多操作',
+            color: const Color(0xFF282828),
+            onSelected: (val) {
+              if (val == 'forward') {
+                _handleForward();
+              } else if (val == 'qr') {
+                _handleScanQr();
+              } else if (val == 'copy') {
+                Clipboard.setData(
+                  ClipboardData(text: _currentItem.playableSource),
+                );
+                showToast('已复制媒体地址', type: ToastType.success);
+              }
+            },
+            itemBuilder:
+                (_) => [
+                  const PopupMenuItem(
+                    value: 'forward',
+                    child: Row(
+                      children: [
+                        Icon(Icons.forward_rounded, size: 16),
+                        SizedBox(width: 8),
+                        Text('转发', style: TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'qr',
+                    child: Row(
+                      children: [
+                        Icon(Icons.qr_code_scanner_rounded, size: 16),
+                        SizedBox(width: 8),
+                        Text('识别图中二维码', style: TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'copy',
+                    child: Row(
+                      children: [
+                        Icon(Icons.content_copy_rounded, size: 16),
+                        SizedBox(width: 8),
+                        Text('复制媒体链接', style: TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ],
+          ),
+
+          const Spacer(),
+
+          // 窗口控制按钮：最小化、最大化、关闭
+          IconButton(
+            icon: const Icon(
+              Icons.remove_rounded,
+              size: 16,
+              color: Colors.white70,
+            ),
+            tooltip: '最小化',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          IconButton(
+            icon: Icon(
+              _isMaximized
+                  ? Icons.filter_none_rounded
+                  : Icons.crop_square_rounded,
+              size: 15,
+              color: Colors.white70,
+            ),
+            tooltip: _isMaximized ? '还原' : '最大化',
+            visualDensity: VisualDensity.compact,
+            onPressed: () {
+              setState(() {
+                _isMaximized = !_isMaximized;
+              });
+            },
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 17,
+              color: Colors.white70,
+            ),
+            tooltip: '关闭',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMediaContent() {
+    final item = _currentItem;
+    if (item.type == MediaPreviewType.video) {
+      if (_videoController != null && _videoController!.value.isInitialized) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            AspectRatio(
+              aspectRatio: _videoController!.value.aspectRatio,
+              child: VideoPlayer(_videoController!),
+            ),
+            IconButton(
+              iconSize: 56,
+              icon: Icon(
+                _isVideoPlaying
+                    ? Icons.pause_circle_filled
+                    : Icons.play_circle_fill,
+                color: Colors.white.withValues(alpha: 0.8),
+              ),
+              onPressed: () {
+                setState(() {
+                  if (_videoController!.value.isPlaying) {
+                    _videoController!.pause();
+                    _isVideoPlaying = false;
+                  } else {
+                    _videoController!.play();
+                    _isVideoPlaying = true;
+                  }
+                });
+              },
+            ),
+          ],
+        );
+      }
+      return const CircularProgressIndicator(color: Color(0xFF07C160));
+    }
+
+    // 图片渲染
+    return ImageViewer(
+      heroTag: null,
+      source: item.playableSource,
+      bytes: item.bytes,
+      thumbnail: item.thumbnail,
+      thumbnailBytes: item.bytes,
+    );
+  }
+
+  Widget _buildNavArrowButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required String tooltip,
+  }) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.45),
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: IconButton(
+        icon: Icon(icon, color: Colors.white70, size: 28),
+        tooltip: tooltip,
+        onPressed: onTap,
+      ),
+    );
+  }
+
+  Widget _buildThumbnailStrip() {
+    return Container(
+      height: 72,
+      color: const Color(0xFF1E1E1E).withValues(alpha: 0.95),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: widget.items.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, idx) {
+          final isSelected = idx == _currentIndex;
+          final item = widget.items[idx];
+          return GestureDetector(
+            onTap: () => _goTo(idx),
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color:
+                      isSelected ? const Color(0xFF07C160) : Colors.transparent,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Image(
+                image: createImageProvider(
+                  item.thumbnail ?? item.playableSource,
+                ),
+                fit: BoxFit.cover,
+                errorBuilder:
+                    (_, _, _) => const Icon(
+                      Icons.broken_image,
+                      color: Colors.white24,
+                      size: 20,
+                    ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

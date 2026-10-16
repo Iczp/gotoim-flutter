@@ -25,6 +25,7 @@ import '../../features/diagnostics/presentation/js_bridge_diagnostics_page.dart'
 import '../../features/diagnostics/presentation/media_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/media_preview_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/floating_window_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/desktop_windows_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/webview_session_diagnostics_page.dart';
 import '../../features/user/presentation/avatar_settings_page.dart';
 import '../../features/mine/presentation/account_management_page.dart';
@@ -316,6 +317,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       _buildAppRoute(
         path: '/diagnostics/floating-window',
         builder: (context, state) => const FloatingWindowDiagnosticsPage(),
+      ),
+      _buildAppRoute(
+        path: '/diagnostics/desktop-windows',
+        builder: (context, state) => const DesktopWindowsDiagnosticsPage(),
       ),
       _buildAppRoute(
         path: '/diagnostics/webview-session',

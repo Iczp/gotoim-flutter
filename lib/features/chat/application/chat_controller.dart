@@ -980,11 +980,42 @@ class ChatController extends ChangeNotifier {
     if (video != null) await _sendVideo(video);
   }
 
-  Future<void> recordAndSendVideo() async {
-    final video = await _mediaService.recordVideo(
-      const MediaPickRequest(maxDuration: Duration(minutes: 10)),
+  /// 发送直接传入的图片 (来自剪贴板或截图)
+  Future<void> sendDirectImage(SelectedFile image, {String? caption}) async {
+    await _sendImage(image);
+    if (caption != null && caption.trim().isNotEmpty) {
+      send(caption.trim());
+    }
+  }
+
+  /// 批量发送直接传入的文件 (来自剪贴板批量粘贴)
+  Future<void> sendDirectFiles(
+    List<SelectedFile> files, {
+    String? caption,
+  }) async {
+    for (final file in files) {
+      await _sendFile(file);
+    }
+    if (caption != null && caption.trim().isNotEmpty) {
+      send(caption.trim());
+    }
+  }
+
+  /// 发送图片字节流 (如剪贴板图像或截图产生的 Uint8List)
+  Future<void> sendImageBytes(
+    Uint8List bytes, {
+    String? caption,
+    String? fileName,
+  }) async {
+    final effectiveName =
+        fileName ?? 'image_${DateTime.now().millisecondsSinceEpoch}.png';
+    final xfile = XFile.fromData(
+      bytes,
+      name: effectiveName,
+      mimeType: 'image/png',
     );
-    if (video != null) await _sendVideo(video);
+    final selected = await SelectedFile.fromXFile(xfile);
+    await sendDirectImage(selected, caption: caption);
   }
 
   Future<void> _sendImage(SelectedFile image) async {

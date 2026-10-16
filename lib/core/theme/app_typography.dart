@@ -5,6 +5,21 @@ import 'package:flutter/material.dart';
 /// Follows Material 3 text scales with refined font weights and line heights
 /// optimized for modern cross-platform chat and productivity apps.
 abstract final class AppTypography {
+  /// Standard cross-platform font family fallback chain.
+  /// Prioritizes Microsoft YaHei on Windows and PingFang SC on macOS/iOS.
+  static const String primaryFontFamily = 'Microsoft YaHei';
+
+  static const List<String> fontFamilyFallback = [
+    'Microsoft YaHei',
+    '微软雅黑',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Heiti SC',
+    'Segoe UI',
+    'Roboto',
+    'sans-serif',
+  ];
+
   static const TextStyle displayLarge = TextStyle(
     fontSize: 57,
     fontWeight: FontWeight.w400,
@@ -132,6 +147,9 @@ abstract final class AppTypography {
       labelSmall: labelSmall.copyWith(
         color: onSurfaceColor.withValues(alpha: 0.6),
       ),
+    ).apply(
+      fontFamily: primaryFontFamily,
+      fontFamilyFallback: fontFamilyFallback,
     );
   }
 }

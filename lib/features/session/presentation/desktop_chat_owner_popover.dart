@@ -42,7 +42,7 @@ class DesktopChatOwnerPopover extends ConsumerWidget {
                 : (anchorOffset?.dy ?? 20.0).clamp(16.0, screenSize.height - 120);
         final double? bottom =
             isNearBottom
-                ? (screenSize.height - (anchorOffset?.dy ?? screenSize.height) - 40)
+                ? (screenSize.height - anchorOffset.dy - 40)
                     .clamp(16.0, screenSize.height - 200)
                 : null;
 

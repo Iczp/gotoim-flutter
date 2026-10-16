@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_navigation.dart';
+import '../../features/media/presentation/desktop_media_viewer_window.dart';
 import '../../features/session/application/session_list_controller.dart';
 import '../services/media/media_gallery_saver.dart';
 import '../services/scan/image_qr_detector.dart';
@@ -111,7 +112,18 @@ abstract class MediaPreview {
   }) {
     if (items.isEmpty) return Future.value();
     final safeInitialIndex = initialIndex.clamp(0, items.length - 1);
-    final nav = Navigator.maybeOf(context, rootNavigator: true) ??
+    final isDesktop =
+        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    if (isDesktop) {
+      return DesktopMediaViewerWindow.open(
+        context,
+        items: items,
+        initialIndex: safeInitialIndex,
+        downloader: downloader,
+      );
+    }
+    final nav =
+        Navigator.maybeOf(context, rootNavigator: true) ??
         Navigator.maybeOf(context) ??
         rootNavigatorKey.currentState;
     if (nav == null) return Future.value();

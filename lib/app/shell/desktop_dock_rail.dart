@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/services/window_service.dart';
 import '../../core/theme/theme_mode_controller.dart';
@@ -151,12 +150,12 @@ class DesktopDockRail extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
 
-          // 3. 全局设置
+          // 3. 全局设置 (独立窗口)
           Tooltip(
             message: '设置',
             child: _DockActionItem(
               icon: Icons.settings_outlined,
-              onTap: () => context.push('/settings'),
+              onTap: () => ref.read(windowServiceProvider).openSettings(),
             ),
           ),
           const SizedBox(height: 10),

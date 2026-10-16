@@ -291,6 +291,13 @@ class DiagnosticsHomePage extends StatelessWidget {
                 onTap: () => context.push('/diagnostics/floating-window'),
               ),
               Cell(
+                icon: const Icon(Icons.desktop_windows_outlined),
+                title: '桌面端独立窗口测试',
+                subtitle: '图片/视频独立视窗、内置浏览器独立窗口、微信风格设置窗口',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/desktop-windows'),
+              ),
+              Cell(
                 icon: const Icon(Icons.palette_outlined),
                 title: '主题与暗黑模式',
                 subtitle: 'Material 3 调色板、语义 Token、字阶、组件展示与切换',
