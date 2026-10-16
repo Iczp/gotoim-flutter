@@ -112,6 +112,11 @@ class Native {
     return device.setSystemVolume(volume);
   }
 
+  /// Retrieves a persistent device identifier across app uninstalls.
+  static Future<String?> getPermanentDeviceId() {
+    return device.getPermanentDeviceId();
+  }
+
   /// Sets the desktop app-icon badge; currently supported by macOS Dock.
   static Future<bool> setDesktopBadge(int? count) {
     return system.setDesktopBadge(count);

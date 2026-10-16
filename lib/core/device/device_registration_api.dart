@@ -25,6 +25,7 @@ class DeviceRegistrationApi {
   final ClientCapabilityService _capabilities;
   final ClientDeviceContext _deviceContext;
   final AppEnvironment _environment;
+  Future<Object?>? _registrationInFlight;
   final Future<String> Function() _readClientCredentialsToken;
 
   Future<Map<String, Object?>> collectPayload({String? name}) async {
@@ -69,7 +70,7 @@ class DeviceRegistrationApi {
       'deviceBrand': device.brand ?? _deviceContext.brand,
       'deviceModel': device.model ?? _deviceContext.model,
       'deviceType': _deviceContext.deviceType,
-      'devicePixelRatio': _toInt(system.devicePixelRatio),
+      'devicePixelRatio': system.devicePixelRatio,
       'deviceOrientation':
           system.windowWidth >= system.windowHeight ? 'landscape' : 'portrait',
       'fontSizeSetting': 0,
@@ -89,7 +90,7 @@ class DeviceRegistrationApi {
       'osVersion': _maxLength(device.systemVersion ?? '', 64),
       'osLanguage': system.locale,
       'osTheme': system.brightness,
-      'pixelRatio': _toInt(system.devicePixelRatio),
+      'pixelRatio': system.devicePixelRatio,
       'screenWidth': _toInt(system.screenWidth),
       'screenHeight': _toInt(system.screenHeight),
       'statusBarHeight': _toInt(system.safeAreaTop),
@@ -132,14 +133,39 @@ class DeviceRegistrationApi {
   String _maxLength(String value, int maxLength) =>
       value.length <= maxLength ? value : value.substring(0, maxLength);
 
-  Future<Object?> register({String? name}) async {
+  Future<Object?> register({String? name}) {
+    final pending = _registrationInFlight;
+    if (pending != null) return pending;
+    final future = _register(name: name);
+    _registrationInFlight = future;
+    return future.whenComplete(() => _registrationInFlight = null);
+  }
+
+  /// Exact request shape for the configured registration API.
+  Future<Map<String, Object?>> collectRequestPayload({String? name}) async {
+    final payload = await collectPayload(name: name);
+    final useAppDevice =
+        _environment.deviceRegistrationApiPath != '/api/chat/device/register';
+    return useAppDevice
+        ? <String, Object?>{
+          'appId': payload['appId'],
+          'deviceId': payload['deviceId'],
+          'profile': Map<String, Object?>.from(payload)..removeWhere(
+            (key, _) => const {'appId', 'deviceId', 'isEnabled'}.contains(key),
+          ),
+        }
+        : payload;
+  }
+
+  Future<Object?> _register({String? name}) async {
+    final body = await collectRequestPayload(name: name);
     final accessToken = await _readClientCredentialsToken();
-    return _apiClient.post<Object?>(
-      '/api/chat/device/register',
-      data: await collectPayload(name: name),
+    final response = await _apiClient.post<Object?>(
+      _environment.deviceRegistrationApiPath,
+      data: body,
       headers: <String, String>{'Authorization': 'Bearer $accessToken'},
-      // This token is independently managed, so user-token refresh is invalid.
       retryOnUnauthorized: false,
     );
+    return response;
   }
 }

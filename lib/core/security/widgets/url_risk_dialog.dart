@@ -4,6 +4,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../widgets/app_toast.dart';
 import '../url_security_level.dart';
+import 'appeal_dialog.dart';
 import 'report_dialog.dart';
 
 /// URL 风险操作选择结果
@@ -184,25 +185,46 @@ class UrlRiskDialog extends StatelessWidget {
               ),
             ),
           ),
-          // 投诉入口
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 28),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          // 申诉与投诉入口
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.verified_outlined, size: 13, color: Color(0xFF07C160)),
+                label: const Text(
+                  '误报申诉',
+                  style: TextStyle(fontSize: 11.5, color: Color(0xFF07C160)),
+                ),
+                onPressed: () {
+                  Navigator.of(context).pop(UrlRiskDialogAction.cancel);
+                  AppealDialog.show(context, url: checkResult.url, domain: checkResult.domain);
+                },
               ),
-              icon: const Icon(Icons.flag_outlined, size: 14, color: Colors.grey),
-              label: const Text(
-                '投诉此链接',
-                style: TextStyle(fontSize: 11.5, color: Colors.grey),
+              const SizedBox(width: 8),
+              const Text('·', style: TextStyle(color: Colors.grey, fontSize: 11)),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.flag_outlined, size: 13, color: Colors.grey),
+                label: const Text(
+                  '投诉此链接',
+                  style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                ),
+                onPressed: () {
+                  Navigator.of(context).pop(UrlRiskDialogAction.cancel);
+                  ReportDialog.showForUrl(context, url: checkResult.url);
+                },
               ),
-              onPressed: () {
-                Navigator.of(context).pop(UrlRiskDialogAction.cancel);
-                ReportDialog.showForUrl(context, url: checkResult.url);
-              },
-            ),
+            ],
           ),
         ],
       ),

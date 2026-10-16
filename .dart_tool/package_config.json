@@ -374,6 +374,12 @@
       "languageVersion": "2.12"
     },
     {
+      "name": "flutter_driver",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/flutter_driver",
+      "packageUri": "lib/",
+      "languageVersion": "3.11"
+    },
+    {
       "name": "flutter_inappwebview",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/flutter_inappwebview-6.2.0-beta.3",
       "packageUri": "lib/",
@@ -542,6 +548,12 @@
       "languageVersion": "3.0"
     },
     {
+      "name": "fuchsia_remote_debug_protocol",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/fuchsia_remote_debug_protocol",
+      "packageUri": "lib/",
+      "languageVersion": "3.11"
+    },
+    {
       "name": "gal",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/gal-2.3.3",
       "packageUri": "lib/",
@@ -672,6 +684,12 @@
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/image_picker_windows-0.2.2",
       "packageUri": "lib/",
       "languageVersion": "3.6"
+    },
+    {
+      "name": "integration_test",
+      "rootUri": "file:///E:/sdk/flutter-3.47.0-active/packages/integration_test",
+      "packageUri": "lib/",
+      "languageVersion": "3.11"
     },
     {
       "name": "io",
@@ -974,6 +992,12 @@
       "languageVersion": "3.0"
     },
     {
+      "name": "process",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/process-5.0.6",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
       "name": "provider",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/provider-6.1.5+1",
       "packageUri": "lib/",
@@ -1202,6 +1226,12 @@
       "languageVersion": "3.1"
     },
     {
+      "name": "sync_http",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/sync_http-0.3.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "synchronized",
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/synchronized-3.4.1+2",
       "packageUri": "lib/",
@@ -1338,6 +1368,12 @@
       "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/web_socket_channel-3.0.3",
       "packageUri": "lib/",
       "languageVersion": "3.3"
+    },
+    {
+      "name": "webdriver",
+      "rootUri": "file:///C:/Users/ZP/AppData/Local/Pub/Cache/hosted/pub.flutter-io.cn/webdriver-3.2.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
     },
     {
       "name": "webkit_inspection_protocol",

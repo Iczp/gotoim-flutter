@@ -134,10 +134,25 @@ class SessionUnitApi {
     );
   }
 
+  Future<void> logoutDevice({
+    required String appId,
+    required String deviceId,
+  }) async {
+    await _apiClient.post<Map<String, dynamic>>(
+      '/api/chat/device/logout',
+      data: <String, Object?>{
+        'appId': appId,
+        'deviceId': deviceId,
+        'allUsers': false,
+        'reason': '用户主动退出该设备登录',
+      },
+    );
+  }
+
   Future<void> abortOnlineConnections({
     required List<String> connectionIds,
     required String reason,
-  }) => _apiClient.post<Map<String, dynamic>>(
+  }) => _apiClient.post<void>(
     '/api/chat/online/abort',
     data: <String, Object?>{
       'connectionIdList': connectionIds,

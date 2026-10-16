@@ -30,6 +30,15 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   final ClientCredentialsTokenStorage _clientCredentialsTokenStorage;
   final ClientDeviceContext _deviceContext;
   static Future<AuthSession>? _globalRefreshInFlight;
+  static Future<void> _tokenWrites = Future<void>.value();
+  static int _sessionGeneration = 0;
+
+  Future<void> _persist(Future<void> Function() action) {
+    final pending = _tokenWrites.then((_) => action());
+    _tokenWrites = pending.then<void>((_) {}, onError: (Object _) {});
+    return pending;
+  }
+
   final Map<String, Future<String>> _clientCredentialsInFlight = {};
 
   static Dio createDio(
@@ -47,19 +56,23 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   }
 
   @override
-  Future<void> clearSession() => _tokenStorage.clear();
+  Future<void> clearSession() {
+    _sessionGeneration++;
+    return _persist(_tokenStorage.clear);
+  }
 
   @override
   Future<void> login({
     required String username,
     required String password,
   }) async {
+    final generation = _sessionGeneration;
     final session = await _requestToken(<String, String>{
       'grant_type': _environment.authLoginGrantType,
       'username': username,
       'password': password,
     });
-    await _save(session);
+    await _save(session, generation);
   }
 
   @override
@@ -107,11 +120,12 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
 
   @override
   Future<void> loginWithScanToken(String scanToken) async {
+    final generation = _sessionGeneration;
     final session = await _requestToken(<String, String>{
       'grant_type': 'scan-token',
       'scan_token': scanToken,
     });
-    await _save(session);
+    await _save(session, generation);
   }
 
   @override
@@ -152,7 +166,9 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
       clientId: clientId,
       clientSecret: clientSecret,
       scope: scope,
-    ).whenComplete(() => _clientCredentialsInFlight.remove(cacheKey));
+    ).whenComplete(() {
+      _clientCredentialsInFlight.remove(cacheKey);
+    });
   }
 
   Future<String> _requestClientCredentials({
@@ -232,6 +248,25 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   @override
   Future<void> logout() async {
     try {
+      final access = await _tokenStorage.readAccessToken();
+      if (access?.isNotEmpty == true) {
+        await _dio.post<dynamic>(
+          '${_environment.apiBaseUrl}/api/chat/device/logout',
+          data: <String, Object?>{
+            'appId': _deviceContext.appId,
+            'deviceId': _deviceContext.deviceId,
+            'allUsers': false,
+          },
+          options: Options(
+            contentType: Headers.jsonContentType,
+            headers: {'Authorization': 'Bearer $access'},
+          ),
+        );
+      }
+    } catch (_) {
+      /* Offline logout still clears local credentials below. */
+    }
+    try {
       await Future.wait<void>(<Future<void>>[
         revoke(RevocationTokenType.accessToken),
         revoke(RevocationTokenType.refreshToken),
@@ -281,6 +316,7 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   }
 
   Future<AuthSession> _refresh() async {
+    final generation = _sessionGeneration;
     final refreshToken = await _tokenStorage.readRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) {
       throw const TokenRefreshRejectedException(
@@ -301,7 +337,7 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
               expiresIn: session.expiresIn,
             )
             : session;
-    await _save(completedSession);
+    await _save(completedSession, generation);
     return completedSession;
   }
 
@@ -351,12 +387,18 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     }
   }
 
-  Future<void> _save(AuthSession session) {
-    return _tokenStorage.save(
+  Future<void> _save(AuthSession session, int generation) => _persist(() async {
+    if (generation != _sessionGeneration) {
+      throw const TokenRefreshRejectedException(
+        '该设备已退出登录，请重新登录。',
+        code: 'session_signed_out',
+      );
+    }
+    await _tokenStorage.save(
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
     );
-  }
+  });
 
   Future<String?> _readToken(RevocationTokenType tokenType) {
     return tokenType == RevocationTokenType.accessToken

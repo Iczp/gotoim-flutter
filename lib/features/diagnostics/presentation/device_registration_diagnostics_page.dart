@@ -6,6 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
+import '../../../core/device/browser_fingerprint.dart';
+import '../../../core/device/client_device_context.dart';
+import '../../../core/config/app_environment.dart';
+import '../../../core/native/native.dart';
+import '../../../core/logging/log_sanitizer.dart';
 
 class DeviceRegistrationDiagnosticsPage extends ConsumerStatefulWidget {
   const DeviceRegistrationDiagnosticsPage({super.key});
@@ -27,11 +32,40 @@ class _DeviceRegistrationDiagnosticsPageState
     super.dispose();
   }
 
+  Future<void> _inspectFingerprint() async {
+    await _run(() async {
+      final nativeId = await Native.device.getPermanentDeviceId();
+      final webFingerprint = await getBrowserFingerprint();
+      final currentContext = ref.read(clientDeviceContextProvider);
+      return <String, Object?>{
+        'currentContextDeviceId': currentContext.deviceId,
+        'currentPlatform': currentContext.platform,
+        'nativeHardwareId': nativeId ?? '当前平台不支持或未返回',
+        'webBrowserFingerprint': webFingerprint ?? '非Web环境或未生成',
+        'isPermanentStrategyActive': true,
+        'persistenceMechanism': {
+          'android':
+              'Widevine MediaDrm PROPERTY_DEVICE_UNIQUE_ID (fallback: ANDROID_ID)',
+          'ios':
+              'Keychain (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly) + IDFV',
+          'windows': 'MachineGuid (Registry Cryptography)',
+          'macOS': 'IOPlatformUUID (System GUID)',
+          'linux': 'machine-id (/etc/machine-id)',
+          'web':
+              'Canvas 2D + WebGL RenderInfo + Navigator + Screen + Timezone Fingerprint',
+        },
+      };
+    });
+  }
+
   Future<void> _collect() async {
     await _run(
-      () async => ref
-          .read(deviceRegistrationApiProvider)
-          .collectPayload(name: _name.text),
+      () async => <String, Object?>{
+        'endpoint': ref.read(appEnvironmentProvider).deviceRegistrationApiPath,
+        'payload': await ref
+            .read(deviceRegistrationApiProvider)
+            .collectRequestPayload(name: _name.text),
+      },
     );
   }
 
@@ -56,7 +90,7 @@ class _DeviceRegistrationDiagnosticsPageState
               _result = const JsonEncoder.withIndent('  ').convert({
                 'status': '成功',
                 'elapsedMs': DateTime.now().difference(started).inMilliseconds,
-                'data': value,
+                'data': LogSanitizer.sanitize(value),
               }),
         );
       }
@@ -88,8 +122,8 @@ class _DeviceRegistrationDiagnosticsPageState
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            'POST /api/chat/device/register；Android、iOS、Windows、macOS、Linux、Web 均可调用。先使用 client_credentials（scope=IM）获取独立 Token，再以 Bearer 调用注册接口。',
+          Text(
+            'POST ${ref.watch(appEnvironmentProvider).deviceRegistrationApiPath}；使用独立 client_credentials Token。客户端设备标识作为注册依据，注册与登录互不等待。',
           ),
           const SizedBox(height: 16),
           TextField(
@@ -104,6 +138,11 @@ class _DeviceRegistrationDiagnosticsPageState
             spacing: 8,
             runSpacing: 8,
             children: [
+              OutlinedButton.icon(
+                onPressed: _working ? null : _inspectFingerprint,
+                icon: const Icon(Icons.fingerprint),
+                label: const Text('查看硬件/浏览器持久指纹'),
+              ),
               OutlinedButton(
                 onPressed: _working ? null : _collect,
                 child: const Text('采集并查看 Payload'),

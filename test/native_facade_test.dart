@@ -55,6 +55,7 @@ void main() {
         expect(await Native.getSystemVolume(), -1);
         expect(await Native.setSystemVolume(0.5), isFalse);
         expect(await Native.setDesktopBadge(7), isFalse);
+        expect(await Native.getPermanentDeviceId(), isNull);
       },
     );
   });

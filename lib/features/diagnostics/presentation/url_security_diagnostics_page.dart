@@ -7,6 +7,7 @@ import '../../../core/security/pages/url_interstitial_page.dart';
 import '../../../core/security/url_security_level.dart';
 import '../../../core/security/url_security_repository.dart';
 import '../../../core/security/url_security_service.dart';
+import '../../../core/security/widgets/appeal_dialog.dart';
 import '../../../core/security/widgets/report_dialog.dart';
 import '../../../core/security/widgets/url_risk_dialog.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -206,6 +207,19 @@ class _UrlSecurityDiagnosticsPageState
     await ReportDialog.showForUrl(
       context,
       url: url,
+      title: _titleController.text.trim(),
+    );
+  }
+
+  Future<void> _triggerAppealModal() async {
+    final url = _urlController.text.trim();
+    final service = ref.read(urlSecurityServiceProvider);
+    final res = await service.checkUrl(url);
+    if (!mounted) return;
+    await AppealDialog.show(
+      context,
+      url: url,
+      domain: res.domain,
       title: _titleController.text.trim(),
     );
   }
@@ -551,6 +565,18 @@ class _UrlSecurityDiagnosticsPageState
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF07C160),
+            ),
+            icon: const Icon(Icons.verified_user_outlined),
+            label: const Text('测试网站误报申诉 (AppealDialog)'),
+            onPressed: _triggerAppealModal,
+          ),
         ),
       ],
     );

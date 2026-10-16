@@ -11,6 +11,7 @@ import '../../../core/floating_window/floating_window.dart';
 import '../../../core/security/url_security_service.dart';
 import '../../../core/security/widgets/report_dialog.dart';
 
+import '../../../core/services/window_service.dart';
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
 
@@ -318,6 +319,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
               onTransfer: _openTransferSheet,
               onOpenSettings: _openChatSettings,
               onOpenAiRuns: _openAiRunTimeline,
+              onPopOut: () {
+                ref
+                    .read(windowServiceProvider)
+                    .openChat(
+                      sessionUnitId: widget.sessionUnitId,
+                      ownerId: widget.ownerId,
+                      title: controller.title,
+                    );
+              },
             ),
             extendBodyBehindAppBar: true,
             body: Stack(

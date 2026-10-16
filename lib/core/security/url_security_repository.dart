@@ -180,17 +180,28 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
     // 检查缓存
     if (_cache.containsKey(trimmed)) {
       final cached = _cache[trimmed]!;
-      return UrlSecurityCheckResult(
-        url: cached.url,
-        domain: cached.domain,
-        level: cached.level,
-        category: cached.category,
-        message: cached.message,
-        interceptReason: cached.interceptReason,
-        checkedAt: cached.checkedAt,
-        source: 'cache',
-        extra: cached.extra,
-      );
+      final isLocal =
+          cached.source == 'local_whitelist' || cached.source == 'local_blacklist';
+      // 本地静态规则长期有效；远端评估结果 60 秒内防高频重复请求，超过 60 秒自动回源，确保服务端加白瞬时生效
+      final isFresh = isLocal ||
+          (cached.checkedAt != null &&
+              DateTime.now().difference(cached.checkedAt!) <
+                  const Duration(seconds: 60));
+      if (isFresh) {
+        return UrlSecurityCheckResult(
+          url: cached.url,
+          domain: cached.domain,
+          level: cached.level,
+          category: cached.category,
+          message: cached.message,
+          interceptReason: cached.interceptReason,
+          checkedAt: cached.checkedAt,
+          source: 'cache',
+          extra: cached.extra,
+        );
+      } else {
+        _cache.remove(trimmed);
+      }
     }
 
     Uri? uri;

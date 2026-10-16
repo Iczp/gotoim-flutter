@@ -14,6 +14,8 @@ class LoginDevicesPage extends ConsumerStatefulWidget {
 }
 
 class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
+  final Set<String> _loggingOut = {};
+  String _key(LoggedInDevice device) => "${device.appId}:${device.deviceId}";
   @override
   void initState() {
     super.initState();
@@ -62,7 +64,13 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
                           device: device,
                           isCurrent:
                               device.deviceId == controller.currentDeviceId,
-                          onForceLogout: null,
+                          busy: _loggingOut.contains(_key(device)),
+                          onForceLogout:
+                              () => _confirmForceLogout(
+                                context,
+                                controller,
+                                device,
+                              ),
                         ),
                       ),
                     ],
@@ -72,6 +80,7 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
                         device: device,
                         isCurrent:
                             device.deviceId == controller.currentDeviceId,
+                        busy: _loggingOut.contains(_key(device)),
                         onForceLogout:
                             () => _confirmForceLogout(
                               context,
@@ -91,12 +100,14 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
     SessionListController controller,
     LoggedInDevice device,
   ) async {
+    final key = _key(device);
+    if (_loggingOut.contains(key)) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder:
           (dialogContext) => AlertDialog(
             title: const Text('强制下线'),
-            content: const Text('确定要断开此设备的在线连接吗？该设备将收到强制退出通知。'),
+            content: const Text('确定要退出此设备的登录吗？在线连接将断开，离线设备下次联网时也需要重新登录。'),
             actions: <Widget>[
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
@@ -110,12 +121,13 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
           ),
     );
     if (confirmed != true || !context.mounted) return;
+    setState(() => _loggingOut.add(key));
     try {
       await controller.forceLogoutDevice(device);
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('已请求断开该设备连接')));
+        ).showSnackBar(const SnackBar(content: Text('已退出该设备登录')));
       }
     } catch (error) {
       if (context.mounted) {
@@ -123,6 +135,8 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
           context,
         ).showSnackBar(SnackBar(content: Text('强制下线失败：$error')));
       }
+    } finally {
+      if (mounted) setState(() => _loggingOut.remove(key));
     }
   }
 }
@@ -132,7 +146,9 @@ class _DeviceCard extends StatelessWidget {
     required this.device,
     required this.isCurrent,
     required this.onForceLogout,
+    this.busy = false,
   });
+  final bool busy;
   final LoggedInDevice device;
   final bool isCurrent;
   final VoidCallback? onForceLogout;
@@ -221,14 +237,24 @@ class _DeviceCard extends StatelessWidget {
               ],
             ),
             if (!isCurrent &&
-                device.connectionId.isNotEmpty &&
+                device.deviceId.isNotEmpty &&
                 onForceLogout != null) ...[
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: onForceLogout,
-                  icon: Icon(Icons.logout_rounded, color: colorScheme.error),
+                  onPressed: busy ? null : onForceLogout,
+                  icon:
+                      busy
+                          ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : Icon(
+                            Icons.logout_rounded,
+                            color: colorScheme.error,
+                          ),
                   label: Text(
                     '强制下线',
                     style: TextStyle(color: colorScheme.error),

@@ -11,6 +11,7 @@ class AppEnvironment {
   const AppEnvironment._({
     required this.flavor,
     required this.apiBaseUrl,
+    required this.deviceRegistrationApiPath,
     required this.appId,
     required this.appName,
     required this.appVersion,
@@ -49,6 +50,7 @@ class AppEnvironment {
 
   final AppFlavor flavor;
   final String apiBaseUrl;
+  final String deviceRegistrationApiPath;
   final String appId;
   final String appName;
   final String appVersion;
@@ -112,6 +114,10 @@ class AppEnvironment {
     return AppEnvironment._(
       flavor: flavor,
       apiBaseUrl: dotenv.get('API_BASE_URL', fallback: ''),
+      deviceRegistrationApiPath: dotenv.get(
+        'DEVICE_REGISTRATION_API_PATH',
+        fallback: '/api/chat/device/register',
+      ),
       appId: dotenv.get('APP_ID', fallback: '__UNI__39F095D'),
       appName: dotenv.get('APP_NAME', fallback: 'Goto IM'),
       appVersion: dotenv.get('APP_VERSION', fallback: '1.0.0'),

@@ -14,6 +14,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onTransfer,
     required this.onOpenSettings,
     this.onOpenAiRuns,
+    this.onPopOut,
     this.selectionMode = false,
     this.onCancelSelection,
     this.useGlass = false,
@@ -27,6 +28,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onTransfer;
   final VoidCallback onOpenSettings;
   final VoidCallback? onOpenAiRuns;
+  final VoidCallback? onPopOut;
   final bool selectionMode;
   final VoidCallback? onCancelSelection;
   final bool useGlass;
@@ -41,13 +43,15 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final foregroundColor = isDark
-        ? const Color(0xFFF1F5F9)
-        : (hasBackground
-            ? const Color(0xFF0F172A)
-            : const Color(0xFF1E293B));
+    final foregroundColor =
+        isDark
+            ? const Color(0xFFF1F5F9)
+            : (hasBackground
+                ? const Color(0xFF0F172A)
+                : const Color(0xFF1E293B));
 
-    final effectiveOverlayStyle = systemOverlayStyle ??
+    final effectiveOverlayStyle =
+        systemOverlayStyle ??
         SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
@@ -77,6 +81,12 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: '转接',
           onPressed: onTransfer,
           icon: const Icon(Icons.electrical_services_outlined),
+        ),
+      if (!selectionMode && onPopOut != null)
+        IconButton(
+          tooltip: '在独立窗口打开',
+          onPressed: onPopOut,
+          icon: const Icon(Icons.open_in_new_rounded, size: 20),
         ),
       if (!selectionMode)
         IconButton(

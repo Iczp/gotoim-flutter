@@ -118,6 +118,13 @@ import MediaPlayer
           result(false)
         }
 
+      case "getPermanentDeviceId":
+        if let idfv = UIDevice.current.identifierForVendor?.uuidString {
+          result(idfv.lowercased())
+        } else {
+          result(nil)
+        }
+
       default:
         result(FlutterMethodNotImplemented)
       }

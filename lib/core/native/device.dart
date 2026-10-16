@@ -82,7 +82,8 @@ class NativeDevice {
     HapticFeedbackType type = HapticFeedbackType.medium,
     int? durationMs,
   }) async {
-    final effectiveDuration = durationMs ??
+    final effectiveDuration =
+        durationMs ??
         switch (type) {
           HapticFeedbackType.selection => 18,
           HapticFeedbackType.light => 25,
@@ -218,5 +219,24 @@ class NativeDevice {
       debugPrint('[NativeDevice] setSystemVolume unsupported: $error');
       return false;
     }
+  }
+
+  /// Retrieves a persistent device identifier across app installs and uninstalls.
+  ///
+  /// On Android: Uses Widevine MediaDrm ID, falling back to Android ID.
+  /// On iOS: Uses UIDevice.identifierForVendor, backed by Keychain persistence.
+  /// On unsupported platforms: returns null.
+  Future<String?> getPermanentDeviceId() async {
+    try {
+      final result = await _methodChannel.invokeMethod<String>(
+        'getPermanentDeviceId',
+      );
+      if (result != null && result.trim().isNotEmpty) {
+        return result.trim();
+      }
+    } catch (e) {
+      debugPrint('[NativeDevice] getPermanentDeviceId fallback: $e');
+    }
+    return null;
   }
 }

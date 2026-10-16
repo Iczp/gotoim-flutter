@@ -20,9 +20,12 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.media.AudioManager
+import android.media.MediaDrm
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
+import java.security.MessageDigest
+import java.util.UUID
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -382,6 +385,16 @@ class NativeDevicePlugin(
                 }
             }
 
+            "getPermanentDeviceId" -> {
+                try {
+                    val id = getPermanentDeviceId()
+                    result.success(id)
+                } catch (e: Exception) {
+                    Log.e(TAG, "getPermanentDeviceId error", e)
+                    result.success(null)
+                }
+            }
+
             else -> result.notImplemented()
         }
     }
@@ -525,6 +538,62 @@ class NativeDevicePlugin(
             sensorManager?.unregisterListener(it)
             proximityListener = null
         }
+    }
+
+    private fun getPermanentDeviceId(): String {
+        // 1. Widevine MediaDrm Hardware ID (survives app uninstall and reinstall, zero permissions required)
+        try {
+            val widevineUuid = UUID(-0x121074568629b532L, -0x5c37d8232ae2de13L)
+            val mediaDrm = MediaDrm(widevineUuid)
+            val idBytes = mediaDrm.getPropertyByteArray(MediaDrm.PROPERTY_DEVICE_UNIQUE_ID)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                mediaDrm.close()
+            } else {
+                @Suppress("DEPRECATION")
+                mediaDrm.release()
+            }
+            if (idBytes != null && idBytes.isNotEmpty()) {
+                val hex = bytesToHex(idBytes)
+                if (hex.isNotBlank()) {
+                    return hashToUuid(idBytes)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "MediaDrm widevine id fallback: ${e.message}")
+        }
+
+        // 2. Fallback to Settings.Secure.ANDROID_ID (stable across reinstalls for same signing key)
+        try {
+            val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+            if (!androidId.isNullOrBlank() && androidId != "9774d56d682e549c") {
+                return hashToUuid(androidId.toByteArray(Charsets.UTF_8))
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Settings.Secure.ANDROID_ID fallback: ${e.message}")
+        }
+
+        // 3. Fallback to Hardware Fingerprint
+        val hardwareInfo = "${Build.BOARD}|${Build.BRAND}|${Build.DEVICE}|${Build.HARDWARE}|${Build.MANUFACTURER}|${Build.MODEL}|${Build.PRODUCT}"
+        return hashToUuid(hardwareInfo.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun hashToUuid(bytes: ByteArray): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val digest = md.digest(bytes)
+        val sb = StringBuilder()
+        for (i in 0 until 16) {
+            sb.append(String.format("%02x", digest[i]))
+        }
+        val hex = sb.toString()
+        return "${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}"
+    }
+
+    private fun bytesToHex(bytes: ByteArray): String {
+        val sb = StringBuilder()
+        for (b in bytes) {
+            sb.append(String.format("%02x", b))
+        }
+        return sb.toString()
     }
 
     fun onDestroy() {

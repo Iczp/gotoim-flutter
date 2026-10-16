@@ -1,6 +1,8 @@
 class LogSanitizer {
   static const _sensitiveKeys = <String>{
     'authorization',
+    'registrationproof',
+    'appdevice_registration_proof',
     'cookie',
     'access_token',
     'refresh_token',
@@ -19,8 +21,10 @@ class LogSanitizer {
     if (value is Map) {
       return <String, Object?>{
         for (final entry in value.entries)
-          entry.key.toString():
-              sanitize(entry.value, key: entry.key.toString()),
+          entry.key.toString(): sanitize(
+            entry.value,
+            key: entry.key.toString(),
+          ),
       };
     }
     if (value is Iterable) {

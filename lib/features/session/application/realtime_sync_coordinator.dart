@@ -48,6 +48,7 @@ class RealtimeSyncCoordinator {
   final Map<String, Future<void>> _unitSyncInFlight = <String, Future<void>>{};
   final Set<int> _ownerResyncRequested = {};
   bool _disposed = false;
+  bool _kicked = false;
 
   void start() {
     _subscription ??= _gateway.events.listen(_onEvent);
@@ -62,12 +63,15 @@ class RealtimeSyncCoordinator {
   void _onEvent(SignalRAppEvent event) {
     if (event is SignalRConnectionEvent &&
         event.state == SignalRConnectionState.connected) {
+      _kicked = false;
       _scheduleCurrentOwnerSync();
       return;
     }
     if (event is! SignalRCommandEvent) return;
     switch (event.command) {
       case SignalRCommand.kicked:
+        if (_kicked) break;
+        _kicked = true;
         final payload = event.payload;
         final reason =
             payload is Map
@@ -389,8 +393,14 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
     messageAlertCoordinator: ref.watch(messageAlertCoordinatorProvider),
     activeChatRegistry: ref.watch(activeChatRegistryProvider),
     onKicked: (reason) async {
+      if (ref.read(authControllerProvider).status ==
+          AuthStatus.unauthenticated) {
+        return;
+      }
       debugPrint('[realtimeSync][kicked] reason=$reason');
-      await ref.read(authControllerProvider.notifier).logout();
+      await ref
+          .read(authControllerProvider.notifier)
+          .sessionInvalidated(reason: reason);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final context = rootNavigatorKey.currentContext;
         if (context == null || !context.mounted) return;
@@ -399,7 +409,7 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
           barrierDismissible: false,
           builder:
               (dialogContext) => AlertDialog(
-                title: const Text('您已被强制踢出'),
+                title: const Text('该设备已退出登录'),
                 content: Text('原因：${reason.isEmpty ? '未知原因' : reason}'),
                 actions: <Widget>[
                   FilledButton(

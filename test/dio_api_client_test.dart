@@ -7,8 +7,78 @@ import 'package:gotoim_flutter/core/network/dio_api_client.dart';
 import 'package:gotoim_flutter/core/network/jwt_token_expiry.dart';
 import 'package:gotoim_flutter/core/network/token_refresher.dart';
 import 'package:gotoim_flutter/core/network/token_storage.dart';
+import 'package:gotoim_flutter/features/session/data/datasources/session_unit_api.dart';
 
 void main() {
+  test(
+    'online abort accepts the backend 204 response without a JSON map',
+    () async {
+      final storage = _MemoryTokenStorage('access-token', 'refresh');
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            expect(options.method, 'POST');
+            expect(options.path, '/api/chat/online/abort');
+            handler.resolve(
+              Response<dynamic>(requestOptions: options, statusCode: 204),
+            );
+          },
+        ),
+      );
+      final client = DioApiClient(
+        dio: dio,
+        tokenStorage: storage,
+        tokenRefresher: _FakeRefresher(storage),
+        deviceContext: _device,
+      );
+      await SessionUnitApi(client).abortOnlineConnections(
+        connectionIds: ['fixture-connection'],
+        reason: '验收退出',
+      );
+    },
+  );
+
+  test(
+    'device logout addresses an offline device without a connection id',
+    () async {
+      final storage = _MemoryTokenStorage('access-token', 'refresh');
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            expect(options.method, 'POST');
+            expect(options.path, '/api/chat/device/logout');
+            expect(options.data['deviceId'], 'offline-device');
+            expect(options.data['appId'], 'other-app');
+            expect(options.data['allUsers'], false);
+            expect(options.data.containsKey('connectionIdList'), false);
+            handler.resolve(
+              Response<dynamic>(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'deviceRecordId': 'record',
+                  'revokedSessions': 1,
+                  'disconnectRequested': true,
+                },
+              ),
+            );
+          },
+        ),
+      );
+      final client = DioApiClient(
+        dio: dio,
+        tokenStorage: storage,
+        tokenRefresher: _FakeRefresher(storage),
+        deviceContext: _device,
+      );
+      await SessionUnitApi(
+        client,
+      ).logoutDevice(appId: 'other-app', deviceId: 'offline-device');
+    },
+  );
+
   test('JWT expiring within five minutes refreshes before HTTP', () async {
     final storage = _MemoryTokenStorage(
       _jwt(DateTime.now().add(const Duration(minutes: 4))),

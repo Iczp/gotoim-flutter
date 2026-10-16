@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,7 +7,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 
 import '../config/app_environment.dart';
+import '../native/native.dart';
 import '../platform/platform_contract.dart';
+import 'browser_fingerprint.dart';
 
 /// Stable, non-sensitive client/device metadata shared by HTTP and SignalR.
 ///
@@ -61,29 +65,105 @@ class ClientDeviceContext {
 }
 
 class ClientDeviceContextFactory {
-  ClientDeviceContextFactory({FlutterSecureStorage? storage, Uuid? uuid})
-    : _storage = storage ?? const FlutterSecureStorage(),
-      _uuid = uuid ?? const Uuid();
+  ClientDeviceContextFactory({
+    FlutterSecureStorage? storage,
+    Uuid? uuid,
+    NativeDevice? nativeDevice,
+  }) : _storage =
+           storage ??
+           const FlutterSecureStorage(
+             iOptions: IOSOptions(
+               accessibility: KeychainAccessibility.first_unlock,
+               synchronizable: false,
+             ),
+             aOptions: AndroidOptions(resetOnError: true),
+           ),
+       _uuid = uuid ?? const Uuid(),
+       _nativeDevice = nativeDevice ?? Native.device;
 
   static const _deviceIdKey = 'gotoim.device-id.v1';
 
   final FlutterSecureStorage _storage;
   final Uuid _uuid;
+  final NativeDevice _nativeDevice;
 
-  Future<ClientDeviceContext> create({
-    required AppEnvironment environment,
+  static String _formatToUuid(String input) {
+    final trimmed = input.trim().toLowerCase();
+    final uuidPattern = RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    );
+    if (uuidPattern.hasMatch(trimmed)) {
+      return trimmed;
+    }
+    final bytes = utf8.encode(trimmed);
+    final hex = sha256.convert(bytes).toString();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}';
+  }
+
+  Future<String> resolveDeviceId({
     required PlatformFacade platformFacade,
   }) async {
     String? deviceId;
     try {
       deviceId = await _storage.read(key: _deviceIdKey);
-      if (deviceId == null || deviceId.isEmpty) {
-        deviceId = _uuid.v4();
-        await _storage.write(key: _deviceIdKey, value: deviceId);
+      if (deviceId != null && deviceId.trim().isNotEmpty) {
+        return _formatToUuid(deviceId.trim());
       }
-    } catch (_) {
-      deviceId ??= _uuid.v4();
+    } catch (_) {}
+
+    // Resolve hardware or environment permanent identifier
+    try {
+      if (platformFacade.isWeb) {
+        deviceId = await getBrowserFingerprint();
+      } else {
+        switch (platformFacade.kind) {
+          case PlatformKind.android:
+          case PlatformKind.ios:
+            deviceId = await _nativeDevice.getPermanentDeviceId();
+            break;
+          case PlatformKind.windows:
+            final winInfo = await DeviceInfoPlugin().windowsInfo;
+            if (winInfo.deviceId.isNotEmpty) {
+              deviceId = _formatToUuid(winInfo.deviceId);
+            }
+            break;
+          case PlatformKind.macos:
+            final macInfo = await DeviceInfoPlugin().macOsInfo;
+            if (macInfo.systemGUID != null && macInfo.systemGUID!.isNotEmpty) {
+              deviceId = _formatToUuid(macInfo.systemGUID!);
+            }
+            break;
+          case PlatformKind.linux:
+            final linuxInfo = await DeviceInfoPlugin().linuxInfo;
+            if (linuxInfo.machineId != null &&
+                linuxInfo.machineId!.isNotEmpty) {
+              deviceId = _formatToUuid(linuxInfo.machineId!);
+            }
+            break;
+          default:
+            break;
+        }
+      }
+    } catch (_) {}
+
+    if (deviceId == null || deviceId.trim().isEmpty) {
+      deviceId = _uuid.v4();
+    } else {
+      deviceId = _formatToUuid(deviceId);
     }
+
+    try {
+      await _storage.write(key: _deviceIdKey, value: deviceId);
+    } catch (_) {}
+
+    return deviceId;
+  }
+
+  Future<ClientDeviceContext> create({
+    required AppEnvironment environment,
+    required PlatformFacade platformFacade,
+  }) async {
+    final deviceId = await resolveDeviceId(platformFacade: platformFacade);
     final kind = platformFacade.kind.name;
     final deviceDetails = await _readDeviceDetails();
     return ClientDeviceContext(

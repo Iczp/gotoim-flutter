@@ -1,8 +1,11 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:gotoim_flutter/core/theme/app_theme_tokens.dart';
+import '../../session/application/session_list_controller.dart';
+import '../../session/presentation/desktop_session_split_view.dart';
 import '../../session/presentation/session_list_page.dart';
 import '../../explore/presentation/explore_page.dart';
 import '../../contact/presentation/contacts_page.dart';
@@ -10,21 +13,28 @@ import '../../workbench/presentation/workbench_page.dart';
 import '../../mine/presentation/mine_page.dart';
 
 /// Top-level section page router for the IM home shell.
-class HomeSectionPage extends StatelessWidget {
+class HomeSectionPage extends ConsumerWidget {
   const HomeSectionPage({
     required this.section,
     required this.isCompact,
+    this.isDesktop = false,
     required this.onOpenOwnerDrawer,
     super.key,
   });
 
   final HomeSection section;
   final bool isCompact;
+  final bool isDesktop;
   final VoidCallback onOpenOwnerDrawer;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (section == HomeSection.messages) {
+      if (isDesktop) {
+        return DesktopSessionSplitView(
+          controller: ref.watch(sessionListControllerProvider),
+        );
+      }
       return SessionListPage(onOpenOwnerDrawer: onOpenOwnerDrawer);
     }
     if (section == HomeSection.contacts) {

@@ -14,6 +14,7 @@ import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/presentation/chat_owner_drawer.dart';
 import '../../features/workbench/application/workbench_layout_notifier.dart';
 import '../layout/app_breakpoints.dart';
+import 'desktop_dock_rail.dart';
 
 /// Responsive host for the IM's top-level sections.
 class ApplicationShell extends ConsumerStatefulWidget {
@@ -130,11 +131,13 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final layout = AppBreakpoints.resolve(constraints.maxWidth);
+            final isDesktop = layout == WindowLayout.desktop;
             final isCompact = layout == WindowLayout.mobile;
             final content = _LazyHomeSectionStack(
               selected: _section,
               visited: _visitedSections,
               isCompact: isCompact,
+              isDesktop: isDesktop,
               onOpenOwnerDrawer: _openOwnerDrawer,
             );
 
@@ -142,20 +145,30 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
               key: _scaffoldKey,
               extendBody: true,
               resizeToAvoidBottomInset: false,
-              drawer: ChatOwnerDrawer(
-                controller: ref.watch(sessionListControllerProvider),
-              ),
+              drawer:
+                  isDesktop
+                      ? null
+                      : ChatOwnerDrawer(
+                        controller: ref.watch(sessionListControllerProvider),
+                      ),
               body:
                   isCompact
                       ? content
                       : Row(
                         children: [
-                          _HomeNavigationRail(
-                            selected: _section,
-                            extended: layout == WindowLayout.desktop,
-                            onSelected: _select,
-                          ),
-                          const VerticalDivider(width: 1),
+                          if (isDesktop)
+                            DesktopDockRail(
+                              selected: _section,
+                              onSelected: _select,
+                            )
+                          else ...[
+                            _HomeNavigationRail(
+                              selected: _section,
+                              extended: false,
+                              onSelected: _select,
+                            ),
+                            const VerticalDivider(width: 1),
+                          ],
                           Expanded(child: content),
                         ],
                       ),
@@ -184,12 +197,14 @@ class _LazyHomeSectionStack extends StatelessWidget {
     required this.selected,
     required this.visited,
     required this.isCompact,
+    this.isDesktop = false,
     required this.onOpenOwnerDrawer,
   });
 
   final HomeSection selected;
   final Set<HomeSection> visited;
   final bool isCompact;
+  final bool isDesktop;
   final VoidCallback onOpenOwnerDrawer;
 
   @override
@@ -209,6 +224,7 @@ class _LazyHomeSectionStack extends StatelessWidget {
                   key: PageStorageKey<String>('home-section-${section.name}'),
                   section: section,
                   isCompact: isCompact,
+                  isDesktop: isDesktop,
                   onOpenOwnerDrawer: onOpenOwnerDrawer,
                 ),
               ),

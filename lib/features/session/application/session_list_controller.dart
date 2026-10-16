@@ -223,7 +223,6 @@ class SessionListController extends ChangeNotifier {
   bool isAiRunning(String sessionUnitId) =>
       _aiRunSessionById.values.any((id) => id == sessionUnitId);
 
-
   /// Receives actual rendered rows from the virtual list. Calls are coalesced
   /// while scrolling, rather than being made from every item build.
   void updateVisibleAiSessions(
@@ -413,15 +412,16 @@ class SessionListController extends ChangeNotifier {
   }
 
   Future<void> forceLogoutDevice(LoggedInDevice device) async {
-    if (device.connectionId.isEmpty) {
-      throw StateError('该在线连接缺少 connectionId，无法强制下线');
-    }
-    await _repository.abortOnlineConnection(
-      connectionId: device.connectionId,
-      reason: '用户主动断开连接',
+    if (device.deviceId.isEmpty) throw StateError('该设备缺少设备标识，无法退出登录');
+    await _repository.logoutDevice(
+      appId: device.appId.isEmpty ? _deviceContext.appId : device.appId,
+      deviceId: device.deviceId,
     );
-    await _friendPresenceStore.refresh(force: true);
-    await loadOnlineDevices(silent: true);
+    // Server acknowledgment is the logout result; presence refresh is eventually consistent.
+    await Future.wait<void>([
+      loadDevices(silent: true),
+      loadOnlineDevices(silent: true),
+    ]);
   }
 
   Future<void> loadOnlineDevices({
@@ -452,6 +452,7 @@ class SessionListController extends ChangeNotifier {
     if (next.isEmpty && isSignalRConnected) {
       next = [
         LoggedInDevice(
+          appId: _deviceContext.appId,
           connectionId: _signalRGateway.connectionInfo.connectionId ?? '',
           deviceId: _deviceContext.deviceId,
           deviceType: _deviceContext.deviceType,
@@ -537,21 +538,23 @@ class SessionListController extends ChangeNotifier {
     final liveImmersed = currentOwnerImmersedCount;
 
     var changed = false;
-    final nextOwners = _owners.map((owner) {
-      if (owner.id == currentId) {
-        if (owner.unreadCount != liveUnread ||
-            owner.immersedCount != liveImmersed) {
-          changed = true;
-          final updated = owner.withOverview(
-            unread: liveUnread,
-            immersed: liveImmersed,
-          );
-          _currentOwner = updated;
-          return updated;
-        }
-      }
-      return owner;
-    }).toList(growable: false);
+    final nextOwners = _owners
+        .map((owner) {
+          if (owner.id == currentId) {
+            if (owner.unreadCount != liveUnread ||
+                owner.immersedCount != liveImmersed) {
+              changed = true;
+              final updated = owner.withOverview(
+                unread: liveUnread,
+                immersed: liveImmersed,
+              );
+              _currentOwner = updated;
+              return updated;
+            }
+          }
+          return owner;
+        })
+        .toList(growable: false);
 
     if (changed) {
       _owners = nextOwners;
@@ -568,20 +571,27 @@ class SessionListController extends ChangeNotifier {
       final liveUnread = currentOwnerUnreadCount;
       final liveImmersed = currentOwnerImmersedCount;
 
-      _owners = _owners.map((owner) {
-        final badge = badges[owner.id];
-        final unread = owner.id == currentId
-            ? liveUnread
-            : (badge?.unread ?? owner.unreadCount);
-        final immersed = owner.id == currentId
-            ? liveImmersed
-            : (badge?.immersed ?? owner.immersedCount);
-        final updated = owner.withOverview(unread: unread, immersed: immersed);
-        if (owner.id == currentId) {
-          _currentOwner = updated;
-        }
-        return updated;
-      }).toList(growable: false);
+      _owners = _owners
+          .map((owner) {
+            final badge = badges[owner.id];
+            final unread =
+                owner.id == currentId
+                    ? liveUnread
+                    : (badge?.unread ?? owner.unreadCount);
+            final immersed =
+                owner.id == currentId
+                    ? liveImmersed
+                    : (badge?.immersed ?? owner.immersedCount);
+            final updated = owner.withOverview(
+              unread: unread,
+              immersed: immersed,
+            );
+            if (owner.id == currentId) {
+              _currentOwner = updated;
+            }
+            return updated;
+          })
+          .toList(growable: false);
       notifyListeners();
     } catch (e) {
       debugPrint('[refreshOverview] failed: $e');

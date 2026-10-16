@@ -44,7 +44,9 @@ class AuthController extends ChangeNotifier {
     this._signalRGateway, {
     AbpConfigurationRepository? abpConfigurationRepository,
     Duration? minSplashDuration,
-  }) : _abpConfigurationRepository = abpConfigurationRepository,
+    Future<void> Function()? clearLocalSession,
+  }) : _clearLocalSession = clearLocalSession,
+       _abpConfigurationRepository = abpConfigurationRepository,
        minSplashDuration =
            minSplashDuration ??
            (_detectTestMode()
@@ -53,6 +55,8 @@ class AuthController extends ChangeNotifier {
     _restore();
   }
 
+  final Future<void> Function()? _clearLocalSession;
+  Future<void>? _invalidating;
   final AuthRepository _repository;
   final SignalRGateway _signalRGateway;
   final AbpConfigurationRepository? _abpConfigurationRepository;
@@ -162,11 +166,17 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sessionInvalidated() async {
+  Future<void> sessionInvalidated({String? reason}) =>
+      _invalidating ??= _invalidateSession(
+        reason,
+      ).whenComplete(() => _invalidating = null);
+
+  Future<void> _invalidateSession(String? reason) async {
+    if (_clearLocalSession != null) await _clearLocalSession();
     await _signalRGateway.disconnect();
     await _abpConfigurationRepository?.clearCache();
     _status = AuthStatus.unauthenticated;
-    _errorMessage = '登录已过期，请重新登录。';
+    _errorMessage = reason?.trim().isNotEmpty == true ? reason : '登录已失效，请重新登录。';
     _accountName = null;
     _userInfo = null;
     _currentUser = null;
@@ -358,6 +368,12 @@ void _runAccountChangedCallbacks(Ref ref) {
 final ChangeNotifierProvider<AuthController> authControllerProvider =
     ChangeNotifierProvider<AuthController>((ref) {
       final controller = AuthController(
+        clearLocalSession: () {
+          final repository = ref.read(authRepositoryProvider);
+          return repository is OpenIdConnectAuthRepository
+              ? repository.clearSession()
+              : ref.read(tokenStorageProvider).clear();
+        },
         ref.watch(authRepositoryProvider),
         ref.watch(signalRGatewayProvider),
         abpConfigurationRepository: ref.watch(

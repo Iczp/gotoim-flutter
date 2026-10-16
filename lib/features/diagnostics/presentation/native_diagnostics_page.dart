@@ -34,6 +34,7 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
 
   // Device State
   BatteryInfo? _batteryInfo;
+  String? _permanentDeviceId;
   double _screenBrightness = 1.0;
   double? _systemVolume;
   bool _flashlightEnabled = false;
@@ -168,11 +169,13 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
     final battery = await Native.getBatteryInfo();
     final brightness = await Native.getScreenBrightness();
     final volume = await Native.getSystemVolume();
+    final permanentId = await Native.getPermanentDeviceId();
     if (mounted) {
       setState(() {
         _batteryInfo = battery;
         _screenBrightness = brightness;
         _systemVolume = volume >= 0 ? volume : null;
+        _permanentDeviceId = permanentId;
       });
     }
   }
@@ -358,9 +361,10 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                     watch.stop();
                     if (!mounted) return;
                     setState(() {
-                      _lifecycleStatus = ok
-                          ? '已成功移至后台 (耗时 ${watch.elapsedMilliseconds} ms)'
-                          : '后台最小化失败 (当前平台不支持)';
+                      _lifecycleStatus =
+                          ok
+                              ? '已成功移至后台 (耗时 ${watch.elapsedMilliseconds} ms)'
+                              : '后台最小化失败 (当前平台不支持)';
                     });
                   },
                 ),
@@ -373,24 +377,33 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                     watch.stop();
                     if (!mounted) return;
                     setState(() {
-                      _lifecycleStatus = ok
-                          ? '重启指令已下发 (耗时 ${watch.elapsedMilliseconds} ms)'
-                          : '重启失败 (当前平台不支持)';
+                      _lifecycleStatus =
+                          ok
+                              ? '重启指令已下发 (耗时 ${watch.elapsedMilliseconds} ms)'
+                              : '重启失败 (当前平台不支持)';
                     });
                   },
                 ),
                 OutlinedButton.icon(
-                  icon: const Icon(Icons.exit_to_app, size: 18, color: Colors.red),
-                  label: const Text('退出应用 (exitApp)', style: TextStyle(color: Colors.red)),
+                  icon: const Icon(
+                    Icons.exit_to_app,
+                    size: 18,
+                    color: Colors.red,
+                  ),
+                  label: const Text(
+                    '退出应用 (exitApp)',
+                    style: TextStyle(color: Colors.red),
+                  ),
                   onPressed: () async {
                     final watch = Stopwatch()..start();
                     final ok = await Native.exitApp();
                     watch.stop();
                     if (!mounted) return;
                     setState(() {
-                      _lifecycleStatus = ok
-                          ? '已发起退出应用 (耗时 ${watch.elapsedMilliseconds} ms)'
-                          : '退出失败';
+                      _lifecycleStatus =
+                          ok
+                              ? '已发起退出应用 (耗时 ${watch.elapsedMilliseconds} ms)'
+                              : '退出失败';
                     });
                   },
                 ),
@@ -681,6 +694,35 @@ class _NativeDiagnosticsPageState extends ConsumerState<NativeDiagnosticsPage> {
                 ),
               ],
             ),
+            if (_permanentDeviceId != null &&
+                _permanentDeviceId!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.fingerprint, size: 20, color: Colors.blue),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SelectableText(
+                        '硬件级持久设备ID:\n$_permanentDeviceId',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Screen Brightness

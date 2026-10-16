@@ -52,6 +52,11 @@ class SessionRepository {
   Future<List<LoggedInDevice>> loadOnlineDevices() async =>
       (await _api.getOnlineDevices()).items;
 
+  Future<void> logoutDevice({
+    required String appId,
+    required String deviceId,
+  }) => _api.logoutDevice(appId: appId, deviceId: deviceId);
+
   Future<void> abortOnlineConnection({
     required String connectionId,
     required String reason,
@@ -156,13 +161,14 @@ class SessionRepository {
       for (final item in localItems) item.id: item,
       for (final item in remoteItems) item.id: item,
     };
-    final resolvedTotalCount = !hasMore
-        ? (remote.hasServerTotalCount && remote.totalCount > 0
-            ? remote.totalCount
-            : await _dao.count(ownerId))
-        : (remote.hasServerTotalCount && remote.totalCount > 0
-            ? remote.totalCount
-            : null);
+    final resolvedTotalCount =
+        !hasMore
+            ? (remote.hasServerTotalCount && remote.totalCount > 0
+                ? remote.totalCount
+                : await _dao.count(ownerId))
+            : (remote.hasServerTotalCount && remote.totalCount > 0
+                ? remote.totalCount
+                : null);
     debugPrint(
       '[loadFriends][result] source=local+remote ownerId=$ownerId '
       'localAdded=${localItems.length} remoteAdded=${remote.items.length} '

@@ -12,10 +12,12 @@ class LoggedInDevice {
     required this.browser,
     required this.browserInfo,
     required this.platform,
+    this.appId = '',
     this.chatObjectIdList = const <int>[],
   });
 
   factory LoggedInDevice.fromJson(Map<String, dynamic> json) => LoggedInDevice(
+    appId: json['appId']?.toString() ?? '',
     connectionId: json['connectionId']?.toString() ?? '',
     deviceId: json['deviceId']?.toString() ?? '',
     deviceType: json['deviceType']?.toString() ?? '',
@@ -39,14 +41,16 @@ class LoggedInDevice {
     browser: json['browser']?.toString() ?? '',
     browserInfo: json['browserInfo']?.toString() ?? '',
     platform: json['platform']?.toString() ?? '',
-    chatObjectIdList: (json['chatObjectIdList'] is List
-        ? (json['chatObjectIdList'] as List)
-            .map((e) => e is num ? e.toInt() : int.tryParse('$e'))
-            .whereType<int>()
-            .toList(growable: false)
-        : const <int>[]),
+    chatObjectIdList:
+        (json['chatObjectIdList'] is List
+            ? (json['chatObjectIdList'] as List)
+                .map((e) => e is num ? e.toInt() : int.tryParse('$e'))
+                .whereType<int>()
+                .toList(growable: false)
+            : const <int>[]),
   );
 
+  final String appId;
   final String deviceId;
 
   /// SignalR connection identifier; required by the online abort endpoint.
