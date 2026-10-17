@@ -199,6 +199,32 @@ void main() {
           const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
           (call) async => null,
         );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('mixin.one/desktop_multi_window/channels'),
+          (call) async => null,
+        );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('mixin.one/desktop_multi_window'),
+          (call) async {
+            switch (call.method) {
+              case 'createWindow':
+                return '101';
+              case 'show':
+              case 'hide':
+              case 'close':
+              case 'focus':
+              case 'setFrame':
+              case 'center':
+                return null;
+              case 'getAllSubWindowIds':
+                return <int>[];
+              default:
+                return null;
+            }
+          },
+        );
     dotenv.loadFromString(
       envString: 'APP_NAME=GotoIM\nAPI_BASE_URL=https://api.gotoim.com',
     );

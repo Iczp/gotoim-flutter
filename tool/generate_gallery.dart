@@ -53,6 +53,16 @@ void main() {
       'file': 'screenshot_desktop_tray_menu.png',
       'desc': '系统托盘图标右键菜单，深灰色调圆角面板，显示激活窗口、当前身份及退出。'
     },
+    {
+      'title': '8. 剪贴板图片预发送微信深色风格确认弹窗 (460 × 420)',
+      'file': 'screenshot_desktop_clipboard_image_confirm.png',
+      'desc': '从系统剪贴板读取图片后，弹出微信同款预发送确认弹窗，支持附言留言、原图预览与快捷键回车确认发送。'
+    },
+    {
+      'title': '9. 剪贴板多文件批量预发送确认弹窗 (520 × 460)',
+      'file': 'screenshot_desktop_clipboard_files_confirm.png',
+      'desc': '从操作系统直接复制多文件并粘贴到聊天输入框时触发，支持单个文件移除、总大小计算与批量快速发送。'
+    },
   ];
 
   final dir = Directory('f:/Dev/GotoIM/gotoim-flutter/screenshots');
