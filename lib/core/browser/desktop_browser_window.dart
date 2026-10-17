@@ -1,9 +1,10 @@
+import 'dart:io' show Platform, Process;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:open_filex/open_filex.dart';
 
 import '../widgets/app_toast.dart';
 
@@ -99,9 +100,22 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   Future<void> _openInExternalBrowser() async {
     try {
       await Clipboard.setData(ClipboardData(text: _currentUrl));
+      final uri = Uri.tryParse(_currentUrl);
+      if (uri == null || (!uri.isScheme('http') && !uri.isScheme('https'))) {
+        showToast('已复制网页链接至剪贴板: $_currentUrl', type: ToastType.success);
+        return;
+      }
+
       showToast('正在调起系统浏览器...', type: ToastType.info);
       if (!kIsWeb) {
-        await OpenFilex.open(_currentUrl);
+        if (Platform.isWindows) {
+          // 直接调起 explorer.exe 且 runInShell: false，严格杜绝 cmd.exe 注入风险
+          await Process.run('explorer.exe', [_currentUrl], runInShell: false);
+        } else if (Platform.isMacOS) {
+          await Process.run('open', [_currentUrl], runInShell: false);
+        } else if (Platform.isLinux) {
+          await Process.run('xdg-open', [_currentUrl], runInShell: false);
+        }
       }
     } catch (_) {
       showToast('已复制网页链接至剪贴板: $_currentUrl', type: ToastType.success);

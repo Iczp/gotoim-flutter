@@ -11,12 +11,17 @@ import '../core/network/api_client.dart';
 import '../core/network/dio_api_client.dart';
 import '../core/devtools/remote_debug/remote_dev_server.dart';
 import '../core/notifications/local_notification_service.dart';
+import '../core/network/session_invalidator.dart';
 import '../features/auth/application/auth_controller.dart';
 import '../core/network/abp/abp_application_configuration_dto.dart';
 import '../core/network/abp/abp_configuration_api.dart';
 import '../core/network/abp/abp_configuration_repository.dart';
 import '../core/network/abp/abp_current_user.dart';
-import '../core/network/session_invalidator.dart';
+import '../core/platform/platform_facade.dart';
+import '../core/services/clipboard_service.dart';
+import '../core/services/file/file_picker_service.dart';
+import '../core/services/media/media_service.dart';
+import '../core/services/scan/scan_code_service.dart';
 import '../features/auth/data/openid_connect_auth_repository.dart';
 
 /// Composition-root providers. Feature pages depend on repositories/use cases,
@@ -55,20 +60,33 @@ final deviceRegistrationApiProvider = Provider<DeviceRegistrationApi>((ref) {
   );
 });
 
-/// 由 bootstrap 创建并覆写，保证通知点击回调在应用启动时即可注册。
+/// 由 bootstrap 创建并覆写，未覆写时回退至系统对应轻量默认实现。
 final localNotificationServiceProvider = Provider<LocalNotificationService>(
-  (ref) =>
-      throw UnimplementedError(
-        'LocalNotificationService must be provided at bootstrap.',
-      ),
+  (ref) {
+    final platform = ref.watch(platformFacadeProvider);
+    return createLocalNotificationService(platformFacade: platform);
+  },
 );
 
 /// Unified application entry point for client/platform APIs.
 final clientCapabilityServiceProvider = Provider<ClientCapabilityService>(
-  (ref) =>
-      throw UnimplementedError(
-        'ClientCapabilityService must be provided at bootstrap.',
-      ),
+  (ref) {
+    final platform = ref.watch(platformFacadeProvider);
+    final environment = ref.watch(appEnvironmentProvider);
+    final deviceContext = ref.watch(clientDeviceContextProvider);
+    final notifications = ref.watch(localNotificationServiceProvider);
+    return DefaultClientCapabilityService(
+      environment: environment,
+      deviceContext: deviceContext,
+      platformFacade: platform,
+      clipboardService: ref.watch(clipboardServiceProvider),
+      filePickerService: ref.watch(filePickerServiceProvider),
+      scanCodeService: ref.watch(scanCodeServiceProvider),
+      imageCodeService: ref.watch(imageCodeServiceProvider),
+      mediaService: ref.watch(mediaServiceProvider),
+      localNotificationService: notifications,
+    );
+  },
 );
 
 /// JSON request/response dispatcher used by WebView adapters and diagnostics.

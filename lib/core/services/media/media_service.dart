@@ -10,7 +10,7 @@ import 'package:record/record.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
 import '../../../app/app_navigation.dart';
-import '../../platform/platform_contract.dart';
+import '../../platform/platform_facade.dart';
 import '../file/file_picker_service.dart';
 import 'video_processing.dart';
 import 'video_processing_models.dart';
@@ -483,8 +483,8 @@ class DefaultMediaService implements MediaService {
 }
 
 final mediaServiceProvider = Provider<MediaService>(
-  (ref) =>
-      throw UnimplementedError(
-        'MediaService must be provided during bootstrap.',
-      ),
+  (ref) {
+    final platform = ref.watch(platformFacadeProvider);
+    return DefaultMediaService(platformFacade: platform);
+  },
 );

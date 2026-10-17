@@ -211,8 +211,16 @@ class ClientDeviceContextFactory {
 }
 
 final clientDeviceContextProvider = Provider<ClientDeviceContext>(
-  (ref) =>
-      throw UnimplementedError(
-        'ClientDeviceContext must be provided during bootstrap.',
-      ),
+  (ref) => const ClientDeviceContext(
+    appId: 'com.gotoim.app',
+    appName: 'GotoIM',
+    appVersion: '1.0.0',
+    deviceId: 'device-subwindow',
+    deviceType: 'desktop',
+    platform: 'windows',
+    brand: '',
+    model: '',
+    browser: '',
+    pushClientId: '',
+  ),
 );

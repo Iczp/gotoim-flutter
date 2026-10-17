@@ -2,12 +2,27 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../config/app_environment.dart';
 import '../platform/platform_facade.dart';
 import '../browser/desktop_browser_window.dart';
 import '../media/media_preview.dart';
+import '../../features/diagnostics/presentation/abp_configuration_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/app_statistic_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/article_message_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/auth_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/chat_bubble_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/chat_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/connection_test_page.dart';
+import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/diagnostics_home_page.dart';
+import '../../features/diagnostics/presentation/local_notification_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/privacy_and_update_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/remote_devtools_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/search_and_group_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/session_list_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/signalr_diagnostics_page.dart';
 import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/media/presentation/desktop_media_viewer_window.dart';
 import '../../features/settings/presentation/desktop_settings_window.dart';
@@ -99,10 +114,83 @@ class NativeSubWindowApp extends StatefulWidget {
 class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
   late final WindowMethodChannel _mainIpcChannel;
   ThemeMode _themeMode = ThemeMode.dark;
+  late NativeWindowPayload _currentPayload;
+
+  late final GoRouter _diagnosticRouter = GoRouter(
+    initialLocation: '/diagnostics',
+    routes: [
+      GoRoute(
+        path: '/diagnostics',
+        builder: (context, state) => const DiagnosticsHomePage(),
+        routes: [
+          GoRoute(
+            path: ':section',
+            builder: (context, state) {
+              final section = state.pathParameters['section'] ?? '';
+              return _buildDiagnosticSubPage(section);
+            },
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/',
+        redirect: (_, _) => '/diagnostics',
+      ),
+    ],
+  );
+
+  Widget _buildDiagnosticSubPage(String section) {
+    switch (section) {
+      case 'remote-devtools':
+        return const RemoteDevToolsDiagnosticsPage();
+      case 'auth':
+        return const AuthDiagnosticsPage();
+      case 'api':
+        return const ConnectionTestPage();
+      case 'abp-configuration':
+        return const AbpConfigurationDiagnosticsPage();
+      case 'signalr':
+        return const SignalRDiagnosticsPage();
+      case 'connection':
+        return const ConnectionTestPage();
+      case 'database':
+        return const DatabaseDiagnosticsPage();
+      case 'privacy-and-update':
+        return const PrivacyAndUpdateDiagnosticsPage();
+      case 'statistic':
+        return const AppStatisticDiagnosticsPage();
+      case 'article-message':
+        return const ArticleMessageDiagnosticsPage();
+      case 'session-list':
+        return const SessionListDiagnosticsPage();
+      case 'chat':
+        return const ChatDiagnosticsPage();
+      case 'chat-bubble':
+        return const ChatBubbleDiagnosticsPage();
+      case 'notifications':
+        return const LocalNotificationDiagnosticsPage();
+      case 'search-and-group':
+        return const SearchAndGroupDiagnosticsPage();
+      default:
+        return Scaffold(
+          appBar: AppBar(title: Text('诊断模块: $section')),
+          body: Center(child: Text('诊断模块: $section')),
+        );
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _currentPayload = widget.payload;
+    final initialThemeStr = widget.payload.extra?['themeMode'] as String?;
+    if (initialThemeStr != null) {
+      _themeMode = ThemeMode.values.firstWhere(
+        (e) => e.name == initialThemeStr,
+        orElse: () => ThemeMode.dark,
+      );
+    }
+
     _mainIpcChannel = const WindowMethodChannel(
       'gotoim/ipc_to_main',
       mode: ChannelMode.bidirectional,
@@ -123,8 +211,21 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
             }
           }
           return true;
+        case 'update_payload':
+          final map = call.arguments as Map?;
+          if (map != null && mounted) {
+            setState(() {
+              _currentPayload = NativeWindowPayload.fromMap(
+                Map<String, dynamic>.from(map),
+              );
+            });
+          }
+          return true;
         case 'bringToFront':
           await widget.controller?.show();
+          return true;
+        case 'account_logout':
+          await _handleLogout();
           return true;
         case 'close':
           await _handleClose();
@@ -138,7 +239,7 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
   Future<void> _handleClose() async {
     try {
       await _mainIpcChannel.invokeMethod('sub_window_closed', {
-        'targetId': widget.payload.targetId,
+        'targetId': _currentPayload.targetId,
         'windowId': widget.controller?.windowId,
       });
     } catch (_) {}
@@ -156,47 +257,61 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
 
   @override
   Widget build(BuildContext context) {
+    final lightTheme = ThemeData(
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: Colors.white,
+      fontFamily: 'Segoe UI',
+      useMaterial3: true,
+    );
+    final darkTheme = ThemeData(
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: const Color(0xFF1E1E1E),
+      fontFamily: 'Segoe UI',
+      useMaterial3: true,
+    );
+
+    if (_currentPayload.type == SubWindowType.diagnostics) {
+      return MaterialApp.router(
+        title: _currentPayload.title,
+        debugShowCheckedModeBanner: false,
+        themeMode: _themeMode,
+        theme: lightTheme,
+        darkTheme: darkTheme,
+        routerConfig: _diagnosticRouter,
+      );
+    }
+
     return MaterialApp(
-      title: widget.payload.title,
+      title: _currentPayload.title,
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: Colors.white,
-        fontFamily: 'Segoe UI',
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1E1E1E),
-        fontFamily: 'Segoe UI',
-        useMaterial3: true,
-      ),
+      theme: lightTheme,
+      darkTheme: darkTheme,
       home: _buildSubWindowContent(),
     );
   }
 
   Widget _buildSubWindowContent() {
-    switch (widget.payload.type) {
+    switch (_currentPayload.type) {
       case SubWindowType.settings:
         return DesktopSettingsWindow(
           isSubWindow: true,
-          extra: widget.payload.extra,
+          extra: _currentPayload.extra,
           onClose: _handleClose,
           onLogout: _handleLogout,
         );
 
       case SubWindowType.browser:
         return DesktopBrowserWindow(
-          initialUrl: widget.payload.url ?? 'https://www.bing.com',
-          title: widget.payload.title,
-          fallbackContent: widget.payload.fallbackContent,
+          initialUrl: _currentPayload.url ?? 'https://www.bing.com',
+          title: _currentPayload.title,
+          fallbackContent: _currentPayload.fallbackContent,
           isSubWindow: true,
           onClose: _handleClose,
         );
 
       case SubWindowType.media:
-        final rawItems = widget.payload.mediaItems;
+        final rawItems = _currentPayload.mediaItems;
         final items = rawItems != null && rawItems.isNotEmpty
             ? rawItems.map((map) {
                 final source = map['source'] as String? ?? '';
@@ -217,18 +332,18 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
               }).toList()
             : [
                 MediaPreviewItem(
-                  id: widget.payload.url ?? 'media',
+                  id: _currentPayload.url ?? 'media',
                   messageId: 'media',
-                  type: (widget.payload.url?.toLowerCase().endsWith('.mp4') ?? false)
+                  type: (_currentPayload.url?.toLowerCase().endsWith('.mp4') ?? false)
                       ? MediaPreviewType.video
                       : MediaPreviewType.image,
-                  source: widget.payload.url ?? '',
-                  heroTag: 'media-${widget.payload.url}',
+                  source: _currentPayload.url ?? '',
+                  heroTag: 'media-${_currentPayload.url}',
                 ),
               ];
         return DesktopMediaViewerWindow(
           items: items,
-          initialIndex: widget.payload.initialIndex,
+          initialIndex: _currentPayload.initialIndex,
           isSubWindow: true,
           onClose: _handleClose,
         );
@@ -236,14 +351,14 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
       case SubWindowType.chat:
         if (widget.controller != null) {
           return DesktopSubWindowChatView(
-            payload: widget.payload,
+            payload: _currentPayload,
             controller: widget.controller!,
             onClose: _handleClose,
           );
         }
         return Scaffold(
           body: Center(
-            child: Text('独立聊天窗口：${widget.payload.title}'),
+            child: Text('独立聊天窗口：${_currentPayload.title}'),
           ),
         );
 

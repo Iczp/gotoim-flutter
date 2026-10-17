@@ -311,12 +311,56 @@ class AppEnvironment {
       );
     }
   }
+
+  static const AppEnvironment defaultEnvironment = AppEnvironment._(
+    flavor: AppFlavor.development,
+    apiBaseUrl: 'http://10.0.5.20:8044',
+    deviceRegistrationApiPath: '/api/chat/device/register',
+    appId: '__UNI__39F095D',
+    appName: 'Goto IM',
+    appVersion: '1.0.0',
+    authBaseUrl: 'http://10.0.5.20:8043',
+    authTokenPath: '/connect/token',
+    authClientId: 'IM_Mobile',
+    authClientSecret: '1q2w3e*',
+    authScope: 'IM offline_access roles profile phone email address',
+    authLoginGrantType: 'password',
+    authUserInfoPath: '/connect/userinfo',
+    authIntrospectionPath: '/connect/introspect',
+    authRevocationPath: '/connect/revocat',
+    signalRBaseUrl: 'http://10.0.5.20:8044',
+    signalRHubPath: '/signalr-hubs/chat',
+    scanLoginHubPath: '/signalr-hubs/scan-login',
+    scanLoginSignalRBaseUrl: 'http://10.0.5.20:8044',
+    scanLoginTemplate: 'gotoim://scan-login?code={code}',
+    scanLoginFallbackExpires: Duration(seconds: 90),
+    scanLoginAuthBaseUrl: 'http://10.0.5.20:8043',
+    scanLoginAuthTokenPath: '/connect/token',
+    scanLoginAuthClientId: 'IM_Mobile',
+    scanLoginAuthClientSecret: '1q2w3e*',
+    scanLoginAuthScope: 'IM',
+    signalRSkipNegotiation: true,
+    signalRReconnectDelays: [0, 2000, 10000, 30000],
+    presenceHeartbeatInterval: Duration(seconds: 30),
+    friendPresenceRefreshMinInterval: Duration(seconds: 10),
+    jsBridgeHarnessUrl: 'http://10.0.5.20:4173',
+    jsBridgeUploadUrl: 'http://10.0.5.20:4173/upload',
+    jsBridgeUploadAllowedHosts: ['10.0.5.20', '127.0.0.1', 'localhost'],
+    enableNetworkLogging: false,
+    deepLinkCustomSchemes: ['gotoim-dev', 'gotoim'],
+    deepLinkAllowedHosts: ['gotoim.com'],
+    statisticBaseUrl: 'http://10.0.5.20:51621',
+  );
 }
 
 final Provider<AppEnvironment> appEnvironmentProvider =
     Provider<AppEnvironment>(
-      (ref) =>
-          throw UnimplementedError(
-            'AppEnvironment must be provided during bootstrap.',
-          ),
+      (ref) {
+        try {
+          if (dotenv.isInitialized) {
+            return AppEnvironment.fromDotEnv(AppFlavor.development);
+          }
+        } catch (_) {}
+        return AppEnvironment.defaultEnvironment;
+      },
     );

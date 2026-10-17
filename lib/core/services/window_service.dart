@@ -254,14 +254,17 @@ class DefaultWindowService implements WindowService {
             if (onLogout != null) {
               await onLogout!();
             }
-            await closeAllSubWindows();
+            await closeAllSubWindows(isLogout: true);
             return true;
 
           case 'theme_changed':
             final args = call.arguments as Map?;
             final mode = args?['themeMode'] as String?;
-            if (mode != null && onThemeChanged != null) {
-              onThemeChanged!(mode);
+            if (mode != null) {
+              if (onThemeChanged != null) {
+                onThemeChanged!(mode);
+              }
+              await broadcastToAllSubWindows('theme_changed', {'themeMode': mode});
             }
             return true;
 
@@ -379,7 +382,14 @@ class DefaultWindowService implements WindowService {
         await controller.hide();
         _reusableControllers[targetId] = controller;
         if (_reusableControllers.length > _maxReusableControllers) {
-          _reusableControllers.remove(_reusableControllers.keys.first);
+          final oldestKey = _reusableControllers.keys.first;
+          final evicted = _reusableControllers.remove(oldestKey);
+          if (evicted != null) {
+            try {
+              await evicted.invokeMethod('close');
+              await evicted.hide();
+            } catch (_) {}
+          }
         }
       } catch (_) {}
     }
@@ -409,10 +419,35 @@ class DefaultWindowService implements WindowService {
     }
   }
 
-  Future<void> closeAllSubWindows() async {
+  Future<void> closeAllSubWindows({bool isLogout = false}) async {
     final targets = _registry.keys.toList();
     for (final target in targets) {
       await closeWindow(target);
+    }
+    if (isLogout) {
+      for (final controller in _reusableControllers.values) {
+        try {
+          await controller.invokeMethod('account_logout');
+          await controller.hide();
+        } catch (_) {}
+      }
+      _reusableControllers.clear();
+      _nativeControllers.clear();
+      _registry.clear();
+      _notify();
+    }
+  }
+
+  Future<void> broadcastToAllSubWindows(String method, [dynamic arguments]) async {
+    for (final controller in _nativeControllers.values) {
+      try {
+        await controller.invokeMethod(method, arguments);
+      } catch (_) {}
+    }
+    for (final controller in _reusableControllers.values) {
+      try {
+        await controller.invokeMethod(method, arguments);
+      } catch (_) {}
     }
   }
 
@@ -436,6 +471,9 @@ class DefaultWindowService implements WindowService {
     try {
       final cachedController = _reusableControllers.remove(targetId);
       if (cachedController != null) {
+        try {
+          await cachedController.invokeMethod('update_payload', payload.toJson());
+        } catch (_) {}
         await cachedController.show();
         _nativeControllers[targetId] = cachedController;
         _registry[targetId] = WindowRecord(
@@ -933,7 +971,7 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
               'serverId': m.serverId,
               'clientMessageId': m.clientMessageId,
               'text': m.text,
-              'isMe': m.ownerId == ownerId,
+              'isMe': m.isMine,
               'state': m.state,
               'time': m.createdAt?.millisecondsSinceEpoch,
             },

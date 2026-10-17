@@ -44,6 +44,43 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
       'gotoim/ipc_to_main',
       mode: ChannelMode.bidirectional,
     );
+    widget.controller.setWindowMethodHandler((call) async {
+      switch (call.method) {
+        case 'chat_receive_message':
+          final data = call.arguments as Map?;
+          if (data != null && mounted) {
+            final t = data['time'];
+            final time = t is num
+                ? DateTime.fromMillisecondsSinceEpoch(t.toInt())
+                : DateTime.now();
+            setState(() {
+              _messages.add(_ChatMessage(
+                id: data['id']?.toString(),
+                serverId: (data['serverId'] as num?)?.toInt(),
+                clientMessageId: data['clientMessageId']?.toString(),
+                text: data['text']?.toString() ?? '',
+                isMe: data['isMe'] == true,
+                time: time,
+                state: data['state']?.toString() ?? 'sent',
+              ));
+            });
+            _scrollToBottom();
+          }
+          return true;
+        case 'chat_refresh':
+          await _loadHistory();
+          return true;
+        case 'account_logout':
+          if (mounted) {
+            setState(() {
+              _messages.clear();
+            });
+          }
+          return true;
+        default:
+          return null;
+      }
+    });
     _loadHistory();
   }
 

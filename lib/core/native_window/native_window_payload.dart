@@ -53,32 +53,36 @@ class NativeWindowPayload {
 
   String toJsonString() => jsonEncode(toJson());
 
+  factory NativeWindowPayload.fromMap(Map<String, dynamic> map) {
+    final typeStr = map['type'] as String? ?? '';
+    final type = SubWindowType.values.firstWhere(
+      (e) => e.name == typeStr,
+      orElse: () => SubWindowType.settings,
+    );
+    final mediaItemsRaw = map['mediaItems'] as List<dynamic>?;
+    final mediaItems = mediaItemsRaw
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    return NativeWindowPayload(
+      type: type,
+      title: map['title'] as String? ?? 'GotoIM',
+      targetId: map['targetId'] as String? ?? 'sub_window',
+      sessionUnitId: map['sessionUnitId'] as String?,
+      ownerId: map['ownerId'] as int?,
+      url: map['url'] as String?,
+      fallbackContent: map['fallbackContent'] as String?,
+      initialIndex: map['initialIndex'] as int? ?? 0,
+      mediaItems: mediaItems,
+      extra: map['extra'] as Map<String, dynamic>?,
+    );
+  }
+
   static NativeWindowPayload? tryParse(String? source) {
     if (source == null || source.trim().isEmpty) return null;
     try {
       final map = jsonDecode(source) as Map<String, dynamic>;
-      final typeStr = map['type'] as String? ?? '';
-      final type = SubWindowType.values.firstWhere(
-        (e) => e.name == typeStr,
-        orElse: () => SubWindowType.settings,
-      );
-      final mediaItemsRaw = map['mediaItems'] as List<dynamic>?;
-      final mediaItems = mediaItemsRaw
-          ?.map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-
-      return NativeWindowPayload(
-        type: type,
-        title: map['title'] as String? ?? 'GotoIM',
-        targetId: map['targetId'] as String? ?? 'sub_window',
-        sessionUnitId: map['sessionUnitId'] as String?,
-        ownerId: map['ownerId'] as int?,
-        url: map['url'] as String?,
-        fallbackContent: map['fallbackContent'] as String?,
-        initialIndex: map['initialIndex'] as int? ?? 0,
-        mediaItems: mediaItems,
-        extra: map['extra'] as Map<String, dynamic>?,
-      );
+      return NativeWindowPayload.fromMap(map);
     } catch (_) {
       return null;
     }
