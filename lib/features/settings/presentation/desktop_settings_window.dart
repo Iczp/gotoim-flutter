@@ -1,3 +1,4 @@
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -30,6 +31,7 @@ class DesktopSettingsWindow extends ConsumerStatefulWidget {
   const DesktopSettingsWindow({
     this.isSubWindow = false,
     this.onClose,
+    this.onLogout,
     this.extra,
     super.key,
   });
@@ -39,6 +41,9 @@ class DesktopSettingsWindow extends ConsumerStatefulWidget {
 
   /// 窗口关闭回调
   final VoidCallback? onClose;
+
+  /// 窗口登出回调
+  final VoidCallback? onLogout;
 
   /// 独立窗口载荷附加参数（当前身份、账号信息等）
   final Map<String, dynamic>? extra;
@@ -132,6 +137,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     );
     if (confirmed && mounted) {
       if (widget.isSubWindow) {
+        widget.onLogout?.call();
         widget.onClose?.call();
         return;
       }
@@ -547,6 +553,17 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     );
   }
 
+  void _setThemeMode(ThemeMode mode) {
+    ref.read(themeModeControllerProvider.notifier).setThemeMode(mode);
+    if (widget.isSubWindow) {
+      try {
+        WindowMethodChannel('gotoim/ipc_to_main').invokeMethod('theme_changed', {
+          'themeMode': mode.name,
+        });
+      } catch (_) {}
+    }
+  }
+
   // ── 2. 通用 ──────────────────────────────────────────────────────────────────
   Widget _buildGeneral(BuildContext context, bool isDark) {
     final themeMode = ref.watch(themeModeProvider);
@@ -563,10 +580,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
               label: '跟随系统',
               icon: Icons.brightness_auto_rounded,
               isSelected: themeMode == ThemeMode.system,
-              onTap:
-                  () => ref
-                      .read(themeModeControllerProvider.notifier)
-                      .setThemeMode(ThemeMode.system),
+              onTap: () => _setThemeMode(ThemeMode.system),
               isDark: isDark,
             ),
             const SizedBox(width: 12),
@@ -574,10 +588,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
               label: '浅色模式',
               icon: Icons.light_mode_rounded,
               isSelected: themeMode == ThemeMode.light,
-              onTap:
-                  () => ref
-                      .read(themeModeControllerProvider.notifier)
-                      .setThemeMode(ThemeMode.light),
+              onTap: () => _setThemeMode(ThemeMode.light),
               isDark: isDark,
             ),
             const SizedBox(width: 12),
@@ -585,10 +596,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
               label: '深色模式',
               icon: Icons.dark_mode_rounded,
               isSelected: themeMode == ThemeMode.dark,
-              onTap:
-                  () => ref
-                      .read(themeModeControllerProvider.notifier)
-                      .setThemeMode(ThemeMode.dark),
+              onTap: () => _setThemeMode(ThemeMode.dark),
               isDark: isDark,
             ),
           ],
@@ -728,8 +736,6 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
 
   // ── 5. 插件 ──────────────────────────────────────────────────────────────────
   Widget _buildPlugins(BuildContext context, bool isDark) {
-    final windowService = ref.read(windowServiceProvider);
-
     return ListView(
       children: [
         _buildSectionHeader('桌面独立插件与工具', isDark),
@@ -740,11 +746,15 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
           trailing: OutlinedButton(
             onPressed: () {
               if (widget.isSubWindow) {
-                showToast('请在主窗口中使用', type: ToastType.info);
+                try {
+                  WindowMethodChannel('gotoim/ipc_to_main').invokeMethod('open_window', {
+                    'type': 'localFileServer',
+                  });
+                } catch (_) {}
                 return;
               }
               Navigator.of(context).pop();
-              windowService.openLocalFileServer();
+              ref.read(windowServiceProvider).openLocalFileServer();
             },
             child: const Text('打开控制台', style: TextStyle(fontSize: 12)),
           ),
@@ -755,11 +765,15 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
           trailing: OutlinedButton(
             onPressed: () {
               if (widget.isSubWindow) {
-                showToast('请在主窗口中使用', type: ToastType.info);
+                try {
+                  WindowMethodChannel('gotoim/ipc_to_main').invokeMethod('open_window', {
+                    'type': 'diagnostics',
+                  });
+                } catch (_) {}
                 return;
               }
               Navigator.of(context).pop();
-              windowService.openDiagnostics();
+              ref.read(windowServiceProvider).openDiagnostics();
             },
             child: const Text('打开诊断', style: TextStyle(fontSize: 12)),
           ),

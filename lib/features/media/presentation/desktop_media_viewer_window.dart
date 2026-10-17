@@ -638,8 +638,13 @@ class _DesktopMediaViewerWindowState
               color: Colors.white70,
             ),
             tooltip: '最小化',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              if (widget.isSubWindow) {
+                widget.onClose?.call();
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
           ),
           IconButton(
             icon: Icon(

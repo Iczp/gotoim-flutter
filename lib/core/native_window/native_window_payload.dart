@@ -7,6 +7,7 @@ enum SubWindowType {
   browser,
   media,
   diagnostics,
+  localFileServer,
 }
 
 /// 原生子窗口启动载荷（跨 Flutter 引擎序列化参数）

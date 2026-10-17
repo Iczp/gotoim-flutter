@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../core/widgets/app_toast.dart';
 import 'native_window_payload.dart';
 
 /// 桌面端微信风格独立聊天子窗口视图
@@ -24,7 +28,10 @@ class DesktopSubWindowChatView extends StatefulWidget {
 class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
   final List<_ChatMessage> _messages = [];
+
+  bool _isLoading = true;
   bool _isPinned = false;
   bool _isMaximized = false;
 
@@ -35,53 +42,134 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
     super.initState();
     _mainIpcChannel = const WindowMethodChannel(
       'gotoim/ipc_to_main',
-      mode: ChannelMode.unidirectional,
+      mode: ChannelMode.bidirectional,
     );
-    _initInitialMessages();
+    _loadHistory();
   }
 
-  void _initInitialMessages() {
-    // 初始欢迎与提示消息
-    _messages.add(
-      _ChatMessage(
-        text: '已进入与 [${widget.payload.title}] 的独立会话窗口',
-        isMe: false,
-        time: DateTime.now(),
-        isSystem: true,
-      ),
-    );
+  Future<void> _loadHistory() async {
+    setState(() => _isLoading = true);
+    try {
+      final dynamic raw = await _mainIpcChannel.invokeMethod('chat_load_history', {
+        'sessionUnitId': widget.payload.sessionUnitId,
+        'ownerId': widget.payload.ownerId,
+      });
+
+      if (raw is List && mounted) {
+        final list = <_ChatMessage>[];
+        for (final item in raw) {
+          if (item is Map) {
+            final t = item['time'];
+            final time = t is num
+                ? DateTime.fromMillisecondsSinceEpoch(t.toInt())
+                : DateTime.now();
+            list.add(_ChatMessage(
+              id: item['id']?.toString(),
+              serverId: (item['serverId'] as num?)?.toInt(),
+              clientMessageId: item['clientMessageId']?.toString(),
+              text: item['text']?.toString() ?? '',
+              isMe: item['isMe'] == true,
+              time: time,
+              state: item['state']?.toString() ?? 'sent',
+            ));
+          }
+        }
+        setState(() {
+          _messages.clear();
+          _messages.add(
+            _ChatMessage(
+              text: '已进入与 [${widget.payload.title}] 的独立会话',
+              isMe: false,
+              time: DateTime.now(),
+              isSystem: true,
+            ),
+          );
+          _messages.addAll(list);
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      } else if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
   void dispose() {
     _inputController.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
-  Future<void> _handleSendMessage() async {
-    final text = _inputController.text.trim();
+  Future<void> _handleSendMessage({String? overrideText, String? retryClientId}) async {
+    final text = overrideText ?? _inputController.text.trim();
     if (text.isEmpty) return;
 
-    final now = DateTime.now();
-    setState(() {
-      _messages.add(_ChatMessage(text: text, isMe: true, time: now));
+    final clientMessageId = retryClientId ??
+        'cmsg_${DateTime.now().millisecondsSinceEpoch}_${math.Random().nextInt(99999)}';
+
+    if (retryClientId == null) {
       _inputController.clear();
-    });
+      setState(() {
+        _messages.add(
+          _ChatMessage(
+            clientMessageId: clientMessageId,
+            text: text,
+            isMe: true,
+            time: DateTime.now(),
+            state: 'sending',
+          ),
+        );
+      });
+      _scrollToBottom();
+    } else {
+      setState(() {
+        final idx = _messages.indexWhere((m) => m.clientMessageId == retryClientId);
+        if (idx != -1) {
+          _messages[idx] = _messages[idx].copyWith(state: 'sending');
+        }
+      });
+    }
 
-    _scrollToBottom();
-
-    // 通过 IPC 向主窗口请求统一发送
     try {
-      await _mainIpcChannel.invokeMethod('chat_send_message', {
+      final dynamic res = await _mainIpcChannel.invokeMethod('chat_send_message', {
         'sessionUnitId': widget.payload.sessionUnitId,
         'ownerId': widget.payload.ownerId,
         'content': text,
-        'time': now.millisecondsSinceEpoch,
+        'clientMessageId': clientMessageId,
       });
+
+      if (res is Map && res['success'] == true && mounted) {
+        setState(() {
+          final idx = _messages.indexWhere((m) => m.clientMessageId == clientMessageId);
+          if (idx != -1) {
+            _messages[idx] = _messages[idx].copyWith(
+              serverId: (res['serverId'] as num?)?.toInt(),
+              state: res['state']?.toString() ?? 'sent',
+            );
+          }
+        });
+      } else {
+        _markMessageFailed(clientMessageId);
+      }
     } catch (_) {
-      // 容错处理
+      _markMessageFailed(clientMessageId);
     }
+  }
+
+  void _markMessageFailed(String clientMessageId) {
+    if (!mounted) return;
+    setState(() {
+      final idx = _messages.indexWhere((m) => m.clientMessageId == clientMessageId);
+      if (idx != -1) {
+        _messages[idx] = _messages[idx].copyWith(state: 'failed');
+      }
+    });
   }
 
   void _scrollToBottom() {
@@ -210,6 +298,16 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   }
 
   Widget _buildMessageList(bool isDark) {
+    if (_isLoading) {
+      return const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
     if (_messages.isEmpty) {
       return Center(
         child: Text(
@@ -248,12 +346,15 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
           );
         }
 
+        final timeStr =
+            '${msg.time.hour.toString().padLeft(2, '0')}:${msg.time.minute.toString().padLeft(2, '0')}';
+
         return Container(
           margin: const EdgeInsets.symmetric(vertical: 6),
           alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
           child: Row(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               if (!msg.isMe) ...[
                 CircleAvatar(
@@ -266,38 +367,82 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
                 ),
                 const SizedBox(width: 8),
               ],
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+              if (msg.isMe && msg.state == 'sending') ...[
+                const Padding(
+                  padding: EdgeInsets.only(right: 6, bottom: 4),
+                  child: SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: Colors.grey,
+                    ),
                   ),
-                  decoration: BoxDecoration(
-                    color:
-                        msg.isMe
+                ),
+              ],
+              if (msg.isMe && msg.state == 'failed') ...[
+                Padding(
+                  padding: const EdgeInsets.only(right: 4, bottom: 2),
+                  child: GestureDetector(
+                    onTap: () => _handleSendMessage(
+                      overrideText: msg.text,
+                      retryClientId: msg.clientMessageId,
+                    ),
+                    child: const Tooltip(
+                      message: '发送失败，点击重试',
+                      child: Icon(
+                        Icons.error_outline_rounded,
+                        size: 18,
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              Flexible(
+                child: Column(
+                  crossAxisAlignment:
+                      msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: msg.isMe
                             ? const Color(0xFF07C160)
                             : (isDark
                                 ? const Color(0xFF2C2C2C)
                                 : Colors.white),
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Text(
-                    msg.text,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color:
-                          msg.isMe
+                      child: Text(
+                        msg.text,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: msg.isMe
                               ? Colors.white
                               : (isDark ? Colors.white : Colors.black87),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 2),
+                    Text(
+                      timeStr,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isDark ? Colors.white38 : Colors.black38,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (msg.isMe) ...[
@@ -334,29 +479,39 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.sentiment_satisfied_alt_rounded,
-                      size: 20),
+                  icon: const Icon(
+                    Icons.sentiment_satisfied_alt_rounded,
+                    size: 20,
+                  ),
                   tooltip: '表情',
                   visualDensity: VisualDensity.compact,
-                  onPressed: () {},
+                  onPressed: () {
+                    showToast('请在主窗口或直接使用系统输入法表情', type: ToastType.info);
+                  },
                 ),
                 IconButton(
                   icon: const Icon(Icons.image_outlined, size: 20),
                   tooltip: '发送图片',
                   visualDensity: VisualDensity.compact,
-                  onPressed: () {},
+                  onPressed: () {
+                    showToast('独立窗口可通过剪贴板粘贴直接发送图片', type: ToastType.info);
+                  },
                 ),
                 IconButton(
                   icon: const Icon(Icons.folder_open_rounded, size: 20),
                   tooltip: '发送文件',
                   visualDensity: VisualDensity.compact,
-                  onPressed: () {},
+                  onPressed: () {
+                    showToast('独立窗口可通过剪贴板粘贴直接发送文件', type: ToastType.info);
+                  },
                 ),
                 IconButton(
                   icon: const Icon(Icons.content_cut_rounded, size: 20),
                   tooltip: '截图',
                   visualDensity: VisualDensity.compact,
-                  onPressed: () {},
+                  onPressed: () {
+                    showToast('支持使用 Win+Shift+S 截图后直接粘贴发送', type: ToastType.info);
+                  },
                 ),
               ],
             ),
@@ -368,20 +523,35 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _inputController,
-                    maxLines: 4,
-                    minLines: 1,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isDark ? Colors.white : Colors.black87,
+                  child: Focus(
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.enter) {
+                        if (HardwareKeyboard.instance.isShiftPressed ||
+                            HardwareKeyboard.instance.isControlPressed) {
+                          return KeyEventResult.ignored;
+                        } else {
+                          _handleSendMessage();
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: _inputController,
+                      focusNode: _focusNode,
+                      maxLines: 4,
+                      minLines: 1,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: '按 Enter 发送消息，Shift/Ctrl+Enter 换行...',
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
                     ),
-                    decoration: const InputDecoration(
-                      hintText: '按 Enter 发送消息，Ctrl+Enter 换行...',
-                      border: InputBorder.none,
-                      isDense: true,
-                    ),
-                    onSubmitted: (_) => _handleSendMessage(),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -415,11 +585,41 @@ class _ChatMessage {
     required this.text,
     required this.isMe,
     required this.time,
+    this.id,
+    this.serverId,
+    this.clientMessageId,
+    this.state = 'sent',
     this.isSystem = false,
   });
 
+  final String? id;
+  final int? serverId;
+  final String? clientMessageId;
   final String text;
   final bool isMe;
   final DateTime time;
+  final String state; // 'sending', 'sent', 'failed'
   final bool isSystem;
+
+  _ChatMessage copyWith({
+    String? id,
+    int? serverId,
+    String? clientMessageId,
+    String? text,
+    bool? isMe,
+    DateTime? time,
+    String? state,
+    bool? isSystem,
+  }) {
+    return _ChatMessage(
+      id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
+      clientMessageId: clientMessageId ?? this.clientMessageId,
+      text: text ?? this.text,
+      isMe: isMe ?? this.isMe,
+      time: time ?? this.time,
+      state: state ?? this.state,
+      isSystem: isSystem ?? this.isSystem,
+    );
+  }
 }

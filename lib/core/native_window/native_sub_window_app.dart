@@ -7,6 +7,8 @@ import '../config/app_environment.dart';
 import '../platform/platform_facade.dart';
 import '../browser/desktop_browser_window.dart';
 import '../media/media_preview.dart';
+import '../../features/diagnostics/presentation/diagnostics_home_page.dart';
+import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/media/presentation/desktop_media_viewer_window.dart';
 import '../../features/settings/presentation/desktop_settings_window.dart';
 import 'desktop_sub_window_chat_view.dart';
@@ -96,14 +98,41 @@ class NativeSubWindowApp extends StatefulWidget {
 
 class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
   late final WindowMethodChannel _mainIpcChannel;
+  ThemeMode _themeMode = ThemeMode.dark;
 
   @override
   void initState() {
     super.initState();
     _mainIpcChannel = const WindowMethodChannel(
       'gotoim/ipc_to_main',
-      mode: ChannelMode.unidirectional,
+      mode: ChannelMode.bidirectional,
     );
+
+    widget.controller?.setWindowMethodHandler((call) async {
+      switch (call.method) {
+        case 'theme_changed':
+          final args = call.arguments as Map?;
+          final modeStr = args?['themeMode'] as String?;
+          if (modeStr != null) {
+            final target = ThemeMode.values.firstWhere(
+              (e) => e.name == modeStr,
+              orElse: () => ThemeMode.dark,
+            );
+            if (mounted) {
+              setState(() => _themeMode = target);
+            }
+          }
+          return true;
+        case 'bringToFront':
+          await widget.controller?.show();
+          return true;
+        case 'close':
+          await _handleClose();
+          return true;
+        default:
+          return null;
+      }
+    });
   }
 
   Future<void> _handleClose() async {
@@ -118,12 +147,19 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
     }
   }
 
+  Future<void> _handleLogout() async {
+    try {
+      await _mainIpcChannel.invokeMethod('app_logout');
+    } catch (_) {}
+    await _handleClose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: widget.payload.title,
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark, // 桌面端原生子窗口默认使用深色优雅微信质感
+      themeMode: _themeMode,
       theme: ThemeData(
         brightness: Brightness.light,
         scaffoldBackgroundColor: Colors.white,
@@ -147,6 +183,7 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
           isSubWindow: true,
           extra: widget.payload.extra,
           onClose: _handleClose,
+          onLogout: _handleLogout,
         );
 
       case SubWindowType.browser:
@@ -163,13 +200,18 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
         final items = rawItems != null && rawItems.isNotEmpty
             ? rawItems.map((map) {
                 final source = map['source'] as String? ?? '';
-                final isVideo = source.toLowerCase().endsWith('.mp4') ||
-                    source.toLowerCase().endsWith('.mov');
+                final typeStr = map['type'] as String?;
+                final isVideo = typeStr == 'video' ||
+                    (typeStr == null &&
+                        (source.toLowerCase().endsWith('.mp4') ||
+                            source.toLowerCase().endsWith('.mov')));
+                final localPath = map['localPath'] as String?;
                 return MediaPreviewItem(
                   id: map['id'] as String? ?? source,
                   messageId: map['messageId'] as String? ?? 'media',
                   type: isVideo ? MediaPreviewType.video : MediaPreviewType.image,
                   source: source,
+                  localPath: localPath,
                   heroTag: 'media-$source',
                 );
               }).toList()
@@ -206,23 +248,10 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
         );
 
       case SubWindowType.diagnostics:
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('GotoIM 子窗口诊断'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: _handleClose,
-              ),
-            ],
-          ),
-          body: Center(
-            child: Text(
-              '当前子窗口 ID: ${widget.controller?.windowId}\n目标: ${widget.payload.targetId}',
-              textAlign: TextAlign.center,
-            ),
-          ),
-        );
+        return const DiagnosticsHomePage();
+
+      case SubWindowType.localFileServer:
+        return const LocalFileServerPage();
     }
   }
 }

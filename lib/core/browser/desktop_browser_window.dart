@@ -1,9 +1,9 @@
-import 'dart:io' show Platform, Process;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../widgets/app_toast.dart';
 
@@ -101,18 +101,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       await Clipboard.setData(ClipboardData(text: _currentUrl));
       showToast('正在调起系统浏览器...', type: ToastType.info);
       if (!kIsWeb) {
-        if (Platform.isWindows) {
-          await Process.run('cmd', [
-            '/c',
-            'start',
-            '',
-            _currentUrl,
-          ], runInShell: true);
-        } else if (Platform.isMacOS) {
-          await Process.run('open', [_currentUrl]);
-        } else if (Platform.isLinux) {
-          await Process.run('xdg-open', [_currentUrl]);
-        }
+        await OpenFilex.open(_currentUrl);
       }
     } catch (_) {
       showToast('已复制网页链接至剪贴板: $_currentUrl', type: ToastType.success);
@@ -470,7 +459,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             icon: const Icon(Icons.remove_rounded, size: 16),
             tooltip: '最小化',
             visualDensity: VisualDensity.compact,
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              if (widget.isSubWindow) {
+                widget.onClose?.call();
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
           ),
           IconButton(
             icon: Icon(

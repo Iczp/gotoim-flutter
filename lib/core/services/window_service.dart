@@ -2,15 +2,19 @@ import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_navigation.dart';
 import '../../features/auth/application/auth_controller.dart';
+import '../../features/chat/application/chat_controller.dart';
+import '../../features/chat/data/models/chat_message.dart';
 import '../../features/session/application/session_list_controller.dart';
 import '../media/media_preview.dart';
 import '../native_window/native_window_payload.dart';
 import '../platform/platform_facade.dart';
+import '../theme/theme_mode_controller.dart';
 
 /// 独立窗口类型定义
 enum WindowType {
@@ -126,7 +130,7 @@ abstract class WindowService {
   Future<void> bringToFront(String targetId);
 
   /// 关闭指定业务窗口
-  Future<void> closeWindow(String targetId);
+  Future<void> closeWindow(String targetId, {String? windowId});
 
   /// 检查指定业务窗口是否已在独立视窗中打开
   bool isWindowOpen(String targetId);
@@ -138,21 +142,47 @@ abstract class WindowService {
   Stream<List<WindowRecord>> get openWindowsStream;
 }
 
+typedef MessageSenderCallback = Future<ChatMessage> Function({
+  required int ownerId,
+  required String sessionUnitId,
+  required String text,
+  String? clientMessageId,
+});
+
+typedef HistoryLoaderCallback = Future<List<Map<String, dynamic>>> Function({
+  required int ownerId,
+  required String sessionUnitId,
+  int limit,
+});
+
 /// 统一窗口服务默认实现
 class DefaultWindowService implements WindowService {
   DefaultWindowService({
     required this.platformFacade,
     this.accountInfoProvider,
+    this.messageSender,
+    this.historyLoader,
+    this.onLogout,
+    this.onThemeChanged,
   }) {
     _ensureIpcInitialized();
   }
 
   final PlatformFacade platformFacade;
   final Map<String, dynamic>? Function()? accountInfoProvider;
+  final MessageSenderCallback? messageSender;
+  final HistoryLoaderCallback? historyLoader;
+  final Future<void> Function()? onLogout;
+  final void Function(String themeMode)? onThemeChanged;
 
   final Map<String, WindowRecord> _registry = <String, WindowRecord>{};
   final Map<String, WindowController> _nativeControllers =
       <String, WindowController>{};
+  final Map<String, WindowController> _reusableControllers =
+      <String, WindowController>{};
+  static const int _maxReusableControllers = 10;
+  final Map<String, Future<void>> _pendingCreations = <String, Future<void>>{};
+
   final StreamController<List<WindowRecord>> _streamController =
       StreamController<List<WindowRecord>>.broadcast();
 
@@ -171,10 +201,80 @@ class DefaultWindowService implements WindowService {
           case 'sub_window_closed':
             final args = call.arguments as Map?;
             final targetId = args?['targetId'] as String?;
+            final windowId = args?['windowId'] as String?;
             if (targetId != null) {
-              await closeWindow(targetId);
+              await closeWindow(targetId, windowId: windowId);
             }
             return true;
+
+          case 'chat_send_message':
+            final args = call.arguments as Map?;
+            if (args != null && messageSender != null) {
+              final sessionUnitId = args['sessionUnitId']?.toString() ?? '';
+              final ownerId = (args['ownerId'] as num?)?.toInt() ?? 0;
+              final content = args['content']?.toString() ?? '';
+              final clientMessageId = args['clientMessageId']?.toString();
+              try {
+                final sent = await messageSender!(
+                  ownerId: ownerId,
+                  sessionUnitId: sessionUnitId,
+                  text: content,
+                  clientMessageId: clientMessageId,
+                );
+                return {
+                  'success': true,
+                  'clientMessageId': sent.clientMessageId ?? sent.localId,
+                  'serverId': sent.serverId,
+                  'state': sent.state,
+                };
+              } catch (e) {
+                return {'success': false, 'error': '$e'};
+              }
+            }
+            return {'success': false, 'error': 'messageSender not registered'};
+
+          case 'chat_load_history':
+            final args = call.arguments as Map?;
+            if (args != null && historyLoader != null) {
+              final sessionUnitId = args['sessionUnitId']?.toString() ?? '';
+              final ownerId = (args['ownerId'] as num?)?.toInt() ?? 0;
+              try {
+                final list = await historyLoader!(
+                  ownerId: ownerId,
+                  sessionUnitId: sessionUnitId,
+                );
+                return list;
+              } catch (_) {
+                return <dynamic>[];
+              }
+            }
+            return <dynamic>[];
+
+          case 'app_logout':
+            if (onLogout != null) {
+              await onLogout!();
+            }
+            await closeAllSubWindows();
+            return true;
+
+          case 'theme_changed':
+            final args = call.arguments as Map?;
+            final mode = args?['themeMode'] as String?;
+            if (mode != null && onThemeChanged != null) {
+              onThemeChanged!(mode);
+            }
+            return true;
+
+          case 'open_window':
+            final args = call.arguments as Map?;
+            final type = args?['type'] as String?;
+            if (type == 'localFileServer') {
+              await openLocalFileServer();
+            } else if (type == 'diagnostics') {
+              await openDiagnostics();
+            }
+            return true;
+
           default:
             return null;
         }
@@ -194,6 +294,7 @@ class DefaultWindowService implements WindowService {
           for (final key in deadKeys) {
             _nativeControllers.remove(key);
             _registry.remove(key);
+            _reusableControllers.remove(key);
           }
           if (deadKeys.isNotEmpty) {
             _notify();
@@ -217,9 +318,10 @@ class DefaultWindowService implements WindowService {
       return _registry.containsKey('tool:fileserver') ||
           _registry.containsKey('tool:localFileServer');
     }
-    if (targetId.startsWith('chat:')) {
-      final parts = targetId.split(':');
-      final sessionUnitId = parts.last;
+    // Only support legacy 2-part chat key fallback (chat:sessionUnitId)
+    final parts = targetId.split(':');
+    if (parts.length == 2 && parts[0] == 'chat') {
+      final sessionUnitId = parts[1];
       return _registry.keys.any(
         (k) => k == targetId || k.endsWith(':$sessionUnitId'),
       );
@@ -229,7 +331,20 @@ class DefaultWindowService implements WindowService {
 
   @override
   Future<void> bringToFront(String targetId) async {
-    final controller = _nativeControllers[targetId];
+    var controller = _nativeControllers[targetId];
+    if (controller == null && targetId.startsWith('chat:')) {
+      final parts = targetId.split(':');
+      if (parts.length == 2) {
+        final sessionUnitId = parts[1];
+        final matchKey = _nativeControllers.keys.firstWhere(
+          (k) => k.endsWith(':$sessionUnitId'),
+          orElse: () => '',
+        );
+        if (matchKey.isNotEmpty) {
+          controller = _nativeControllers[matchKey];
+        }
+      }
+    }
     if (controller != null) {
       try {
         await controller.show();
@@ -251,33 +366,53 @@ class DefaultWindowService implements WindowService {
   }
 
   @override
-  Future<void> closeWindow(String targetId) async {
+  Future<void> closeWindow(String targetId, {String? windowId}) async {
+    final currentController = _nativeControllers[targetId];
+    if (windowId != null &&
+        currentController != null &&
+        currentController.windowId != windowId) {
+      return;
+    }
     final controller = _nativeControllers.remove(targetId);
     if (controller != null) {
       try {
         await controller.hide();
+        _reusableControllers[targetId] = controller;
+        if (_reusableControllers.length > _maxReusableControllers) {
+          _reusableControllers.remove(_reusableControllers.keys.first);
+        }
       } catch (_) {}
     }
     bool removed = _registry.remove(targetId) != null;
     if (!removed && targetId.startsWith('chat:')) {
       final parts = targetId.split(':');
-      final sessionUnitId = parts.last;
-      final matchingKeys =
-          _registry.keys.where((k) => k.endsWith(':$sessionUnitId')).toList();
-      for (final k in matchingKeys) {
-        _registry.remove(k);
-        final c = _nativeControllers.remove(k);
-        if (c != null) {
-          try {
-            c.hide();
-          } catch (_) {}
+      if (parts.length == 2) {
+        final sessionUnitId = parts[1];
+        final matchingKeys =
+            _registry.keys.where((k) => k.endsWith(':$sessionUnitId')).toList();
+        for (final k in matchingKeys) {
+          _registry.remove(k);
+          final c = _nativeControllers.remove(k);
+          if (c != null) {
+            try {
+              await c.hide();
+              _reusableControllers[k] = c;
+            } catch (_) {}
+          }
+          removed = true;
         }
-        removed = true;
       }
     }
     if (removed) {
       _notify();
       debugPrint('[WindowService] closeWindow: $targetId');
+    }
+  }
+
+  Future<void> closeAllSubWindows() async {
+    final targets = _registry.keys.toList();
+    for (final target in targets) {
+      await closeWindow(target);
     }
   }
 
@@ -288,8 +423,34 @@ class DefaultWindowService implements WindowService {
     required String title,
     required NativeWindowPayload payload,
   }) async {
+    final pending = _pendingCreations[targetId];
+    if (pending != null) {
+      await pending;
+      return;
+    }
+
+    final completer = Completer<void>();
+    _pendingCreations[targetId] = completer.future.catchError((_) {});
+
     _ensureIpcInitialized();
     try {
+      final cachedController = _reusableControllers.remove(targetId);
+      if (cachedController != null) {
+        await cachedController.show();
+        _nativeControllers[targetId] = cachedController;
+        _registry[targetId] = WindowRecord(
+          targetId: targetId,
+          type: type,
+          title: title,
+          openedAt: DateTime.now(),
+          nativeWindowId: cachedController.windowId,
+          extra: payload.toJson(),
+        );
+        _notify();
+        completer.complete();
+        return;
+      }
+
       final controller = await WindowController.create(
         WindowConfiguration(
           arguments: payload.toJsonString(),
@@ -307,6 +468,7 @@ class DefaultWindowService implements WindowService {
         extra: payload.toJson(),
       );
       _notify();
+      completer.complete();
       debugPrint(
         '[WindowService] Native multi-window created successfully: $targetId (windowId=${controller.windowId})',
       );
@@ -317,7 +479,10 @@ class DefaultWindowService implements WindowService {
       _registry.remove(targetId);
       _nativeControllers.remove(targetId);
       _notify();
+      completer.completeError(e, stackTrace);
       rethrow;
+    } finally {
+      _pendingCreations.remove(targetId);
     }
   }
 
@@ -329,7 +494,9 @@ class DefaultWindowService implements WindowService {
   }) async {
     final effectiveOwnerId = ownerId ?? 0;
     final targetId = 'chat:$effectiveOwnerId:$sessionUnitId';
-    if (isWindowOpen(targetId)) {
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
+      final pending = _pendingCreations[targetId];
+      if (pending != null) await pending;
       await bringToFront(targetId);
       return;
     }
@@ -389,7 +556,9 @@ class DefaultWindowService implements WindowService {
     String? title,
   }) async {
     final targetId = 'miniApp:$appId';
-    if (isWindowOpen(targetId)) {
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
+      final pending = _pendingCreations[targetId];
+      if (pending != null) await pending;
       await bringToFront(targetId);
       return;
     }
@@ -439,7 +608,9 @@ class DefaultWindowService implements WindowService {
     String? fallbackContent,
   }) async {
     final targetId = 'browser:$url';
-    if (isWindowOpen(targetId)) {
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
+      final pending = _pendingCreations[targetId];
+      if (pending != null) await pending;
       await bringToFront(targetId);
       return;
     }
@@ -491,7 +662,9 @@ class DefaultWindowService implements WindowService {
     int initialIndex = 0,
   }) async {
     final targetId = 'media:$mediaUrl';
-    if (isWindowOpen(targetId)) {
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
+      final pending = _pendingCreations[targetId];
+      if (pending != null) await pending;
       await bringToFront(targetId);
       return;
     }
@@ -526,7 +699,9 @@ class DefaultWindowService implements WindowService {
                     (i) => {
                       'id': i.id,
                       'messageId': i.messageId,
+                      'type': i.type.name,
                       'source': i.source,
+                      'localPath': i.localPath,
                     },
                   )
                   .toList(),
@@ -566,7 +741,9 @@ class DefaultWindowService implements WindowService {
   @override
   Future<void> openSettings() async {
     const targetId = 'tool:settings';
-    if (isWindowOpen(targetId)) {
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
+      final pending = _pendingCreations[targetId];
+      if (pending != null) await pending;
       await bringToFront(targetId);
       return;
     }
@@ -609,7 +786,9 @@ class DefaultWindowService implements WindowService {
   @override
   Future<void> openDiagnostics() async {
     const targetId = 'tool:diagnostics';
-    if (isWindowOpen(targetId)) {
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
+      final pending = _pendingCreations[targetId];
+      if (pending != null) await pending;
       await bringToFront(targetId);
       return;
     }
@@ -617,7 +796,7 @@ class DefaultWindowService implements WindowService {
     if (platformFacade.supportsMultipleWindows) {
       try {
         final payload = const NativeWindowPayload(
-          type: SubWindowType.settings,
+          type: SubWindowType.diagnostics,
           title: '开发诊断中心',
           targetId: targetId,
         );
@@ -651,7 +830,9 @@ class DefaultWindowService implements WindowService {
   @override
   Future<void> openLocalFileServer() async {
     const targetId = 'tool:localFileServer';
-    if (isWindowOpen(targetId)) {
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
+      final pending = _pendingCreations[targetId];
+      if (pending != null) await pending;
       await bringToFront(targetId);
       return;
     }
@@ -659,10 +840,9 @@ class DefaultWindowService implements WindowService {
     if (platformFacade.supportsMultipleWindows) {
       try {
         final payload = const NativeWindowPayload(
-          type: SubWindowType.browser,
+          type: SubWindowType.localFileServer,
           title: '局域网快传',
           targetId: targetId,
-          url: 'http://127.0.0.1:8080',
         );
         await _openNativeSubWindow(
           targetId: targetId,
@@ -684,7 +864,7 @@ class DefaultWindowService implements WindowService {
         title: '局域网快传',
       );
       try {
-        await context.push('/fileserver');
+        await context.push('/local-file-server');
       } finally {
         await closeWindow(targetId);
       }
@@ -721,6 +901,55 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
   final platformFacade = ref.watch(platformFacadeProvider);
   return DefaultWindowService(
     platformFacade: platformFacade,
+    messageSender: ({
+      required int ownerId,
+      required String sessionUnitId,
+      required String text,
+      String? clientMessageId,
+    }) async {
+      final repo = ref.read(messageRepositoryProvider);
+      return await repo.sendText(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        text: text,
+        clientMessageId: clientMessageId,
+      );
+    },
+    historyLoader: ({
+      required int ownerId,
+      required String sessionUnitId,
+      int limit = 20,
+    }) async {
+      final repo = ref.read(messageRepositoryProvider);
+      final page = await repo.loadInitialLocal(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        limit: limit,
+      );
+      return page.items
+          .map(
+            (m) => {
+              'id': m.localId,
+              'serverId': m.serverId,
+              'clientMessageId': m.clientMessageId,
+              'text': m.text,
+              'isMe': m.ownerId == ownerId,
+              'state': m.state,
+              'time': m.createdAt?.millisecondsSinceEpoch,
+            },
+          )
+          .toList();
+    },
+    onLogout: () async {
+      await ref.read(authControllerProvider.notifier).logout();
+    },
+    onThemeChanged: (mode) {
+      final target = ThemeMode.values.firstWhere(
+        (e) => e.name == mode,
+        orElse: () => ThemeMode.system,
+      );
+      ref.read(themeModeControllerProvider.notifier).setThemeMode(target);
+    },
     accountInfoProvider: () {
       try {
         final sessionList = ref.read(sessionListControllerProvider);
