@@ -5,8 +5,15 @@ import 'app/bootstrap_error_app.dart';
 import 'app/mini_app_bootstrap.dart';
 import 'core/logging/app_logger.dart';
 import 'core/logging/console_color.dart';
+import 'core/native_window/native_sub_window_app.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
+  // 桌面端原生多窗口分流拦截：若是由 C++ runner 派生的子引擎，进入极简子窗口入口
+  if (args.isNotEmpty && args.first == 'multi_window') {
+    await runNativeSubWindowApp(args);
+    return;
+  }
+
   setupConsoleColorLogger();
 
   FlutterError.onError = (details) {

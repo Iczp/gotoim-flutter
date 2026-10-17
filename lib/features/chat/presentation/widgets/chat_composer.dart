@@ -1109,40 +1109,43 @@ class ChatComposerState extends State<ChatComposer>
           // 2. 顶部工具栏
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            child: Row(
-              children: [
-                _DesktopToolIcon(
-                  icon: Icons.sentiment_satisfied_alt_outlined,
-                  tooltip: '表情',
-                  onPressed: () => _openDesktopEmojiPicker(context),
-                ),
-                const SizedBox(width: 4),
-                _DesktopToolIcon(
-                  icon: Icons.image_outlined,
-                  tooltip: '发送图片',
-                  onPressed: widget.controller.chooseAndSendImages,
-                ),
-                const SizedBox(width: 4),
-                // 屏幕截图按钮 (Alt+A)
-                _DesktopToolIcon(
-                  icon: Icons.crop_free_rounded,
-                  tooltip: '屏幕截图 (Alt+A)',
-                  onPressed: _handleDesktopScreenshot,
-                ),
-                const SizedBox(width: 4),
-                _DesktopToolIcon(
-                  icon: Icons.folder_open_outlined,
-                  tooltip: '发送文件',
-                  onPressed: widget.controller.chooseAndSendFile,
-                ),
-                const SizedBox(width: 4),
-                if (widget.onOpenAppearancePanel != null)
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
                   _DesktopToolIcon(
-                    icon: Icons.wallpaper_rounded,
-                    tooltip: '设置聊天背景',
-                    onPressed: widget.onOpenAppearancePanel!,
+                    icon: Icons.sentiment_satisfied_alt_outlined,
+                    tooltip: '表情',
+                    onPressed: () => _openDesktopEmojiPicker(context),
                   ),
-              ],
+                  const SizedBox(width: 4),
+                  _DesktopToolIcon(
+                    icon: Icons.image_outlined,
+                    tooltip: '发送图片',
+                    onPressed: widget.controller.chooseAndSendImages,
+                  ),
+                  const SizedBox(width: 4),
+                  // 屏幕截图按钮 (Alt+A)
+                  _DesktopToolIcon(
+                    icon: Icons.crop_free_rounded,
+                    tooltip: '屏幕截图 (Alt+A)',
+                    onPressed: _handleDesktopScreenshot,
+                  ),
+                  const SizedBox(width: 4),
+                  _DesktopToolIcon(
+                    icon: Icons.folder_open_outlined,
+                    tooltip: '发送文件',
+                    onPressed: widget.controller.chooseAndSendFile,
+                  ),
+                  const SizedBox(width: 4),
+                  if (widget.onOpenAppearancePanel != null)
+                    _DesktopToolIcon(
+                      icon: Icons.wallpaper_rounded,
+                      tooltip: '设置聊天背景',
+                      onPressed: widget.onOpenAppearancePanel!,
+                    ),
+                ],
+              ),
             ),
           ),
 
@@ -1225,66 +1228,78 @@ class ChatComposerState extends State<ChatComposer>
           // 4. 底部状态与发送按钮栏
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Enter 发送，Shift+Enter 换行',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color:
-                        isDark
-                            ? const Color(0xFF666666)
-                            : const Color(0xFFAAAAAA),
-                  ),
-                ),
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: widget.input,
-                  builder: (context, value, _) {
-                    final canSend =
-                        value.text.trim().isNotEmpty &&
-                        !widget.controller.isSending &&
-                        !widget.controller.isMuted;
-                    return FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor:
-                            canSend
-                                ? const Color(0xFF07C160)
-                                : (isDark
-                                    ? const Color(0xFF2E2E2E)
-                                    : const Color(0xFFE5E5E5)),
-                        foregroundColor:
-                            canSend
-                                ? Colors.white
-                                : (isDark
-                                    ? const Color(0xFF666666)
-                                    : const Color(0xFFAAAAAA)),
-                        minimumSize: const Size(68, 28),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        elevation: 0,
-                      ),
-                      onPressed:
-                          canSend
-                              ? () {
-                                final text = widget.input.text.trim();
-                                widget.input.clear();
-                                widget.controller.send(text);
-                              }
-                              : null,
-                      child: const Text(
-                        '发送',
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 260;
+                final hintText =
+                    isNarrow ? 'Enter 发送' : 'Enter 发送，Shift+Enter 换行';
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        hintText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                          color:
+                              isDark
+                                  ? const Color(0xFF666666)
+                                  : const Color(0xFFAAAAAA),
                         ),
                       ),
-                    );
-                  },
-                ),
-              ],
+                    ),
+                    const SizedBox(width: 8),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: widget.input,
+                      builder: (context, value, _) {
+                        final canSend =
+                            value.text.trim().isNotEmpty &&
+                            !widget.controller.isSending &&
+                            !widget.controller.isMuted;
+                        return FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor:
+                                canSend
+                                    ? const Color(0xFF07C160)
+                                    : (isDark
+                                        ? const Color(0xFF2E2E2E)
+                                        : const Color(0xFFE5E5E5)),
+                            foregroundColor:
+                                canSend
+                                    ? Colors.white
+                                    : (isDark
+                                        ? const Color(0xFF666666)
+                                        : const Color(0xFFAAAAAA)),
+                            minimumSize: const Size(68, 28),
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed:
+                              canSend
+                                  ? () {
+                                    final text = widget.input.text.trim();
+                                    widget.input.clear();
+                                    widget.controller.send(text);
+                                  }
+                                  : null,
+                          child: const Text(
+                            '发送',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],

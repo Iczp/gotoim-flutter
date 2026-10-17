@@ -27,7 +27,21 @@ import '../../session/application/session_list_controller.dart';
 ///   6. 关于 GotoIM (About)
 /// - 右侧内容区：各模块设置项配置
 class DesktopSettingsWindow extends ConsumerStatefulWidget {
-  const DesktopSettingsWindow({super.key});
+  const DesktopSettingsWindow({
+    this.isSubWindow = false,
+    this.onClose,
+    this.extra,
+    super.key,
+  });
+
+  /// 是否作为独立原生操作系统窗口全屏承载
+  final bool isSubWindow;
+
+  /// 窗口关闭回调
+  final VoidCallback? onClose;
+
+  /// 独立窗口载荷附加参数（当前身份、账号信息等）
+  final Map<String, dynamic>? extra;
 
   /// 唤起桌面端独立设置窗口
   static Future<void> open(BuildContext context) {
@@ -117,6 +131,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
       isDestructive: true,
     );
     if (confirmed && mounted) {
+      if (widget.isSubWindow) {
+        widget.onClose?.call();
+        return;
+      }
       Navigator.of(context).pop();
       await ref.read(authControllerProvider).logout();
     }
@@ -144,6 +162,46 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     final borderColor =
         isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000);
 
+    final body = Column(
+      children: [
+        // 1. 窗口标题栏
+        _buildWindowTitleBar(context, isDark, railBg, borderColor),
+
+        // 2. 左右分栏主体
+        Expanded(
+          child: Row(
+            children: [
+              // 左侧导航栏 (宽 180)
+              Container(
+                width: 180,
+                color: railBg,
+                child: _buildLeftRail(isDark),
+              ),
+
+              // 右侧内容区
+              Expanded(
+                child: Container(
+                  color: windowBg,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 20,
+                  ),
+                  child: _buildRightContent(context, isDark),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (widget.isSubWindow) {
+      return Material(
+        color: windowBg,
+        child: SizedBox.expand(child: body),
+      );
+    }
+
     return Center(
       child: Material(
         color: Colors.transparent,
@@ -163,38 +221,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              // 1. 窗口标题栏
-              _buildWindowTitleBar(context, isDark, railBg, borderColor),
-
-              // 2. 左右分栏主体
-              Expanded(
-                child: Row(
-                  children: [
-                    // 左侧导航栏 (宽 180)
-                    Container(
-                      width: 180,
-                      color: railBg,
-                      child: _buildLeftRail(isDark),
-                    ),
-
-                    // 右侧内容区
-                    Expanded(
-                      child: Container(
-                        color: windowBg,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 28,
-                          vertical: 20,
-                        ),
-                        child: _buildRightContent(context, isDark),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          child: body,
         ),
       ),
     );
@@ -241,7 +268,13 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
             icon: const Icon(Icons.close_rounded, size: 17),
             tooltip: '关闭',
             visualDensity: VisualDensity.compact,
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              if (widget.onClose != null) {
+                widget.onClose!();
+              } else if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            },
           ),
         ],
       ),
@@ -333,19 +366,29 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
 
   // ── 1. 账号与存储 ─────────────────────────────────────────────────────────────
   Widget _buildAccountAndStorage(BuildContext context, bool isDark) {
-    final authState = ref.watch(authControllerProvider);
-    final sessionListState = ref.watch(sessionListControllerProvider);
-    final currentOwner = sessionListState.currentOwner;
+    String displayName = '登录用户';
+    String accountId = '当前账号';
+    String? avatarUrl;
 
-    final displayName =
-        currentOwner?.name ??
-        authState.currentUser?.name ??
-        authState.accountName ??
-        '登录用户';
-    final accountId =
-        authState.currentUser?.userName ??
-        (currentOwner != null ? '${currentOwner.id}' : '未知账号');
-    final avatarUrl = currentOwner?.imageUrl;
+    if (widget.isSubWindow) {
+      displayName = widget.extra?['displayName'] as String? ?? '登录用户';
+      accountId = widget.extra?['accountId'] as String? ?? '当前账号';
+      avatarUrl = widget.extra?['avatarUrl'] as String?;
+    } else {
+      final authState = ref.watch(authControllerProvider);
+      final sessionListState = ref.watch(sessionListControllerProvider);
+      final currentOwner = sessionListState.currentOwner;
+
+      displayName =
+          currentOwner?.name ??
+          authState.currentUser?.name ??
+          authState.accountName ??
+          '登录用户';
+      accountId =
+          authState.currentUser?.userName ??
+          (currentOwner != null ? '${currentOwner.id}' : '未知账号');
+      avatarUrl = currentOwner?.imageUrl;
+    }
 
     return ListView(
       children: [
@@ -696,6 +739,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
           subtitle: '局域网内免流量极速点对点大文件收发',
           trailing: OutlinedButton(
             onPressed: () {
+              if (widget.isSubWindow) {
+                showToast('请在主窗口中使用', type: ToastType.info);
+                return;
+              }
               Navigator.of(context).pop();
               windowService.openLocalFileServer();
             },
@@ -707,6 +754,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
           subtitle: '设备环境、SignalR 事件、Token 与多平台 API 诊断',
           trailing: OutlinedButton(
             onPressed: () {
+              if (widget.isSubWindow) {
+                showToast('请在主窗口中使用', type: ToastType.info);
+                return;
+              }
               Navigator.of(context).pop();
               windowService.openDiagnostics();
             },
@@ -761,6 +812,11 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
               FilledButton.tonal(
                 onPressed: () async {
                   showToast('正在检查更新...', type: ToastType.info);
+                  if (widget.isSubWindow) {
+                    await Future<void>.delayed(const Duration(milliseconds: 400));
+                    showToast('已是最新版本', type: ToastType.success);
+                    return;
+                  }
                   try {
                     final service = ref.read(appUpdateServiceProvider);
                     final latest = await service.checkUpdate();

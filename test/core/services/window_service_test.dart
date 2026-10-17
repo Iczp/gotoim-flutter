@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/platform/platform_facade.dart';
 import 'package:gotoim_flutter/core/services/window_service.dart';
@@ -20,6 +21,35 @@ class _FakePlatformFacade implements PlatformFacade {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('mixin.one/desktop_multi_window/channels'),
+      (call) async => null,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('mixin.one/desktop_multi_window'),
+      (call) async {
+        switch (call.method) {
+          case 'createWindow':
+            return '101';
+          case 'show':
+          case 'hide':
+          case 'close':
+          case 'focus':
+          case 'setFrame':
+          case 'center':
+            return null;
+          case 'getAllSubWindowIds':
+            return <int>[];
+          default:
+            return null;
+        }
+      },
+    );
+  });
 
   group('DefaultWindowService Tests', () {
     late DefaultWindowService windowService;
@@ -46,9 +76,10 @@ void main() {
       );
 
       expect(windowService.isWindowOpen('chat:s1'), isTrue);
+      expect(windowService.isWindowOpen('chat:100:s1'), isTrue);
       expect(windowService.openWindows.length, 1);
       final record = windowService.openWindows.first;
-      expect(record.targetId, 'chat:s1');
+      expect(record.targetId, 'chat:100:s1');
       expect(record.type, WindowType.chat);
       expect(record.title, '测试会话');
       expect(record.extra?['ownerId'], 100);
@@ -89,23 +120,74 @@ void main() {
       },
     );
 
-    test('openWebBrowser, openMediaViewer, and openSettings register correctly', () async {
-      await windowService.openWebBrowser(
-        url: 'https://news.qq.com/article/1',
-        title: '腾讯新闻',
+    test(
+      'openWebBrowser, openMediaViewer, and openSettings register correctly',
+      () async {
+        await windowService.openWebBrowser(
+          url: 'https://news.qq.com/article/1',
+          title: '腾讯新闻',
+        );
+        expect(
+          windowService.isWindowOpen('browser:https://news.qq.com/article/1'),
+          isTrue,
+        );
+
+        await windowService.openMediaViewer(
+          mediaUrl: 'https://cdn.example.com/image.jpg',
+          title: '图片预览',
+        );
+        expect(
+          windowService.isWindowOpen('media:https://cdn.example.com/image.jpg'),
+          isTrue,
+        );
+
+        await windowService.openSettings();
+        expect(windowService.isWindowOpen('tool:settings'), isTrue);
+
+        expect(windowService.openWindows.length, 3);
+      },
+    );
+
+    test('Creation failure rolls back atomic opening placeholder and leaves no fake records', () async {
+      // Temporarily make createWindow throw
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('mixin.one/desktop_multi_window'),
+        (call) async {
+          if (call.method == 'createWindow') {
+            throw Exception('OS Window creation failed');
+          }
+          return null;
+        },
       );
-      expect(windowService.isWindowOpen('browser:https://news.qq.com/article/1'), isTrue);
 
-      await windowService.openMediaViewer(
-        mediaUrl: 'https://cdn.example.com/image.jpg',
-        title: '图片预览',
+      await windowService.openChat(
+        sessionUnitId: 'fail_session',
+        ownerId: 999,
+        title: '失败测试会话',
       );
-      expect(windowService.isWindowOpen('media:https://cdn.example.com/image.jpg'), isTrue);
 
-      await windowService.openSettings();
-      expect(windowService.isWindowOpen('tool:settings'), isTrue);
+      // Should NOT leave any record in openWindows
+      expect(windowService.isWindowOpen('chat:999:fail_session'), isFalse);
+      expect(windowService.isWindowOpen('chat:fail_session'), isFalse);
 
-      expect(windowService.openWindows.length, 3);
+      // Restore mock handler
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('mixin.one/desktop_multi_window'),
+        (call) async {
+          if (call.method == 'createWindow') return '102';
+          return null;
+        },
+      );
+
+      // Subsequent attempt succeeds without blocked opening placeholder
+      await windowService.openChat(
+        sessionUnitId: 'fail_session',
+        ownerId: 999,
+        title: '失败测试会话重试',
+      );
+      expect(windowService.isWindowOpen('chat:999:fail_session'), isTrue);
     });
   });
 }

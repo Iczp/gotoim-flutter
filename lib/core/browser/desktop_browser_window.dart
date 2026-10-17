@@ -26,12 +26,16 @@ class DesktopBrowserWindow extends ConsumerStatefulWidget {
     required this.initialUrl,
     this.title,
     this.fallbackContent,
+    this.isSubWindow = false,
+    this.onClose,
     super.key,
   });
 
   final String initialUrl;
   final String? title;
   final String? fallbackContent;
+  final bool isSubWindow;
+  final VoidCallback? onClose;
 
   /// 唤起桌面端独立浏览器窗口
   static Future<void> open(
@@ -136,6 +140,100 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             ? screenSize.height
             : 720.0.clamp(400.0, screenSize.height - 40);
 
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. 顶部专业浏览器工具栏 (含置顶、Tab标签、地址与控制按钮)
+        _buildBrowserTopBar(
+          context,
+          isDark,
+          topBarBg,
+          tabBg,
+          borderColor,
+        ),
+
+        // 2. 加载进度条
+        if (_isLoading && _progress < 1.0)
+          LinearProgressIndicator(
+            value: _progress,
+            minHeight: 2,
+            backgroundColor: Colors.transparent,
+            valueColor: const AlwaysStoppedAnimation<Color>(
+              Color(0xFF07C160),
+            ),
+          ),
+
+        // 3. 网页主内容视图
+        Expanded(
+          child: Container(
+            color: isDark ? const Color(0xFF181818) : Colors.white,
+            child: Stack(
+              children: [
+                if (InAppWebViewPlatform.instance != null)
+                  InAppWebView(
+                    initialUrlRequest: URLRequest(
+                      url: WebUri(_currentUrl),
+                    ),
+                    initialSettings: InAppWebViewSettings(
+                      useShouldOverrideUrlLoading: true,
+                      mediaPlaybackRequiresUserGesture: false,
+                      allowsInlineMediaPlayback: true,
+                      javaScriptEnabled: true,
+                      isInspectable: true,
+                    ),
+                    onWebViewCreated: (controller) {
+                      _webViewController = controller;
+                    },
+                    onProgressChanged: (controller, progress) {
+                      setState(() {
+                        _progress = progress / 100.0;
+                        _isLoading = progress < 100;
+                      });
+                    },
+                    onTitleChanged: (controller, title) {
+                      if (title != null && title.isNotEmpty) {
+                        setState(() {
+                          _pageTitle = title;
+                        });
+                      }
+                    },
+                    onLoadStop: (controller, url) async {
+                      final canBack = await controller.canGoBack();
+                      final canForward = await controller.canGoForward();
+                      setState(() {
+                        _isLoading = false;
+                        _canGoBack = canBack;
+                        _canGoForward = canForward;
+                        if (url != null) _currentUrl = url.toString();
+                      });
+                    },
+                    onReceivedError: (controller, request, error) {
+                      setState(() {
+                        _isLoading = false;
+                        _errorMessage = error.description;
+                      });
+                    },
+                  )
+                else
+                  _buildWebPreviewPlaceholder(context, isDark),
+
+                // 加载失败或错误遮罩
+                if (_errorMessage != null)
+                  _buildErrorFallback(context, isDark),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+
+    if (widget.isSubWindow) {
+      return Material(
+        color: windowBg,
+        child: SizedBox.expand(child: body),
+      );
+    }
+
     return Center(
       child: Material(
         color: Colors.transparent,
@@ -157,92 +255,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. 顶部专业浏览器工具栏 (含置顶、Tab标签、地址与控制按钮)
-              _buildBrowserTopBar(
-                context,
-                isDark,
-                topBarBg,
-                tabBg,
-                borderColor,
-              ),
-
-              // 2. 加载进度条
-              if (_isLoading && _progress < 1.0)
-                LinearProgressIndicator(
-                  value: _progress,
-                  minHeight: 2,
-                  backgroundColor: Colors.transparent,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFF07C160),
-                  ),
-                ),
-
-              // 3. 网页主内容视图
-              Expanded(
-                child: Container(
-                  color: isDark ? const Color(0xFF181818) : Colors.white,
-                  child: Stack(
-                    children: [
-                      if (InAppWebViewPlatform.instance != null)
-                        InAppWebView(
-                          initialUrlRequest: URLRequest(
-                            url: WebUri(_currentUrl),
-                          ),
-                          initialSettings: InAppWebViewSettings(
-                            useShouldOverrideUrlLoading: true,
-                            mediaPlaybackRequiresUserGesture: false,
-                            allowsInlineMediaPlayback: true,
-                            javaScriptEnabled: true,
-                            isInspectable: true,
-                          ),
-                          onWebViewCreated: (controller) {
-                            _webViewController = controller;
-                          },
-                          onProgressChanged: (controller, progress) {
-                            setState(() {
-                              _progress = progress / 100.0;
-                              _isLoading = progress < 100;
-                            });
-                          },
-                          onTitleChanged: (controller, title) {
-                            if (title != null && title.isNotEmpty) {
-                              setState(() {
-                                _pageTitle = title;
-                              });
-                            }
-                          },
-                          onLoadStop: (controller, url) async {
-                            final canBack = await controller.canGoBack();
-                            final canForward = await controller.canGoForward();
-                            setState(() {
-                              _isLoading = false;
-                              _canGoBack = canBack;
-                              _canGoForward = canForward;
-                              if (url != null) _currentUrl = url.toString();
-                            });
-                          },
-                          onReceivedError: (controller, request, error) {
-                            setState(() {
-                              _isLoading = false;
-                              _errorMessage = error.description;
-                            });
-                          },
-                        )
-                      else
-                        _buildWebPreviewPlaceholder(context, isDark),
-
-                      // 加载失败或错误遮罩
-                      if (_errorMessage != null)
-                        _buildErrorFallback(context, isDark),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+          child: body,
         ),
       ),
     );
@@ -478,7 +491,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             icon: const Icon(Icons.close_rounded, size: 17),
             tooltip: '关闭窗口',
             visualDensity: VisualDensity.compact,
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              if (widget.onClose != null) {
+                widget.onClose!();
+              } else if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            },
           ),
         ],
       ),

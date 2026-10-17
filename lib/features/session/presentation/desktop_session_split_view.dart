@@ -32,6 +32,7 @@ class _DesktopSessionSplitViewState
     extends ConsumerState<DesktopSessionSplitView> {
   String? _selectedSessionUnitId;
   String? _selectedTitle;
+  int? _activeOwnerId;
   bool _isPinnedExpanded = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchKeyword = '';
@@ -89,8 +90,22 @@ class _DesktopSessionSplitViewState
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
     final currentOwner = widget.controller.currentOwner;
+    final currentOwnerId = currentOwner?.id;
+
+    // 核心身份隔离逻辑：当检测到当前聊天身份改变，立即重置右侧聊天窗口选择状态，坚决杜绝串数据
+    if (_activeOwnerId != null && _activeOwnerId != currentOwnerId) {
+      _selectedSessionUnitId = null;
+      _selectedTitle = null;
+    }
+    _activeOwnerId = currentOwnerId;
 
     final allSessions = widget.controller.sessions;
+    // 保护：如果当前选中的 session 并不属于当前身份的会话列表，安全重置选择
+    if (_selectedSessionUnitId != null &&
+        !allSessions.any((s) => s.id == _selectedSessionUnitId)) {
+      _selectedSessionUnitId = null;
+      _selectedTitle = null;
+    }
     final filteredSessions =
         _searchKeyword.isEmpty
             ? allSessions
@@ -391,8 +406,10 @@ class _DesktopSessionSplitViewState
           behavior: HitTestBehavior.opaque,
           onHorizontalDragUpdate: (details) {
             setState(() {
-              _sessionPaneWidth = (_sessionPaneWidth + details.delta.dx)
-                  .clamp(220.0, 480.0);
+              _sessionPaneWidth = (_sessionPaneWidth + details.delta.dx).clamp(
+                220.0,
+                480.0,
+              );
             });
           },
           child: MouseRegion(
@@ -400,12 +417,7 @@ class _DesktopSessionSplitViewState
             child: Container(
               width: 5,
               color: Colors.transparent,
-              child: Center(
-                child: Container(
-                  width: 0.5,
-                  color: dividerColor,
-                ),
-              ),
+              child: Center(child: Container(width: 0.5, color: dividerColor)),
             ),
           ),
         ),
@@ -422,7 +434,9 @@ class _DesktopSessionSplitViewState
                     isDesktop: true,
                     onPopOut: () {
                       final ownerId = widget.controller.currentOwner?.id;
-                      ref.read(windowServiceProvider).openChat(
+                      ref
+                          .read(windowServiceProvider)
+                          .openChat(
                             sessionUnitId: _selectedSessionUnitId!,
                             ownerId: ownerId,
                             title: _selectedTitle,

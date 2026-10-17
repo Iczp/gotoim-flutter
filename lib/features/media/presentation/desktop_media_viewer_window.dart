@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/media/media_preview.dart';
@@ -34,12 +35,16 @@ class DesktopMediaViewerWindow extends ConsumerStatefulWidget {
     required this.items,
     this.initialIndex = 0,
     this.downloader,
+    this.isSubWindow = false,
+    this.onClose,
     super.key,
   });
 
   final List<MediaPreviewItem> items;
   final int initialIndex;
   final MediaDownloader? downloader;
+  final bool isSubWindow;
+  final VoidCallback? onClose;
 
   /// 唤起桌面端独立多媒体查看窗口
   static Future<void> open(
@@ -78,6 +83,7 @@ class _DesktopMediaViewerWindowState
   // 视频播放控制器 (若是视频)
   VideoPlayerController? _videoController;
   bool _isVideoPlaying = false;
+  String? _videoError;
 
   @override
   void initState() {
@@ -100,19 +106,67 @@ class _DesktopMediaViewerWindowState
     _videoController?.dispose();
     _videoController = null;
     _isVideoPlaying = false;
+    _videoError = null;
 
     final item = _currentItem;
     if (item.type == MediaPreviewType.video) {
-      final source = item.playableSource;
-      final uri = Uri.tryParse(source);
-      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-        _videoController = VideoPlayerController.networkUrl(uri);
-      } else {
-        _videoController = VideoPlayerController.file(File(source));
+      try {
+        final source = item.playableSource;
+        final uri = Uri.tryParse(source);
+        if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+          _videoController = VideoPlayerController.networkUrl(uri);
+        } else {
+          _videoController = VideoPlayerController.file(File(source));
+        }
+        _videoController!
+            .initialize()
+            .then((_) {
+              if (mounted) {
+                setState(() {
+                  _videoError = null;
+                });
+              }
+            })
+            .catchError((dynamic err, StackTrace st) {
+              if (mounted) {
+                setState(() {
+                  _videoError = '视频解码/播放器初始化异常: $err';
+                });
+              }
+            });
+      } catch (e) {
+        setState(() {
+          _videoError = '创建视频播放控制器失败: $e';
+        });
       }
-      _videoController!.initialize().then((_) {
-        if (mounted) setState(() {});
-      });
+    }
+  }
+
+  Future<void> _openWithDefaultPlayer() async {
+    final item = _currentItem;
+    final source = item.playableSource;
+    try {
+      showToast('正在调起系统默认播放器...', type: ToastType.info);
+      if (source.startsWith('http://') || source.startsWith('https://')) {
+        final uri = Uri.tryParse(source);
+        if (uri == null || (!uri.isScheme('http') && !uri.isScheme('https'))) {
+          showToast('非法多媒体网络地址', type: ToastType.error);
+          return;
+        }
+        if (Platform.isWindows) {
+          // 不使用 cmd.exe 解释器，直接传给系统进程避免参数注入
+          await Process.run('explorer.exe', [source]);
+        } else {
+          await OpenFilex.open(source);
+        }
+      } else {
+        final res = await OpenFilex.open(source);
+        if (res.type != ResultType.done && Platform.isWindows) {
+          await Process.run('explorer.exe', [source]);
+        }
+      }
+    } catch (e) {
+      showToast('打开失败: $e', type: ToastType.error);
     }
   }
 
@@ -183,6 +237,10 @@ class _DesktopMediaViewerWindowState
   }
 
   Future<void> _handleScanQr() async {
+    if (widget.isSubWindow) {
+      showToast('独立窗口中暂不支持二维码识别', type: ToastType.info);
+      return;
+    }
     final detector = ref.read(imageQrDetectorProvider);
     final item = _currentItem;
     final cacheKey = item.localPath ?? item.source;
@@ -220,6 +278,7 @@ class _DesktopMediaViewerWindowState
     final targets = await ForwardTargetPicker.pickTargets(
       context: context,
       sessionLoader: () async {
+        if (widget.isSubWindow) return [];
         final sessionList = ref.read(sessionListControllerProvider);
         return sessionList.sessions;
       },
@@ -243,12 +302,107 @@ class _DesktopMediaViewerWindowState
             ? screenSize.height
             : 680.0.clamp(400.0, screenSize.height - 20);
 
+    final body = Column(
+      children: [
+        // 1. 顶部多媒体专属工具栏
+        _buildViewerTopBar(context),
+
+        // 2. 媒体主展示画布
+        Expanded(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // 核心视窗
+              Center(
+                child: RotatedBox(
+                  quarterTurns: _rotationQuarterTurns,
+                  child: InteractiveViewer(
+                    transformationController: _transformController,
+                    minScale: 0.2,
+                    maxScale: 6.0,
+                    clipBehavior: Clip.none,
+                    child: _buildMediaContent(),
+                  ),
+                ),
+              ),
+
+              // 左侧快速翻页指示按钮
+              if (_currentIndex > 0)
+                Positioned(
+                  left: 16,
+                  child: _buildNavArrowButton(
+                    icon: Icons.chevron_left_rounded,
+                    onTap: () => _goTo(_currentIndex - 1),
+                    tooltip: '上一张',
+                  ),
+                ),
+
+              // 右侧快速翻页指示按钮
+              if (_currentIndex < widget.items.length - 1)
+                Positioned(
+                  right: 16,
+                  child: _buildNavArrowButton(
+                    icon: Icons.chevron_right_rounded,
+                    onTap: () => _goTo(_currentIndex + 1),
+                    tooltip: '下一张',
+                  ),
+                ),
+
+              // 底部折叠缩略图条 (当 _showThumbnails 为 true)
+              if (_showThumbnails && widget.items.length > 1)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: _buildThumbnailStrip(),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    final content = widget.isSubWindow
+        ? Material(
+            color: const Color(0xFF161616),
+            child: SizedBox.expand(child: body),
+          )
+        : Center(
+            child: Material(
+              color: Colors.transparent,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: dialogWidth,
+                height: dialogHeight,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161616),
+                  borderRadius:
+                      _isMaximized ? BorderRadius.zero : BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      blurRadius: 40,
+                      spreadRadius: 4,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: body,
+              ),
+            ),
+          );
+
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
           if (event.logicalKey == LogicalKeyboardKey.escape) {
-            Navigator.of(context).pop();
+            if (widget.onClose != null) {
+              widget.onClose!();
+            } else if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
             return KeyEventResult.handled;
           } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
             _goTo(_currentIndex - 1);
@@ -263,89 +417,7 @@ class _DesktopMediaViewerWindowState
         }
         return KeyEventResult.ignored;
       },
-      child: Center(
-        child: Material(
-          color: Colors.transparent,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: dialogWidth,
-            height: dialogHeight,
-            decoration: BoxDecoration(
-              color: const Color(0xFF161616),
-              borderRadius:
-                  _isMaximized ? BorderRadius.zero : BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.65),
-                  blurRadius: 40,
-                  spreadRadius: 4,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                // 1. 顶部多媒体专属工具栏
-                _buildViewerTopBar(context),
-
-                // 2. 媒体主展示画布
-                Expanded(
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // 核心视窗
-                      Center(
-                        child: RotatedBox(
-                          quarterTurns: _rotationQuarterTurns,
-                          child: InteractiveViewer(
-                            transformationController: _transformController,
-                            minScale: 0.2,
-                            maxScale: 6.0,
-                            clipBehavior: Clip.none,
-                            child: _buildMediaContent(),
-                          ),
-                        ),
-                      ),
-
-                      // 左侧快速翻页指示按钮
-                      if (_currentIndex > 0)
-                        Positioned(
-                          left: 16,
-                          child: _buildNavArrowButton(
-                            icon: Icons.chevron_left_rounded,
-                            onTap: () => _goTo(_currentIndex - 1),
-                            tooltip: '上一张',
-                          ),
-                        ),
-
-                      // 右侧快速翻页指示按钮
-                      if (_currentIndex < widget.items.length - 1)
-                        Positioned(
-                          right: 16,
-                          child: _buildNavArrowButton(
-                            icon: Icons.chevron_right_rounded,
-                            onTap: () => _goTo(_currentIndex + 1),
-                            tooltip: '下一张',
-                          ),
-                        ),
-
-                      // 底部折叠缩略图条 (当 _showThumbnails 为 true)
-                      if (_showThumbnails && widget.items.length > 1)
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: _buildThumbnailStrip(),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      child: content,
     );
   }
 
@@ -593,7 +665,13 @@ class _DesktopMediaViewerWindowState
             ),
             tooltip: '关闭',
             visualDensity: VisualDensity.compact,
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              if (widget.onClose != null) {
+                widget.onClose!();
+              } else if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            },
           ),
         ],
       ),
@@ -603,6 +681,91 @@ class _DesktopMediaViewerWindowState
   Widget _buildMediaContent() {
     final item = _currentItem;
     if (item.type == MediaPreviewType.video) {
+      if (_videoError != null) {
+        return Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 420),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF242424),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.smart_display_outlined,
+                  size: 48,
+                  color: Color(0xFFFA5151),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  '当前平台视频播放组件未能成功加载',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _videoError!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF9E9E9E),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: const BorderSide(color: Colors.white24),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                      ),
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: const Text('重试', style: TextStyle(fontSize: 13)),
+                      onPressed: () {
+                        setState(() {
+                          _videoError = null;
+                        });
+                        _checkVideoController();
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF07C160),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                      ),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                      label: const Text(
+                        '系统播放器打开',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      onPressed: _openWithDefaultPlayer,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
       if (_videoController != null && _videoController!.value.isInitialized) {
         return Stack(
           alignment: Alignment.center,

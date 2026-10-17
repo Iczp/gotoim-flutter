@@ -164,6 +164,36 @@ class _DesktopWindowsDiagnosticsPageState
     }
   }
 
+  Future<void> _testOpenStandaloneChat() async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中...';
+      _error = null;
+    });
+    try {
+      final windowService = ref.read(windowServiceProvider);
+      await windowService.openChat(
+        sessionUnitId: 'diag-session-101',
+        ownerId: 1001,
+        title: '产品技术委员会 (独立窗口)',
+      );
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult =
+            '已成功调起独立聊天窗口 (真实原生操作系统 HWND)\n会话: 产品技术委员会\nSessionUnit: diag-session-101\nOwner: 1001';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
+  }
+
   Future<void> _testOpenTrayFlyout() async {
     final sw = Stopwatch()..start();
     setState(() {
@@ -235,6 +265,28 @@ class _DesktopWindowsDiagnosticsPageState
         _elapsedMs = sw.elapsedMilliseconds;
         _lastResult =
             '成功向【张三】模拟追加一条新未读消息\n当前全局未读总数: ${state.totalUnread}\n聊天对象1未读数: ${state.groups.first.totalUnread}';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
+  }
+
+  void _testLoadSampleData() {
+    final sw = Stopwatch()..start();
+    try {
+      ref.read(trayGroupedUnreadProvider.notifier).loadSampleData();
+      final state = ref.read(trayGroupedUnreadProvider);
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult =
+            '已成功注入测试模拟未读数据 (张三 5 条，客服 2 条)\n当前未读总数: ${state.totalUnread}';
       });
     } catch (e, st) {
       sw.stop();
@@ -769,6 +821,11 @@ class _DesktopWindowsDiagnosticsPageState
                 onPressed: _testSimulateMessage,
               ),
               FilledButton.tonalIcon(
+                icon: const Icon(Icons.playlist_add_check_rounded, size: 16),
+                label: const Text('注入测试未读数据 (Mock)'),
+                onPressed: _testLoadSampleData,
+              ),
+              FilledButton.tonalIcon(
                 icon: const Icon(Icons.done_all_rounded, size: 16),
                 label: const Text('一键清空未读'),
                 onPressed: _testClearUnread,
@@ -787,6 +844,15 @@ class _DesktopWindowsDiagnosticsPageState
                 icon: const Icon(Icons.settings_outlined, size: 16),
                 label: const Text('打开独立设置窗口'),
                 onPressed: _testOpenSettings,
+              ),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF07C160),
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                label: const Text('打开独立聊天窗口 (HWND)'),
+                onPressed: _testOpenStandaloneChat,
               ),
               FilledButton.icon(
                 style: FilledButton.styleFrom(

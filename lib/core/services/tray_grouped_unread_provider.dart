@@ -7,10 +7,16 @@ import 'tray_service.dart';
 class TrayGroupedUnreadNotifier extends Notifier<TrayGroupedUnreadState> {
   @override
   TrayGroupedUnreadState build() {
-    return _createInitialState();
+    return TrayGroupedUnreadState.empty;
   }
 
-  static TrayGroupedUnreadState _createInitialState() {
+  /// 加载示例测试数据 (用于诊断页或本地预览)
+  void loadSampleData() {
+    state = createSampleState();
+    _syncWithTrayService();
+  }
+
+  static TrayGroupedUnreadState createSampleState() {
     // 初始示例数据，模拟多聊天对象与好友未读消息
     final owner1Sessions = [
       TraySessionItem(

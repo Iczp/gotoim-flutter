@@ -8,6 +8,7 @@ import 'package:gotoim_flutter/core/browser/desktop_browser_window.dart';
 import 'package:gotoim_flutter/core/config/app_environment.dart';
 import 'package:gotoim_flutter/core/media/media_preview.dart';
 import 'package:gotoim_flutter/core/services/tray_grouped_unread_provider.dart';
+import 'package:gotoim_flutter/core/services/tray_message_models.dart';
 import 'package:gotoim_flutter/core/widgets/desktop_tray_message_box.dart';
 import 'package:gotoim_flutter/features/media/presentation/desktop_media_viewer_window.dart';
 import 'package:gotoim_flutter/features/settings/presentation/desktop_settings_window.dart';
@@ -73,6 +74,13 @@ class _MockAuthController extends ChangeNotifier implements AuthController {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _SampleTrayGroupedUnreadNotifier extends TrayGroupedUnreadNotifier {
+  @override
+  TrayGroupedUnreadState build() {
+    return TrayGroupedUnreadNotifier.createSampleState();
+  }
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -110,10 +118,15 @@ void main() {
   });
 
   group('桌面端托盘未读数据模型与状态流转测试', () {
-    test('初始状态包含按聊天对象分组的未读数据', () {
+    test('初始状态默认为空状态，loadSampleData 后包含按聊天对象分组的未读数据', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
+      final initialState = container.read(trayGroupedUnreadProvider);
+      expect(initialState.totalUnread, equals(0));
+      expect(initialState.groups, isEmpty);
+
+      container.read(trayGroupedUnreadProvider.notifier).loadSampleData();
       final state = container.read(trayGroupedUnreadProvider);
 
       expect(state.totalUnread, equals(7));
@@ -142,6 +155,7 @@ void main() {
       addTearDown(container.dispose);
 
       final notifier = container.read(trayGroupedUnreadProvider.notifier);
+      notifier.loadSampleData();
 
       // 标记会话 u-101 已读 (李四的 3 条消息)
       notifier.markSessionRead(1001, 'u-101');
@@ -159,6 +173,7 @@ void main() {
       addTearDown(container.dispose);
 
       final notifier = container.read(trayGroupedUnreadProvider.notifier);
+      notifier.loadSampleData();
       notifier.markAllRead();
 
       final state = container.read(trayGroupedUnreadProvider);
@@ -171,6 +186,7 @@ void main() {
       addTearDown(container.dispose);
 
       final notifier = container.read(trayGroupedUnreadProvider.notifier);
+      notifier.loadSampleData();
       notifier.simulateIncomingMessage(
         ownerId: 1001,
         ownerName: '张三',
@@ -192,8 +208,13 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
+        ProviderScope(
+          overrides: [
+            trayGroupedUnreadProvider.overrideWith(
+              _SampleTrayGroupedUnreadNotifier.new,
+            ),
+          ],
+          child: const MaterialApp(
             home: Scaffold(
               backgroundColor: Color(0xFF1E1E1E),
               body: Center(child: DesktopTrayMessageBox()),
