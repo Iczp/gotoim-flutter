@@ -64,17 +64,20 @@ class NativeWindowPayload {
         ?.map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
 
+    final extraRaw = map['extra'];
+    final extra = extraRaw is Map ? Map<String, dynamic>.from(extraRaw) : null;
+
     return NativeWindowPayload(
       type: type,
       title: map['title'] as String? ?? 'GotoIM',
       targetId: map['targetId'] as String? ?? 'sub_window',
       sessionUnitId: map['sessionUnitId'] as String?,
-      ownerId: map['ownerId'] as int?,
+      ownerId: (map['ownerId'] as num?)?.toInt(),
       url: map['url'] as String?,
       fallbackContent: map['fallbackContent'] as String?,
-      initialIndex: map['initialIndex'] as int? ?? 0,
+      initialIndex: (map['initialIndex'] as num?)?.toInt() ?? 0,
       mediaItems: mediaItems,
-      extra: map['extra'] as Map<String, dynamic>?,
+      extra: extra,
     );
   }
 

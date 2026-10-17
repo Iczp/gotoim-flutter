@@ -407,6 +407,16 @@ class DefaultWindowService implements WindowService {
             try {
               await c.hide();
               _reusableControllers[k] = c;
+              if (_reusableControllers.length > _maxReusableControllers) {
+                final oldestKey = _reusableControllers.keys.first;
+                final evicted = _reusableControllers.remove(oldestKey);
+                if (evicted != null) {
+                  try {
+                    await evicted.invokeMethod('close');
+                    await evicted.hide();
+                  } catch (_) {}
+                }
+              }
             } catch (_) {}
           }
           removed = true;
@@ -428,6 +438,7 @@ class DefaultWindowService implements WindowService {
       for (final controller in _reusableControllers.values) {
         try {
           await controller.invokeMethod('account_logout');
+          await controller.invokeMethod('close');
           await controller.hide();
         } catch (_) {}
       }

@@ -211,16 +211,19 @@ class ClientDeviceContextFactory {
 }
 
 final clientDeviceContextProvider = Provider<ClientDeviceContext>(
-  (ref) => const ClientDeviceContext(
-    appId: 'com.gotoim.app',
-    appName: 'GotoIM',
-    appVersion: '1.0.0',
-    deviceId: 'device-subwindow',
-    deviceType: 'desktop',
-    platform: 'windows',
-    brand: '',
-    model: '',
-    browser: '',
-    pushClientId: '',
-  ),
+  (ref) {
+    final env = ref.watch(appEnvironmentProvider);
+    return ClientDeviceContext(
+      appId: env.appId,
+      appName: env.appName,
+      appVersion: env.appVersion,
+      deviceId: 'device-subwindow-${const Uuid().v4().substring(0, 8)}',
+      deviceType: 'desktop',
+      platform: 'windows',
+      brand: '',
+      model: '',
+      browser: '',
+      pushClientId: '',
+    );
+  },
 );

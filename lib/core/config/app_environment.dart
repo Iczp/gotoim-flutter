@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -140,7 +141,7 @@ class AppEnvironment {
       ),
       authRevocationPath: dotenv.get(
         'AUTH_REVOCATION_PATH',
-        fallback: '/connect/revocat',
+        fallback: '/connect/revocation',
       ),
       signalRBaseUrl: dotenv.get('SIGNALR_BASE_URL', fallback: ''),
       signalRHubPath: dotenv.get(
@@ -322,12 +323,12 @@ class AppEnvironment {
     authBaseUrl: 'http://10.0.5.20:8043',
     authTokenPath: '/connect/token',
     authClientId: 'IM_Mobile',
-    authClientSecret: '1q2w3e*',
+    authClientSecret: '',
     authScope: 'IM offline_access roles profile phone email address',
     authLoginGrantType: 'password',
     authUserInfoPath: '/connect/userinfo',
     authIntrospectionPath: '/connect/introspect',
-    authRevocationPath: '/connect/revocat',
+    authRevocationPath: '/connect/revocation',
     signalRBaseUrl: 'http://10.0.5.20:8044',
     signalRHubPath: '/signalr-hubs/chat',
     scanLoginHubPath: '/signalr-hubs/scan-login',
@@ -337,7 +338,7 @@ class AppEnvironment {
     scanLoginAuthBaseUrl: 'http://10.0.5.20:8043',
     scanLoginAuthTokenPath: '/connect/token',
     scanLoginAuthClientId: 'IM_Mobile',
-    scanLoginAuthClientSecret: '1q2w3e*',
+    scanLoginAuthClientSecret: '',
     scanLoginAuthScope: 'IM',
     signalRSkipNegotiation: true,
     signalRReconnectDelays: [0, 2000, 10000, 30000],
@@ -358,9 +359,19 @@ final Provider<AppEnvironment> appEnvironmentProvider =
       (ref) {
         try {
           if (dotenv.isInitialized) {
-            return AppEnvironment.fromDotEnv(AppFlavor.development);
+            const flavorName = String.fromEnvironment(
+              'APP_ENV',
+              defaultValue: 'development',
+            );
+            final flavor = AppEnvironment.parseFlavor(flavorName);
+            return AppEnvironment.fromDotEnv(flavor);
           }
-        } catch (_) {}
+        } catch (e) {
+          if (kReleaseMode) {
+            debugPrint('[AppEnvironment] Critical: Failed to load environment: $e');
+            rethrow;
+          }
+        }
         return AppEnvironment.defaultEnvironment;
       },
     );

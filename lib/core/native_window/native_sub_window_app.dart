@@ -1,5 +1,6 @@
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -115,6 +116,7 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
   late final WindowMethodChannel _mainIpcChannel;
   ThemeMode _themeMode = ThemeMode.dark;
   late NativeWindowPayload _currentPayload;
+  Future<dynamic> Function(MethodCall call)? _childMethodHandler;
 
   late final GoRouter _diagnosticRouter = GoRouter(
     initialLocation: '/diagnostics',
@@ -225,15 +227,24 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
           await widget.controller?.show();
           return true;
         case 'account_logout':
-          await _handleLogout();
+          await _handleLogout(notifyMain: false);
           return true;
         case 'close':
           await _handleClose();
           return true;
         default:
+          if (_childMethodHandler != null) {
+            return await _childMethodHandler!(call);
+          }
           return null;
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _diagnosticRouter.dispose();
+    super.dispose();
   }
 
   Future<void> _handleClose() async {
@@ -248,10 +259,12 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
     }
   }
 
-  Future<void> _handleLogout() async {
-    try {
-      await _mainIpcChannel.invokeMethod('app_logout');
-    } catch (_) {}
+  Future<void> _handleLogout({bool notifyMain = true}) async {
+    if (notifyMain) {
+      try {
+        await _mainIpcChannel.invokeMethod('app_logout');
+      } catch (_) {}
+    }
     await _handleClose();
   }
 
@@ -354,6 +367,7 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
             payload: _currentPayload,
             controller: widget.controller!,
             onClose: _handleClose,
+            onRegisterHandler: (handler) => _childMethodHandler = handler,
           );
         }
         return Scaffold(

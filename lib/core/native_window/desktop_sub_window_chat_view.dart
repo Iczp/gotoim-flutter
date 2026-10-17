@@ -13,12 +13,15 @@ class DesktopSubWindowChatView extends StatefulWidget {
     required this.payload,
     required this.controller,
     this.onClose,
+    this.onRegisterHandler,
     super.key,
   });
 
   final NativeWindowPayload payload;
   final WindowController controller;
   final VoidCallback? onClose;
+  final void Function(Future<dynamic> Function(MethodCall call)? handler)?
+      onRegisterHandler;
 
   @override
   State<DesktopSubWindowChatView> createState() =>
@@ -44,7 +47,8 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
       'gotoim/ipc_to_main',
       mode: ChannelMode.bidirectional,
     );
-    widget.controller.setWindowMethodHandler((call) async {
+
+    Future<dynamic> handler(MethodCall call) async {
       switch (call.method) {
         case 'chat_receive_message':
           final data = call.arguments as Map?;
@@ -53,16 +57,26 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
             final time = t is num
                 ? DateTime.fromMillisecondsSinceEpoch(t.toInt())
                 : DateTime.now();
+            final clientMsgId = data['clientMessageId']?.toString();
+            final serverId = (data['serverId'] as num?)?.toInt();
+            final newMsg = _ChatMessage(
+              id: data['id']?.toString(),
+              serverId: serverId,
+              clientMessageId: clientMsgId,
+              text: data['text']?.toString() ?? '',
+              isMe: data['isMe'] == true,
+              time: time,
+              state: data['state']?.toString() ?? 'sent',
+            );
             setState(() {
-              _messages.add(_ChatMessage(
-                id: data['id']?.toString(),
-                serverId: (data['serverId'] as num?)?.toInt(),
-                clientMessageId: data['clientMessageId']?.toString(),
-                text: data['text']?.toString() ?? '',
-                isMe: data['isMe'] == true,
-                time: time,
-                state: data['state']?.toString() ?? 'sent',
-              ));
+              final existingIndex = _messages.indexWhere((m) =>
+                  (clientMsgId != null && m.clientMessageId == clientMsgId) ||
+                  (serverId != null && serverId != 0 && m.serverId == serverId));
+              if (existingIndex != -1) {
+                _messages[existingIndex] = newMsg;
+              } else {
+                _messages.add(newMsg);
+              }
             });
             _scrollToBottom();
           }
@@ -76,11 +90,19 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
               _messages.clear();
             });
           }
+          widget.onClose?.call();
           return true;
         default:
           return null;
       }
-    });
+    }
+
+    if (widget.onRegisterHandler != null) {
+      widget.onRegisterHandler!(handler);
+    } else {
+      widget.controller.setWindowMethodHandler(handler);
+    }
+
     _loadHistory();
   }
 
@@ -136,7 +158,17 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   }
 
   @override
+  void didUpdateWidget(covariant DesktopSubWindowChatView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.payload.sessionUnitId != widget.payload.sessionUnitId ||
+        oldWidget.payload.ownerId != widget.payload.ownerId) {
+      _loadHistory();
+    }
+  }
+
+  @override
   void dispose() {
+    widget.onRegisterHandler?.call(null);
     _inputController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
