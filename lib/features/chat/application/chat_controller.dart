@@ -62,6 +62,7 @@ final attachmentTransferServiceProvider =
         client: ref.watch(apiClientProvider),
         environment: ref.watch(appEnvironmentProvider),
         filePickerService: ref.watch(filePickerServiceProvider),
+        cache: ref.watch(attachmentCacheProvider),
       );
     });
 

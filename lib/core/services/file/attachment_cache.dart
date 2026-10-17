@@ -1,8 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'attachment_cache_stub.dart'
     if (dart.library.io) 'attachment_cache_io.dart'
     as platform;
+import 'storage_path_service.dart';
 
 /// 根据文件后缀或消息类型解析附件所属类别（用于目录分类保存与局域网管理站）
 String resolveAttachmentCategory(
@@ -85,4 +88,14 @@ abstract class AttachmentCache {
   Future<void> open(String path);
 }
 
-AttachmentCache createAttachmentCache() => platform.createAttachmentCache();
+AttachmentCache createAttachmentCache({
+  Future<String> Function()? storagePathResolver,
+}) => platform.createAttachmentCache(storagePathResolver: storagePathResolver);
+
+/// 全局 AttachmentCache Provider，默认注入持久化存储路径解析器
+final attachmentCacheProvider = Provider<AttachmentCache>((ref) {
+  final storageService = ref.watch(storagePathServiceProvider);
+  return createAttachmentCache(
+    storagePathResolver: storageService.getActiveStoragePath,
+  );
+});

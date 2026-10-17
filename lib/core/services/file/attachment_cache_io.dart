@@ -5,10 +5,19 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'attachment_cache.dart';
+import 'storage_path_service.dart';
 
-AttachmentCache createAttachmentCache() => _IoAttachmentCache();
+AttachmentCache createAttachmentCache({
+  Future<String> Function()? storagePathResolver,
+}) => _IoAttachmentCache(storagePathResolver: storagePathResolver);
 
 class _IoAttachmentCache implements AttachmentCache {
+  _IoAttachmentCache({Future<String> Function()? storagePathResolver})
+      : _storagePathResolver =
+            storagePathResolver ?? StoragePathService.globalResolver;
+
+  final Future<String> Function()? _storagePathResolver;
+
   String _sanitizeKey(String key) =>
       key.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
 
@@ -21,9 +30,21 @@ class _IoAttachmentCache implements AttachmentCache {
     return sanitized.isEmpty ? fallback : sanitized;
   }
 
-  /// 获取局域网文件共享站“聊天文件”根目录：
-  /// ${Documents}/LocalShare/聊天文件
+  /// 获取“聊天文件”根目录：优先使用用户自定义目录，未配置时使用 ${Documents}/LocalShare/聊天文件
   Future<Directory> _getChatFilesRoot() async {
+    final resolver = _storagePathResolver ?? StoragePathService.globalResolver;
+    if (resolver != null) {
+      try {
+        final custom = await resolver();
+        if (custom.trim().isNotEmpty) {
+          final dir = Directory(custom.trim());
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          return dir;
+        }
+      } catch (_) {}
+    }
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory(
       '${docs.path}${Platform.pathSeparator}LocalShare${Platform.pathSeparator}聊天文件',
@@ -143,7 +164,19 @@ class _IoAttachmentCache implements AttachmentCache {
       if (found != null) return found;
     }
 
-    // 5. 兜底兼容旧版私有缓存目录（getApplicationSupportDirectory()/attachments）
+    // 5. 若配置了自定义根目录且未找到，自动回退到系统默认文档目录查找历史文件
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final defaultRoot = Directory(
+        '${docs.path}${Platform.pathSeparator}LocalShare${Platform.pathSeparator}聊天文件',
+      );
+      if (defaultRoot.path != root.path && await defaultRoot.exists()) {
+        final found = await _searchInDirectory(defaultRoot, safeKey, safeName);
+        if (found != null) return found;
+      }
+    } catch (_) {}
+
+    // 6. 兜底兼容旧版私有缓存目录（getApplicationSupportDirectory()/attachments）
     try {
       final supportRoot = await getApplicationSupportDirectory();
       final legacyDir = Directory(

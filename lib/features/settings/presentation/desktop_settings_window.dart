@@ -2,10 +2,10 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../../core/compliance/agreement_viewer_page.dart';
 import '../../../core/compliance/privacy_service.dart';
+import '../../../core/services/file/storage_path_service.dart';
 import '../../../core/services/window_service.dart';
 import '../../../core/theme/font_scale_controller.dart';
 import '../../../core/theme/theme_mode_controller.dart';
@@ -75,6 +75,11 @@ enum _SettingsTab {
   final IconData icon;
 }
 
+enum _StorageMigrationChoice {
+  migrateAndChange,
+  changeOnly,
+}
+
 class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
   _SettingsTab _activeTab = _SettingsTab.accountAndStorage;
   bool _isPinned = false;
@@ -100,10 +105,11 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
 
   Future<void> _initStoragePath() async {
     try {
-      final docDir = await getApplicationDocumentsDirectory();
+      final storageService = ref.read(storagePathServiceProvider);
+      final active = await storageService.getActiveStoragePath();
       if (mounted) {
         setState(() {
-          _storagePath = '${docDir.path}\\GotoIM_Files';
+          _storagePath = active;
         });
       }
     } catch (_) {
@@ -115,15 +121,304 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     }
   }
 
+  Future<void> _handleOpenStorageFolder() async {
+    final storageService = ref.read(storagePathServiceProvider);
+    final active = await storageService.getActiveStoragePath();
+    final opened = await storageService.openInExplorer(active);
+    if (!opened && mounted) {
+      showToast('无法打开指定文件夹: $active', type: ToastType.error);
+    }
+  }
+
+  Future<void> _handleResetStoragePath() async {
+    final storageService = ref.read(storagePathServiceProvider);
+    final defaultPath = await storageService.getDefaultPath();
+    if (_storagePath == defaultPath) {
+      showToast('当前已是默认存储位置', type: ToastType.info);
+      return;
+    }
+    await storageService.resetToDefault();
+    if (mounted) {
+      setState(() {
+        _storagePath = defaultPath;
+      });
+      showToast('已恢复为默认存储位置', type: ToastType.success);
+    }
+  }
+
   Future<void> _handleChangeStoragePath() async {
+    final storageService = ref.read(storagePathServiceProvider);
+    final currentPath = await storageService.getActiveStoragePath();
+
     final selectedDirectory = await FilePicker.getDirectoryPath(
       dialogTitle: '选择 GotoIM 文件存储目录',
+      initialDirectory: currentPath,
     );
-    if (selectedDirectory != null && mounted) {
-      setState(() {
-        _storagePath = selectedDirectory;
-      });
-      showToast('存储位置已更新', type: ToastType.success);
+    if (selectedDirectory == null || !mounted) return;
+
+    final normalizedNewPath = selectedDirectory.trim();
+    if (normalizedNewPath.isEmpty || normalizedNewPath == currentPath) {
+      return;
+    }
+
+    // 检查旧目录是否有已有文件
+    final stats = await storageService.calculateDirectoryStats(currentPath);
+
+    if (stats.fileCount == 0) {
+      await storageService.setCustomPath(normalizedNewPath);
+      if (mounted) {
+        setState(() {
+          _storagePath = normalizedNewPath;
+        });
+        showToast('存储位置已更新', type: ToastType.success);
+      }
+      return;
+    }
+
+    // 原目录存在已有文件，弹出微信同款迁移询问弹窗
+    if (!mounted) return;
+    final choice = await _showStorageMigrationChoiceDialog(
+      currentPath: currentPath,
+      newPath: normalizedNewPath,
+      stats: stats,
+    );
+
+    if (choice == null || !mounted) return; // 用户取消
+
+    if (choice == _StorageMigrationChoice.changeOnly) {
+      await storageService.setCustomPath(normalizedNewPath);
+      if (mounted) {
+        setState(() {
+          _storagePath = normalizedNewPath;
+        });
+        showToast('存储位置已更新（原历史文件保留在原处）', type: ToastType.success);
+      }
+      return;
+    }
+
+    if (choice == _StorageMigrationChoice.migrateAndChange) {
+      await _executeStorageMigration(
+        storageService: storageService,
+        sourcePath: currentPath,
+        targetPath: normalizedNewPath,
+        totalFiles: stats.fileCount,
+      );
+    }
+  }
+
+  Future<_StorageMigrationChoice?> _showStorageMigrationChoiceDialog({
+    required String currentPath,
+    required String newPath,
+    required StorageDirectoryStats stats,
+  }) async {
+    return showDialog<_StorageMigrationChoice>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF232323) : Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Row(
+            children: [
+              Icon(Icons.drive_file_move_outlined,
+                  color: Color(0xFF07C160), size: 22),
+              SizedBox(width: 8),
+              Text(
+                '更改文件存储位置',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '检测到当前目录存有 ${stats.fileCount} 个聊天文件 (共 ${stats.formattedBytes})。',
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF1E1E1E)
+                      : const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF333333)
+                        : const Color(0xFFE0E0E0),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '原位置: $currentPath',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '新位置: $newPath',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? const Color(0xFF07C160)
+                            : const Color(0xFF06AD56),
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                '是否将已有历史聊天文件无损迁移至新位置？',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('取消', style: TextStyle(color: Colors.grey)),
+            ),
+            OutlinedButton(
+              onPressed: () =>
+                  Navigator.of(ctx).pop(_StorageMigrationChoice.changeOnly),
+              style: OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6)),
+              ),
+              child: const Text('仅更改位置', style: TextStyle(fontSize: 12)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx)
+                  .pop(_StorageMigrationChoice.migrateAndChange),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF07C160),
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6)),
+              ),
+              child: const Text('迁移原文件',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _executeStorageMigration({
+    required StoragePathService storageService,
+    required String sourcePath,
+    required String targetPath,
+    required int totalFiles,
+  }) async {
+    final progressNotifier = ValueNotifier<int>(0);
+
+    // 显示进度弹窗
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF232323) : Colors.white,
+            surfaceTintColor: Colors.transparent,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: const Text(
+              '正在迁移聊天文件...',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            content: ValueListenableBuilder<int>(
+              valueListenable: progressNotifier,
+              builder: (context, current, _) {
+                final double progress = totalFiles > 0
+                    ? (current / totalFiles).clamp(0.0, 1.0)
+                    : 0.0;
+                final percent = (progress * 100).toInt();
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: isDark
+                          ? const Color(0xFF1E1E1E)
+                          : const Color(0xFFE5E5E5),
+                      color: const Color(0xFF07C160),
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '正在复制文件: $current / $totalFiles',
+                          style:
+                              const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        Text(
+                          '$percent%',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF07C160),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      '请勿关闭应用，正在保持子目录结构无损迁移...',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    final result = await storageService.migrateFiles(
+      sourcePath: sourcePath,
+      targetPath: targetPath,
+      onProgress: (cur, tot) {
+        progressNotifier.value = cur;
+      },
+    );
+
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop(); // 关闭进度弹窗
+      if (result.success) {
+        setState(() {
+          _storagePath = targetPath;
+        });
+        showToast('已成功迁移 ${result.migratedCount} 个文件至新位置！',
+            type: ToastType.success);
+      } else {
+        showToast('文件迁移失败: ${result.errorMessage}', type: ToastType.error);
+      }
     }
   }
 
@@ -525,15 +820,43 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
         _buildRowItem(
           label: '存储位置',
           subtitle: _storagePath,
-          trailing: OutlinedButton(
-            onPressed: _handleChangeStoragePath,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton(
+                onPressed: _handleOpenStorageFolder,
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                child: const Text('打开文件夹', style: TextStyle(fontSize: 12)),
               ),
-            ),
-            child: const Text('更改', style: TextStyle(fontSize: 12)),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: _handleChangeStoragePath,
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                child: const Text('更改', style: TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: _handleResetStoragePath,
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                ),
+                child: const Text('恢复默认',
+                    style: TextStyle(fontSize: 11, color: Colors.grey)),
+              ),
+            ],
           ),
         ),
 

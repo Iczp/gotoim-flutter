@@ -2,7 +2,9 @@ import 'dart:typed_data';
 
 import 'attachment_cache.dart';
 
-AttachmentCache createAttachmentCache() => _UnsupportedAttachmentCache();
+AttachmentCache createAttachmentCache({
+  Future<String> Function()? storagePathResolver,
+}) => _UnsupportedAttachmentCache();
 
 class _UnsupportedAttachmentCache implements AttachmentCache {
   @override
