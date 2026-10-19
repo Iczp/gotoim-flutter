@@ -126,6 +126,62 @@ class TrayGroupedUnreadState {
 
   static const empty = TrayGroupedUnreadState(totalUnread: 0, groups: []);
 
+  Map<String, dynamic> toJson() => {
+    'totalUnread': totalUnread,
+    'groups': [
+      for (final g in groups)
+        {
+          'ownerId': g.ownerId,
+          'ownerName': g.ownerName,
+          'totalUnread': g.totalUnread,
+          'isCurrent': g.isCurrent,
+          'avatarUrl': g.avatarUrl,
+          'roleTitle': g.roleTitle,
+          'sessions': [
+            for (final s in g.sessions)
+              {
+                'sessionUnitId': s.sessionUnitId,
+                'targetName': s.targetName,
+                'lastMessageText': s.lastMessageText,
+                'unreadCount': s.unreadCount,
+                'avatarUrl': s.avatarUrl,
+                'lastMessageTime': s.lastMessageTime?.toIso8601String(),
+                'isGroup': s.isGroup,
+              },
+          ],
+        },
+    ],
+  };
+
+  factory TrayGroupedUnreadState.fromJson(Map map) => TrayGroupedUnreadState(
+    totalUnread: (map['totalUnread'] as num?)?.toInt() ?? 0,
+    groups: [
+      for (final g in map['groups'] as List? ?? const [])
+        TrayOwnerGroup(
+          ownerId: (g['ownerId'] as num).toInt(),
+          ownerName: g['ownerName'] as String,
+          totalUnread: (g['totalUnread'] as num).toInt(),
+          isCurrent: g['isCurrent'] == true,
+          avatarUrl: g['avatarUrl'] as String?,
+          roleTitle: g['roleTitle'] as String?,
+          sessions: [
+            for (final s in g['sessions'] as List? ?? const [])
+              TraySessionItem(
+                sessionUnitId: s['sessionUnitId'] as String,
+                targetName: s['targetName'] as String,
+                lastMessageText: s['lastMessageText'] as String,
+                unreadCount: (s['unreadCount'] as num).toInt(),
+                avatarUrl: s['avatarUrl'] as String?,
+                isGroup: s['isGroup'] == true,
+                lastMessageTime: DateTime.tryParse(
+                  s['lastMessageTime']?.toString() ?? '',
+                ),
+              ),
+          ],
+        ),
+    ],
+  );
+
   TrayGroupedUnreadState copyWith({
     int? totalUnread,
     List<TrayOwnerGroup>? groups,

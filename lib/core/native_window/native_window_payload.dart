@@ -8,6 +8,7 @@ enum SubWindowType {
   media,
   diagnostics,
   localFileServer,
+  tray,
 }
 
 /// 原生子窗口启动载荷（跨 Flutter 引擎序列化参数）
@@ -36,6 +37,32 @@ class NativeWindowPayload {
   final List<Map<String, dynamic>>? mediaItems;
   final Map<String, dynamic>? extra;
 
+  NativeWindowPayload copyWith({
+    SubWindowType? type,
+    String? title,
+    String? targetId,
+    String? sessionUnitId,
+    int? ownerId,
+    String? url,
+    String? fallbackContent,
+    int? initialIndex,
+    List<Map<String, dynamic>>? mediaItems,
+    Map<String, dynamic>? extra,
+  }) {
+    return NativeWindowPayload(
+      type: type ?? this.type,
+      title: title ?? this.title,
+      targetId: targetId ?? this.targetId,
+      sessionUnitId: sessionUnitId ?? this.sessionUnitId,
+      ownerId: ownerId ?? this.ownerId,
+      url: url ?? this.url,
+      fallbackContent: fallbackContent ?? this.fallbackContent,
+      initialIndex: initialIndex ?? this.initialIndex,
+      mediaItems: mediaItems ?? this.mediaItems,
+      extra: extra ?? this.extra,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'type': type.name,
@@ -60,9 +87,8 @@ class NativeWindowPayload {
       orElse: () => SubWindowType.settings,
     );
     final mediaItemsRaw = map['mediaItems'] as List<dynamic>?;
-    final mediaItems = mediaItemsRaw
-        ?.map((e) => Map<String, dynamic>.from(e as Map))
-        .toList();
+    final mediaItems =
+        mediaItemsRaw?.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
     final extraRaw = map['extra'];
     final extra = extraRaw is Map ? Map<String, dynamic>.from(extraRaw) : null;

@@ -17,6 +17,7 @@ import '../application/chat_settings_controller.dart';
 import 'chat_background_page.dart';
 import 'chat_background_preview_page.dart';
 import 'member_tile.dart';
+import '../../../core/security/widgets/report_dialog.dart';
 
 enum ChatSettingsResult { messagesCleared, sessionLeft }
 
@@ -262,9 +263,15 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     ),
                     Cell(
                       icon: const Icon(Icons.report_problem_outlined),
-                      title: '投诉',
+                      title: controller.isGroup ? '投诉该群' : '投诉',
                       showArrow: true,
-                      onTap: () => showToast('投诉通道暂未开放', type: ToastType.info),
+                      onTap: () {
+                        ReportDialog.showForGroup(
+                          context,
+                          groupId: controller.sessionUnitId,
+                          groupTitle: controller.title,
+                        );
+                      },
                     ),
                     if (controller.isGroup)
                       Cell(

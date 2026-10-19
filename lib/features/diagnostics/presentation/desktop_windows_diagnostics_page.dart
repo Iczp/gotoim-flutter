@@ -33,6 +33,9 @@ class _DesktopWindowsDiagnosticsPageState
   final TextEditingController _imageUrlController = TextEditingController(
     text: 'https://picsum.photos/1200/800',
   );
+  final TextEditingController _videoUrlController = TextEditingController(
+    text: 'https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4',
+  );
   final TextEditingController _unreadCountController = TextEditingController(
     text: '5',
   );
@@ -48,6 +51,7 @@ class _DesktopWindowsDiagnosticsPageState
     _urlController.dispose();
     _urlTitleController.dispose();
     _imageUrlController.dispose();
+    _videoUrlController.dispose();
     _unreadCountController.dispose();
     super.dispose();
   }
@@ -57,6 +61,8 @@ class _DesktopWindowsDiagnosticsPageState
       _urlController.text = 'https://news.qq.com';
       _urlTitleController.text = '腾讯新闻';
       _imageUrlController.text = 'https://picsum.photos/1200/800';
+      _videoUrlController.text =
+          'https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4';
       _unreadCountController.text = '5';
       _isBlinking = true;
       _status = '已恢复默认设置';
@@ -136,6 +142,63 @@ class _DesktopWindowsDiagnosticsPageState
         _elapsedMs = sw.elapsedMilliseconds;
         _error = '$e\n$st';
       });
+    }
+  }
+
+  Future<void> _testOpenVideoViewer({bool cacheFirst = false}) async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中';
+      _error = null;
+    });
+    try {
+      final url = _videoUrlController.text.trim();
+      final item = MediaPreviewItem(
+        id: url,
+        messageId: 'video-diagnostic',
+        type: MediaPreviewType.video,
+        source: url,
+        heroTag: url,
+      );
+      final localPath =
+          cacheFirst
+              ? await DefaultMediaDownloader.instance
+                  .download(item)
+                  .timeout(const Duration(seconds: 30))
+              : null;
+      if (cacheFirst && (localPath == null || localPath.isEmpty)) {
+        throw StateError('未取得可播放的本地视频文件');
+      }
+      await ref
+          .read(windowServiceProvider)
+          .openMediaViewer(
+            mediaUrl: url,
+            title: '视频播放诊断',
+            items: [
+              MediaPreviewItem(
+                id: url,
+                messageId: 'video-diagnostic',
+                localPath: localPath,
+                type: MediaPreviewType.video,
+                source: url,
+                heroTag: url,
+              ),
+            ],
+          );
+      if (!mounted) return;
+      setState(() {
+        _status = '窗口已创建';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult =
+            '${cacheFirst ? '已下载并传入本地缓存。' : '直接网络播放。'}请在独立窗口确认视频画面、播放进度和关闭恢复；窗口创建不代表播放验证通过。';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status = '失败';
+          _error = '$error';
+        });
+      }
     }
   }
 
@@ -234,7 +297,8 @@ class _DesktopWindowsDiagnosticsPageState
       setState(() {
         _status = '成功';
         _elapsedMs = sw.elapsedMilliseconds;
-        _lastResult = '已动态合成并绘制托盘图标角标数字: $count\n支持平台: Windows / macOS / Linux';
+        _lastResult =
+            '主窗口已处理托盘角标更新请求（实际图标需目视确认）: $count\n支持平台: Windows / macOS / Linux';
       });
     } catch (e, st) {
       sw.stop();
@@ -762,6 +826,15 @@ class _DesktopWindowsDiagnosticsPageState
                     ),
                   ),
                   const SizedBox(height: 10),
+                  TextField(
+                    controller: _videoUrlController,
+                    decoration: const InputDecoration(
+                      labelText: '视频测试 URL',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
@@ -816,6 +889,12 @@ class _DesktopWindowsDiagnosticsPageState
                 onPressed: _testUpdateTrayBadge,
               ),
               FilledButton.tonalIcon(
+                icon: const Icon(Icons.menu_open, size: 16),
+                label: const Text('显示真实托盘菜单'),
+                onPressed:
+                    () => ref.read(trayServiceProvider).showContextMenu(),
+              ),
+              FilledButton.tonalIcon(
                 icon: const Icon(Icons.add_comment_rounded, size: 16),
                 label: const Text('模拟接收新消息 (+1)'),
                 onPressed: _testSimulateMessage,
@@ -839,6 +918,16 @@ class _DesktopWindowsDiagnosticsPageState
                 icon: const Icon(Icons.photo_library_outlined, size: 16),
                 label: const Text('打开独立图片/视频窗口'),
                 onPressed: _testOpenMediaViewer,
+              ),
+              FilledButton.icon(
+                icon: const Icon(Icons.play_circle_outline, size: 16),
+                label: const Text('打开独立视频播放诊断'),
+                onPressed: _testOpenVideoViewer,
+              ),
+              FilledButton.tonalIcon(
+                icon: const Icon(Icons.download_for_offline_outlined, size: 16),
+                label: const Text('下载后验证本地视频'),
+                onPressed: () => _testOpenVideoViewer(cacheFirst: true),
               ),
               FilledButton.tonalIcon(
                 icon: const Icon(Icons.settings_outlined, size: 16),

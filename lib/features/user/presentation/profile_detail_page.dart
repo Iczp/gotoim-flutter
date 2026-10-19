@@ -41,11 +41,10 @@ class ProfileDetailPage extends StatelessWidget {
             icon: const Icon(Icons.more_horiz_rounded),
             tooltip: '更多选项',
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('更多资料设置'),
-                  duration: Duration(seconds: 1),
-                ),
+              showMoreProfileActionSheet(
+                context,
+                userId: subject.id,
+                userName: subject.name,
               );
             },
           ),

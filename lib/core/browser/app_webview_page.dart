@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'desktop_browser_window.dart';
 import '../floating_window/floating_window.dart';
 import '../media/media_preview.dart';
+import '../services/window_service.dart';
 import '../widgets/app_toast.dart';
 import 'floating_web_bubble.dart';
 import 'browser_more_sheet.dart';
@@ -284,6 +285,17 @@ class AppWebViewPage extends ConsumerStatefulWidget {
     final isDesktop =
         !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
     if (isDesktop) {
+      try {
+        final container = ProviderScope.containerOf(context, listen: false);
+        final windowService = container.read(windowServiceProvider);
+        return windowService.openWebBrowser(
+          url: url,
+          title: title,
+          fallbackContent: fallbackContent,
+        );
+      } catch (e) {
+        debugPrint('[AppWebViewPage] openWebBrowser fallback to dialog: $e');
+      }
       return DesktopBrowserWindow.open(
         context,
         url: url,
@@ -1110,7 +1122,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
       onReceivedError: (controller, request, error) {
         if (!mounted) return;
         // 仅主框架错误才阻断显示错误页，避免第三方统计/埋点或子资源 404 导致整屏阻断
-        if (request.isForMainFrame ?? true) {
+        if (request.isForMainFrame != false && error.type != WebResourceErrorType.CANCELLED) {
           setState(() {
             _isLoading = false;
             _errorMessage = error.description;

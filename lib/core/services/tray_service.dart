@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform, exit;
 import 'package:flutter/foundation.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore_for_file: deprecated_member_use
 import 'package:tray_manager/legacy.dart';
@@ -9,6 +10,7 @@ import '../../app/app_navigation.dart';
 import '../widgets/desktop_tray_message_box.dart';
 import 'tray_badge_generator.dart';
 import 'window_service.dart';
+import '../platform/windows/windows_window_adapter.dart';
 
 /// 统一跨平台系统托盘服务抽象 (TrayService Facade)
 ///
@@ -33,20 +35,35 @@ abstract class TrayService {
   /// 释放托盘资源
   Future<void> dispose();
 
+  Future<void> showContextMenu();
+
   /// 当前运行环境是否支持系统托盘
   bool get isSupported;
 }
 
 class DesktopTrayService with TrayListener implements TrayService {
-  DesktopTrayService({
-    required this.windowService,
-    this.onOpenFlyout,
-  });
+  DesktopTrayService({required this.windowService, this.onOpenFlyout});
 
   final WindowService windowService;
   final VoidCallback? onOpenFlyout;
 
   bool _initialized = false;
+  Object? _lastError;
+  Future<void> _updates = Future<void>.value();
+  Future<void> _enqueue(Future<void> Function() update) {
+    _updates = _updates
+        .then((_) async {
+          if (_initialized) await update();
+        })
+        .catchError((Object error) {
+          _lastError = error;
+          debugPrint(
+            '[DesktopTrayService] update failed: ${error.runtimeType}',
+          );
+        });
+    return _updates;
+  }
+
   int _unreadCount = 0;
   String? _currentOwnerName;
   bool _isBlinkingEnabled = true;
@@ -61,17 +78,38 @@ class DesktopTrayService with TrayListener implements TrayService {
   Future<void> initialize() async {
     if (!isSupported || _initialized) return;
     try {
-      trayManager.addListener(this);
-
-      // 默认基础图标配置
-      final defaultIconPath = _getDefaultIconPath();
-      await trayManager.setIcon(defaultIconPath);
-      await trayManager.setToolTip('Goto IM 跨平台即时通讯');
+      _lastError = null;
+      if (WindowsWindowAdapter.isWindows) {
+        await WindowsWindowAdapter.setupCustomTitleBar();
+        WindowsWindowAdapter.onTrayEvent = (event) {
+          if (event == 'left') onTrayIconMouseDown();
+          if (event == 'show') windowService.bringToFront('main');
+          if (event == 'unread') onTrayIconMouseDown();
+          if (event == 'exit') {
+            unawaited(dispose());
+            exit(0);
+          }
+        };
+        await WindowsWindowAdapter.initializeTray();
+      } else {
+        trayManager.addListener(this);
+        await trayManager.setIcon(_getDefaultIconPath());
+        await trayManager.setToolTip('Goto IM 跨平台即时通讯');
+      }
       await _buildMenu();
       _initialized = true;
+      await _enqueue(() async {
+        await _buildMenu();
+        await _applyIcon();
+        if (_unreadCount > 0 && _isBlinkingEnabled) _startBlinking();
+      });
       debugPrint('[DesktopTrayService] Initialized system tray successfully.');
     } catch (e, st) {
-      debugPrint('[DesktopTrayService] Failed to initialize tray: $e\n$st');
+      _lastError = e;
+      _initialized = false;
+      debugPrint(
+        '[DesktopTrayService] Failed to initialize tray: ${e.runtimeType}\n$st',
+      );
     }
   }
 
@@ -83,32 +121,30 @@ class DesktopTrayService with TrayListener implements TrayService {
 
   Future<void> _buildMenu() async {
     if (!isSupported) return;
+    if (WindowsWindowAdapter.isWindows) {
+      await WindowsWindowAdapter.updateTray({
+        'owner': _currentOwnerName ?? '',
+        'unread': _unreadCount,
+        'tooltip':
+            _unreadCount > 0
+                ? 'Goto IM ($_unreadCount条新消息)'
+                : 'Goto IM 跨平台即时通讯',
+      });
+      return;
+    }
     final ownerLabel =
         _currentOwnerName != null && _currentOwnerName!.isNotEmpty
             ? '当前身份: $_currentOwnerName'
             : 'Goto IM 聊天';
 
     final items = <MenuItem>[
-      MenuItem(
-        key: 'show_app',
-        label: '打开 Goto IM',
-      ),
+      MenuItem(key: 'show_app', label: '打开 Goto IM'),
       if (_unreadCount > 0)
-        MenuItem(
-          key: 'open_unread_flyout',
-          label: '查看未读消息 ($_unreadCount)',
-        ),
+        MenuItem(key: 'open_unread_flyout', label: '查看未读消息 ($_unreadCount)'),
       MenuItem.separator(),
-      MenuItem(
-        key: 'current_owner',
-        label: ownerLabel,
-        disabled: true,
-      ),
+      MenuItem(key: 'current_owner', label: ownerLabel, disabled: true),
       MenuItem.separator(),
-      MenuItem(
-        key: 'exit_app',
-        label: '退出应用',
-      ),
+      MenuItem(key: 'exit_app', label: '退出应用'),
     ];
 
     final menu = Menu(items: items);
@@ -116,69 +152,73 @@ class DesktopTrayService with TrayListener implements TrayService {
   }
 
   @override
-  Future<void> setUnread(int unreadCount) async {
-    if (!isSupported || !_initialized) return;
-    if (_unreadCount == unreadCount) return;
-    _unreadCount = unreadCount;
-
-    try {
-      final tooltip = unreadCount > 0
-          ? 'Goto IM ($unreadCount条新消息)'
-          : 'Goto IM 跨平台即时通讯';
-      await trayManager.setToolTip(tooltip);
-      await _buildMenu();
-
-      // 动态更新或绘制带有角标数字的托盘图标
-      if (unreadCount > 0) {
-        final badgePath = await TrayBadgeGenerator.generateBadgeIconPath(
-          unreadCount: unreadCount,
+  Future<void> setUnread(int unreadCount) {
+    final count = unreadCount < 0 ? 0 : unreadCount;
+    if (!isSupported) return _updates;
+    if (!_initialized) {
+      _unreadCount = count;
+      return _updates;
+    }
+    if (_unreadCount == count) return _updates;
+    _unreadCount = count;
+    _stopBlinking();
+    return _enqueue(() async {
+      // Coalesce notifications queued before the platform finishes a frame.
+      if (count != _unreadCount) return;
+      if (!WindowsWindowAdapter.isWindows) {
+        await trayManager.setToolTip(
+          count > 0 ? 'Goto IM ($count条新消息)' : 'Goto IM 跨平台即时通讯',
         );
-        if (badgePath != null) {
-          await trayManager.setIcon(badgePath);
-        }
-        if (_isBlinkingEnabled) {
-          _startBlinking();
-        }
-      } else {
-        _stopBlinking();
-        await trayManager.setIcon(_getDefaultIconPath());
       }
-    } catch (e) {
-      debugPrint('[DesktopTrayService] setUnread failed: $e');
+      await _buildMenu();
+      await _applyIcon();
+      if (_unreadCount > 0 && _isBlinkingEnabled) _startBlinking();
+    });
+  }
+
+  Future<void> _applyIcon() async {
+    final count = _unreadCount;
+    final dimmed = _isBlinkDimmed;
+    final path =
+        count > 0
+            ? await TrayBadgeGenerator.generateBadgeIconPath(
+              unreadCount: count,
+              isDimmed: dimmed,
+            )
+            : (WindowsWindowAdapter.isWindows ? '' : _getDefaultIconPath());
+    if (path != null &&
+        count == _unreadCount &&
+        dimmed == _isBlinkDimmed &&
+        _initialized) {
+      if (WindowsWindowAdapter.isWindows) {
+        await WindowsWindowAdapter.updateTray({'iconPath': path});
+      } else {
+        await trayManager.setIcon(path);
+      }
     }
   }
 
   @override
   void setBlinking(bool enabled) {
     _isBlinkingEnabled = enabled;
-    if (!enabled) {
-      _stopBlinking();
-      if (_unreadCount > 0) {
-        TrayBadgeGenerator.generateBadgeIconPath(unreadCount: _unreadCount)
-            .then((path) {
-          if (path != null) trayManager.setIcon(path);
-        });
-      }
-    } else if (_unreadCount > 0) {
-      _startBlinking();
-    }
+    _stopBlinking();
+    unawaited(_enqueue(_applyIcon));
+    if (enabled && _unreadCount > 0) _startBlinking();
   }
 
   void _startBlinking() {
     _blinkTimer?.cancel();
-    _blinkTimer = Timer.periodic(const Duration(milliseconds: 800), (_) async {
+    _blinkTimer = Timer.periodic(const Duration(milliseconds: 800), (_) {
       if (_unreadCount <= 0 || !_isBlinkingEnabled) {
         _stopBlinking();
         return;
       }
-      _isBlinkDimmed = !_isBlinkDimmed;
-      final iconPath = await TrayBadgeGenerator.generateBadgeIconPath(
-        unreadCount: _unreadCount,
-        isDimmed: _isBlinkDimmed,
+      unawaited(
+        _enqueue(() async {
+          _isBlinkDimmed = !_isBlinkDimmed;
+          await _applyIcon();
+        }),
       );
-      if (iconPath != null) {
-        await trayManager.setIcon(iconPath);
-      }
     });
   }
 
@@ -190,8 +230,9 @@ class DesktopTrayService with TrayListener implements TrayService {
 
   @override
   Future<void> updateContextMenu({String? currentOwnerName}) async {
-    if (!isSupported || !_initialized) return;
+    if (!isSupported) return;
     _currentOwnerName = currentOwnerName;
+    if (!_initialized) return;
     try {
       await _buildMenu();
     } catch (e) {
@@ -221,7 +262,17 @@ class DesktopTrayService with TrayListener implements TrayService {
   @override
   void onTrayIconRightMouseDown() {
     // 右键点击托盘图标：弹出上下文菜单
-    trayManager.popUpContextMenu();
+    unawaited(showContextMenu());
+  }
+
+  @override
+  Future<void> showContextMenu() async {
+    if (!_initialized) return;
+    if (WindowsWindowAdapter.isWindows) {
+      await WindowsWindowAdapter.showTrayMenu();
+    } else {
+      await trayManager.popUpContextMenu();
+    }
   }
 
   @override
@@ -244,12 +295,62 @@ class DesktopTrayService with TrayListener implements TrayService {
     if (!isSupported || !_initialized) return;
     try {
       _stopBlinking();
-      trayManager.removeListener(this);
-      await trayManager.destroy();
       _initialized = false;
+      await _updates;
+      if (WindowsWindowAdapter.isWindows) {
+        WindowsWindowAdapter.onTrayEvent = null;
+        await WindowsWindowAdapter.destroyTray();
+      } else {
+        trayManager.removeListener(this);
+        await trayManager.destroy();
+      }
     } catch (e) {
       debugPrint('[DesktopTrayService] dispose failed: $e');
     }
+  }
+}
+
+/// Child engines forward tray commands to the single tray owned by the main engine.
+class SubWindowTrayService implements TrayService {
+  const SubWindowTrayService();
+  static const _channel = WindowMethodChannel(
+    'gotoim/ipc_to_main',
+    mode: ChannelMode.bidirectional,
+  );
+  @override
+  bool get isSupported =>
+      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  @override
+  Future<void> initialize() async {}
+  @override
+  Future<void> dispose() async {}
+  @override
+  Future<void> setUnread(int unreadCount) async {
+    await _channel.invokeMethod('tray_command', {'unread': unreadCount});
+  }
+
+  @override
+  void setBlinking(bool enabled) {
+    unawaited(
+      _channel
+          .invokeMethod('tray_command', {'blinking': enabled})
+          .then<void>((_) {})
+          .catchError((Object error) {
+            debugPrint('[SubWindowTrayService] command failed: $error');
+          }),
+    );
+  }
+
+  @override
+  Future<void> showContextMenu() async {
+    await _channel.invokeMethod('tray_command', {'showMenu': true});
+  }
+
+  @override
+  Future<void> updateContextMenu({String? currentOwnerName}) async {
+    await _channel.invokeMethod('tray_command', {
+      'ownerName': currentOwnerName,
+    });
   }
 }
 
@@ -274,6 +375,8 @@ class NoopTrayService implements TrayService {
 
   @override
   bool get isSupported => false;
+  @override
+  Future<void> showContextMenu() async {}
 }
 
 final Provider<TrayService> trayServiceProvider = Provider<TrayService>((ref) {
@@ -284,6 +387,31 @@ final Provider<TrayService> trayServiceProvider = Provider<TrayService>((ref) {
   }
   final windowService = ref.watch(windowServiceProvider);
   final tray = DesktopTrayService(windowService: windowService);
-  ref.onDispose(tray.dispose);
+  // Wire the existing instance in one direction. Reading trayServiceProvider
+  // from windowServiceProvider's IPC handler creates a Riverpod dependency cycle.
+  if (windowService is DefaultWindowService) {
+    windowService.trayCommand = (arguments) async {
+      await tray.initialize();
+      if (!tray._initialized) throw StateError('主窗口托盘初始化失败');
+      tray._lastError = null;
+      if (arguments['showMenu'] == true) await tray.showContextMenu();
+      if (arguments['unread'] is num) {
+        await tray.setUnread((arguments['unread'] as num).toInt());
+      }
+      if (arguments['blinking'] is bool) {
+        tray.setBlinking(arguments['blinking'] as bool);
+      }
+      if (arguments.containsKey('ownerName')) {
+        await tray.updateContextMenu(
+          currentOwnerName: arguments['ownerName'] as String?,
+        );
+      }
+      if (tray._lastError != null) throw StateError('主窗口托盘更新失败');
+    };
+  }
+  ref.onDispose(() {
+    if (windowService is DefaultWindowService) windowService.trayCommand = null;
+    unawaited(tray.dispose());
+  });
   return tray;
 });

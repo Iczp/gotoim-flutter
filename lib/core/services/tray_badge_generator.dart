@@ -16,11 +16,24 @@ class TrayBadgeGenerator {
 
   static final Map<int, String> _badgeCache = <int, String>{};
 
+  static final Map<int, Future<String?>> _pending = {};
+
   /// 生成带角标数字的托盘图标，并返回文件绝对路径
   static Future<String?> generateBadgeIconPath({
     required int unreadCount,
     bool isDimmed = false,
-  }) async {
+  }) {
+    final count = unreadCount.clamp(0, 100);
+    final key = count * 10 + (isDimmed ? 1 : 0);
+    return _pending.putIfAbsent(
+      key,
+      () => _generate(count, isDimmed).whenComplete(() {
+        _pending.remove(key);
+      }),
+    );
+  }
+
+  static Future<String?> _generate(int unreadCount, bool isDimmed) async {
     if (kIsWeb ||
         (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
       return null;
@@ -130,15 +143,34 @@ class TrayBadgeGenerator {
 
       final picture = recorder.endRecording();
       final image = await picture.toImage(size.toInt(), size.toInt());
+      picture.dispose();
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
 
       if (byteData == null) return null;
 
       final tempDir = await getTemporaryDirectory();
+      final png = byteData.buffer.asUint8List();
+      Uint8List bytes = png;
+      if (Platform.isWindows) {
+        // Vista+ ICO embeds PNG data; LoadImage(IMAGE_ICON) requires its directory.
+        final header =
+            ByteData(22)
+              ..setUint16(2, 1, Endian.little)
+              ..setUint16(4, 1, Endian.little)
+              ..setUint8(6, 32)
+              ..setUint8(7, 32)
+              ..setUint16(10, 1, Endian.little)
+              ..setUint16(12, 32, Endian.little)
+              ..setUint32(14, png.length, Endian.little)
+              ..setUint32(18, 22, Endian.little);
+        bytes = Uint8List.fromList([...header.buffer.asUint8List(), ...png]);
+      }
+      final extension = Platform.isWindows ? 'ico' : 'png';
       final targetFile = File(
-        '${tempDir.path}/gotoim_tray_badge_${unreadCount}_${isDimmed ? "dim" : "normal"}.png',
+        '${tempDir.path}/gotoim_tray_badge_${pid}_${unreadCount}_${isDimmed ? "dim" : "normal"}.$extension',
       );
-      await targetFile.writeAsBytes(byteData.buffer.asUint8List(), flush: true);
+      await targetFile.writeAsBytes(bytes, flush: true);
 
       _badgeCache[cacheKey] = targetFile.path;
       return targetFile.path;

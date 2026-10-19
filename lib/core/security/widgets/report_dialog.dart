@@ -115,6 +115,42 @@ class ReportDialog extends ConsumerStatefulWidget {
     );
   }
 
+  /// 针对群聊发起投诉
+  static Future<bool?> showForGroup(
+    BuildContext context, {
+    required String groupId,
+    required String groupTitle,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => ReportDialog(
+        target: groupTitle,
+        targetType: 'group',
+        messageId: groupId,
+        targetTitle: '群聊「$groupTitle」',
+      ),
+    );
+  }
+
+  /// 针对用户/好友发起投诉
+  static Future<bool?> showForUser(
+    BuildContext context, {
+    required String userId,
+    required String userName,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => ReportDialog(
+        target: userName,
+        targetType: 'user',
+        messageId: userId,
+        targetTitle: '用户「$userName」',
+      ),
+    );
+  }
+
   @override
   ConsumerState<ReportDialog> createState() => _ReportDialogState();
 }
@@ -193,7 +229,12 @@ class _ReportDialogState extends ConsumerState<ReportDialog> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              widget.targetType == 'url' ? '投诉违规网页' : '投诉违规消息',
+              switch (widget.targetType) {
+                'url' => '投诉违规网页',
+                'group' => '投诉违规群聊',
+                'user' => '投诉违规用户',
+                _ => '投诉违规消息',
+              },
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
           ),

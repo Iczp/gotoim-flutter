@@ -130,13 +130,25 @@ class _DesktopSessionSplitViewState
     final dividerColor =
         isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000);
 
-    return Row(
-      children: [
-        // ── 会话列表栏 (左列，宽 _sessionPaneWidth) ──────────────────────────
-        Container(
-          width: _sessionPaneWidth,
-          color: listPaneBg,
-          child: Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalWidth = constraints.maxWidth;
+        // P2-03: 当窗口较窄 (例如宽 < 760) 时，动态计算左侧会话栏宽度，保证右侧聊天内容区至少保留 360px，杜绝压缩文字和输入控件
+        double effectivePaneWidth = _sessionPaneWidth;
+        if (totalWidth.isFinite && totalWidth < 760) {
+          final maxPane = (totalWidth - 360.0).clamp(180.0, 260.0);
+          if (effectivePaneWidth > maxPane) {
+            effectivePaneWidth = maxPane;
+          }
+        }
+
+        return Row(
+          children: [
+            // ── 会话列表栏 (左列，宽 effectivePaneWidth) ──────────────────────────
+            Container(
+              width: effectivePaneWidth,
+              color: listPaneBg,
+              child: Column(
             children: [
               const SizedBox(height: 12),
 
@@ -406,9 +418,10 @@ class _DesktopSessionSplitViewState
           behavior: HitTestBehavior.opaque,
           onHorizontalDragUpdate: (details) {
             setState(() {
+              final maxAllowed = (totalWidth.isFinite ? totalWidth - 320.0 : 480.0).clamp(220.0, 480.0);
               _sessionPaneWidth = (_sessionPaneWidth + details.delta.dx).clamp(
-                220.0,
-                480.0,
+                180.0,
+                maxAllowed,
               );
             });
           },
@@ -447,6 +460,8 @@ class _DesktopSessionSplitViewState
         ),
       ],
     );
+  },
+);
   }
 }
 

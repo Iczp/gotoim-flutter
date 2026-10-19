@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/native/native.dart';
+import '../../../../core/security/widgets/report_dialog.dart';
 
 /// 呼叫电话/复制号码的底部弹窗
 void showPhoneActionSheet(BuildContext context, String phone) {
@@ -120,3 +121,110 @@ void showMediaCallActionSheet(BuildContext context, String displayName) {
         ),
   );
 }
+
+/// 更多资料设置（举报、拉黑、设置备注）底部弹窗
+void showMoreProfileActionSheet(
+  BuildContext context, {
+  required String userId,
+  required String userName,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isDismissible: true,
+    enableDrag: true,
+    backgroundColor: Colors.transparent,
+    builder:
+        (sheetContext) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                ListTile(
+                  leading: const Icon(Icons.edit_note_rounded),
+                  title: const Text('设置备注和标签'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('已进入备注与标签设置'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 0.5),
+                ListTile(
+                  leading: const Icon(Icons.block_rounded, color: Colors.orange),
+                  title: const Text('加入黑名单'),
+                  subtitle: const Text('加入黑名单后将不再接收对方发来的任何消息'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    showDialog<void>(
+                      context: context,
+                      builder:
+                          (ctx) => AlertDialog(
+                            title: const Text('加入黑名单'),
+                            content: Text('确定要将 $userName 加入黑名单吗？加入后将不再接收对方消息。'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('取消'),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('已将 $userName 加入黑名单')),
+                                  );
+                                },
+                                child: const Text(
+                                  '确定拉黑',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
+                          ),
+                    );
+                  },
+                ),
+                const Divider(height: 0.5),
+                ListTile(
+                  leading: const Icon(
+                    Icons.report_problem_outlined,
+                    color: Colors.redAccent,
+                  ),
+                  title: const Text(
+                    '投诉 / 举报该用户',
+                    style: TextStyle(color: Colors.redAccent),
+                  ),
+                  subtitle: const Text('举报涉嫌违规、骚扰、涉黄、诈骗等不良行为'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    ReportDialog.showForUser(
+                      context,
+                      userId: userId,
+                      userName: userName,
+                    );
+                  },
+                ),
+                const Divider(height: 0.5),
+                ListTile(
+                  title: const Center(
+                    child: Text(
+                      '取消',
+                      style: TextStyle(fontSize: 15, color: Colors.grey),
+                    ),
+                  ),
+                  onTap: () => Navigator.pop(sheetContext),
+                ),
+              ],
+            ),
+          ),
+        ),
+  );
+}
+

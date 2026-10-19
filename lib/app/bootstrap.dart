@@ -19,6 +19,8 @@ import '../core/notifications/local_notification_service.dart';
 import '../core/statistic/statistic_config.dart';
 import '../core/statistic/statistic_service.dart';
 import '../core/platform/platform_facade.dart';
+import '../core/platform/windows/windows_window_adapter.dart';
+import '../core/widgets/desktop_startup_scene.dart';
 import '../core/services/clipboard_service.dart';
 import '../core/services/file/file_picker_service.dart';
 import '../core/services/file/file_upload_service.dart';
@@ -41,7 +43,12 @@ Future<void> bootstrap() async {
   ensureSessionInvalidatorRegistered();
 
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  if (WindowsWindowAdapter.isWindows) {
+    runApp(const DesktopStartupScene());
+    await widgetsBinding.endOfFrame;
+  } else {
+    FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  }
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

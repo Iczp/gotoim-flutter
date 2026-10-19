@@ -227,6 +227,11 @@ class NativeSensor {
 
   /// Stream of proximity sensor events.
   Stream<ProximityEvent> get onProximityChange {
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      return const Stream<ProximityEvent>.empty();
+    }
     _proximityStream ??= _createSafeStream<ProximityEvent>(_proximityChannel, (
       dynamic event,
     ) {

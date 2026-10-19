@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/session/data/models/chat_owner.dart';
+import '../../features/session/data/models/session_summary.dart';
 import 'tray_message_models.dart';
 import 'tray_service.dart';
 
@@ -8,6 +10,10 @@ class TrayGroupedUnreadNotifier extends Notifier<TrayGroupedUnreadState> {
   @override
   TrayGroupedUnreadState build() {
     return TrayGroupedUnreadState.empty;
+  }
+
+  void applySnapshot(TrayGroupedUnreadState snapshot) {
+    state = snapshot;
   }
 
   /// 加载示例测试数据 (用于诊断页或本地预览)
@@ -197,6 +203,77 @@ class TrayGroupedUnreadNotifier extends Notifier<TrayGroupedUnreadState> {
       (sum, g) => sum + g.totalUnread,
     );
     state = state.copyWith(totalUnread: newTotal, groups: updatedGroups);
+    _syncWithTrayService();
+  }
+
+  /// 将真实会话列表 (SessionSummary) 投影同步到托盘分组未读状态中
+  void syncFromRealSessions({
+    required ChatOwner? currentOwner,
+    required List<ChatOwner> allOwners,
+    required List<SessionSummary> sessions,
+  }) {
+    if (currentOwner == null) {
+      state = TrayGroupedUnreadState.empty;
+      _syncWithTrayService();
+      return;
+    }
+
+    final unreadSessions = sessions.where((s) => s.unreadCount > 0).toList();
+    final ownerSessions =
+        unreadSessions.map((s) {
+          final dest = s.raw['destination'];
+          final isGroup =
+              s.raw['isGroup'] == true ||
+              (dest is Map &&
+                  (dest['objectType'] == 1 || dest['isGroup'] == true));
+          return TraySessionItem(
+            sessionUnitId: s.id,
+            targetName: s.title,
+            lastMessageText: s.preview,
+            unreadCount: s.unreadCount,
+            lastMessageTime: s.updatedAt ?? DateTime.now(),
+            isGroup: isGroup,
+          );
+        }).toList();
+
+    final currentGroupTotal = ownerSessions.fold<int>(
+      0,
+      (sum, s) => sum + s.unreadCount,
+    );
+
+    final groups = <TrayOwnerGroup>[];
+    if (currentGroupTotal > 0 || allOwners.length > 1) {
+      groups.add(
+        TrayOwnerGroup(
+          ownerId: currentOwner.id,
+          ownerName: currentOwner.name,
+          isCurrent: true,
+          roleTitle: currentOwner.typeDescription,
+          totalUnread: currentGroupTotal,
+          sessions: ownerSessions,
+        ),
+      );
+    }
+
+    // 其它身份的未读统计
+    for (final owner in allOwners) {
+      if (owner.id == currentOwner.id) continue;
+      if (owner.unreadCount > 0) {
+        groups.add(
+          TrayOwnerGroup(
+            ownerId: owner.id,
+            ownerName: owner.name,
+            isCurrent: false,
+            roleTitle: owner.typeDescription,
+            totalUnread: owner.unreadCount,
+            sessions: const [],
+          ),
+        );
+      }
+    }
+
+    final total = groups.fold<int>(0, (sum, g) => sum + g.totalUnread);
+    state = TrayGroupedUnreadState(totalUnread: total, groups: groups);
     _syncWithTrayService();
   }
 

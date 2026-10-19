@@ -1,3 +1,4 @@
+import '../platform/windows/windows_window_adapter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,10 +17,17 @@ import 'app_toast.dart';
 /// 3. 点击具体会话：自动切换身份至该聊天对象，并唤醒主窗口聚焦至该会话；
 /// 4. 浮窗底部与顶部提供“一键已读”、“打开主界面”及“查看所有会话”快捷操作。
 class DesktopTrayMessageBox extends ConsumerStatefulWidget {
-  const DesktopTrayMessageBox({super.key});
+  const DesktopTrayMessageBox({this.nativeWindow = false, super.key});
+  final bool nativeWindow;
 
   /// 在桌面右下角（任务栏托盘上方）弹出微信风格无边框浮窗
   static Future<void> show(BuildContext context) {
+    if (WindowsWindowAdapter.isWindows) {
+      return ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(windowServiceProvider).openTrayFlyout();
+    }
     return showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -102,8 +110,16 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
     });
   }
 
+  void _close() {
+    if (widget.nativeWindow) {
+      WindowsWindowAdapter.close();
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   void _handleOpenSession(TrayOwnerGroup group, TraySessionItem session) {
-    Navigator.of(context).pop();
+    _close();
     final windowService = ref.read(windowServiceProvider);
 
     showToast(
@@ -118,10 +134,8 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
       title: session.targetName,
     );
 
-    // 标记该会话已读
-    ref
-        .read(trayGroupedUnreadProvider.notifier)
-        .markSessionRead(group.ownerId, session.sessionUnitId);
+    // The actual chat controller owns read receipts; do not remove local
+    // tray entries before the server confirms that the conversation was read.
   }
 
   @override
@@ -154,7 +168,8 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
 
     // 动态限制最大高度，防止大/小分辨率屏幕下浮窗顶出桌面或被任务栏遮挡
     final screenH = MediaQuery.of(context).size.height;
-    final maxFlyoutHeight = (screenH * 0.72).clamp(380.0, 560.0);
+    final maxFlyoutHeight =
+        widget.nativeWindow ? screenH : (screenH * 0.72).clamp(380.0, 560.0);
 
     final allCollapsed =
         state.groups.isNotEmpty &&
@@ -163,7 +178,7 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
     return Material(
       color: Colors.transparent,
       child: Container(
-        width: 380,
+        width: widget.nativeWindow ? double.infinity : 380,
         constraints: BoxConstraints(maxHeight: maxFlyoutHeight),
         decoration: BoxDecoration(
           color: surfaceBg,
@@ -309,7 +324,7 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
                 style: const TextStyle(fontSize: 11.5),
               ),
             ),
-          if (totalUnread > 0)
+          if (totalUnread > 0 && !widget.nativeWindow)
             TextButton(
               onPressed: () {
                 ref.read(trayGroupedUnreadProvider.notifier).markAllRead();
@@ -326,7 +341,7 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
             icon: const Icon(Icons.close_rounded, size: 16),
             visualDensity: VisualDensity.compact,
             tooltip: '关闭',
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: _close,
           ),
         ],
       ),
@@ -449,29 +464,30 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
                   ),
                   const SizedBox(width: 4),
                   // 本组快捷一键已读按钮
-                  Tooltip(
-                    message: '本身份全部已读',
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(4),
-                      onTap: () {
-                        ref
-                            .read(trayGroupedUnreadProvider.notifier)
-                            .markOwnerAllRead(group.ownerId);
-                        showToast(
-                          '【${group.ownerName}】的所有消息已标记已读',
-                          type: ToastType.success,
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.done_all_rounded,
-                          size: 16,
-                          color: textSecondary,
+                  if (!widget.nativeWindow)
+                    Tooltip(
+                      message: '本身份全部已读',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: () {
+                          ref
+                              .read(trayGroupedUnreadProvider.notifier)
+                              .markOwnerAllRead(group.ownerId);
+                          showToast(
+                            '【${group.ownerName}】的所有消息已标记已读',
+                            type: ToastType.success,
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.done_all_rounded,
+                            size: 16,
+                            color: textSecondary,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                   const SizedBox(width: 4),
                   // 5-新消息总数量 Badge (防大数字溢出)
                   Container(
@@ -687,7 +703,7 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
         children: [
           InkWell(
             onTap: () {
-              Navigator.of(context).pop();
+              _close();
               ref.read(windowServiceProvider).bringToFront('main');
             },
             child: Text(
@@ -697,7 +713,7 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.of(context).pop();
+              _close();
               ref.read(windowServiceProvider).bringToFront('main');
             },
             style: ElevatedButton.styleFrom(

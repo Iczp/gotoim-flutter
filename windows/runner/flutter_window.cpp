@@ -1,9 +1,14 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include "window_controls.h"
 
 #include "flutter/generated_plugin_registrant.h"
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
+
+namespace {
+constexpr UINT kRedrawAfterShow = WM_APP + 0x47;
+}
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -31,11 +36,15 @@ bool FlutterWindow::OnCreate() {
         reinterpret_cast<flutter::FlutterViewController *>(controller);
     auto *registry = flutter_view_controller->engine();
     RegisterPlugins(registry);
+
+    RegisterWindowControls(flutter_view_controller->engine());
   });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  RegisterWindowControls(flutter_controller_->engine());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
+    PostMessage(GetHandle(), kRedrawAfterShow, 0, 0);
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -58,6 +67,13 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Present a fresh frame only after ShowWindow and its size/visibility messages
+  // have returned to the platform message loop.
+  if (message == kRedrawAfterShow && flutter_controller_) {
+    flutter_controller_->ForceRedraw();
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

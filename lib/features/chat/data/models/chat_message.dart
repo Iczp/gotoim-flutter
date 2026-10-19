@@ -74,6 +74,39 @@ class ChatMessage {
     );
   }
 
+  Map<String, dynamic> toWindowPayload() => {
+    'id': localId,
+    'serverId': serverId,
+    'clientMessageId': clientMessageId,
+    'ownerId': ownerId,
+    'sessionUnitId': sessionUnitId,
+    'senderSessionUnitId': senderSessionUnitId,
+    'messageType': messageType,
+    'state': state,
+    'score': score,
+    'time': createdAt?.millisecondsSinceEpoch,
+    'text': text,
+    'isMe': isMine,
+    'raw': raw,
+  };
+
+  factory ChatMessage.fromWindowPayload(Map map) => ChatMessage(
+    localId: map['id'] as String,
+    serverId: (map['serverId'] as num?)?.toInt(),
+    clientMessageId: map['clientMessageId'] as String?,
+    ownerId: (map['ownerId'] as num?)?.toInt() ?? 0,
+    sessionUnitId: map['sessionUnitId'] as String,
+    senderSessionUnitId: map['senderSessionUnitId'] as String?,
+    messageType: (map['messageType'] as num?)?.toInt() ?? 0,
+    state: map['state'] as String? ?? 'received',
+    score: (map['score'] as num?)?.toInt() ?? 0,
+    createdAt:
+        map['time'] is num
+            ? DateTime.fromMillisecondsSinceEpoch((map['time'] as num).toInt())
+            : null,
+    raw: Map<String, dynamic>.from(map['raw'] as Map? ?? const {}),
+  );
+
   final String localId;
   final int? serverId;
   final String? clientMessageId;

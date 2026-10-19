@@ -20,6 +20,8 @@ import 'chat_quote_preview.dart';
 import 'chat_recording_panel.dart';
 import 'clipboard_files_confirm_dialog.dart';
 import 'clipboard_image_confirm_dialog.dart';
+import 'screenshot_annotation_dialog.dart';
+import '../../../../core/platform/windows/windows_window_adapter.dart';
 
 /// 底部消息输入与操作区组件（ChatComposer）
 ///
@@ -85,6 +87,15 @@ class ChatComposerState extends State<ChatComposer>
   bool _mentionSheetOpen = false;
   bool _menuMode = false;
   String? _lastDockMetrics;
+  bool _hideWindowOnScreenshot = true;
+
+  // 微信同款桌面端高度调节与快捷键偏好
+  double _desktopComposerHeight = 175.0; // 微信桌面同款初始高度
+  static const double _minDesktopComposerHeight = 115.0;
+  static const double _maxDesktopComposerHeight = 420.0;
+  bool _isDraggingSplitter = false;
+  bool _sendOnEnter = true; // 微信默认: Enter 发送，Ctrl+Enter 换行
+  final ScrollController _desktopScrollController = ScrollController();
 
   static const _functions = <ChatFunctionItem>[
     ChatFunctionItem('相册', Icons.photo_outlined),
@@ -167,6 +178,7 @@ class ChatComposerState extends State<ChatComposer>
     }
     _focusNode.dispose();
     _pageController.dispose();
+    _desktopScrollController.dispose();
     super.dispose();
   }
 
@@ -511,14 +523,6 @@ class ChatComposerState extends State<ChatComposer>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hasBg = widget.hasBackground;
 
-    final sendButtonBackground =
-        isDark ? colorScheme.primary : colorScheme.primary;
-    final sendButtonForeground =
-        isDark ? colorScheme.onPrimary : colorScheme.onPrimary;
-    final disabledSendButtonBackground =
-        isDark
-            ? const Color(0xFF334155).withValues(alpha: 0.5)
-            : const Color(0xFFCBD5E1).withValues(alpha: 0.6);
 
     final inputControlHeight = tokens.chatMessageMinHeight;
     final verticalPadding =
@@ -714,46 +718,80 @@ class ChatComposerState extends State<ChatComposer>
                       width: inputControlHeight,
                       height: inputControlHeight,
                       child: IconButton(
-                        tooltip: _showFunctions ? '打开键盘' : '更多功能',
-                        onPressed: _toggleFunctions,
+                        tooltip: '表情',
+                        onPressed: () {
+                          if (kIsWeb || widget.isDesktop) {
+                            _openDesktopEmojiPicker(context);
+                          } else {
+                            _toggleFunctions();
+                          }
+                        },
                         padding: EdgeInsets.zero,
-                        icon: AnimatedRotation(
-                          turns: _showFunctions ? 0.125 : 0,
-                          duration: const Duration(milliseconds: 180),
-                          child: const Icon(Icons.add_circle_outline),
+                        icon: const Icon(
+                          Icons.sentiment_satisfied_alt_outlined,
+                          size: 26,
                         ),
                       ),
                     ),
                   if (!_voiceMode)
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        minimumSize: Size(58, inputControlHeight),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        backgroundColor: sendButtonBackground,
-                        foregroundColor: sendButtonForeground,
-                        disabledBackgroundColor: disabledSendButtonBackground,
-                        elevation: 0,
-                      ),
-                      onPressed:
-                          widget.controller.isSending ||
-                                  widget.controller.isMuted
-                              ? null
-                              : () {
-                                final value = widget.input.text;
-                                widget.input.clear();
-                                widget.controller.send(value);
-                              },
-                      child: const Text(
-                        '发送',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: widget.input,
+                      builder: (context, val, _) {
+                        final hasText = val.text.trim().isNotEmpty;
+                        if (!hasText) {
+                          return SizedBox(
+                            width: inputControlHeight,
+                            height: inputControlHeight,
+                            child: IconButton(
+                              tooltip: _showFunctions ? '打开键盘' : '更多功能',
+                              onPressed: _toggleFunctions,
+                              padding: EdgeInsets.zero,
+                              icon: AnimatedRotation(
+                                turns: _showFunctions ? 0.125 : 0,
+                                duration: const Duration(milliseconds: 180),
+                                child: const Icon(
+                                  Icons.add_circle_outline_rounded,
+                                  size: 26,
+                                ),
+                              ),
+                            ),
+                          );
+                        } else {
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                minimumSize: Size(58, inputControlHeight),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                backgroundColor: const Color(0xFF07C160),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                              ),
+                              onPressed:
+                                  widget.controller.isSending ||
+                                          widget.controller.isMuted
+                                      ? null
+                                      : () {
+                                        final value = widget.input.text;
+                                        widget.input.clear();
+                                        widget.controller.send(value);
+                                      },
+                              child: const Text(
+                                '发送',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                      },
                     ),
                 ],
               ),
@@ -998,19 +1036,30 @@ class ChatComposerState extends State<ChatComposer>
   Future<void> _handleDesktopScreenshot() async {
     try {
       showToast('正在启动截图工具，请截取选区...', type: ToastType.info);
+      if (_hideWindowOnScreenshot &&
+          !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.windows) {
+        await WindowsWindowAdapter.minimize();
+        await Future<void>.delayed(const Duration(milliseconds: 260));
+      }
       final screenCapture = DesktopScreenCaptureService(
         clipboardService: SystemClipboardService(),
         platformFacade: createPlatformFacade(),
       );
       final imageBytes = await screenCapture.capture();
+      if (_hideWindowOnScreenshot &&
+          !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.windows) {
+        await WindowsWindowAdapter.bringToFront();
+      }
       if (imageBytes != null && imageBytes.isNotEmpty && mounted) {
-        final result = await ClipboardImageConfirmDialog.show(
+        final result = await ScreenshotAnnotationDialog.show(
           context,
           imageBytes: imageBytes,
         );
         if (result != null && result.confirmed) {
           await widget.controller.sendImageBytes(
-            imageBytes,
+            result.imageBytes,
             caption: result.caption,
             fileName: 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png',
           );
@@ -1053,6 +1102,12 @@ class ChatComposerState extends State<ChatComposer>
         final result = await ClipboardImageConfirmDialog.show(
           context,
           imageBytes: imageBytes,
+          onAnnotatedSend: (annotatedBytes, caption) async {
+            await widget.controller.sendImageBytes(
+              annotatedBytes,
+              caption: caption,
+            );
+          },
         );
         if (result != null && result.confirmed) {
           await widget.controller.sendImageBytes(
@@ -1068,6 +1123,320 @@ class ChatComposerState extends State<ChatComposer>
     return false; // 无文件或图像，放行常规纯文本粘贴
   }
 
+  void _sendDesktopText() {
+    final text = widget.input.text.trim();
+    if (text.isNotEmpty &&
+        !widget.controller.isSending &&
+        !widget.controller.isMuted) {
+      widget.input.clear();
+      widget.controller.send(text);
+    }
+  }
+
+  KeyEventResult _handleDesktopKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      // 1. 发送消息逻辑 (支持用户快捷键偏好切换)
+      if (event.logicalKey == LogicalKeyboardKey.enter) {
+        final isCtrl = HardwareKeyboard.instance.isControlPressed ||
+            HardwareKeyboard.instance.isMetaPressed;
+        final isShift = HardwareKeyboard.instance.isShiftPressed;
+
+        if (_sendOnEnter) {
+          // 模式 1: 按 Enter 发送，Shift+Enter 或 Ctrl+Enter 换行
+          if (isShift || isCtrl) {
+            return KeyEventResult.ignored; // 放行系统默认换行
+          } else {
+            _sendDesktopText();
+            return KeyEventResult.handled;
+          }
+        } else {
+          // 模式 2: 按 Ctrl+Enter 发送，Enter 换行
+          if (isCtrl) {
+            _sendDesktopText();
+            return KeyEventResult.handled;
+          } else {
+            return KeyEventResult.ignored; // 放行系统默认换行
+          }
+        }
+      }
+
+      // 2. Alt + A 快捷截屏
+      if (event.logicalKey == LogicalKeyboardKey.keyA &&
+          HardwareKeyboard.instance.isAltPressed) {
+        _handleDesktopScreenshot();
+        return KeyEventResult.handled;
+      }
+
+      // 3. Ctrl + V 智能剪贴板粘贴
+      if (event.logicalKey == LogicalKeyboardKey.keyV &&
+          (HardwareKeyboard.instance.isControlPressed ||
+              HardwareKeyboard.instance.isMetaPressed)) {
+        final prevText = widget.input.text;
+        _handleClipboardPaste().then((intercepted) {
+          if (intercepted && mounted) {
+            if (widget.input.text != prevText) {
+              widget.input.text = prevText;
+            }
+          }
+        });
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Widget _buildDesktopToolbar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _DesktopToolIcon(
+              icon: Icons.sentiment_satisfied_alt_outlined,
+              tooltip: '表情',
+              onPressed: () => _openDesktopEmojiPicker(context),
+            ),
+            const SizedBox(width: 4),
+            _DesktopToolIcon(
+              icon: Icons.folder_open_outlined,
+              tooltip: '发送文件',
+              onPressed: widget.controller.chooseAndSendFile,
+            ),
+            const SizedBox(width: 4),
+            // 屏幕截图按钮 (Alt+A) 配合选项菜单 (立即截屏 / 截屏时隐藏当前窗口)
+            _buildDesktopScreenshotTool(context),
+            const SizedBox(width: 4),
+            _DesktopToolIcon(
+              icon: Icons.history_rounded,
+              tooltip: '聊天记录',
+              onPressed: () {
+                showToast('已加载全部漫游聊天记录，向上滚动可查阅', type: ToastType.info);
+              },
+            ),
+            const SizedBox(width: 4),
+            _DesktopToolIcon(
+              icon: Icons.image_outlined,
+              tooltip: '发送图片',
+              onPressed: widget.controller.chooseAndSendImages,
+            ),
+            const SizedBox(width: 4),
+            if (widget.onOpenAppearancePanel != null)
+              _DesktopToolIcon(
+                icon: Icons.wallpaper_rounded,
+                tooltip: '设置聊天背景',
+                onPressed: widget.onOpenAppearancePanel!,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopTextInput(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Focus(
+        onKeyEvent: _handleDesktopKeyEvent,
+        child: Scrollbar(
+          controller: _desktopScrollController,
+          thumbVisibility: false,
+          child: TextField(
+            controller: widget.input,
+            focusNode: _focusNode,
+            scrollController: _desktopScrollController,
+            expands: true,
+            maxLines: null,
+            minLines: null,
+            textAlignVertical: TextAlignVertical.top,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.45,
+              color: isDark ? const Color(0xFFF0F0F0) : const Color(0xFF1E293B),
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.only(top: 2, bottom: 4),
+              hintText: widget.controller.isMuted
+                  ? '全员禁言中'
+                  : '输入消息，支持拖拽或 Ctrl+V 粘贴图片/文件...',
+              hintStyle: TextStyle(
+                fontSize: 13.5,
+                color: isDark
+                    ? const Color(0xFF757575)
+                    : const Color(0xFF9E9E9E),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopBottomBar(BuildContext context, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 320;
+          final hintText = _sendOnEnter
+              ? (isNarrow ? 'Enter 发送' : '按 Enter 发送，按 Ctrl+Enter 换行')
+              : (isNarrow ? 'Ctrl+Enter 发送' : '按 Ctrl+Enter 发送，按 Enter 换行');
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  hintText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: isDark
+                        ? const Color(0xFF666666)
+                        : const Color(0xFFAAAAAA),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // 微信同款“发送(S)”组合按钮 (带快捷键下拉切换)
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: widget.input,
+                builder: (context, value, _) {
+                  final canSend = value.text.trim().isNotEmpty &&
+                      !widget.controller.isSending &&
+                      !widget.controller.isMuted;
+
+                  final btnBg = canSend
+                      ? const Color(0xFF07C160)
+                      : (isDark
+                          ? const Color(0xFF2E2E2E)
+                          : const Color(0xFFE5E5E5));
+                  final btnFg = canSend
+                      ? Colors.white
+                      : (isDark
+                          ? const Color(0xFF666666)
+                          : const Color(0xFFAAAAAA));
+
+                  return Container(
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: btnBg,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 发送主体按钮
+                        InkWell(
+                          onTap: canSend ? _sendDesktopText : null,
+                          hoverColor: canSend ? const Color(0xFF06AD56) : null,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Center(
+                              child: Text(
+                                '发送(S)',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: btnFg,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // 细微竖分割线
+                        Container(
+                          width: 1,
+                          height: 16,
+                          color: canSend
+                              ? Colors.white24
+                              : (isDark ? Colors.white10 : Colors.black12),
+                        ),
+                        // 下拉切换快捷键小三角
+                        Theme(
+                          data: Theme.of(context).copyWith(
+                            hoverColor: Colors.transparent,
+                          ),
+                          child: PopupMenuButton<bool>(
+                            tooltip: '发送快捷键设置',
+                            padding: EdgeInsets.zero,
+                            icon: Icon(
+                              Icons.arrow_drop_down_rounded,
+                              size: 16,
+                              color: btnFg,
+                            ),
+                            offset: const Offset(0, -95),
+                            onSelected: (mode) {
+                              setState(() => _sendOnEnter = mode);
+                              showToast(
+                                mode
+                                    ? '已切换为: 按 Enter 键发送'
+                                    : '已切换为: 按 Ctrl+Enter 键发送',
+                                type: ToastType.info,
+                              );
+                            },
+                            itemBuilder: (ctx) => [
+                              PopupMenuItem(
+                                value: true,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      _sendOnEnter
+                                          ? Icons.check_rounded
+                                          : Icons.check_box_outline_blank,
+                                      size: 16,
+                                      color: _sendOnEnter
+                                          ? const Color(0xFF07C160)
+                                          : Colors.transparent,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      '按 Enter 键发送消息',
+                                      style: TextStyle(fontSize: 12.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: false,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      !_sendOnEnter
+                                          ? Icons.check_rounded
+                                          : Icons.check_box_outline_blank,
+                                      size: 16,
+                                      color: !_sendOnEnter
+                                          ? const Color(0xFF07C160)
+                                          : Colors.transparent,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      '按 Ctrl+Enter 键发送消息',
+                                      style: TextStyle(fontSize: 12.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildDesktopComposer(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -1077,22 +1446,49 @@ class ChatComposerState extends State<ChatComposer>
     final quoted = widget.controller.quoting;
 
     return Container(
+      height: _desktopComposerHeight,
       decoration: BoxDecoration(
         color: bg,
-        border: Border(top: BorderSide(color: borderColor, width: 0.5)),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. 引用消息展示
+          // 1. 微信同款顶部可拖拽高度调节分割条 (Resize Handle)
+          MouseRegion(
+            cursor: SystemMouseCursors.resizeUpDown,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onVerticalDragStart: (_) => setState(() => _isDraggingSplitter = true),
+              onVerticalDragEnd: (_) => setState(() => _isDraggingSplitter = false),
+              onVerticalDragCancel: () => setState(() => _isDraggingSplitter = false),
+              onVerticalDragUpdate: (details) {
+                setState(() {
+                  _desktopComposerHeight = (_desktopComposerHeight - details.delta.dy)
+                      .clamp(_minDesktopComposerHeight, _maxDesktopComposerHeight);
+                });
+              },
+              child: Container(
+                height: 6,
+                color: Colors.transparent,
+                child: Center(
+                  child: Container(
+                    height: 1,
+                    color: _isDraggingSplitter
+                        ? const Color(0xFF07C160)
+                        : borderColor,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 2. 引用消息展示
           if (quoted != null)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              color:
-                  isDark
-                      ? Colors.white.withValues(alpha: 0.04)
-                      : Colors.black.withValues(alpha: 0.03),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.black.withValues(alpha: 0.03),
               child: Row(
                 children: [
                   Expanded(child: widget.quoteContentBuilder(quoted)),
@@ -1106,204 +1502,81 @@ class ChatComposerState extends State<ChatComposer>
               ),
             ),
 
-          // 2. 顶部工具栏
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _DesktopToolIcon(
-                    icon: Icons.sentiment_satisfied_alt_outlined,
-                    tooltip: '表情',
-                    onPressed: () => _openDesktopEmojiPicker(context),
-                  ),
-                  const SizedBox(width: 4),
-                  _DesktopToolIcon(
-                    icon: Icons.image_outlined,
-                    tooltip: '发送图片',
-                    onPressed: widget.controller.chooseAndSendImages,
-                  ),
-                  const SizedBox(width: 4),
-                  // 屏幕截图按钮 (Alt+A)
-                  _DesktopToolIcon(
-                    icon: Icons.crop_free_rounded,
-                    tooltip: '屏幕截图 (Alt+A)',
-                    onPressed: _handleDesktopScreenshot,
-                  ),
-                  const SizedBox(width: 4),
-                  _DesktopToolIcon(
-                    icon: Icons.folder_open_outlined,
-                    tooltip: '发送文件',
-                    onPressed: widget.controller.chooseAndSendFile,
-                  ),
-                  const SizedBox(width: 4),
-                  if (widget.onOpenAppearancePanel != null)
-                    _DesktopToolIcon(
-                      icon: Icons.wallpaper_rounded,
-                      tooltip: '设置聊天背景',
-                      onPressed: widget.onOpenAppearancePanel!,
-                    ),
-                ],
-              ),
-            ),
-          ),
+          // 3. 顶部微信同款工具栏 (表情、发送文件、屏幕截图、聊天记录、发送图片、背景)
+          _buildDesktopToolbar(context),
 
-          // 3. 多行输入区域与快捷键拦截 (Enter 发送, Shift/Ctrl+Enter 换行, Alt+A 截图, Ctrl+V 智能粘贴)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Focus(
-              onKeyEvent: (node, event) {
-                if (event is KeyDownEvent) {
-                  // 1. Enter 发送
-                  if (event.logicalKey == LogicalKeyboardKey.enter) {
-                    if (HardwareKeyboard.instance.isShiftPressed ||
-                        HardwareKeyboard.instance.isControlPressed ||
-                        HardwareKeyboard.instance.isMetaPressed) {
-                      return KeyEventResult.ignored;
-                    } else {
-                      final text = widget.input.text.trim();
-                      if (text.isNotEmpty &&
-                          !widget.controller.isSending &&
-                          !widget.controller.isMuted) {
-                        widget.input.clear();
-                        widget.controller.send(text);
-                      }
-                      return KeyEventResult.handled;
-                    }
-                  }
+          // 4. 多行文本输入区 (Expanded 随拖拽高度弹性拉伸)
+          Expanded(child: _buildDesktopTextInput(isDark)),
 
-                  // 2. Alt + A 快捷截屏
-                  if (event.logicalKey == LogicalKeyboardKey.keyA &&
-                      HardwareKeyboard.instance.isAltPressed) {
-                    _handleDesktopScreenshot();
-                    return KeyEventResult.handled;
-                  }
-
-                  // 3. Ctrl + V / Cmd + V 智能剪贴板粘贴
-                  if (event.logicalKey == LogicalKeyboardKey.keyV &&
-                      (HardwareKeyboard.instance.isControlPressed ||
-                          HardwareKeyboard.instance.isMetaPressed)) {
-                    final prevText = widget.input.text;
-                    _handleClipboardPaste().then((intercepted) {
-                      if (intercepted && mounted) {
-                        if (widget.input.text != prevText) {
-                          widget.input.text = prevText;
-                        }
-                      }
-                    });
-                  }
-                }
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: widget.input,
-                focusNode: _focusNode,
-                maxLines: 4,
-                minLines: 3,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-                decoration: InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                  hintText:
-                      widget.controller.isMuted
-                          ? '全员禁言中'
-                          : '输入消息，支持拖拽或 Ctrl+V 粘贴图片/文件...',
-                  hintStyle: TextStyle(
-                    fontSize: 13.5,
-                    color:
-                        isDark
-                            ? const Color(0xFF757575)
-                            : const Color(0xFF9E9E9E),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // 4. 底部状态与发送按钮栏
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isNarrow = constraints.maxWidth < 260;
-                final hintText =
-                    isNarrow ? 'Enter 发送' : 'Enter 发送，Shift+Enter 换行';
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        hintText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color:
-                              isDark
-                                  ? const Color(0xFF666666)
-                                  : const Color(0xFFAAAAAA),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: widget.input,
-                      builder: (context, value, _) {
-                        final canSend =
-                            value.text.trim().isNotEmpty &&
-                            !widget.controller.isSending &&
-                            !widget.controller.isMuted;
-                        return FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor:
-                                canSend
-                                    ? const Color(0xFF07C160)
-                                    : (isDark
-                                        ? const Color(0xFF2E2E2E)
-                                        : const Color(0xFFE5E5E5)),
-                            foregroundColor:
-                                canSend
-                                    ? Colors.white
-                                    : (isDark
-                                        ? const Color(0xFF666666)
-                                        : const Color(0xFFAAAAAA)),
-                            minimumSize: const Size(68, 28),
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            elevation: 0,
-                          ),
-                          onPressed:
-                              canSend
-                                  ? () {
-                                    final text = widget.input.text.trim();
-                                    widget.input.clear();
-                                    widget.controller.send(text);
-                                  }
-                                  : null,
-                          child: const Text(
-                            '发送',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
+          // 5. 底部状态与微信同款“发送(S)”组合按钮
+          _buildDesktopBottomBar(context, isDark),
         ],
       ),
+    );
+  }
+
+  Widget _buildDesktopScreenshotTool(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _DesktopToolIcon(
+          icon: Icons.crop_free_rounded,
+          tooltip: '屏幕截图 (Alt+A)',
+          onPressed: _handleDesktopScreenshot,
+        ),
+        Theme(
+          data: Theme.of(context).copyWith(hoverColor: Colors.transparent),
+          child: PopupMenuButton<String>(
+            tooltip: '截图设置',
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.arrow_drop_down_rounded, size: 16),
+            offset: const Offset(0, -95),
+            onSelected: (value) {
+              if (value == 'toggle_hide') {
+                setState(() {
+                  _hideWindowOnScreenshot = !_hideWindowOnScreenshot;
+                });
+                showToast(
+                  _hideWindowOnScreenshot ? '已开启截屏时隐藏窗口' : '已关闭截屏时隐藏窗口',
+                  type: ToastType.info,
+                );
+              } else if (value == 'capture') {
+                _handleDesktopScreenshot();
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'capture',
+                child: Row(
+                  children: [
+                    Icon(Icons.crop_free_rounded, size: 16),
+                    SizedBox(width: 8),
+                    Text('立即截屏 (Alt+A)', style: TextStyle(fontSize: 12.5)),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'toggle_hide',
+                child: Row(
+                  children: [
+                    Icon(
+                      _hideWindowOnScreenshot
+                          ? Icons.check_box_rounded
+                          : Icons.check_box_outline_blank_rounded,
+                      size: 16,
+                      color: _hideWindowOnScreenshot
+                          ? const Color(0xFF07C160)
+                          : null,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('截屏时隐藏当前窗口', style: TextStyle(fontSize: 12.5)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

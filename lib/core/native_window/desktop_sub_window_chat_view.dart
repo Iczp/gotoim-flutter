@@ -3,8 +3,17 @@ import 'dart:math' as math;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/chat/data/models/chat_message.dart' as domain;
+import '../../features/chat/presentation/message_content/chat_message_content_renderer.dart';
+import '../services/file/attachment_transfer_service.dart';
+import '../services/window_service.dart';
+import '../media/media_preview.dart';
+import '../config/app_environment.dart';
+import '../utils/api_url_resolver.dart';
 
 import '../../core/widgets/app_toast.dart';
+import '../platform/windows/windows_window_adapter.dart';
 import 'native_window_payload.dart';
 
 /// 桌面端微信风格独立聊天子窗口视图
@@ -21,7 +30,7 @@ class DesktopSubWindowChatView extends StatefulWidget {
   final WindowController controller;
   final VoidCallback? onClose;
   final void Function(Future<dynamic> Function(MethodCall call)? handler)?
-      onRegisterHandler;
+  onRegisterHandler;
 
   @override
   State<DesktopSubWindowChatView> createState() =>
@@ -35,14 +44,28 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   final List<_ChatMessage> _messages = [];
 
   bool _isLoading = true;
+  bool _loadingHistory = false;
+  bool _refreshPending = false;
+  bool _hasMore = true;
+  final Map<String, AttachmentTransferState> _attachments = {};
   bool _isPinned = false;
   bool _isMaximized = false;
+  bool _sendOnEnter = true;
 
   late final WindowMethodChannel _mainIpcChannel;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WindowsWindowAdapter.setupCustomTitleBar();
+      if (mounted) {
+        setState(() {
+          _isMaximized = WindowsWindowAdapter.isMaximized();
+        });
+      }
+    });
+
     _mainIpcChannel = const WindowMethodChannel(
       'gotoim/ipc_to_main',
       mode: ChannelMode.bidirectional,
@@ -54,9 +77,10 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
           final data = call.arguments as Map?;
           if (data != null && mounted) {
             final t = data['time'];
-            final time = t is num
-                ? DateTime.fromMillisecondsSinceEpoch(t.toInt())
-                : DateTime.now();
+            final time =
+                t is num
+                    ? DateTime.fromMillisecondsSinceEpoch(t.toInt())
+                    : DateTime.now();
             final clientMsgId = data['clientMessageId']?.toString();
             final serverId = (data['serverId'] as num?)?.toInt();
             final newMsg = _ChatMessage(
@@ -64,14 +88,22 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
               serverId: serverId,
               clientMessageId: clientMsgId,
               text: data['text']?.toString() ?? '',
+              message:
+                  data['raw'] is Map
+                      ? domain.ChatMessage.fromWindowPayload(data)
+                      : null,
               isMe: data['isMe'] == true,
               time: time,
               state: data['state']?.toString() ?? 'sent',
             );
             setState(() {
-              final existingIndex = _messages.indexWhere((m) =>
-                  (clientMsgId != null && m.clientMessageId == clientMsgId) ||
-                  (serverId != null && serverId != 0 && m.serverId == serverId));
+              final existingIndex = _messages.indexWhere(
+                (m) =>
+                    (clientMsgId != null && m.clientMessageId == clientMsgId) ||
+                    (serverId != null &&
+                        serverId != 0 &&
+                        m.serverId == serverId),
+              );
               if (existingIndex != -1) {
                 _messages[existingIndex] = newMsg;
               } else {
@@ -82,6 +114,7 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
           }
           return true;
         case 'chat_refresh':
+        case 'bringToFront':
           await _loadHistory();
           return true;
         case 'account_logout':
@@ -106,53 +139,87 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
     _loadHistory();
   }
 
-  Future<void> _loadHistory() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadHistory({bool older = false}) async {
+    if (_loadingHistory) {
+      if (!older) _refreshPending = true;
+      return;
+    }
+    _loadingHistory = true;
+    final previousOffset =
+        _scrollController.hasClients ? _scrollController.offset : 0.0;
+    final scores = _messages
+        .map((m) => m.message?.score)
+        .whereType<int>()
+        .where((s) => s > 0);
+    final beforeScore =
+        older && scores.isNotEmpty ? scores.reduce(math.min) : null;
+    setState(() => _isLoading = _messages.isEmpty);
     try {
-      final dynamic raw = await _mainIpcChannel.invokeMethod('chat_load_history', {
-        'sessionUnitId': widget.payload.sessionUnitId,
-        'ownerId': widget.payload.ownerId,
-      });
+      final dynamic raw = await _mainIpcChannel
+          .invokeMethod('chat_load_history', {
+            'sessionUnitId': widget.payload.sessionUnitId,
+            'ownerId': widget.payload.ownerId,
+            if (beforeScore != null) 'beforeScore': beforeScore,
+          });
 
       if (raw is List && mounted) {
         final list = <_ChatMessage>[];
         for (final item in raw) {
           if (item is Map) {
             final t = item['time'];
-            final time = t is num
-                ? DateTime.fromMillisecondsSinceEpoch(t.toInt())
-                : DateTime.now();
-            list.add(_ChatMessage(
-              id: item['id']?.toString(),
-              serverId: (item['serverId'] as num?)?.toInt(),
-              clientMessageId: item['clientMessageId']?.toString(),
-              text: item['text']?.toString() ?? '',
-              isMe: item['isMe'] == true,
-              time: time,
-              state: item['state']?.toString() ?? 'sent',
-            ));
+            final time =
+                t is num
+                    ? DateTime.fromMillisecondsSinceEpoch(t.toInt())
+                    : DateTime.now();
+            list.add(
+              _ChatMessage(
+                id: item['id']?.toString(),
+                serverId: (item['serverId'] as num?)?.toInt(),
+                clientMessageId: item['clientMessageId']?.toString(),
+                text: item['text']?.toString() ?? '',
+                message:
+                    item['raw'] is Map
+                        ? domain.ChatMessage.fromWindowPayload(item)
+                        : null,
+                isMe: item['isMe'] == true,
+                time: time,
+                state: item['state']?.toString() ?? 'sent',
+              ),
+            );
           }
         }
         setState(() {
-          _messages.clear();
-          _messages.add(
-            _ChatMessage(
-              text: '已进入与 [${widget.payload.title}] 的独立会话',
-              isMe: false,
-              time: DateTime.now(),
-              isSystem: true,
-            ),
-          );
-          _messages.addAll(list);
+          final merged = <String, _ChatMessage>{};
+          for (final m in [..._messages, ...list]) {
+            merged[m.clientMessageId ??
+                    m.serverId?.toString() ??
+                    m.id ??
+                    '${m.time.microsecondsSinceEpoch}'] =
+                m;
+          }
+          _messages
+            ..clear()
+            ..addAll(merged.values);
+          _messages.sort((a, b) => a.time.compareTo(b.time));
+          if (older) _hasMore = list.isNotEmpty;
           _isLoading = false;
         });
-        _scrollToBottom();
+        // Reverse layout anchors the newest item at zero even when images
+        // change height after loading. Older pages append away from the anchor.
+        if (!older && previousOffset <= 80) _scrollToBottom();
       } else if (mounted) {
         setState(() => _isLoading = false);
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() => _isLoading = false);
+        showToast('加载历史消息失败，请重试', type: ToastType.error);
+      }
+    } finally {
+      _loadingHistory = false;
+      if (_refreshPending && mounted) {
+        _refreshPending = false;
+        _loadHistory();
       }
     }
   }
@@ -175,11 +242,15 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
     super.dispose();
   }
 
-  Future<void> _handleSendMessage({String? overrideText, String? retryClientId}) async {
+  Future<void> _handleSendMessage({
+    String? overrideText,
+    String? retryClientId,
+  }) async {
     final text = overrideText ?? _inputController.text.trim();
     if (text.isEmpty) return;
 
-    final clientMessageId = retryClientId ??
+    final clientMessageId =
+        retryClientId ??
         'cmsg_${DateTime.now().millisecondsSinceEpoch}_${math.Random().nextInt(99999)}';
 
     if (retryClientId == null) {
@@ -198,7 +269,9 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
       _scrollToBottom();
     } else {
       setState(() {
-        final idx = _messages.indexWhere((m) => m.clientMessageId == retryClientId);
+        final idx = _messages.indexWhere(
+          (m) => m.clientMessageId == retryClientId,
+        );
         if (idx != -1) {
           _messages[idx] = _messages[idx].copyWith(state: 'sending');
         }
@@ -206,16 +279,19 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
     }
 
     try {
-      final dynamic res = await _mainIpcChannel.invokeMethod('chat_send_message', {
-        'sessionUnitId': widget.payload.sessionUnitId,
-        'ownerId': widget.payload.ownerId,
-        'content': text,
-        'clientMessageId': clientMessageId,
-      });
+      final dynamic res = await _mainIpcChannel
+          .invokeMethod('chat_send_message', {
+            'sessionUnitId': widget.payload.sessionUnitId,
+            'ownerId': widget.payload.ownerId,
+            'content': text,
+            'clientMessageId': clientMessageId,
+          });
 
       if (res is Map && res['success'] == true && mounted) {
         setState(() {
-          final idx = _messages.indexWhere((m) => m.clientMessageId == clientMessageId);
+          final idx = _messages.indexWhere(
+            (m) => m.clientMessageId == clientMessageId,
+          );
           if (idx != -1) {
             _messages[idx] = _messages[idx].copyWith(
               serverId: (res['serverId'] as num?)?.toInt(),
@@ -234,7 +310,9 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   void _markMessageFailed(String clientMessageId) {
     if (!mounted) return;
     setState(() {
-      final idx = _messages.indexWhere((m) => m.clientMessageId == clientMessageId);
+      final idx = _messages.indexWhere(
+        (m) => m.clientMessageId == clientMessageId,
+      );
       if (idx != -1) {
         _messages[idx] = _messages[idx].copyWith(state: 'failed');
       }
@@ -245,7 +323,7 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
@@ -281,90 +359,182 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   }
 
   Widget _buildTitleBar(bool isDark, Color bg) {
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000),
-            width: 0.5,
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onPanStart: (_) => WindowsWindowAdapter.startDragging(),
+      onDoubleTap: () {
+        WindowsWindowAdapter.toggleMaximize();
+        if (mounted) {
+          setState(() {
+            _isMaximized = WindowsWindowAdapter.isMaximized();
+          });
+        }
+      },
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(
+            bottom: BorderSide(
+              color: isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000),
+              width: 0.5,
+            ),
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.chat_bubble_outline_rounded,
-            size: 18,
-            color: Color(0xFF07C160),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            widget.payload.title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : Colors.black87,
+        child: Row(
+          children: [
+            const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 18,
+              color: Color(0xFF07C160),
             ),
-          ),
-          const Spacer(),
-          // 置顶按钮
-          IconButton(
-            icon: Icon(
-              _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-              size: 16,
-              color: _isPinned ? const Color(0xFF07C160) : Colors.grey,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                widget.payload.title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            tooltip: _isPinned ? '取消置顶' : '置顶窗口',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              setState(() {
-                _isPinned = !_isPinned;
-              });
-            },
-          ),
-          // 最小化
-          IconButton(
-            icon: const Icon(Icons.remove_rounded, size: 16),
-            tooltip: '最小化',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => widget.controller.hide(),
-          ),
-          // 最大化/还原
-          IconButton(
-            icon: Icon(
-              _isMaximized
-                  ? Icons.filter_none_rounded
-                  : Icons.crop_square_rounded,
-              size: 15,
+            // 置顶按钮
+            IconButton(
+              icon: Icon(
+                _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                size: 16,
+                color: _isPinned ? const Color(0xFF07C160) : Colors.grey,
+              ),
+              tooltip: _isPinned ? '取消置顶' : '置顶窗口',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                setState(() {
+                  _isPinned = !_isPinned;
+                });
+                WindowsWindowAdapter.setAlwaysOnTop(_isPinned);
+              },
             ),
-            tooltip: _isMaximized ? '还原' : '最大化',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              setState(() {
-                _isMaximized = !_isMaximized;
-              });
-            },
-          ),
-          // 关闭按钮
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 17),
-            tooltip: '关闭',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              if (widget.onClose != null) {
-                widget.onClose!();
-              } else {
-                widget.controller.hide();
-              }
-            },
-          ),
-        ],
+            // 最小化
+            IconButton(
+              icon: const Icon(Icons.remove_rounded, size: 16),
+              tooltip: '最小化',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => WindowsWindowAdapter.minimize(),
+            ),
+            // 最大化/还原
+            IconButton(
+              icon: Icon(
+                _isMaximized
+                    ? Icons.filter_none_rounded
+                    : Icons.crop_square_rounded,
+                size: 15,
+              ),
+              tooltip: _isMaximized ? '还原' : '最大化',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                WindowsWindowAdapter.toggleMaximize();
+                if (mounted) {
+                  setState(() {
+                    _isMaximized = WindowsWindowAdapter.isMaximized();
+                  });
+                }
+              },
+            ),
+            // 关闭按钮
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 17),
+              tooltip: '关闭',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                if (widget.onClose != null) {
+                  widget.onClose!();
+                } else {
+                  WindowsWindowAdapter.close();
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  Future<void> _messageAction(domain.ChatMessage message, String action) async {
+    try {
+      final raw = await _mainIpcChannel.invokeMethod('chat_message_action', {
+        'action': action,
+        'message': message.toWindowPayload(),
+      });
+      if (!mounted || raw is! Map) return;
+      if (raw['success'] != true) throw StateError('附件操作失败');
+      setState(
+        () =>
+            _attachments[message.localId] = AttachmentTransferState(
+              status:
+                  raw['status'] == 'completed'
+                      ? AttachmentTransferStatus.completed
+                      : AttachmentTransferStatus.idle,
+              localPath: raw['localPath'] as String?,
+            ),
+      );
+    } catch (_) {
+      if (mounted) showToast('操作失败，请检查连接后重试', type: ToastType.error);
+    }
+  }
+
+  Widget _buildRichContent(domain.ChatMessage message) => Consumer(
+    builder: (context, ref, _) {
+      if (message.messageType == 3) {
+        return TextButton.icon(
+          icon: const Icon(Icons.volume_up),
+          label: Text('语音 ${message.audioDuration.inSeconds}秒'),
+          onPressed: () => _messageAction(message, 'voice'),
+        );
+      }
+      final mediaItems =
+          message.mediaUrl == null
+              ? <MediaPreviewItem>[]
+              : [
+                MediaPreviewItem(
+                  id: message.localId,
+                  messageId: message.serverId?.toString() ?? message.localId,
+                  type:
+                      message.messageType == 4
+                          ? MediaPreviewType.video
+                          : MediaPreviewType.image,
+                  source: resolveApiUrl(
+                    message.mediaUrl,
+                    ref.read(appEnvironmentProvider).apiBaseUrl,
+                  ),
+                  heroTag: message.localId,
+                  localPath: message.localFilePath,
+                ),
+              ];
+      return ChatMessageContentRenderer(
+        message: message,
+        attachmentState:
+            _attachments[message.localId] ?? const AttachmentTransferState(),
+        onVoiceOpened: () => _messageAction(message, 'voice'),
+        onAttachmentDownload: () => _messageAction(message, 'download'),
+        onAttachmentCancel: () => _messageAction(message, 'cancel'),
+        onAttachmentOpen: () => _messageAction(message, 'open'),
+        onAttachmentSaveAs: () => _messageAction(message, 'saveAs'),
+        onLinkTap:
+            () => ref
+                .read(windowServiceProvider)
+                .openWebBrowser(url: message.mediaUrl ?? ''),
+        imageBytes: null,
+        uploadProgress: null,
+        apiBaseUrl: ref.read(appEnvironmentProvider).apiBaseUrl,
+        mediaItems: mediaItems,
+        mediaInitialIndex: 0,
+        maxWidth: 440,
+      );
+    },
+  );
 
   Widget _buildMessageList(bool isDark) {
     if (_isLoading) {
@@ -390,11 +560,23 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
     }
 
     return ListView.builder(
+      reverse: true,
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      itemCount: _messages.length,
+      itemCount: _messages.length + 1,
       itemBuilder: (context, index) {
-        final msg = _messages[index];
+        if (index == _messages.length) {
+          return Center(
+            child: TextButton(
+              onPressed:
+                  _hasMore && !_loadingHistory
+                      ? () => _loadHistory(older: true)
+                      : null,
+              child: Text(_hasMore ? '加载更早消息' : '已加载全部历史消息'),
+            ),
+          );
+        }
+        final msg = _messages[_messages.length - 1 - index];
         if (msg.isSystem) {
           return Center(
             child: Container(
@@ -453,10 +635,11 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
                 Padding(
                   padding: const EdgeInsets.only(right: 4, bottom: 2),
                   child: GestureDetector(
-                    onTap: () => _handleSendMessage(
-                      overrideText: msg.text,
-                      retryClientId: msg.clientMessageId,
-                    ),
+                    onTap:
+                        () => _handleSendMessage(
+                          overrideText: msg.text,
+                          retryClientId: msg.clientMessageId,
+                        ),
                     child: const Tooltip(
                       message: '发送失败，点击重试',
                       child: Icon(
@@ -471,37 +654,52 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
               Flexible(
                 child: Column(
                   crossAxisAlignment:
-                      msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                      msg.isMe
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: msg.isMe
-                            ? const Color(0xFF07C160)
-                            : (isDark
-                                ? const Color(0xFF2C2C2C)
-                                : Colors.white),
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        msg.text,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: msg.isMe
-                              ? Colors.white
-                              : (isDark ? Colors.white : Colors.black87),
-                        ),
-                      ),
+                      padding:
+                          msg.message != null
+                              ? EdgeInsets.zero
+                              : const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                      decoration:
+                          msg.message != null
+                              ? null
+                              : BoxDecoration(
+                                color:
+                                    msg.isMe
+                                        ? const Color(0xFF07C160)
+                                        : (isDark
+                                            ? const Color(0xFF2C2C2C)
+                                            : Colors.white),
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.05),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                      child:
+                          msg.message != null
+                              ? _buildRichContent(msg.message!)
+                              : Text(
+                                msg.text,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color:
+                                      msg.isMe
+                                          ? Colors.white
+                                          : (isDark
+                                              ? Colors.white
+                                              : Colors.black87),
+                                ),
+                              ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -579,13 +777,16 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
                   tooltip: '截图',
                   visualDensity: VisualDensity.compact,
                   onPressed: () {
-                    showToast('支持使用 Win+Shift+S 截图后直接粘贴发送', type: ToastType.info);
+                    showToast(
+                      '支持使用 Win+Shift+S 截图后直接粘贴发送',
+                      type: ToastType.info,
+                    );
                   },
                 ),
               ],
             ),
           ),
-          // 文本输入行与发送按钮
+          // 文本输入行与微信同款发送按钮组
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
             child: Row(
@@ -594,17 +795,30 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
                 Expanded(
                   child: Focus(
                     onKeyEvent: (node, event) {
-                      if (event is KeyDownEvent &&
-                          event.logicalKey == LogicalKeyboardKey.enter) {
-                        if (HardwareKeyboard.instance.isShiftPressed ||
-                            HardwareKeyboard.instance.isControlPressed) {
-                          return KeyEventResult.ignored;
+                      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                      final isEnter =
+                          event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.numpadEnter;
+                      if (!isEnter) return KeyEventResult.ignored;
+
+                      final isCtrl = HardwareKeyboard.instance.isControlPressed;
+                      final isShift = HardwareKeyboard.instance.isShiftPressed;
+
+                      if (_sendOnEnter) {
+                        if (isCtrl || isShift) {
+                          return KeyEventResult.ignored; // 换行
                         } else {
                           _handleSendMessage();
                           return KeyEventResult.handled;
                         }
+                      } else {
+                        if (isCtrl && !isShift) {
+                          _handleSendMessage();
+                          return KeyEventResult.handled;
+                        } else {
+                          return KeyEventResult.ignored; // 换行
+                        }
                       }
-                      return KeyEventResult.ignored;
                     },
                     child: TextField(
                       controller: _inputController,
@@ -615,8 +829,11 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
                         fontSize: 14,
                         color: isDark ? Colors.white : Colors.black87,
                       ),
-                      decoration: const InputDecoration(
-                        hintText: '按 Enter 发送消息，Shift/Ctrl+Enter 换行...',
+                      decoration: InputDecoration(
+                        hintText:
+                            _sendOnEnter
+                                ? '按 Enter 发送，Ctrl+Enter 换行'
+                                : '按 Ctrl+Enter 发送，Enter 换行',
                         border: InputBorder.none,
                         isDense: true,
                       ),
@@ -624,21 +841,119 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _handleSendMessage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF07C160),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text('发送'),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _inputController,
+                  builder: (context, val, _) {
+                    final hasText = val.text.trim().isNotEmpty;
+                    final bg =
+                        hasText
+                            ? const Color(0xFF07C160)
+                            : (isDark
+                                ? const Color(0xFF2A2A2A)
+                                : const Color(0xFFE9E9E9));
+                    final fg =
+                        hasText
+                            ? Colors.white
+                            : (isDark
+                                ? const Color(0xFF666666)
+                                : const Color(0xFF999999));
+                    final border =
+                        hasText
+                            ? const Color(0xFF06AD56)
+                            : (isDark
+                                ? const Color(0xFF383838)
+                                : const Color(0xFFDCDCDC));
+
+                    return Container(
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: bg,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: border, width: 0.8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          InkWell(
+                            borderRadius: const BorderRadius.horizontal(
+                              left: Radius.circular(3),
+                            ),
+                            onTap: hasText ? _handleSendMessage : null,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 5,
+                              ),
+                              child: Text(
+                                '发送(S)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: fg,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            width: 0.8,
+                            height: 16,
+                            color: fg.withValues(alpha: 0.25),
+                          ),
+                          PopupMenuButton<bool>(
+                            tooltip: '发送快捷键设置',
+                            icon: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 16,
+                              color: fg,
+                            ),
+                            padding: EdgeInsets.zero,
+                            offset: const Offset(0, -90),
+                            onSelected: (val) {
+                              setState(() {
+                                _sendOnEnter = val;
+                              });
+                            },
+                            itemBuilder:
+                                (ctx) => [
+                                  PopupMenuItem(
+                                    value: true,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          _sendOnEnter
+                                              ? Icons.check_rounded
+                                              : null,
+                                          size: 16,
+                                          color: const Color(0xFF07C160),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text('按 Enter 键发送消息'),
+                                      ],
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: false,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          !_sendOnEnter
+                                              ? Icons.check_rounded
+                                              : null,
+                                          size: 16,
+                                          color: const Color(0xFF07C160),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text('按 Ctrl+Enter 键发送消息'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -659,8 +974,10 @@ class _ChatMessage {
     this.clientMessageId,
     this.state = 'sent',
     this.isSystem = false,
+    this.message,
   });
 
+  final domain.ChatMessage? message;
   final String? id;
   final int? serverId;
   final String? clientMessageId;
@@ -681,6 +998,7 @@ class _ChatMessage {
     bool? isSystem,
   }) {
     return _ChatMessage(
+      message: message,
       id: id ?? this.id,
       serverId: serverId ?? this.serverId,
       clientMessageId: clientMessageId ?? this.clientMessageId,

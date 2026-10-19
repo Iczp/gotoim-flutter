@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../config/app_environment.dart';
+import '../theme/app_theme.dart';
 import '../platform/platform_facade.dart';
+import '../platform/windows/windows_window_adapter.dart';
 import '../browser/desktop_browser_window.dart';
 import '../media/media_preview.dart';
 import '../../features/diagnostics/presentation/abp_configuration_diagnostics_page.dart';
@@ -17,6 +19,7 @@ import '../../features/diagnostics/presentation/chat_bubble_diagnostics_page.dar
 import '../../features/diagnostics/presentation/chat_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/connection_test_page.dart';
 import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/desktop_windows_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/diagnostics_home_page.dart';
 import '../../features/diagnostics/presentation/local_notification_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/privacy_and_update_diagnostics_page.dart';
@@ -25,10 +28,18 @@ import '../../features/diagnostics/presentation/search_and_group_diagnostics_pag
 import '../../features/diagnostics/presentation/session_list_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/signalr_diagnostics_page.dart';
 import '../../features/local_file_server/pages/local_file_server_page.dart';
+import '../../features/local_file_server/pages/shared_file_manager_page.dart';
 import '../../features/media/presentation/desktop_media_viewer_window.dart';
 import '../../features/settings/presentation/desktop_settings_window.dart';
 import 'desktop_sub_window_chat_view.dart';
+import 'desktop_window_title_bar.dart';
 import 'native_window_payload.dart';
+import '../services/window_service.dart';
+import '../services/tray_grouped_unread_provider.dart';
+import '../services/tray_message_models.dart';
+import '../services/tray_service.dart';
+import '../widgets/desktop_tray_message_box.dart';
+import '../widgets/desktop_startup_scene.dart';
 
 /// 桌面端原生子窗口独立轻量入口
 ///
@@ -37,7 +48,11 @@ import 'native_window_payload.dart';
 /// 2. 仅初始化渲染所需的最小绑定、基础主题与当前独立视窗；
 /// 3. 通过 WindowMethodChannel 与主引擎进行双向 IPC 通信。
 Future<void> runNativeSubWindowApp(List<String> args) async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  if (WindowsWindowAdapter.isWindows) {
+    runApp(const DesktopStartupScene());
+    await binding.endOfFrame;
+  }
 
   WindowController? controller;
   try {
@@ -45,7 +60,8 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
   } catch (_) {}
 
   final payloadRaw = args.length > 2 ? args[2] : (controller?.arguments ?? '');
-  final payload = NativeWindowPayload.tryParse(payloadRaw) ??
+  final payload =
+      NativeWindowPayload.tryParse(payloadRaw) ??
       const NativeWindowPayload(
         type: SubWindowType.settings,
         title: 'GotoIM',
@@ -88,31 +104,33 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
     ProviderScope(
       overrides: [
         appEnvironmentProvider.overrideWithValue(environment),
+        trayServiceProvider.overrideWithValue(const SubWindowTrayService()),
         platformFacadeProvider.overrideWithValue(platformFacade),
+        windowServiceProvider.overrideWith(
+          (ref) => DefaultWindowService(
+            platformFacade: platformFacade,
+            isSubWindow: true,
+          ),
+        ),
       ],
-      child: NativeSubWindowApp(
-        controller: controller,
-        payload: payload,
-      ),
+      child: NativeSubWindowApp(controller: controller, payload: payload),
     ),
   );
 }
 
-class NativeSubWindowApp extends StatefulWidget {
-  const NativeSubWindowApp({
-    required this.payload,
-    this.controller,
-    super.key,
-  });
+class NativeSubWindowApp extends ConsumerStatefulWidget {
+  const NativeSubWindowApp({required this.payload, this.controller, super.key});
 
   final NativeWindowPayload payload;
   final WindowController? controller;
 
   @override
-  State<NativeSubWindowApp> createState() => _NativeSubWindowAppState();
+  ConsumerState<NativeSubWindowApp> createState() => _NativeSubWindowAppState();
 }
 
-class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
+class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
+  bool _visible = true;
+  Future<void>? _closing;
   late final WindowMethodChannel _mainIpcChannel;
   ThemeMode _themeMode = ThemeMode.dark;
   late NativeWindowPayload _currentPayload;
@@ -134,15 +152,31 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
           ),
         ],
       ),
+      GoRoute(path: '/', redirect: (_, _) => '/diagnostics'),
+    ],
+  );
+
+  late final GoRouter _fileServerRouter = GoRouter(
+    initialLocation: '/local-file-server',
+    routes: [
       GoRoute(
-        path: '/',
-        redirect: (_, _) => '/diagnostics',
+        path: '/local-file-server',
+        builder: (context, state) => const LocalFileServerPage(),
+        routes: [
+          GoRoute(
+            path: 'files',
+            builder: (context, state) => const SharedFileManagerPage(),
+          ),
+        ],
       ),
+      GoRoute(path: '/', redirect: (_, _) => '/local-file-server'),
     ],
   );
 
   Widget _buildDiagnosticSubPage(String section) {
     switch (section) {
+      case 'desktop-windows':
+        return const DesktopWindowsDiagnosticsPage();
       case 'remote-devtools':
         return const RemoteDevToolsDiagnosticsPage();
       case 'auth':
@@ -184,13 +218,23 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WindowsWindowAdapter.setupCustomTitleBar();
+      _refreshTraySnapshot();
+      if (_currentPayload.type == SubWindowType.tray) {
+        WindowsWindowAdapter.showTrayFlyout();
+      }
+    });
+    WindowsWindowAdapter.onCloseRequested = _handleClose;
     _currentPayload = widget.payload;
     final initialThemeStr = widget.payload.extra?['themeMode'] as String?;
     if (initialThemeStr != null) {
       _themeMode = ThemeMode.values.firstWhere(
         (e) => e.name == initialThemeStr,
-        orElse: () => ThemeMode.dark,
+        orElse: () => ThemeMode.system,
       );
+    } else {
+      _themeMode = ThemeMode.system;
     }
 
     _mainIpcChannel = const WindowMethodChannel(
@@ -206,7 +250,7 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
           if (modeStr != null) {
             final target = ThemeMode.values.firstWhere(
               (e) => e.name == modeStr,
-              orElse: () => ThemeMode.dark,
+              orElse: () => ThemeMode.system,
             );
             if (mounted) {
               setState(() => _themeMode = target);
@@ -217,14 +261,44 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
           final map = call.arguments as Map?;
           if (map != null && mounted) {
             setState(() {
+              _visible = true;
               _currentPayload = NativeWindowPayload.fromMap(
                 Map<String, dynamic>.from(map),
               );
+              final themeStr = _currentPayload.extra?['themeMode'] as String?;
+              if (themeStr != null) {
+                _themeMode = ThemeMode.values.firstWhere(
+                  (e) => e.name == themeStr,
+                  orElse: () => _themeMode,
+                );
+              }
             });
           }
           return true;
+        case 'tray_update':
+          if (call.arguments is Map) {
+            ref
+                .read(trayGroupedUnreadProvider.notifier)
+                .applySnapshot(
+                  TrayGroupedUnreadState.fromJson(call.arguments as Map),
+                );
+          }
+          return true;
+        case 'disposeWindow':
+          await WindowsWindowAdapter.destroy();
+          return true;
         case 'bringToFront':
+          if (mounted) setState(() => _visible = true);
           await widget.controller?.show();
+          if (_currentPayload.type == SubWindowType.tray) {
+            await _refreshTraySnapshot();
+            await WindowsWindowAdapter.showTrayFlyout();
+          } else {
+            await WindowsWindowAdapter.bringToFront();
+          }
+          if (_childMethodHandler != null) {
+            await _childMethodHandler!(call);
+          }
           return true;
         case 'account_logout':
           await _handleLogout(notifyMain: false);
@@ -241,18 +315,44 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
     });
   }
 
+  Future<void> _refreshTraySnapshot() async {
+    try {
+      final raw = await _mainIpcChannel.invokeMethod('tray_snapshot');
+      if (mounted && raw is Map) {
+        ref
+            .read(trayGroupedUnreadProvider.notifier)
+            .applySnapshot(TrayGroupedUnreadState.fromJson(raw));
+      }
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    WindowsWindowAdapter.onCloseRequested = null;
     _diagnosticRouter.dispose();
+    _fileServerRouter.dispose();
     super.dispose();
   }
 
-  Future<void> _handleClose() async {
+  Future<void> _handleClose() =>
+      _closing ??= _closeOnce().whenComplete(() {
+        _closing = null;
+      });
+
+  Future<void> _closeOnce() async {
+    if (mounted &&
+        (_currentPayload.type == SubWindowType.media ||
+            _currentPayload.type == SubWindowType.browser)) {
+      setState(() => _visible = false);
+    }
     try {
       await _mainIpcChannel.invokeMethod('sub_window_closed', {
         'targetId': _currentPayload.targetId,
         'windowId': widget.controller?.windowId,
       });
+      // Main owns hiding and caching. A second hide here can race with a
+      // rapid reopen and hide the newly restored window.
+      return;
     } catch (_) {}
     if (widget.controller != null) {
       await widget.controller!.hide();
@@ -270,18 +370,8 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
 
   @override
   Widget build(BuildContext context) {
-    final lightTheme = ThemeData(
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: Colors.white,
-      fontFamily: 'Segoe UI',
-      useMaterial3: true,
-    );
-    final darkTheme = ThemeData(
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF1E1E1E),
-      fontFamily: 'Segoe UI',
-      useMaterial3: true,
-    );
+    final lightTheme = AppTheme.lightTheme();
+    final darkTheme = AppTheme.darkTheme();
 
     if (_currentPayload.type == SubWindowType.diagnostics) {
       return MaterialApp.router(
@@ -290,7 +380,20 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
         themeMode: _themeMode,
         theme: lightTheme,
         darkTheme: darkTheme,
+        builder: _buildToolFrame,
         routerConfig: _diagnosticRouter,
+      );
+    }
+
+    if (_currentPayload.type == SubWindowType.localFileServer) {
+      return MaterialApp.router(
+        title: _currentPayload.title,
+        debugShowCheckedModeBanner: false,
+        themeMode: _themeMode,
+        theme: lightTheme,
+        darkTheme: darkTheme,
+        builder: _buildToolFrame,
+        routerConfig: _fileServerRouter,
       );
     }
 
@@ -304,8 +407,18 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
     );
   }
 
+  Widget _buildToolFrame(BuildContext context, Widget? child) =>
+      DesktopToolWindowFrame(
+        title: _currentPayload.title,
+        onClose: _handleClose,
+        child: child ?? const SizedBox.shrink(),
+      );
+
   Widget _buildSubWindowContent() {
+    if (!_visible) return const SizedBox.shrink();
     switch (_currentPayload.type) {
+      case SubWindowType.tray:
+        return const Scaffold(body: DesktopTrayMessageBox(nativeWindow: true));
       case SubWindowType.settings:
         return DesktopSettingsWindow(
           isSubWindow: true,
@@ -325,35 +438,49 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
 
       case SubWindowType.media:
         final rawItems = _currentPayload.mediaItems;
-        final items = rawItems != null && rawItems.isNotEmpty
-            ? rawItems.map((map) {
-                final source = map['source'] as String? ?? '';
-                final typeStr = map['type'] as String?;
-                final isVideo = typeStr == 'video' ||
-                    (typeStr == null &&
-                        (source.toLowerCase().endsWith('.mp4') ||
-                            source.toLowerCase().endsWith('.mov')));
-                final localPath = map['localPath'] as String?;
-                return MediaPreviewItem(
-                  id: map['id'] as String? ?? source,
-                  messageId: map['messageId'] as String? ?? 'media',
-                  type: isVideo ? MediaPreviewType.video : MediaPreviewType.image,
-                  source: source,
-                  localPath: localPath,
-                  heroTag: 'media-$source',
-                );
-              }).toList()
-            : [
-                MediaPreviewItem(
-                  id: _currentPayload.url ?? 'media',
-                  messageId: 'media',
-                  type: (_currentPayload.url?.toLowerCase().endsWith('.mp4') ?? false)
-                      ? MediaPreviewType.video
-                      : MediaPreviewType.image,
-                  source: _currentPayload.url ?? '',
-                  heroTag: 'media-${_currentPayload.url}',
-                ),
-              ];
+        final items =
+            rawItems != null && rawItems.isNotEmpty
+                ? rawItems.map((map) {
+                  final source = map['source'] as String? ?? '';
+                  final typeStr = map['type'] as String?;
+                  final isVideo =
+                      typeStr == 'video' ||
+                      (typeStr == null &&
+                          (source.toLowerCase().endsWith('.mp4') ||
+                              source.toLowerCase().endsWith('.mov')));
+                  final localPath = map['localPath'] as String?;
+                  return MediaPreviewItem(
+                    id: map['id'] as String? ?? source,
+                    messageId: map['messageId'] as String? ?? 'media',
+                    type:
+                        isVideo
+                            ? MediaPreviewType.video
+                            : MediaPreviewType.image,
+                    source: source,
+                    localPath: localPath,
+                    userId: map['userId'] as String?,
+                    chatTarget: map['chatTarget'] as String?,
+                    createdAt: DateTime.tryParse(
+                      map['createdAt']?.toString() ?? '',
+                    ),
+                    fileName: map['fileName'] as String?,
+                    thumbnail: map['thumbnail'] as String?,
+                    heroTag: 'media-$source',
+                  );
+                }).toList()
+                : [
+                  MediaPreviewItem(
+                    id: _currentPayload.url ?? 'media',
+                    messageId: 'media',
+                    type:
+                        (_currentPayload.url?.toLowerCase().endsWith('.mp4') ??
+                                false)
+                            ? MediaPreviewType.video
+                            : MediaPreviewType.image,
+                    source: _currentPayload.url ?? '',
+                    heroTag: 'media-${_currentPayload.url}',
+                  ),
+                ];
         return DesktopMediaViewerWindow(
           items: items,
           initialIndex: _currentPayload.initialIndex,
@@ -371,9 +498,7 @@ class _NativeSubWindowAppState extends State<NativeSubWindowApp> {
           );
         }
         return Scaffold(
-          body: Center(
-            child: Text('独立聊天窗口：${_currentPayload.title}'),
-          ),
+          body: Center(child: Text('独立聊天窗口：${_currentPayload.title}')),
         );
 
       case SubWindowType.diagnostics:

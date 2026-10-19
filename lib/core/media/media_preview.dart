@@ -10,6 +10,7 @@ import '../../features/session/application/session_list_controller.dart';
 import '../services/media/media_gallery_saver.dart';
 import '../services/scan/image_qr_detector.dart';
 import '../services/scan/qr_action_resolver.dart';
+import '../services/window_service.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/target_picker/target_picker.dart';
@@ -115,6 +116,19 @@ abstract class MediaPreview {
     final isDesktop =
         !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
     if (isDesktop) {
+      try {
+        final container = ProviderScope.containerOf(context, listen: false);
+        final windowService = container.read(windowServiceProvider);
+        final currentItem = items[safeInitialIndex];
+        return windowService.openMediaViewer(
+          mediaUrl: currentItem.playableSource,
+          title: '媒体预览 - ${currentItem.id}',
+          items: items,
+          initialIndex: safeInitialIndex,
+        );
+      } catch (e) {
+        debugPrint('[MediaPreview] openMediaViewer fallback to dialog: $e');
+      }
       return DesktopMediaViewerWindow.open(
         context,
         items: items,

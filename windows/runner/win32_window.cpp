@@ -135,7 +135,7 @@ bool Win32Window::Create(const std::wstring& title,
   double scale_factor = dpi / 96.0;
 
   HWND window = CreateWindow(
-      window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
+      window_class, title.c_str(), (WS_OVERLAPPEDWINDOW & ~WS_CAPTION) | WS_THICKFRAME | WS_CLIPCHILDREN,
       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
       Scale(size.width, scale_factor), Scale(size.height, scale_factor),
       nullptr, nullptr, GetModuleHandle(nullptr), this);
@@ -144,6 +144,8 @@ bool Win32Window::Create(const std::wstring& title,
     return false;
   }
 
+  // Create with the final frame style. Changing the client size after
+  // creation can leave an empty first render surface waiting for stale metrics.
   UpdateTheme(window);
 
   return OnCreate();

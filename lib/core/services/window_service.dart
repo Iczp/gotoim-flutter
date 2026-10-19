@@ -11,10 +11,14 @@ import '../../features/auth/application/auth_controller.dart';
 import '../../features/chat/application/chat_controller.dart';
 import '../../features/chat/data/models/chat_message.dart';
 import '../../features/session/application/session_list_controller.dart';
+import '../../features/session/data/session_change_bus.dart';
 import '../media/media_preview.dart';
 import '../native_window/native_window_payload.dart';
 import '../platform/platform_facade.dart';
+import '../platform/windows/windows_window_adapter.dart';
 import '../theme/theme_mode_controller.dart';
+import 'tray_grouped_unread_provider.dart';
+import 'tray_message_models.dart';
 
 /// 独立窗口类型定义
 enum WindowType {
@@ -25,6 +29,7 @@ enum WindowType {
   diagnostics,
   settings,
   browser,
+  tray,
 }
 
 /// 窗口记录，用于管理和防止重复创建相同会话/应用的窗口
@@ -126,6 +131,8 @@ abstract class WindowService {
   /// 打开或激活独立开发诊断中心窗口
   Future<void> openDiagnostics();
 
+  Future<void> openTrayFlyout();
+
   /// 激活或置顶已有窗口
   Future<void> bringToFront(String targetId);
 
@@ -140,20 +147,36 @@ abstract class WindowService {
 
   /// 独立窗口列表变更流
   Stream<List<WindowRecord>> get openWindowsStream;
+
+  /// 向对应会话的独立聊天子窗口推送实时消息
+  Future<void> notifyChatMessage({
+    required int ownerId,
+    required String sessionUnitId,
+    required Map<String, dynamic> messageData,
+  });
+
+  /// 通知对应会话的独立聊天子窗口刷新消息
+  Future<void> notifyChatRefresh({
+    required int ownerId,
+    required String sessionUnitId,
+  });
 }
 
-typedef MessageSenderCallback = Future<ChatMessage> Function({
-  required int ownerId,
-  required String sessionUnitId,
-  required String text,
-  String? clientMessageId,
-});
+typedef MessageSenderCallback =
+    Future<ChatMessage> Function({
+      required int ownerId,
+      required String sessionUnitId,
+      required String text,
+      String? clientMessageId,
+    });
 
-typedef HistoryLoaderCallback = Future<List<Map<String, dynamic>>> Function({
-  required int ownerId,
-  required String sessionUnitId,
-  int limit,
-});
+typedef HistoryLoaderCallback =
+    Future<List<Map<String, dynamic>>> Function({
+      required int ownerId,
+      required String sessionUnitId,
+      int limit,
+      int? beforeScore,
+    });
 
 /// 统一窗口服务默认实现
 class DefaultWindowService implements WindowService {
@@ -162,18 +185,40 @@ class DefaultWindowService implements WindowService {
     this.accountInfoProvider,
     this.messageSender,
     this.historyLoader,
+    this.messageAction,
     this.onLogout,
     this.onThemeChanged,
+    this.themeModeProvider,
+    this.traySnapshotProvider,
+    this.trayCommand,
+    this.isSubWindow = false,
   }) {
     _ensureIpcInitialized();
   }
 
   final PlatformFacade platformFacade;
+  Future<void> Function(Map arguments)? trayCommand;
+  final bool isSubWindow;
+  final TrayGroupedUnreadState Function()? traySnapshotProvider;
+  static const _mainChannel = WindowMethodChannel(
+    'gotoim/ipc_to_main',
+    mode: ChannelMode.bidirectional,
+  );
+  Future<void> _requestMain(Map<String, dynamic> arguments) async {
+    await _mainChannel.invokeMethod('open_window', arguments);
+  }
+
   final Map<String, dynamic>? Function()? accountInfoProvider;
   final MessageSenderCallback? messageSender;
   final HistoryLoaderCallback? historyLoader;
+  final Future<Map<String, dynamic>> Function(
+    String action,
+    ChatMessage message,
+  )?
+  messageAction;
   final Future<void> Function()? onLogout;
   final void Function(String themeMode)? onThemeChanged;
+  final String Function()? themeModeProvider;
 
   final Map<String, WindowRecord> _registry = <String, WindowRecord>{};
   final Map<String, WindowController> _nativeControllers =
@@ -189,7 +234,11 @@ class DefaultWindowService implements WindowService {
   bool _ipcInitialized = false;
 
   void _ensureIpcInitialized() {
-    if (_ipcInitialized || !platformFacade.supportsMultipleWindows) return;
+    if (isSubWindow ||
+        _ipcInitialized ||
+        !platformFacade.supportsMultipleWindows) {
+      return;
+    }
     _ipcInitialized = true;
     try {
       const mainIpcChannel = WindowMethodChannel(
@@ -233,6 +282,15 @@ class DefaultWindowService implements WindowService {
             }
             return {'success': false, 'error': 'messageSender not registered'};
 
+          case 'chat_message_action':
+            final args = call.arguments as Map;
+            if (messageAction == null) {
+              throw StateError('Message action unavailable');
+            }
+            return await messageAction!(
+              args['action'] as String,
+              ChatMessage.fromWindowPayload(args['message'] as Map),
+            );
           case 'chat_load_history':
             final args = call.arguments as Map?;
             if (args != null && historyLoader != null) {
@@ -242,10 +300,12 @@ class DefaultWindowService implements WindowService {
                 final list = await historyLoader!(
                   ownerId: ownerId,
                   sessionUnitId: sessionUnitId,
+                  beforeScore: (args['beforeScore'] as num?)?.toInt(),
+                  limit: 30,
                 );
                 return list;
               } catch (_) {
-                return <dynamic>[];
+                throw StateError('历史消息加载失败');
               }
             }
             return <dynamic>[];
@@ -264,14 +324,69 @@ class DefaultWindowService implements WindowService {
               if (onThemeChanged != null) {
                 onThemeChanged!(mode);
               }
-              await broadcastToAllSubWindows('theme_changed', {'themeMode': mode});
+              await broadcastToAllSubWindows('theme_changed', {
+                'themeMode': mode,
+              });
             }
             return true;
 
+          case 'tray_command':
+            if (trayCommand == null) throw StateError('Tray unavailable');
+            await trayCommand!(call.arguments as Map);
+            return true;
+          case 'tray_snapshot':
+            return traySnapshotProvider?.call().toJson() ??
+                TrayGroupedUnreadState.empty.toJson();
+          case 'focus_main':
+            await bringToFront('main');
+            return true;
           case 'open_window':
             final args = call.arguments as Map?;
             final type = args?['type'] as String?;
-            if (type == 'localFileServer') {
+            if (type == 'tray') {
+              await openTrayFlyout();
+            } else if (type == 'browser') {
+              await openWebBrowser(
+                url: args!['url'] as String,
+                title: args['title'] as String?,
+              );
+            } else if (type == 'media') {
+              await openMediaViewer(
+                mediaUrl: args!['url'] as String,
+                initialIndex: (args['initialIndex'] as num?)?.toInt() ?? 0,
+                items:
+                    (args['items'] as List?)
+                        ?.map(
+                          (m) => MediaPreviewItem(
+                            id: (m['id'] ?? m['source']) as String,
+                            messageId: (m['messageId'] ?? 'preview') as String,
+                            localPath: m['localPath'] as String?,
+                            userId: m['userId'] as String?,
+                            chatTarget: m['chatTarget'] as String?,
+                            createdAt: DateTime.tryParse(
+                              m['createdAt']?.toString() ?? '',
+                            ),
+                            fileName: m['fileName'] as String?,
+                            thumbnail: m['thumbnail'] as String?,
+                            source: m['source'] as String,
+                            type:
+                                m['type'] == 'video'
+                                    ? MediaPreviewType.video
+                                    : MediaPreviewType.image,
+                            heroTag: m['source'] as String,
+                          ),
+                        )
+                        .toList(),
+              );
+            } else if (type == 'chat') {
+              await openChat(
+                sessionUnitId: args!['sessionUnitId'] as String,
+                ownerId: (args['ownerId'] as num?)?.toInt(),
+                title: args['title'] as String?,
+              );
+            } else if (type == 'settings') {
+              await openSettings();
+            } else if (type == 'localFileServer') {
               await openLocalFileServer();
             } else if (type == 'diagnostics') {
               await openDiagnostics();
@@ -334,6 +449,14 @@ class DefaultWindowService implements WindowService {
 
   @override
   Future<void> bringToFront(String targetId) async {
+    if (targetId == 'main') {
+      if (isSubWindow) {
+        await _mainChannel.invokeMethod('focus_main');
+        return;
+      }
+      await WindowsWindowAdapter.bringToFront();
+      return;
+    }
     var controller = _nativeControllers[targetId];
     if (controller == null && targetId.startsWith('chat:')) {
       final parts = targetId.split(':');
@@ -386,8 +509,7 @@ class DefaultWindowService implements WindowService {
           final evicted = _reusableControllers.remove(oldestKey);
           if (evicted != null) {
             try {
-              await evicted.invokeMethod('close');
-              await evicted.hide();
+              await evicted.invokeMethod('disposeWindow');
             } catch (_) {}
           }
         }
@@ -412,8 +534,7 @@ class DefaultWindowService implements WindowService {
                 final evicted = _reusableControllers.remove(oldestKey);
                 if (evicted != null) {
                   try {
-                    await evicted.invokeMethod('close');
-                    await evicted.hide();
+                    await evicted.invokeMethod('disposeWindow');
                   } catch (_) {}
                 }
               }
@@ -435,11 +556,10 @@ class DefaultWindowService implements WindowService {
       await closeWindow(target);
     }
     if (isLogout) {
-      for (final controller in _reusableControllers.values) {
+      for (final controller in _reusableControllers.values.toList()) {
         try {
           await controller.invokeMethod('account_logout');
-          await controller.invokeMethod('close');
-          await controller.hide();
+          await controller.invokeMethod('disposeWindow');
         } catch (_) {}
       }
       _reusableControllers.clear();
@@ -449,17 +569,101 @@ class DefaultWindowService implements WindowService {
     }
   }
 
-  Future<void> broadcastToAllSubWindows(String method, [dynamic arguments]) async {
+  @override
+  Future<void> notifyChatMessage({
+    required int ownerId,
+    required String sessionUnitId,
+    required Map<String, dynamic> messageData,
+  }) async {
+    final targetId = 'chat:$ownerId:$sessionUnitId';
+    final controller =
+        _nativeControllers[targetId] ??
+        _reusableControllers[targetId] ??
+        _nativeControllers['chat:$sessionUnitId'] ??
+        _reusableControllers['chat:$sessionUnitId'];
+    if (controller != null) {
+      try {
+        await controller.invokeMethod('chat_receive_message', messageData);
+        debugPrint('[WindowService] Pushed chat_receive_message to $targetId');
+      } catch (e) {
+        debugPrint('[WindowService] notifyChatMessage error: $e');
+      }
+    }
+  }
+
+  @override
+  Future<void> notifyChatRefresh({
+    required int ownerId,
+    required String sessionUnitId,
+  }) async {
+    final targetId = 'chat:$ownerId:$sessionUnitId';
+    final controller =
+        _nativeControllers[targetId] ??
+        _reusableControllers[targetId] ??
+        _nativeControllers['chat:$sessionUnitId'] ??
+        _reusableControllers['chat:$sessionUnitId'];
+    if (controller != null) {
+      try {
+        await controller.invokeMethod('chat_refresh');
+        debugPrint('[WindowService] Pushed chat_refresh to $targetId');
+      } catch (e) {
+        debugPrint('[WindowService] notifyChatRefresh error: $e');
+      }
+    }
+  }
+
+  Future<void> updateTraySnapshot(TrayGroupedUnreadState snapshot) async {
+    for (final controller in [
+      ..._nativeControllers.values,
+      ..._reusableControllers.values,
+    ]) {
+      try {
+        await controller.invokeMethod('tray_update', snapshot.toJson());
+      } catch (_) {}
+    }
+  }
+
+  Future<void> broadcastToAllSubWindows(
+    String method, [
+    dynamic arguments,
+  ]) async {
     for (final controller in _nativeControllers.values) {
       try {
         await controller.invokeMethod(method, arguments);
       } catch (_) {}
     }
-    for (final controller in _reusableControllers.values) {
+    for (final controller in _reusableControllers.values.toList()) {
       try {
         await controller.invokeMethod(method, arguments);
       } catch (_) {}
     }
+  }
+
+  @override
+  Future<void> openTrayFlyout() async {
+    if (isSubWindow) return _requestMain({'type': 'tray'});
+    const targetId = 'tool:tray';
+    final snapshot =
+        traySnapshotProvider?.call() ?? TrayGroupedUnreadState.empty;
+    if (isWindowOpen(targetId)) {
+      await _nativeControllers[targetId]?.invokeMethod(
+        'tray_update',
+        snapshot.toJson(),
+      );
+      await bringToFront(targetId);
+      return;
+    }
+    await _openNativeSubWindow(
+      targetId: targetId,
+      type: WindowType.tray,
+      title: '未读消息',
+      payload: NativeWindowPayload(
+        type: SubWindowType.tray,
+        title: '未读消息',
+        targetId: targetId,
+        extra: {'traySnapshot': snapshot.toJson()},
+      ),
+    );
   }
 
   /// 创建真正的原生顶层操作系统窗口 (HWND)
@@ -480,12 +684,24 @@ class DefaultWindowService implements WindowService {
 
     _ensureIpcInitialized();
     try {
+      final currentTheme = themeModeProvider?.call() ?? 'system';
+      final updatedExtra = <String, dynamic>{
+        ...?payload.extra,
+        'themeMode': currentTheme,
+      };
+      final effectivePayload = payload.copyWith(extra: updatedExtra);
+
       final cachedController = _reusableControllers.remove(targetId);
       if (cachedController != null) {
         try {
-          await cachedController.invokeMethod('update_payload', payload.toJson());
+          await cachedController.invokeMethod(
+            'update_payload',
+            effectivePayload.toJson(),
+          );
+          await cachedController.invokeMethod('chat_refresh');
         } catch (_) {}
         await cachedController.show();
+        await cachedController.invokeMethod('bringToFront');
         _nativeControllers[targetId] = cachedController;
         _registry[targetId] = WindowRecord(
           targetId: targetId,
@@ -493,7 +709,7 @@ class DefaultWindowService implements WindowService {
           title: title,
           openedAt: DateTime.now(),
           nativeWindowId: cachedController.windowId,
-          extra: payload.toJson(),
+          extra: effectivePayload.toJson(),
         );
         _notify();
         completer.complete();
@@ -502,8 +718,8 @@ class DefaultWindowService implements WindowService {
 
       final controller = await WindowController.create(
         WindowConfiguration(
-          arguments: payload.toJsonString(),
-          hiddenAtLaunch: false,
+          arguments: effectivePayload.toJsonString(),
+          hiddenAtLaunch: true,
         ),
       );
       await controller.show();
@@ -541,12 +757,24 @@ class DefaultWindowService implements WindowService {
     int? ownerId,
     String? title,
   }) async {
+    if (isSubWindow) {
+      return _requestMain({
+        'type': 'chat',
+        'sessionUnitId': sessionUnitId,
+        'ownerId': ownerId,
+        'title': title,
+      });
+    }
     final effectiveOwnerId = ownerId ?? 0;
     final targetId = 'chat:$effectiveOwnerId:$sessionUnitId';
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
       if (pending != null) await pending;
       await bringToFront(targetId);
+      await notifyChatRefresh(
+        ownerId: effectiveOwnerId,
+        sessionUnitId: sessionUnitId,
+      );
       return;
     }
 
@@ -604,6 +832,13 @@ class DefaultWindowService implements WindowService {
     required String initialUrl,
     String? title,
   }) async {
+    if (isSubWindow) {
+      return _requestMain({
+        'type': 'browser',
+        'url': initialUrl,
+        'title': title,
+      });
+    }
     final targetId = 'miniApp:$appId';
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
@@ -656,6 +891,9 @@ class DefaultWindowService implements WindowService {
     String? title,
     String? fallbackContent,
   }) async {
+    if (isSubWindow) {
+      return _requestMain({'type': 'browser', 'url': url, 'title': title});
+    }
     final targetId = 'browser:$url';
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
@@ -710,6 +948,31 @@ class DefaultWindowService implements WindowService {
     List<MediaPreviewItem>? items,
     int initialIndex = 0,
   }) async {
+    if (isSubWindow) {
+      return _requestMain({
+        'type': 'media',
+        'url': mediaUrl,
+        'initialIndex': initialIndex,
+        'items':
+            items
+                ?.map(
+                  (i) => {
+                    'id': i.id,
+                    'messageId': i.messageId,
+                    'source': i.source,
+                    'type': i.type.name,
+                    'localPath': i.localPath,
+                    'userId': i.userId,
+                    'chatTarget': i.chatTarget,
+                    'createdAt': i.createdAt?.toIso8601String(),
+                    'fileName': i.fileName,
+                    'thumbnail': i.thumbnail,
+                  },
+                )
+                .toList(),
+      });
+    }
+
     final targetId = 'media:$mediaUrl';
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
@@ -751,6 +1014,11 @@ class DefaultWindowService implements WindowService {
                       'type': i.type.name,
                       'source': i.source,
                       'localPath': i.localPath,
+                      'userId': i.userId,
+                      'chatTarget': i.chatTarget,
+                      'createdAt': i.createdAt?.toIso8601String(),
+                      'fileName': i.fileName,
+                      'thumbnail': i.thumbnail,
                     },
                   )
                   .toList(),
@@ -789,6 +1057,7 @@ class DefaultWindowService implements WindowService {
 
   @override
   Future<void> openSettings() async {
+    if (isSubWindow) return _requestMain({'type': 'settings'});
     const targetId = 'tool:settings';
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
@@ -834,6 +1103,7 @@ class DefaultWindowService implements WindowService {
 
   @override
   Future<void> openDiagnostics() async {
+    if (isSubWindow) return _requestMain({'type': 'diagnostics'});
     const targetId = 'tool:diagnostics';
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
@@ -878,6 +1148,7 @@ class DefaultWindowService implements WindowService {
 
   @override
   Future<void> openLocalFileServer() async {
+    if (isSubWindow) return _requestMain({'type': 'localFileServer'});
     const targetId = 'tool:localFileServer';
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
@@ -948,8 +1219,22 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
   ref,
 ) {
   final platformFacade = ref.watch(platformFacadeProvider);
-  return DefaultWindowService(
+  final sessionChangeBus = ref.watch(sessionChangeBusProvider);
+
+  late final DefaultWindowService service;
+  ref.listen(trayGroupedUnreadProvider, (previous, next) {
+    unawaited(service.updateTraySnapshot(next));
+  });
+  service = DefaultWindowService(
     platformFacade: platformFacade,
+    traySnapshotProvider: () => ref.read(trayGroupedUnreadProvider),
+    themeModeProvider: () {
+      try {
+        return ref.read(themeModeControllerProvider).name;
+      } catch (_) {
+        return 'system';
+      }
+    },
     messageSender: ({
       required int ownerId,
       required String sessionUnitId,
@@ -957,37 +1242,101 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
       String? clientMessageId,
     }) async {
       final repo = ref.read(messageRepositoryProvider);
-      return await repo.sendText(
+      final sent = await repo.sendText(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
         text: text,
         clientMessageId: clientMessageId,
       );
+      // 同时推送给已打开的子窗口自身
+      service.notifyChatMessage(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        messageData: sent.toWindowPayload(),
+      );
+      return sent;
     },
     historyLoader: ({
       required int ownerId,
       required String sessionUnitId,
-      int limit = 20,
+      int limit = 30,
+      int? beforeScore,
     }) async {
       final repo = ref.read(messageRepositoryProvider);
-      final page = await repo.loadInitialLocal(
-        ownerId: ownerId,
-        sessionUnitId: sessionUnitId,
-        limit: limit,
-      );
-      return page.items
-          .map(
-            (m) => {
-              'id': m.localId,
-              'serverId': m.serverId,
-              'clientMessageId': m.clientMessageId,
-              'text': m.text,
-              'isMe': m.isMine,
-              'state': m.state,
-              'time': m.createdAt?.millisecondsSinceEpoch,
-            },
-          )
-          .toList();
+      var page =
+          beforeScore == null
+              ? await repo.loadInitialLocal(
+                ownerId: ownerId,
+                sessionUnitId: sessionUnitId,
+                limit: limit,
+              )
+              : await repo.loadHistory(
+                ownerId: ownerId,
+                sessionUnitId: sessionUnitId,
+                beforeScore: beforeScore,
+                limit: limit,
+              );
+      if (beforeScore == null && page.items.isEmpty) {
+        page = await repo.loadHistory(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          limit: limit,
+        );
+      }
+      return page.items.reversed.map((m) => m.toWindowPayload()).toList();
+    },
+    messageAction: (action, message) async {
+      if (action == 'voice') {
+        await ref
+            .read(audioPlaybackServiceProvider)
+            .toggle(
+              messageId: message.localId,
+              localPath: message.localFilePath,
+              url: message.mediaUrl,
+            );
+        return {'success': true};
+      }
+      final transfer = ref.read(attachmentTransferServiceProvider);
+      final source = message.mediaUrl ?? '';
+      final fileName =
+          message.fileName.isEmpty ? 'attachment' : message.fileName;
+      if (action == 'cancel') {
+        await transfer.cancel(message.localId);
+      } else if (action == 'saveAs') {
+        await transfer.saveAs(
+          id: message.localId,
+          source: source,
+          fileName: fileName,
+          userId: message.ownerId.toString(),
+          chatTarget: message.sessionUnitId,
+          messageDate: message.createdAt,
+        );
+      } else if (action == 'open') {
+        await transfer.open(
+          id: message.localId,
+          source: source,
+          fileName: fileName,
+          userId: message.ownerId.toString(),
+          chatTarget: message.sessionUnitId,
+          messageDate: message.createdAt,
+        );
+      } else {
+        await transfer.download(
+          id: message.localId,
+          source: source,
+          fileName: fileName,
+          userId: message.ownerId.toString(),
+          chatTarget: message.sessionUnitId,
+          messageDate: message.createdAt,
+        );
+      }
+      final state = transfer.stateFor(message.localId);
+      if (state.error != null) throw StateError('附件处理失败: ${state.error}');
+      return {
+        'success': true,
+        'localPath': state.localPath,
+        'status': state.status.name,
+      };
     },
     onLogout: () async {
       await ref.read(authControllerProvider.notifier).logout();
@@ -1016,4 +1365,20 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
       }
     },
   );
+
+  // 监听全局会话变更总线，当收到任何消息或会话更新时，自动通知对应的独立子窗口刷新
+  final sub = sessionChangeBus.events.listen((event) {
+    if (event.sessionUnitId.isNotEmpty) {
+      service.notifyChatRefresh(
+        ownerId: event.ownerId,
+        sessionUnitId: event.sessionUnitId,
+      );
+    }
+  });
+
+  ref.onDispose(() {
+    sub.cancel();
+  });
+
+  return service;
 });

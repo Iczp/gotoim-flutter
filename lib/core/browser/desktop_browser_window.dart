@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../platform/windows/windows_window_adapter.dart';
 import '../widgets/app_toast.dart';
 
 /// 桌面端微信同款独立网页浏览器窗口 (DesktopBrowserWindow - 打开链接)
@@ -77,6 +78,16 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   @override
   void initState() {
     super.initState();
+    if (widget.isSubWindow) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WindowsWindowAdapter.setupCustomTitleBar();
+        if (mounted) {
+          setState(() {
+            _isMaximized = WindowsWindowAdapter.isMaximized();
+          });
+        }
+      });
+    }
     _currentUrl = widget.initialUrl;
     _pageTitle = widget.title ?? _extractHost(widget.initialUrl);
   }
@@ -87,6 +98,16 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       if (uri.host.isNotEmpty) return uri.host;
     } catch (_) {}
     return '网页浏览';
+  }
+
+  void _closeWindow() {
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else if (widget.isSubWindow) {
+      WindowsWindowAdapter.close();
+    } else {
+      Navigator.of(context).maybePop();
+    }
   }
 
   Future<void> _refresh() async {
@@ -137,23 +158,17 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     final dialogWidth =
         _isMaximized
             ? screenSize.width
-            : 980.0.clamp(600.0, screenSize.width - 40);
+            : (screenSize.width - 40).clamp(0.0, 980.0);
     final dialogHeight =
         _isMaximized
             ? screenSize.height
-            : 720.0.clamp(400.0, screenSize.height - 40);
+            : (screenSize.height - 40).clamp(0.0, 720.0);
 
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // 1. 顶部专业浏览器工具栏 (含置顶、Tab标签、地址与控制按钮)
-        _buildBrowserTopBar(
-          context,
-          isDark,
-          topBarBg,
-          tabBg,
-          borderColor,
-        ),
+        _buildBrowserTopBar(context, isDark, topBarBg, tabBg, borderColor),
 
         // 2. 加载进度条
         if (_isLoading && _progress < 1.0)
@@ -161,9 +176,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             value: _progress,
             minHeight: 2,
             backgroundColor: Colors.transparent,
-            valueColor: const AlwaysStoppedAnimation<Color>(
-              Color(0xFF07C160),
-            ),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF07C160)),
           ),
 
         // 3. 网页主内容视图
@@ -171,14 +184,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
           child: Container(
             color: isDark ? const Color(0xFF181818) : Colors.white,
             child: Stack(
+              fit: StackFit.expand,
               children: [
                 if (InAppWebViewPlatform.instance != null)
                   InAppWebView(
-                    initialUrlRequest: URLRequest(
-                      url: WebUri(_currentUrl),
-                    ),
+                    initialUrlRequest: URLRequest(url: WebUri(_currentUrl)),
                     initialSettings: InAppWebViewSettings(
-                      useShouldOverrideUrlLoading: true,
+                      useShouldOverrideUrlLoading: false,
                       mediaPlaybackRequiresUserGesture: false,
                       allowsInlineMediaPlayback: true,
                       javaScriptEnabled: true,
@@ -188,22 +200,33 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       _webViewController = controller;
                     },
                     onProgressChanged: (controller, progress) {
+                      if (!mounted) return;
                       setState(() {
                         _progress = progress / 100.0;
                         _isLoading = progress < 100;
                       });
                     },
                     onTitleChanged: (controller, title) {
+                      if (!mounted) return;
                       if (title != null && title.isNotEmpty) {
                         setState(() {
                           _pageTitle = title;
                         });
                       }
                     },
+                    onLoadStart: (controller, url) {
+                      if (!mounted) return;
+                      setState(() {
+                        _errorMessage = null;
+                        _isLoading = true;
+                      });
+                    },
                     onLoadStop: (controller, url) async {
                       final canBack = await controller.canGoBack();
                       final canForward = await controller.canGoForward();
+                      if (!mounted) return;
                       setState(() {
+                        _errorMessage = null;
                         _isLoading = false;
                         _canGoBack = canBack;
                         _canGoForward = canForward;
@@ -211,6 +234,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       });
                     },
                     onReceivedError: (controller, request, error) {
+                      if (!mounted ||
+                          request.isForMainFrame == false ||
+                          error.type == WebResourceErrorType.CANCELLED) {
+                        return;
+                      }
                       setState(() {
                         _isLoading = false;
                         _errorMessage = error.description;
@@ -221,8 +249,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                   _buildWebPreviewPlaceholder(context, isDark),
 
                 // 加载失败或错误遮罩
-                if (_errorMessage != null)
-                  _buildErrorFallback(context, isDark),
+                if (_errorMessage != null) _buildErrorFallback(context, isDark),
               ],
             ),
           ),
@@ -231,10 +258,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     );
 
     if (widget.isSubWindow) {
-      return Material(
-        color: windowBg,
-        child: SizedBox.expand(child: body),
-      );
+      return Material(color: windowBg, child: SizedBox.expand(child: body));
     }
 
     return Center(
@@ -330,185 +354,215 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     Color tabBg,
     Color border,
   ) {
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(bottom: BorderSide(color: border, width: 0.5)),
-      ),
-      child: Row(
-        children: [
-          // 置顶图标
-          IconButton(
-            icon: Icon(
-              _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-              size: 16,
-              color: _isPinned ? const Color(0xFF07C160) : Colors.grey,
-            ),
-            tooltip: _isPinned ? '取消置顶' : '固定置顶',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              setState(() {
-                _isPinned = !_isPinned;
-              });
-            },
-          ),
-
-          // 书签/侧边栏图标
-          IconButton(
-            icon: const Icon(Icons.view_sidebar_outlined, size: 16),
-            tooltip: '侧边栏',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              showToast('侧边栏功能已开启', type: ToastType.info);
-            },
-          ),
-
-          const SizedBox(width: 4),
-
-          // 核心活动标签页 (Tab)
-          Flexible(
-            child: Container(
-              height: 32,
-              constraints: const BoxConstraints(maxWidth: 240),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: tabBg,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: border, width: 0.5),
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onPanStart: (_) {
+        if (widget.isSubWindow) {
+          WindowsWindowAdapter.startDragging();
+        }
+      },
+      onDoubleTap: () {
+        if (widget.isSubWindow) {
+          WindowsWindowAdapter.toggleMaximize();
+          if (mounted) {
+            setState(() {
+              _isMaximized = WindowsWindowAdapter.isMaximized();
+            });
+          }
+        }
+      },
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(bottom: BorderSide(color: border, width: 0.5)),
+        ),
+        child: Row(
+          children: [
+            // 置顶图标
+            IconButton(
+              icon: Icon(
+                _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                size: 16,
+                color: _isPinned ? const Color(0xFF07C160) : Colors.grey,
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.public_rounded,
-                    size: 14,
-                    color:
-                        isDark
-                            ? const Color(0xFF07C160)
-                            : const Color(0xFF07C160),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _pageTitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+              tooltip: _isPinned ? '取消置顶' : '固定置顶',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                setState(() {
+                  _isPinned = !_isPinned;
+                });
+                if (widget.isSubWindow) {
+                  WindowsWindowAdapter.setAlwaysOnTop(_isPinned);
+                }
+              },
+            ),
+
+            // 书签/侧边栏图标
+            IconButton(
+              icon: const Icon(Icons.view_sidebar_outlined, size: 16),
+              tooltip: '侧边栏',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                showToast('侧边栏功能已开启', type: ToastType.info);
+              },
+            ),
+
+            const SizedBox(width: 4),
+
+            // 核心活动标签页 (Tab)
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 480).clamp(
+                60.0,
+                240.0,
+              ),
+              child: Container(
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: tabBg,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: border, width: 0.5),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.public_rounded,
+                      size: 14,
+                      color:
+                          isDark
+                              ? const Color(0xFF07C160)
+                              : const Color(0xFF07C160),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _pageTitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(4),
-                    onTap: () => Navigator.of(context).pop(),
-                    child: const Padding(
-                      padding: EdgeInsets.all(2),
-                      child: Icon(Icons.close_rounded, size: 14),
+                    Tooltip(
+                      message: '关闭网页',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: _closeWindow,
+                        child: const Padding(
+                          padding: EdgeInsets.all(2),
+                          child: Icon(Icons.close_rounded, size: 14),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
 
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
 
-          // 导航操作：后退、前进、刷新
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_rounded, size: 13),
-            tooltip: '后退',
-            visualDensity: VisualDensity.compact,
-            onPressed:
-                _canGoBack
-                    ? () async {
-                      await _webViewController?.goBack();
-                    }
-                    : null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.arrow_forward_ios_rounded, size: 13),
-            tooltip: '前进',
-            visualDensity: VisualDensity.compact,
-            onPressed:
-                _canGoForward
-                    ? () async {
-                      await _webViewController?.goForward();
-                    }
-                    : null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-            tooltip: '重新加载',
-            visualDensity: VisualDensity.compact,
-            onPressed: _refresh,
-          ),
-
-          const Spacer(),
-
-          // 在系统外部浏览器中打开
-          IconButton(
-            icon: const Icon(Icons.open_in_browser_rounded, size: 16),
-            tooltip: '在系统默认浏览器中打开',
-            visualDensity: VisualDensity.compact,
-            onPressed: _openInExternalBrowser,
-          ),
-
-          // 复制网页链接
-          IconButton(
-            icon: const Icon(Icons.link_rounded, size: 16),
-            tooltip: '复制链接',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: _currentUrl));
-              showToast('网页链接已复制到剪贴板', type: ToastType.success);
-            },
-          ),
-
-          const SizedBox(width: 6),
-
-          // 窗口控制按钮：最小化、最大化、关闭
-          IconButton(
-            icon: const Icon(Icons.remove_rounded, size: 16),
-            tooltip: '最小化',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              if (widget.isSubWindow) {
-                widget.onClose?.call();
-              } else {
-                Navigator.of(context).maybePop();
-              }
-            },
-          ),
-          IconButton(
-            icon: Icon(
-              _isMaximized
-                  ? Icons.filter_none_rounded
-                  : Icons.crop_square_rounded,
-              size: 15,
+            // 导航操作：后退、前进、刷新
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_rounded, size: 13),
+              tooltip: '后退',
+              visualDensity: VisualDensity.compact,
+              onPressed:
+                  _canGoBack
+                      ? () async {
+                        await _webViewController?.goBack();
+                      }
+                      : null,
             ),
-            tooltip: _isMaximized ? '还原窗口' : '最大化窗口',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              setState(() {
-                _isMaximized = !_isMaximized;
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 17),
-            tooltip: '关闭窗口',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              if (widget.onClose != null) {
-                widget.onClose!();
-              } else if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              }
-            },
-          ),
-        ],
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios_rounded, size: 13),
+              tooltip: '前进',
+              visualDensity: VisualDensity.compact,
+              onPressed:
+                  _canGoForward
+                      ? () async {
+                        await _webViewController?.goForward();
+                      }
+                      : null,
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              tooltip: '重新加载',
+              visualDensity: VisualDensity.compact,
+              onPressed: _refresh,
+            ),
+
+            const Spacer(),
+
+            // 在系统外部浏览器中打开
+            IconButton(
+              icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+              tooltip: '在系统默认浏览器中打开',
+              visualDensity: VisualDensity.compact,
+              onPressed: _openInExternalBrowser,
+            ),
+
+            // 复制网页链接
+            IconButton(
+              icon: const Icon(Icons.link_rounded, size: 16),
+              tooltip: '复制链接',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: _currentUrl));
+                showToast('网页链接已复制到剪贴板', type: ToastType.success);
+              },
+            ),
+
+            const SizedBox(width: 6),
+
+            // 窗口控制按钮：最小化、最大化、关闭
+            IconButton(
+              icon: const Icon(Icons.remove_rounded, size: 16),
+              tooltip: '最小化',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                if (widget.isSubWindow) {
+                  WindowsWindowAdapter.minimize();
+                } else {
+                  Navigator.of(context).maybePop();
+                }
+              },
+            ),
+            IconButton(
+              icon: Icon(
+                _isMaximized
+                    ? Icons.filter_none_rounded
+                    : Icons.crop_square_rounded,
+                size: 15,
+              ),
+              tooltip: _isMaximized ? '还原窗口' : '最大化窗口',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                if (widget.isSubWindow) {
+                  WindowsWindowAdapter.toggleMaximize();
+                  if (mounted) {
+                    setState(() {
+                      _isMaximized = WindowsWindowAdapter.isMaximized();
+                    });
+                  }
+                } else {
+                  setState(() {
+                    _isMaximized = !_isMaximized;
+                  });
+                }
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 17),
+              tooltip: '关闭窗口',
+              visualDensity: VisualDensity.compact,
+              onPressed: _closeWindow,
+            ),
+          ],
+        ),
       ),
     );
   }

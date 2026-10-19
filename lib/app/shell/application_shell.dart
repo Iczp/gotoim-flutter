@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import '../../core/compliance/privacy_consent_dialog.dart';
 import '../../core/compliance/privacy_service.dart';
 import '../../core/native/native.dart';
+import '../../core/platform/windows/windows_window_adapter.dart';
+import '../../core/services/tray_grouped_unread_provider.dart';
 import '../../core/services/tray_service.dart';
 import '../../core/theme/tab_glass_controller.dart';
 import '../../core/widgets/app_badge.dart';
@@ -38,6 +40,9 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WindowsWindowAdapter.setupCustomTitleBar();
+    });
     Future<void>.microtask(() async {
       final privacy = ref.read(privacyServiceProvider);
       final hasAgreed = await privacy.initialize();
@@ -49,13 +54,14 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         );
         if (!agreed || !mounted) return;
       }
-      // After privacy agreement is confirmed, perform silent app version check
-      await ref
-          .read(appUpdateServiceProvider)
-          .checkUpdate(silent: true, context: context);
+      // A slow version check must not delay the tray needed for close-to-tray.
+      // Both services start only after the existing privacy agreement check.
       if (mounted) {
         unawaited(ref.read(trayServiceProvider).initialize());
       }
+      await ref
+          .read(appUpdateServiceProvider)
+          .checkUpdate(silent: true, context: context);
     });
   }
 
@@ -137,6 +143,16 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         ref.read(trayServiceProvider).updateContextMenu(currentOwnerName: next);
       },
     );
+    ref.listen<SessionListController>(
+      sessionListControllerProvider,
+      (prev, next) {
+        ref.read(trayGroupedUnreadProvider.notifier).syncFromRealSessions(
+          currentOwner: next.currentOwner,
+          allOwners: next.owners,
+          sessions: next.sessions,
+        );
+      },
+    );
 
     return PopScope(
       canPop: false,
@@ -181,15 +197,23 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
               body:
                   isCompact
                       ? content
-                      : Row(
-                        children: [
-                          DesktopDockRail(
-                            selected: _section,
-                            onSelected: _select,
-                          ),
-                          Expanded(child: content),
-                        ],
-                      ),
+                      : Column(
+                          children: [
+                            if (isNativeDesktop)
+                              const _DesktopMainWindowTitleBar(),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  DesktopDockRail(
+                                    selected: _section,
+                                    onSelected: _select,
+                                  ),
+                                  Expanded(child: content),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
               bottomNavigationBar:
                   isCompact
                       ? _HomeNavigationBar(
@@ -343,6 +367,122 @@ class _HomeNavigationBar extends ConsumerWidget {
                   .toList(growable: false),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 桌面端主窗口无边框自定义标题栏 (沉浸式顶栏 + 窗口三按钮)
+class _DesktopMainWindowTitleBar extends StatefulWidget {
+  const _DesktopMainWindowTitleBar();
+
+  @override
+  State<_DesktopMainWindowTitleBar> createState() =>
+      _DesktopMainWindowTitleBarState();
+}
+
+class _DesktopMainWindowTitleBarState
+    extends State<_DesktopMainWindowTitleBar> {
+  bool _isMaximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _isMaximized = WindowsWindowAdapter.isMaximized();
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFECECEC);
+    final borderColor =
+        isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onPanStart: (_) => WindowsWindowAdapter.startDragging(),
+      onDoubleTap: () {
+        WindowsWindowAdapter.toggleMaximize();
+        if (mounted) {
+          setState(() {
+            _isMaximized = WindowsWindowAdapter.isMaximized();
+          });
+        }
+      },
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.chat_bubble_rounded,
+              size: 15,
+              color: Color(0xFF07C160),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Goto IM',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+            const Spacer(),
+            // 最小化按钮
+            IconButton(
+              icon: const Icon(Icons.remove_rounded, size: 14),
+              tooltip: '最小化',
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              onPressed: () => WindowsWindowAdapter.minimize(),
+            ),
+            const SizedBox(width: 2),
+            // 最大化/还原按钮
+            IconButton(
+              icon: Icon(
+                _isMaximized
+                    ? Icons.filter_none_rounded
+                    : Icons.crop_square_rounded,
+                size: 13,
+              ),
+              tooltip: _isMaximized ? '还原' : '最大化',
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              onPressed: () {
+                WindowsWindowAdapter.toggleMaximize();
+                if (mounted) {
+                  setState(() {
+                    _isMaximized = WindowsWindowAdapter.isMaximized();
+                  });
+                }
+              },
+            ),
+            const SizedBox(width: 2),
+            // 关闭按钮
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 15),
+              tooltip: '关闭',
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              onPressed: () => WindowsWindowAdapter.close(),
+            ),
+          ],
         ),
       ),
     );

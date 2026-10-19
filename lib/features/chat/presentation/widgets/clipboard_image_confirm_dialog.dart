@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'screenshot_annotation_dialog.dart';
+
 /// 剪贴板图片预发送确认对话框 (ClipboardImageConfirmDialog)
 ///
 /// 核心规范：
@@ -8,22 +10,28 @@ import 'package:flutter/services.dart';
 /// 2. 高保真图片缩略预览（自适应长宽比，最大高度 260px）；
 /// 3. 显示图像大小与文件类型标签；
 /// 4. 提供留言输入框（可选随图附言）；
-/// 5. 键盘快捷支持：Enter 确认发送，Esc 取消。
+/// 5. 提供 "编辑 / 标注" 入口，支持在发送前进行涂鸦、形状、高亮、马赛克等标注；
+/// 6. 键盘快捷支持：Enter 确认发送，Esc 取消。
 class ClipboardImageConfirmDialog extends StatefulWidget {
   const ClipboardImageConfirmDialog({
     required this.imageBytes,
     this.initialCaption,
+    this.onAnnotatedSend,
     super.key,
   });
 
   final Uint8List imageBytes;
   final String? initialCaption;
+  final Future<void> Function(Uint8List annotatedBytes, String? caption)?
+  onAnnotatedSend;
 
   /// 弹出图片预发送确认对话框
   static Future<({bool confirmed, String? caption})?> show(
     BuildContext context, {
     required Uint8List imageBytes,
     String? initialCaption,
+    Future<void> Function(Uint8List annotatedBytes, String? caption)?
+    onAnnotatedSend,
   }) {
     return showGeneralDialog<({bool confirmed, String? caption})>(
       context: context,
@@ -46,6 +54,7 @@ class ClipboardImageConfirmDialog extends StatefulWidget {
           child: ClipboardImageConfirmDialog(
             imageBytes: imageBytes,
             initialCaption: initialCaption,
+            onAnnotatedSend: onAnnotatedSend,
           ),
         );
       },
@@ -261,8 +270,36 @@ class _ClipboardImageConfirmDialogState
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 color: headerBg,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    // 微信同款: "编辑 / 标注" 入口
+                    TextButton.icon(
+                      onPressed: () async {
+                        final currentCaption = _captionController.text.trim();
+                        Navigator.of(context).pop((confirmed: false, caption: null));
+                        final result = await ScreenshotAnnotationDialog.show(
+                          context,
+                          imageBytes: widget.imageBytes,
+                          initialCaption:
+                              currentCaption.isNotEmpty ? currentCaption : null,
+                        );
+                        if (result != null && result.confirmed) {
+                          if (widget.onAnnotatedSend != null) {
+                            await widget.onAnnotatedSend!(
+                              result.imageBytes,
+                              result.caption,
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.draw_outlined, size: 16),
+                      label: const Text('编辑 / 标注'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: textSecondary,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                    ),
+                    const Spacer(),
                     TextButton(
                       onPressed: _onCancel,
                       style: TextButton.styleFrom(

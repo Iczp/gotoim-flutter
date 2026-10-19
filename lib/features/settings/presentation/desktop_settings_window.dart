@@ -1,3 +1,4 @@
+import '../../../core/native_window/desktop_window_title_bar.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../../../core/compliance/agreement_viewer_page.dart';
 import '../../../core/compliance/privacy_service.dart';
+import '../../../core/platform/windows/windows_window_adapter.dart';
 import '../../../core/services/file/storage_path_service.dart';
 import '../../../core/services/window_service.dart';
 import '../../../core/theme/font_scale_controller.dart';
@@ -75,14 +77,10 @@ enum _SettingsTab {
   final IconData icon;
 }
 
-enum _StorageMigrationChoice {
-  migrateAndChange,
-  changeOnly,
-}
+enum _StorageMigrationChoice { migrateAndChange, changeOnly }
 
 class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
   _SettingsTab _activeTab = _SettingsTab.accountAndStorage;
-  bool _isPinned = false;
 
   // 账号与存储设置状态
   bool _preserveHistory = true;
@@ -101,6 +99,11 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
   void initState() {
     super.initState();
     _initStoragePath();
+    if (widget.isSubWindow) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WindowsWindowAdapter.setupCustomTitleBar();
+      });
+    }
   }
 
   Future<void> _initStoragePath() async {
@@ -218,12 +221,16 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
         return AlertDialog(
           backgroundColor: isDark ? const Color(0xFF232323) : Colors.white,
           surfaceTintColor: Colors.transparent,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           title: const Row(
             children: [
-              Icon(Icons.drive_file_move_outlined,
-                  color: Color(0xFF07C160), size: 22),
+              Icon(
+                Icons.drive_file_move_outlined,
+                color: Color(0xFF07C160),
+                size: 22,
+              ),
               SizedBox(width: 8),
               Text(
                 '更改文件存储位置',
@@ -237,21 +244,25 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
             children: [
               Text(
                 '检测到当前目录存有 ${stats.fileCount} 个聊天文件 (共 ${stats.formattedBytes})。',
-                style:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E1E1E)
-                      : const Color(0xFFF5F5F5),
+                  color:
+                      isDark
+                          ? const Color(0xFF1E1E1E)
+                          : const Color(0xFFF5F5F5),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF333333)
-                        : const Color(0xFFE0E0E0),
+                    color:
+                        isDark
+                            ? const Color(0xFF333333)
+                            : const Color(0xFFE0E0E0),
                   ),
                 ),
                 child: Column(
@@ -268,9 +279,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
                       '新位置: $newPath',
                       style: TextStyle(
                         fontSize: 11,
-                        color: isDark
-                            ? const Color(0xFF07C160)
-                            : const Color(0xFF06AD56),
+                        color:
+                            isDark
+                                ? const Color(0xFF07C160)
+                                : const Color(0xFF06AD56),
                         fontWeight: FontWeight.w600,
                       ),
                       maxLines: 2,
@@ -292,29 +304,40 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
               child: const Text('取消', style: TextStyle(color: Colors.grey)),
             ),
             OutlinedButton(
-              onPressed: () =>
-                  Navigator.of(ctx).pop(_StorageMigrationChoice.changeOnly),
+              onPressed:
+                  () =>
+                      Navigator.of(ctx).pop(_StorageMigrationChoice.changeOnly),
               style: OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6)),
+                  borderRadius: BorderRadius.circular(6),
+                ),
               ),
               child: const Text('仅更改位置', style: TextStyle(fontSize: 12)),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(ctx)
-                  .pop(_StorageMigrationChoice.migrateAndChange),
+              onPressed:
+                  () => Navigator.of(
+                    ctx,
+                  ).pop(_StorageMigrationChoice.migrateAndChange),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF07C160),
                 foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6)),
+                  borderRadius: BorderRadius.circular(6),
+                ),
               ),
-              child: const Text('迁移原文件',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              child: const Text(
+                '迁移原文件',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         );
@@ -341,8 +364,9 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
           child: AlertDialog(
             backgroundColor: isDark ? const Color(0xFF232323) : Colors.white,
             surfaceTintColor: Colors.transparent,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             title: const Text(
               '正在迁移聊天文件...',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
@@ -350,9 +374,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
             content: ValueListenableBuilder<int>(
               valueListenable: progressNotifier,
               builder: (context, current, _) {
-                final double progress = totalFiles > 0
-                    ? (current / totalFiles).clamp(0.0, 1.0)
-                    : 0.0;
+                final double progress =
+                    totalFiles > 0
+                        ? (current / totalFiles).clamp(0.0, 1.0)
+                        : 0.0;
                 final percent = (progress * 100).toInt();
                 return Column(
                   mainAxisSize: MainAxisSize.min,
@@ -360,9 +385,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
                   children: [
                     LinearProgressIndicator(
                       value: progress,
-                      backgroundColor: isDark
-                          ? const Color(0xFF1E1E1E)
-                          : const Color(0xFFE5E5E5),
+                      backgroundColor:
+                          isDark
+                              ? const Color(0xFF1E1E1E)
+                              : const Color(0xFFE5E5E5),
                       color: const Color(0xFF07C160),
                       minHeight: 8,
                       borderRadius: BorderRadius.circular(4),
@@ -373,8 +399,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
                       children: [
                         Text(
                           '正在复制文件: $current / $totalFiles',
-                          style:
-                              const TextStyle(fontSize: 12, color: Colors.grey),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
                         ),
                         Text(
                           '$percent%',
@@ -414,8 +442,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
         setState(() {
           _storagePath = targetPath;
         });
-        showToast('已成功迁移 ${result.migratedCount} 个文件至新位置！',
-            type: ToastType.success);
+        showToast(
+          '已成功迁移 ${result.migratedCount} 个文件至新位置！',
+          type: ToastType.success,
+        );
       } else {
         showToast('文件迁移失败: ${result.errorMessage}', type: ToastType.error);
       }
@@ -497,10 +527,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     );
 
     if (widget.isSubWindow) {
-      return Material(
-        color: windowBg,
-        child: SizedBox.expand(child: body),
-      );
+      return Material(color: windowBg, child: SizedBox.expand(child: body));
     }
 
     return Center(
@@ -534,51 +561,26 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     Color bg,
     Color border,
   ) {
-    return Container(
-      height: 42,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(color: bg),
-      child: Row(
-        children: [
-          Text(
-            '设置',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white70 : Colors.black87,
-            ),
-          ),
-          const Spacer(),
-          // 置顶切换按钮
-          IconButton(
-            icon: Icon(
-              _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-              size: 16,
-              color: _isPinned ? const Color(0xFF07C160) : Colors.grey,
-            ),
-            tooltip: _isPinned ? '取消置顶' : '固定置顶',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              setState(() {
-                _isPinned = !_isPinned;
-              });
+    if (widget.isSubWindow) {
+      return DesktopWindowTitleBar(
+        title: '设置',
+        onClose:
+            widget.onClose ??
+            () {
+              WindowsWindowAdapter.close();
             },
-          ),
-          // 关闭按钮
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 17),
-            tooltip: '关闭',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              if (widget.onClose != null) {
-                widget.onClose!();
-              } else if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              }
-            },
-          ),
-        ],
-      ),
+      );
+    }
+    return AppBar(
+      title: const Text('设置'),
+      automaticallyImplyLeading: false,
+      actions: [
+        IconButton(
+          tooltip: '关闭',
+          icon: const Icon(Icons.close),
+          onPressed: widget.onClose ?? () => Navigator.of(context).maybePop(),
+        ),
+      ],
     );
   }
 
@@ -826,8 +828,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
               OutlinedButton(
                 onPressed: _handleOpenStorageFolder,
                 style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -838,8 +842,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
               OutlinedButton(
                 onPressed: _handleChangeStoragePath,
                 style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -850,11 +856,15 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
               TextButton(
                 onPressed: _handleResetStoragePath,
                 style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                 ),
-                child: const Text('恢复默认',
-                    style: TextStyle(fontSize: 11, color: Colors.grey)),
+                child: const Text(
+                  '恢复默认',
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
               ),
             ],
           ),
@@ -880,9 +890,9 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     ref.read(themeModeControllerProvider.notifier).setThemeMode(mode);
     if (widget.isSubWindow) {
       try {
-        WindowMethodChannel('gotoim/ipc_to_main').invokeMethod('theme_changed', {
-          'themeMode': mode.name,
-        });
+        WindowMethodChannel(
+          'gotoim/ipc_to_main',
+        ).invokeMethod('theme_changed', {'themeMode': mode.name});
       } catch (_) {}
     }
   }
@@ -1070,9 +1080,9 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
             onPressed: () {
               if (widget.isSubWindow) {
                 try {
-                  WindowMethodChannel('gotoim/ipc_to_main').invokeMethod('open_window', {
-                    'type': 'localFileServer',
-                  });
+                  WindowMethodChannel(
+                    'gotoim/ipc_to_main',
+                  ).invokeMethod('open_window', {'type': 'localFileServer'});
                 } catch (_) {}
                 return;
               }
@@ -1089,9 +1099,9 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
             onPressed: () {
               if (widget.isSubWindow) {
                 try {
-                  WindowMethodChannel('gotoim/ipc_to_main').invokeMethod('open_window', {
-                    'type': 'diagnostics',
-                  });
+                  WindowMethodChannel(
+                    'gotoim/ipc_to_main',
+                  ).invokeMethod('open_window', {'type': 'diagnostics'});
                 } catch (_) {}
                 return;
               }
@@ -1150,7 +1160,9 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
                 onPressed: () async {
                   showToast('正在检查更新...', type: ToastType.info);
                   if (widget.isSubWindow) {
-                    await Future<void>.delayed(const Duration(milliseconds: 400));
+                    await Future<void>.delayed(
+                      const Duration(milliseconds: 400),
+                    );
                     showToast('已是最新版本', type: ToastType.success);
                     return;
                   }

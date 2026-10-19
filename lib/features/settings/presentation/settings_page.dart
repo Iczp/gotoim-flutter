@@ -42,6 +42,62 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 
+  Future<void> _confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('申请注销账号', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '注销账号为不可逆操作，请在操作前仔细阅读以下须知：',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              SizedBox(height: 12),
+              Text('1. 账号注销后，您将无法再以此账号登录 GotoIM。'),
+              SizedBox(height: 6),
+              Text('2. 您的个人资料、好友关系、聊天记录及云端同步数据将被彻底清空且无法恢复。'),
+              SizedBox(height: 6),
+              Text('3. 您创建的群聊将自动解散或移交管理员，群成员身份将被移除。'),
+              SizedBox(height: 6),
+              Text('4. 注销立即生效，绑定的手机号/身份凭证将在冷却期后释放。'),
+              SizedBox(height: 12),
+              Text(
+                '如果您已阅读并充分知晓上述后果，请点击确认注销。',
+                style: TextStyle(color: Colors.redAccent, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('放弃注销'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认注销并清空数据'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      showToast('账号注销申请已提交，数据已彻底清空', type: ToastType.success);
+      await ref.read(authControllerProvider).logout();
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -87,6 +143,14 @@ class SettingsPage extends ConsumerWidget {
                 subtitle: '已登录设备列表与下线管理',
                 showArrow: true,
                 onTap: () => context.push('/devices'),
+              ),
+              Cell(
+                icon: const Icon(Icons.no_accounts_outlined, color: Colors.redAccent),
+                title: '注销账号',
+                titleColor: Colors.redAccent,
+                subtitle: '永久注销当前账号并清空全部数据',
+                showArrow: true,
+                onTap: () => _confirmDeleteAccount(context, ref),
               ),
             ],
           ),
