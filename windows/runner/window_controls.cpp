@@ -4,9 +4,85 @@
 #include <flutter/standard_method_codec.h>
 #include <shellapi.h>
 #include <dwmapi.h>
+#include <commctrl.h>
 #include "resource.h"
 #include <string>
 #include <memory>
+
+#pragma comment(lib, "comctl32.lib")
+
+static HWND g_main_window = nullptr;
+
+void SetMainWindowHandle(HWND hwnd) {
+  g_main_window = hwnd;
+}
+
+HWND GetMainWindowHandle() {
+  return g_main_window;
+}
+
+LRESULT CALLBACK SubWindowSubclassProc(
+    HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+    UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+  switch (uMsg) {
+    case WM_NCCALCSIZE: {
+      if (wParam == TRUE) {
+        auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lParam);
+        if (IsZoomed(hwnd)) {
+          HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+          MONITORINFO monitor_info{sizeof(MONITORINFO)};
+          if (GetMonitorInfo(monitor, &monitor_info)) {
+            params->rgrc[0] = monitor_info.rcWork;
+          }
+        }
+        return 0;
+      }
+      return 0;
+    }
+    case WM_WINDOWPOSCHANGED: {
+      auto* pos = reinterpret_cast<WINDOWPOS*>(lParam);
+      if (!(pos->flags & SWP_NOSIZE)) {
+        HWND child = GetWindow(hwnd, GW_CHILD);
+        if (child) {
+          RECT rc;
+          GetClientRect(hwnd, &rc);
+          MoveWindow(child, 0, 0, rc.right - rc.left, rc.bottom - rc.top, TRUE);
+        }
+      }
+      break;
+    }
+    case WM_DESTROY: {
+      HWND main = GetMainWindowHandle();
+      if (main && IsWindow(main)) {
+        EnableWindow(main, TRUE);
+        SetForegroundWindow(main);
+      }
+      RemoveWindowSubclass(hwnd, SubWindowSubclassProc, uIdSubclass);
+      break;
+    }
+  }
+  return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+void ConfigureSubWindowNative(HWND sub_hwnd, HWND child_hwnd) {
+  if (!sub_hwnd || !IsWindow(sub_hwnd)) return;
+  const LONG_PTR style = GetWindowLongPtr(sub_hwnd, GWL_STYLE);
+  const LONG_PTR custom = (style & ~WS_CAPTION) | WS_THICKFRAME | WS_CLIPCHILDREN;
+  if (style != custom) {
+    SetWindowLongPtr(sub_hwnd, GWL_STYLE, custom);
+  }
+  SetWindowSubclass(sub_hwnd, SubWindowSubclassProc, 1001, 0);
+  const MARGINS margins = {0, 0, 1, 0};
+  DwmExtendFrameIntoClientArea(sub_hwnd, &margins);
+  SetWindowPos(sub_hwnd, nullptr, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED |
+               SWP_NOACTIVATE);
+  if (child_hwnd && IsWindow(child_hwnd)) {
+    RECT rc;
+    GetClientRect(sub_hwnd, &rc);
+    MoveWindow(child_hwnd, 0, 0, rc.right - rc.left, rc.bottom - rc.top, TRUE);
+  }
+}
 
 namespace {
 constexpr UINT kTrayCallback = WM_APP + 0x48;
@@ -22,8 +98,9 @@ std::wstring Wide(const std::string& value) {
 }
 class WindowControls : public flutter::Plugin {
  public:
-  explicit WindowControls(flutter::PluginRegistrarWindows* registrar)
+  explicit WindowControls(flutter::PluginRegistrarWindows* registrar, HWND explicit_hwnd = nullptr)
       : registrar_(registrar),
+        explicit_hwnd_(explicit_hwnd),
         channel_(std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
             registrar->messenger(), "gotoim/window",
             &flutter::StandardMethodCodec::GetInstance())) {
@@ -60,6 +137,10 @@ class WindowControls : public flutter::Plugin {
             channel_->InvokeMethod("closeRequested", nullptr);
           }
           if (hwnd == Window() && message == WM_CLOSE && !allow_destroy_) {
+            if (is_modal_ && g_main_window && IsWindow(g_main_window)) {
+              EnableWindow(g_main_window, TRUE);
+              SetForegroundWindow(g_main_window);
+            }
             // Cached engines stay alive. Dart updates the window registry.
             ShowWindow(hwnd, SW_HIDE);
             channel_->InvokeMethod("closeRequested", nullptr);
@@ -173,6 +254,24 @@ class WindowControls : public flutter::Plugin {
             ? std::get_if<bool>(call.arguments()) : nullptr;
         SetWindowPos(hwnd, pinned && *pinned ? HWND_TOPMOST : HWND_NOTOPMOST,
                      0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+      } else if (method == "setModal") {
+        const bool* modal = call.arguments()
+            ? std::get_if<bool>(call.arguments()) : nullptr;
+        is_modal_ = modal && *modal;
+        if (is_modal_) {
+          if (g_main_window && IsWindow(g_main_window) && g_main_window != hwnd) {
+            SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window));
+            EnableWindow(g_main_window, FALSE);
+          }
+          SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                       SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+          SetForegroundWindow(hwnd);
+        } else {
+          if (g_main_window && IsWindow(g_main_window)) {
+            EnableWindow(g_main_window, TRUE);
+            SetForegroundWindow(g_main_window);
+          }
+        }
       } else if (method == "trayFlyout") {
         auto_hide_ = true;
         POINT cursor;
@@ -195,6 +294,10 @@ class WindowControls : public flutter::Plugin {
     });
   }
   ~WindowControls() override {
+    if (is_modal_ && g_main_window && IsWindow(g_main_window)) {
+      EnableWindow(g_main_window, TRUE);
+      SetForegroundWindow(g_main_window);
+    }
     DestroyTray();
     registrar_->UnregisterTopLevelWindowProcDelegate(delegate_);
   }
@@ -234,6 +337,9 @@ class WindowControls : public flutter::Plugin {
     if (selected == 3) TrayEvent("exit");
   }
   HWND Window() const {
+    if (explicit_hwnd_ && IsWindow(explicit_hwnd_)) {
+      return explicit_hwnd_;
+    }
     auto* view = registrar_->GetView();
     return view ? GetAncestor(view->GetNativeWindow(), GA_ROOT) : nullptr;
   }
@@ -249,10 +355,13 @@ class WindowControls : public flutter::Plugin {
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED |
                    SWP_NOACTIVATE);
     }
+    SetWindowSubclass(hwnd, SubWindowSubclassProc, 1002, 0);
     const MARGINS margins = {0, 0, 1, 0};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
   }
   flutter::PluginRegistrarWindows* registrar_;
+  HWND explicit_hwnd_ = nullptr;
+  bool is_modal_ = false;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   int delegate_ = -1;
   HWND configured_window_ = nullptr;
@@ -265,9 +374,9 @@ class WindowControls : public flutter::Plugin {
   std::wstring tray_owner_;
 };
 }
-void RegisterWindowControls(flutter::FlutterEngine* engine) {
+void RegisterWindowControls(flutter::FlutterEngine* engine, HWND explicit_hwnd) {
   auto* registrar = flutter::PluginRegistrarManager::GetInstance()
       ->GetRegistrar<flutter::PluginRegistrarWindows>(
           engine->GetRegistrarForPlugin("GotoIMWindowControls"));
-  registrar->AddPlugin(std::make_unique<WindowControls>(registrar));
+  registrar->AddPlugin(std::make_unique<WindowControls>(registrar, explicit_hwnd));
 }

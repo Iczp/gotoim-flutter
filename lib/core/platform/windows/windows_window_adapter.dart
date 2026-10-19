@@ -66,6 +66,10 @@ class WindowsWindowAdapter {
     await _invoke('pin', pinned);
   }
 
+  static Future<void> setModal(bool modal) async {
+    await _invoke('setModal', modal);
+  }
+
   static Future<void> bringToFront() async {
     await _invoke('restore');
   }

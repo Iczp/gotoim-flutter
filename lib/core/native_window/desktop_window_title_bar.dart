@@ -30,10 +30,20 @@ class DesktopWindowTitleBar extends StatefulWidget {
   const DesktopWindowTitleBar({
     required this.title,
     required this.onClose,
+    this.showPin = true,
+    this.showMinimize = true,
+    this.showMaximize = true,
+    this.allowDoubleClickMaximize = true,
+    this.backgroundColor,
     super.key,
   });
   final String title;
   final VoidCallback onClose;
+  final bool showPin;
+  final bool showMinimize;
+  final bool showMaximize;
+  final bool allowDoubleClickMaximize;
+  final Color? backgroundColor;
 
   @override
   State<DesktopWindowTitleBar> createState() => _DesktopWindowTitleBarState();
@@ -52,7 +62,9 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar> {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surfaceContainer,
+    color:
+        widget.backgroundColor ??
+        Theme.of(context).colorScheme.surfaceContainer,
     child: SizedBox(
       height: 42,
       child: Row(
@@ -61,40 +73,50 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar> {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onPanStart: (_) => WindowsWindowAdapter.startDragging(),
-              onDoubleTap: _toggleMaximize,
+              onDoubleTap:
+                  widget.allowDoubleClickMaximize ? _toggleMaximize : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text(widget.title),
+                  child: Text(
+                    widget.title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-          IconButton(
-            tooltip: _pinned ? '取消置顶' : '置顶',
-            icon: Icon(
-              _pinned ? Icons.push_pin : Icons.push_pin_outlined,
-              size: 16,
+          if (widget.showPin)
+            IconButton(
+              tooltip: _pinned ? '取消置顶' : '置顶',
+              icon: Icon(
+                _pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                size: 16,
+              ),
+              onPressed: () {
+                setState(() => _pinned = !_pinned);
+                WindowsWindowAdapter.setAlwaysOnTop(_pinned);
+              },
             ),
-            onPressed: () {
-              setState(() => _pinned = !_pinned);
-              WindowsWindowAdapter.setAlwaysOnTop(_pinned);
-            },
-          ),
-          IconButton(
-            tooltip: '最小化',
-            icon: const Icon(Icons.remove, size: 16),
-            onPressed: WindowsWindowAdapter.minimize,
-          ),
-          IconButton(
-            tooltip: _maximized ? '还原' : '最大化',
-            icon: Icon(
-              _maximized ? Icons.filter_none : Icons.crop_square,
-              size: 16,
+          if (widget.showMinimize)
+            IconButton(
+              tooltip: '最小化',
+              icon: const Icon(Icons.remove, size: 16),
+              onPressed: WindowsWindowAdapter.minimize,
             ),
-            onPressed: _toggleMaximize,
-          ),
+          if (widget.showMaximize)
+            IconButton(
+              tooltip: _maximized ? '还原' : '最大化',
+              icon: Icon(
+                _maximized ? Icons.filter_none : Icons.crop_square,
+                size: 16,
+              ),
+              onPressed: _toggleMaximize,
+            ),
           IconButton(
             tooltip: '关闭',
             icon: const Icon(Icons.close, size: 17),

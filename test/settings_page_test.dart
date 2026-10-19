@@ -40,7 +40,9 @@ void main() {
     expect(find.text('局域网文件管理'), findsOneWidget);
     expect(find.text('扫码登录终端'), findsOneWidget);
     expect(find.text('清理临时缓存'), findsOneWidget);
-    expect(find.text('关于 Goto IM'), findsOneWidget);
+    expect(find.text('检查新版本'), findsOneWidget);
+    expect(find.text('用户服务协议'), findsOneWidget);
+    expect(find.text('隐私保护政策'), findsOneWidget);
     expect(find.text('退出登录'), findsOneWidget);
 
     expect(find.byType(CellGroup), findsWidgets);

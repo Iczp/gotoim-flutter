@@ -37,10 +37,16 @@ bool FlutterWindow::OnCreate() {
     auto *registry = flutter_view_controller->engine();
     RegisterPlugins(registry);
 
-    RegisterWindowControls(flutter_view_controller->engine());
+    HWND child_hwnd = flutter_view_controller->view()->GetNativeWindow();
+    HWND top_hwnd = GetAncestor(child_hwnd, GA_ROOT);
+    if (top_hwnd && IsWindow(top_hwnd)) {
+      ConfigureSubWindowNative(top_hwnd, child_hwnd);
+    }
+    RegisterWindowControls(flutter_view_controller->engine(), top_hwnd);
   });
+  SetMainWindowHandle(GetHandle());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
-  RegisterWindowControls(flutter_controller_->engine());
+  RegisterWindowControls(flutter_controller_->engine(), GetHandle());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();

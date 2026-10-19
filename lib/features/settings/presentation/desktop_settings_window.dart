@@ -102,8 +102,17 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     if (widget.isSubWindow) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         WindowsWindowAdapter.setupCustomTitleBar();
+        WindowsWindowAdapter.setModal(true);
       });
     }
+  }
+
+  @override
+  void dispose() {
+    if (widget.isSubWindow) {
+      WindowsWindowAdapter.setModal(false);
+    }
+    super.dispose();
   }
 
   Future<void> _initStoragePath() async {
@@ -452,6 +461,19 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     }
   }
 
+  void _handleClose() {
+    if (widget.isSubWindow) {
+      WindowsWindowAdapter.setModal(false);
+    }
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else if (widget.isSubWindow) {
+      WindowsWindowAdapter.close();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
   Future<void> _handleLogout() async {
     final confirmed = await showConfirmModal(
       context: context,
@@ -462,6 +484,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     );
     if (confirmed && mounted) {
       if (widget.isSubWindow) {
+        WindowsWindowAdapter.setModal(false);
         widget.onLogout?.call();
         widget.onClose?.call();
         return;
@@ -564,11 +587,12 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     if (widget.isSubWindow) {
       return DesktopWindowTitleBar(
         title: '设置',
-        onClose:
-            widget.onClose ??
-            () {
-              WindowsWindowAdapter.close();
-            },
+        showPin: false,
+        showMinimize: false,
+        showMaximize: false,
+        allowDoubleClickMaximize: false,
+        backgroundColor: bg,
+        onClose: _handleClose,
       );
     }
     return AppBar(
@@ -578,7 +602,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
         IconButton(
           tooltip: '关闭',
           icon: const Icon(Icons.close),
-          onPressed: widget.onClose ?? () => Navigator.of(context).maybePop(),
+          onPressed: _handleClose,
         ),
       ],
     );

@@ -566,6 +566,11 @@ class DefaultWindowService implements WindowService {
 
   @override
   Future<void> closeWindow(String targetId, {String? windowId}) async {
+    if (targetId == 'tool:settings') {
+      try {
+        await WindowsWindowAdapter.setModal(false);
+      } catch (_) {}
+    }
     final currentController = _nativeControllers[targetId];
     if (windowId != null &&
         currentController != null &&
