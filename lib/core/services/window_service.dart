@@ -17,8 +17,10 @@ import '../native_window/native_window_payload.dart';
 import '../platform/platform_facade.dart';
 import '../platform/windows/windows_window_adapter.dart';
 import '../theme/theme_mode_controller.dart';
+import 'file/file_picker_service.dart';
 import 'tray_grouped_unread_provider.dart';
 import 'tray_message_models.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 
 /// 独立窗口类型定义
 enum WindowType {
@@ -170,6 +172,23 @@ typedef MessageSenderCallback =
       String? clientMessageId,
     });
 
+typedef ImageSenderCallback =
+    Future<ChatMessage> Function({
+      required int ownerId,
+      required String sessionUnitId,
+      required List<int> bytes,
+      String? fileName,
+      String? caption,
+    });
+
+typedef FilesSenderCallback =
+    Future<List<ChatMessage>> Function({
+      required int ownerId,
+      required String sessionUnitId,
+      required List<String> filePaths,
+      String? caption,
+    });
+
 typedef HistoryLoaderCallback =
     Future<List<Map<String, dynamic>>> Function({
       required int ownerId,
@@ -184,6 +203,8 @@ class DefaultWindowService implements WindowService {
     required this.platformFacade,
     this.accountInfoProvider,
     this.messageSender,
+    this.imageSender,
+    this.filesSender,
     this.historyLoader,
     this.messageAction,
     this.onLogout,
@@ -210,6 +231,8 @@ class DefaultWindowService implements WindowService {
 
   final Map<String, dynamic>? Function()? accountInfoProvider;
   final MessageSenderCallback? messageSender;
+  final ImageSenderCallback? imageSender;
+  final FilesSenderCallback? filesSender;
   final HistoryLoaderCallback? historyLoader;
   final Future<Map<String, dynamic>> Function(
     String action,
@@ -281,6 +304,56 @@ class DefaultWindowService implements WindowService {
               }
             }
             return {'success': false, 'error': 'messageSender not registered'};
+
+          case 'chat_send_image':
+            final args = call.arguments as Map?;
+            if (args != null && imageSender != null) {
+              final sessionUnitId = args['sessionUnitId']?.toString() ?? '';
+              final ownerId = (args['ownerId'] as num?)?.toInt() ?? 0;
+              final bytes = (args['bytes'] as List?)?.cast<int>() ?? <int>[];
+              final fileName = args['fileName'] as String?;
+              final caption = args['caption'] as String?;
+              try {
+                final sent = await imageSender!(
+                  ownerId: ownerId,
+                  sessionUnitId: sessionUnitId,
+                  bytes: bytes,
+                  fileName: fileName,
+                  caption: caption,
+                );
+                return {
+                  'success': true,
+                  'clientMessageId': sent.clientMessageId ?? sent.localId,
+                  'serverId': sent.serverId,
+                  'state': sent.state,
+                };
+              } catch (e) {
+                return {'success': false, 'error': '$e'};
+              }
+            }
+            return {'success': false, 'error': 'imageSender not registered'};
+
+          case 'chat_send_files':
+            final args = call.arguments as Map?;
+            if (args != null && filesSender != null) {
+              final sessionUnitId = args['sessionUnitId']?.toString() ?? '';
+              final ownerId = (args['ownerId'] as num?)?.toInt() ?? 0;
+              final filePaths =
+                  (args['filePaths'] as List?)?.cast<String>() ?? <String>[];
+              final caption = args['caption'] as String?;
+              try {
+                final sentList = await filesSender!(
+                  ownerId: ownerId,
+                  sessionUnitId: sessionUnitId,
+                  filePaths: filePaths,
+                  caption: caption,
+                );
+                return {'success': true, 'count': sentList.length};
+              } catch (e) {
+                return {'success': false, 'error': '$e'};
+              }
+            }
+            return {'success': false, 'error': 'filesSender not registered'};
 
           case 'chat_message_action':
             final args = call.arguments as Map;
@@ -1255,6 +1328,85 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
         messageData: sent.toWindowPayload(),
       );
       return sent;
+    },
+    imageSender: ({
+      required int ownerId,
+      required String sessionUnitId,
+      required List<int> bytes,
+      String? fileName,
+      String? caption,
+    }) async {
+      final repo = ref.read(messageRepositoryProvider);
+      final effectiveName =
+          fileName ?? 'image_${DateTime.now().millisecondsSinceEpoch}.png';
+      final xfile = XFile.fromData(
+        Uint8List.fromList(bytes),
+        name: effectiveName,
+        mimeType: 'image/png',
+      );
+      final selected = await SelectedFile.fromXFile(xfile);
+      final local = await repo.createLocalImage(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        file: selected,
+      );
+      service.notifyChatMessage(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        messageData: local.toWindowPayload(),
+      );
+      final sent = await repo.sendLocalImage(local: local, file: selected);
+      service.notifyChatMessage(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        messageData: sent.toWindowPayload(),
+      );
+      if (caption != null && caption.trim().isNotEmpty) {
+        await repo.sendText(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          text: caption.trim(),
+        );
+      }
+      return sent;
+    },
+    filesSender: ({
+      required int ownerId,
+      required String sessionUnitId,
+      required List<String> filePaths,
+      String? caption,
+    }) async {
+      final repo = ref.read(messageRepositoryProvider);
+      final results = <ChatMessage>[];
+      for (final p in filePaths) {
+        final xfile = XFile(p);
+        final selected = await SelectedFile.fromXFile(xfile);
+        final local = await repo.createLocalFile(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          file: selected,
+        );
+        service.notifyChatMessage(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          messageData: local.toWindowPayload(),
+        );
+        final sent = await repo.sendLocalFile(local: local, file: selected);
+        service.notifyChatMessage(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          messageData: sent.toWindowPayload(),
+        );
+        results.add(sent);
+      }
+      if (caption != null && caption.trim().isNotEmpty) {
+        await repo.sendText(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          text: caption.trim(),
+        );
+      }
+      return results;
     },
     historyLoader: ({
       required int ownerId,

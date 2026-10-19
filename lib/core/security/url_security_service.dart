@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_navigation.dart';
 import '../browser/app_webview_page.dart';
+import '../config/app_environment.dart';
 import '../native/native.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/app_toast.dart';
@@ -18,6 +19,7 @@ class UrlSecurityService {
       : _repository = repository;
 
   final UrlSecurityRepository _repository;
+  static UrlSecurityService? _fallbackInstance;
 
   /// 全局单例便捷访问
   static UrlSecurityService get instance {
@@ -25,7 +27,11 @@ class UrlSecurityService {
     if (container != null) {
       return container.read(urlSecurityServiceProvider);
     }
-    throw StateError('globalProviderContainer 尚未初始化');
+    return _fallbackInstance ??= UrlSecurityService(
+      repository: DefaultUrlSecurityRepository(
+        environment: AppEnvironment.defaultEnvironment,
+      ),
+    );
   }
 
   /// 快速检测给定 URL 域名是否属于官方或受信白名单（用于 WebView 隔离特权 JSBridge）

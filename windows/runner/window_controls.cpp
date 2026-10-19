@@ -3,6 +3,7 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 #include <shellapi.h>
+#include <dwmapi.h>
 #include "resource.h"
 #include <string>
 #include <memory>
@@ -30,6 +31,20 @@ class WindowControls : public flutter::Plugin {
     delegate_ = registrar_->RegisterTopLevelWindowProcDelegate(
         [this](HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
             -> std::optional<LRESULT> {
+          if (hwnd == Window() && message == WM_NCCALCSIZE) {
+            if (wparam == TRUE) {
+              auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
+              if (IsZoomed(hwnd)) {
+                HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO monitor_info{sizeof(MONITORINFO)};
+                if (GetMonitorInfo(monitor, &monitor_info)) {
+                  params->rgrc[0] = monitor_info.rcWork;
+                }
+              }
+              return 0;
+            }
+            return 0;
+          }
           if (hwnd == Window() && message == kTrayCallback) {
             if (lparam == WM_LBUTTONUP) TrayEvent("left");
             if (lparam == WM_RBUTTONUP || lparam == WM_CONTEXTMENU) ShowTrayMenu();
@@ -234,6 +249,8 @@ class WindowControls : public flutter::Plugin {
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED |
                    SWP_NOACTIVATE);
     }
+    const MARGINS margins = {0, 0, 1, 0};
+    DwmExtendFrameIntoClientArea(hwnd, &margins);
   }
   flutter::PluginRegistrarWindows* registrar_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;

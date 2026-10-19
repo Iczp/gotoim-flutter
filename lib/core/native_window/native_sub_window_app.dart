@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/app_navigation.dart';
 import '../config/app_environment.dart';
 import '../theme/app_theme.dart';
 import '../platform/platform_facade.dart';
@@ -100,19 +101,24 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
   final environment = AppEnvironment.fromDotEnv(flavor);
   final platformFacade = createPlatformFacade();
 
-  runApp(
-    ProviderScope(
-      overrides: [
-        appEnvironmentProvider.overrideWithValue(environment),
-        trayServiceProvider.overrideWithValue(const SubWindowTrayService()),
-        platformFacadeProvider.overrideWithValue(platformFacade),
-        windowServiceProvider.overrideWith(
-          (ref) => DefaultWindowService(
-            platformFacade: platformFacade,
-            isSubWindow: true,
-          ),
+  final container = ProviderContainer(
+    overrides: [
+      appEnvironmentProvider.overrideWithValue(environment),
+      trayServiceProvider.overrideWithValue(const SubWindowTrayService()),
+      platformFacadeProvider.overrideWithValue(platformFacade),
+      windowServiceProvider.overrideWith(
+        (ref) => DefaultWindowService(
+          platformFacade: platformFacade,
+          isSubWindow: true,
         ),
-      ],
+      ),
+    ],
+  );
+  rootProviderContainer ??= container;
+
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
       child: NativeSubWindowApp(controller: controller, payload: payload),
     ),
   );

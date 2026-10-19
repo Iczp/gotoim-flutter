@@ -30,6 +30,7 @@ import '../../session/data/repositories/session_repository.dart';
 import '../../session/data/session_change_bus.dart';
 import '../../chat_settings/data/models/chat_member.dart';
 import '../../chat_settings/data/repositories/chat_settings_repository.dart';
+import '../presentation/widgets/chat_composer_controller.dart';
 
 final messageRepositoryProvider = Provider<MessageRepository>(
   (ref) => MessageRepository(
@@ -66,7 +67,7 @@ final attachmentTransferServiceProvider =
       );
     });
 
-class ChatController extends ChangeNotifier {
+class ChatController extends ChangeNotifier implements ChatComposerController {
   ChatController(
     this._repository,
     this._sessionRepository, {
@@ -114,6 +115,7 @@ class ChatController extends ChangeNotifier {
   final Map<String, Uint8List> _imagePreviews = <String, Uint8List>{};
   final Map<String, double> uploadProgress = <String, double>{};
   bool isLoading = false;
+  @override
   bool isSending = false;
   bool isLoadingLatest = false;
   bool hasMore = true;
@@ -151,6 +153,7 @@ class ChatController extends ChangeNotifier {
 
   final Map<int, AiStreamReply> _aiStreamReplies = <int, AiStreamReply>{};
   List<AiRunRecord> _recentAiRuns = const <AiRunRecord>[];
+  @override
   ChatMessage? quoting;
   bool selectionMode = false;
   int newMessageCount = 0;
@@ -158,10 +161,14 @@ class ChatController extends ChangeNotifier {
   int? _lastSubmittedReadMessageId;
   int? _initialUnreadDividerMessageId;
   final Set<String> selectedLocalIds = <String>{};
+  @override
   final List<ChatMember> mentionMembers = <ChatMember>[];
   final Map<String, String> _mentionedTokens = <String, String>{};
+  @override
   bool mentionVisible = false;
+  @override
   bool mentionLoading = false;
+  @override
   bool mentionHasMore = false;
   String _mentionKeyword = '';
   int _mentionStart = -1;
@@ -257,6 +264,7 @@ class ChatController extends ChangeNotifier {
   int? get peerChatObjectId =>
       asInt(asMap(friend?.raw['destination'])['id']) ??
       asInt(friend?.raw['destinationId']);
+  @override
   bool get isMuted => friend?.isMuted == true;
   String? get backgroundImage {
     final setting = asMap(friend?.raw['setting'] ?? friend?.raw['Setting']);
@@ -266,9 +274,11 @@ class ChatController extends ChangeNotifier {
 
   int get destinationObjectType =>
       asInt(asMap(friend?.raw['destination'])['objectType']) ?? 0;
+  @override
   bool get isOfficialAccount =>
       destinationObjectType == 3 || destinationObjectType == 4;
 
+  @override
   List<Map<String, dynamic>> get officialAccountMenus {
     final rawMenus = friend?.raw['menus'];
     if (rawMenus is List && rawMenus.isNotEmpty) {
@@ -310,6 +320,7 @@ class ChatController extends ChangeNotifier {
     );
   }
 
+  @override
   String get mentionKeyword => _mentionKeyword;
   int? get initialUnreadDividerMessageId => _initialUnreadDividerMessageId;
 
@@ -702,6 +713,7 @@ class ChatController extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> send(String text) async {
     final value = text.trim();
     if (value.isEmpty || isSending) return;
@@ -766,6 +778,7 @@ class ChatController extends ChangeNotifier {
     }());
   }
 
+  @override
   void updateMentionInput(String text) {
     final match = RegExp(r'(?:^|\s)@([^\s@]*)$').firstMatch(text);
     if (match == null) {
@@ -792,9 +805,11 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
   Future<void> loadMoreMentions() =>
       _loadMentions(generation: _mentionGeneration, reset: false);
 
+  @override
   void updateMentionKeyword(String keyword) {
     if (!mentionVisible || keyword == _mentionKeyword) return;
     _mentionKeyword = keyword;
@@ -805,6 +820,7 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
   void dismissMention() {
     _hideMention();
     notifyListeners();
@@ -863,12 +879,14 @@ class ChatController extends ChangeNotifier {
     return '$prefix$token$suffix';
   }
 
+  @override
   bool isMemberMentioned(ChatMember member, String text) {
     final token = '@${member.name}';
     return _mentionedTokens[member.id] == token ||
         RegExp('@${RegExp.escape(member.name)}(?=\\s|\$)').hasMatch(text);
   }
 
+  @override
   String toggleMention(String text, ChatMember member) {
     final token = '@${member.name}';
     if (isMemberMentioned(member, text)) {
@@ -906,6 +924,7 @@ class ChatController extends ChangeNotifier {
     _mentionGeneration++;
   }
 
+  @override
   Future<void> chooseAndSendFile() async {
     try {
       final files = await _filePickerService.chooseFile(
@@ -919,6 +938,7 @@ class ChatController extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> chooseAndSendImages() async {
     try {
       final images = await _mediaService.chooseImage(
@@ -969,11 +989,13 @@ class ChatController extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> takeAndSendPhoto() async {
     final image = await _mediaService.takePhoto(const MediaPickRequest());
     if (image != null) await _sendImage(image);
   }
 
+  @override
   Future<void> chooseAndSendVideo() async {
     final video = await _mediaService.chooseVideo(
       const MediaPickRequest(maxDuration: Duration(minutes: 10)),
@@ -990,6 +1012,7 @@ class ChatController extends ChangeNotifier {
   }
 
   /// 批量发送直接传入的文件 (来自剪贴板批量粘贴)
+  @override
   Future<void> sendDirectFiles(
     List<SelectedFile> files, {
     String? caption,
@@ -1003,6 +1026,7 @@ class ChatController extends ChangeNotifier {
   }
 
   /// 发送图片字节流 (如剪贴板图像或截图产生的 Uint8List)
+  @override
   Future<void> sendImageBytes(
     Uint8List bytes, {
     String? caption,
@@ -1094,6 +1118,7 @@ class ChatController extends ChangeNotifier {
     }());
   }
 
+  @override
   void quoteMessage(ChatMessage message) {
     if (message.serverId == null) return;
     quoting = message;
@@ -1102,6 +1127,7 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
   void cancelQuote() {
     quoting = null;
     notifyListeners();
@@ -1299,20 +1325,25 @@ class ChatController extends ChangeNotifier {
     if (receivedIncoming && _viewingLatest) unawaited(markLatestRead());
   }
 
+  @override
   Future<void> startVoiceRecording() => _mediaService.startAudioRecording(
     const AudioRecordingRequest(fileNamePrefix: 'gotoim_voice'),
   );
 
+  @override
   Future<bool> hasVoiceRecordingPermission() =>
       _mediaService.hasAudioRecordingPermission();
 
   Future<double> voiceRecordingLevel() => _mediaService.audioRecordingLevel();
 
+  @override
   Stream<double> voiceRecordingLevels(Duration interval) =>
       _mediaService.audioRecordingLevels(interval);
 
+  @override
   Future<void> cancelVoiceRecording() => _mediaService.cancelAudioRecording();
 
+  @override
   Future<void> finishVoiceRecording(Duration duration) async {
     final file = await _mediaService.stopAudioRecording();
     if (file == null) return;

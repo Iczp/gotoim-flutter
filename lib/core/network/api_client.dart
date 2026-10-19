@@ -40,9 +40,11 @@ class MultipartUploadFile {
     required this.name,
     required this.length,
     required this.openRead,
+    this.contentType,
   });
 
   final String name;
   final int length;
   final Stream<List<int>> Function() openRead;
+  final String? contentType;
 }

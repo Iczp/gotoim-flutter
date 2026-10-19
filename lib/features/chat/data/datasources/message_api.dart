@@ -126,15 +126,28 @@ class MessageApi {
     void Function(int sent, int total)? onProgress,
   }) {
     late final String path;
+    String? mimeType;
     switch (messageType) {
       case 2:
         path = '/api/chat/message-sender/send-upload-image/$sessionUnitId';
+        final lower = fileName.toLowerCase();
+        if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+          mimeType = 'image/jpeg';
+        } else if (lower.endsWith('.gif')) {
+          mimeType = 'image/gif';
+        } else if (lower.endsWith('.webp')) {
+          mimeType = 'image/webp';
+        } else {
+          mimeType = 'image/png';
+        }
         break;
       case 3:
         path = '/api/chat/message-sender/send-upload-sound/$sessionUnitId';
+        mimeType = 'audio/amr';
         break;
       case 4:
         path = '/api/chat/message-sender/send-upload-video/$sessionUnitId';
+        mimeType = 'video/mp4';
         break;
       default:
         path = '/api/chat/message-sender/send-upload-file/$sessionUnitId';
@@ -146,6 +159,7 @@ class MessageApi {
         name: fileName,
         length: fileLength,
         openRead: openRead,
+        contentType: mimeType,
       ),
       extraFields: extraFields,
       onProgress: onProgress,

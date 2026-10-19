@@ -11,8 +11,8 @@ import '../../../../core/theme/app_theme_tokens.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/glass_container.dart';
 import '../../../../core/widgets/half_page_sheet.dart';
-import '../../application/chat_controller.dart';
 import '../../data/models/chat_message.dart';
+import 'chat_composer_controller.dart';
 import 'chat_function_panel.dart';
 import 'chat_mention_panel.dart';
 import 'chat_public_account_menu.dart';
@@ -44,7 +44,7 @@ class ChatComposer extends StatefulWidget {
   });
 
   /// 聊天状态控制器
-  final ChatController controller;
+  final ChatComposerController controller;
 
   /// 输入框文本控制器
   final TextEditingController input;
@@ -523,7 +523,6 @@ class ChatComposerState extends State<ChatComposer>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hasBg = widget.hasBackground;
 
-
     final inputControlHeight = tokens.chatMessageMinHeight;
     final verticalPadding =
         ((tokens.chatComposerHeight - inputControlHeight) / 2)
@@ -762,8 +761,9 @@ class ChatComposerState extends State<ChatComposer>
                             child: FilledButton(
                               style: FilledButton.styleFrom(
                                 minimumSize: Size(58, inputControlHeight),
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(6),
                                 ),
@@ -1137,7 +1137,8 @@ class ChatComposerState extends State<ChatComposer>
     if (event is KeyDownEvent) {
       // 1. 发送消息逻辑 (支持用户快捷键偏好切换)
       if (event.logicalKey == LogicalKeyboardKey.enter) {
-        final isCtrl = HardwareKeyboard.instance.isControlPressed ||
+        final isCtrl =
+            HardwareKeyboard.instance.isControlPressed ||
             HardwareKeyboard.instance.isMetaPressed;
         final isShift = HardwareKeyboard.instance.isShiftPressed;
 
@@ -1257,14 +1258,14 @@ class ChatComposerState extends State<ChatComposer>
               isDense: true,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.only(top: 2, bottom: 4),
-              hintText: widget.controller.isMuted
-                  ? '全员禁言中'
-                  : '输入消息，支持拖拽或 Ctrl+V 粘贴图片/文件...',
+              hintText:
+                  widget.controller.isMuted
+                      ? '全员禁言中'
+                      : '输入消息，支持拖拽或 Ctrl+V 粘贴图片/文件...',
               hintStyle: TextStyle(
                 fontSize: 13.5,
-                color: isDark
-                    ? const Color(0xFF757575)
-                    : const Color(0xFF9E9E9E),
+                color:
+                    isDark ? const Color(0xFF757575) : const Color(0xFF9E9E9E),
               ),
             ),
           ),
@@ -1279,9 +1280,10 @@ class ChatComposerState extends State<ChatComposer>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 320;
-          final hintText = _sendOnEnter
-              ? (isNarrow ? 'Enter 发送' : '按 Enter 发送，按 Ctrl+Enter 换行')
-              : (isNarrow ? 'Ctrl+Enter 发送' : '按 Ctrl+Enter 发送，按 Enter 换行');
+          final hintText =
+              _sendOnEnter
+                  ? (isNarrow ? 'Enter 发送' : '按 Enter 发送，按 Ctrl+Enter 换行')
+                  : (isNarrow ? 'Ctrl+Enter 发送' : '按 Ctrl+Enter 发送，按 Enter 换行');
 
           return Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1293,9 +1295,10 @@ class ChatComposerState extends State<ChatComposer>
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11.5,
-                    color: isDark
-                        ? const Color(0xFF666666)
-                        : const Color(0xFFAAAAAA),
+                    color:
+                        isDark
+                            ? const Color(0xFF666666)
+                            : const Color(0xFFAAAAAA),
                   ),
                 ),
               ),
@@ -1305,20 +1308,23 @@ class ChatComposerState extends State<ChatComposer>
               ValueListenableBuilder<TextEditingValue>(
                 valueListenable: widget.input,
                 builder: (context, value, _) {
-                  final canSend = value.text.trim().isNotEmpty &&
+                  final canSend =
+                      value.text.trim().isNotEmpty &&
                       !widget.controller.isSending &&
                       !widget.controller.isMuted;
 
-                  final btnBg = canSend
-                      ? const Color(0xFF07C160)
-                      : (isDark
-                          ? const Color(0xFF2E2E2E)
-                          : const Color(0xFFE5E5E5));
-                  final btnFg = canSend
-                      ? Colors.white
-                      : (isDark
-                          ? const Color(0xFF666666)
-                          : const Color(0xFFAAAAAA));
+                  final btnBg =
+                      canSend
+                          ? const Color(0xFF07C160)
+                          : (isDark
+                              ? const Color(0xFF2E2E2E)
+                              : const Color(0xFFE5E5E5));
+                  final btnFg =
+                      canSend
+                          ? Colors.white
+                          : (isDark
+                              ? const Color(0xFF666666)
+                              : const Color(0xFFAAAAAA));
 
                   return Container(
                     height: 28,
@@ -1352,15 +1358,16 @@ class ChatComposerState extends State<ChatComposer>
                         Container(
                           width: 1,
                           height: 16,
-                          color: canSend
-                              ? Colors.white24
-                              : (isDark ? Colors.white10 : Colors.black12),
+                          color:
+                              canSend
+                                  ? Colors.white24
+                                  : (isDark ? Colors.white10 : Colors.black12),
                         ),
                         // 下拉切换快捷键小三角
                         Theme(
-                          data: Theme.of(context).copyWith(
-                            hoverColor: Colors.transparent,
-                          ),
+                          data: Theme.of(
+                            context,
+                          ).copyWith(hoverColor: Colors.transparent),
                           child: PopupMenuButton<bool>(
                             tooltip: '发送快捷键设置',
                             padding: EdgeInsets.zero,
@@ -1379,50 +1386,53 @@ class ChatComposerState extends State<ChatComposer>
                                 type: ToastType.info,
                               );
                             },
-                            itemBuilder: (ctx) => [
-                              PopupMenuItem(
-                                value: true,
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      _sendOnEnter
-                                          ? Icons.check_rounded
-                                          : Icons.check_box_outline_blank,
-                                      size: 16,
-                                      color: _sendOnEnter
-                                          ? const Color(0xFF07C160)
-                                          : Colors.transparent,
+                            itemBuilder:
+                                (ctx) => [
+                                  PopupMenuItem(
+                                    value: true,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          _sendOnEnter
+                                              ? Icons.check_rounded
+                                              : Icons.check_box_outline_blank,
+                                          size: 16,
+                                          color:
+                                              _sendOnEnter
+                                                  ? const Color(0xFF07C160)
+                                                  : Colors.transparent,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          '按 Enter 键发送消息',
+                                          style: TextStyle(fontSize: 12.5),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      '按 Enter 键发送消息',
-                                      style: TextStyle(fontSize: 12.5),
+                                  ),
+                                  PopupMenuItem(
+                                    value: false,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          !_sendOnEnter
+                                              ? Icons.check_rounded
+                                              : Icons.check_box_outline_blank,
+                                          size: 16,
+                                          color:
+                                              !_sendOnEnter
+                                                  ? const Color(0xFF07C160)
+                                                  : Colors.transparent,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          '按 Ctrl+Enter 键发送消息',
+                                          style: TextStyle(fontSize: 12.5),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: false,
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      !_sendOnEnter
-                                          ? Icons.check_rounded
-                                          : Icons.check_box_outline_blank,
-                                      size: 16,
-                                      color: !_sendOnEnter
-                                          ? const Color(0xFF07C160)
-                                          : Colors.transparent,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      '按 Ctrl+Enter 键发送消息',
-                                      style: TextStyle(fontSize: 12.5),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                                  ),
+                                ],
                           ),
                         ),
                       ],
@@ -1447,9 +1457,7 @@ class ChatComposerState extends State<ChatComposer>
 
     return Container(
       height: _desktopComposerHeight,
-      decoration: BoxDecoration(
-        color: bg,
-      ),
+      decoration: BoxDecoration(color: bg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1458,13 +1466,19 @@ class ChatComposerState extends State<ChatComposer>
             cursor: SystemMouseCursors.resizeUpDown,
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onVerticalDragStart: (_) => setState(() => _isDraggingSplitter = true),
-              onVerticalDragEnd: (_) => setState(() => _isDraggingSplitter = false),
-              onVerticalDragCancel: () => setState(() => _isDraggingSplitter = false),
+              onVerticalDragStart:
+                  (_) => setState(() => _isDraggingSplitter = true),
+              onVerticalDragEnd:
+                  (_) => setState(() => _isDraggingSplitter = false),
+              onVerticalDragCancel:
+                  () => setState(() => _isDraggingSplitter = false),
               onVerticalDragUpdate: (details) {
                 setState(() {
-                  _desktopComposerHeight = (_desktopComposerHeight - details.delta.dy)
-                      .clamp(_minDesktopComposerHeight, _maxDesktopComposerHeight);
+                  _desktopComposerHeight =
+                      (_desktopComposerHeight - details.delta.dy).clamp(
+                        _minDesktopComposerHeight,
+                        _maxDesktopComposerHeight,
+                      );
                 });
               },
               child: Container(
@@ -1473,9 +1487,10 @@ class ChatComposerState extends State<ChatComposer>
                 child: Center(
                   child: Container(
                     height: 1,
-                    color: _isDraggingSplitter
-                        ? const Color(0xFF07C160)
-                        : borderColor,
+                    color:
+                        _isDraggingSplitter
+                            ? const Color(0xFF07C160)
+                            : borderColor,
                   ),
                 ),
               ),
@@ -1486,9 +1501,10 @@ class ChatComposerState extends State<ChatComposer>
           if (quoted != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : Colors.black.withValues(alpha: 0.03),
+              color:
+                  isDark
+                      ? Colors.white.withValues(alpha: 0.04)
+                      : Colors.black.withValues(alpha: 0.03),
               child: Row(
                 children: [
                   Expanded(child: widget.quoteContentBuilder(quoted)),
@@ -1544,36 +1560,41 @@ class ChatComposerState extends State<ChatComposer>
                 _handleDesktopScreenshot();
               }
             },
-            itemBuilder: (ctx) => [
-              const PopupMenuItem(
-                value: 'capture',
-                child: Row(
-                  children: [
-                    Icon(Icons.crop_free_rounded, size: 16),
-                    SizedBox(width: 8),
-                    Text('立即截屏 (Alt+A)', style: TextStyle(fontSize: 12.5)),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'toggle_hide',
-                child: Row(
-                  children: [
-                    Icon(
-                      _hideWindowOnScreenshot
-                          ? Icons.check_box_rounded
-                          : Icons.check_box_outline_blank_rounded,
-                      size: 16,
-                      color: _hideWindowOnScreenshot
-                          ? const Color(0xFF07C160)
-                          : null,
+            itemBuilder:
+                (ctx) => [
+                  const PopupMenuItem(
+                    value: 'capture',
+                    child: Row(
+                      children: [
+                        Icon(Icons.crop_free_rounded, size: 16),
+                        SizedBox(width: 8),
+                        Text('立即截屏 (Alt+A)', style: TextStyle(fontSize: 12.5)),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    const Text('截屏时隐藏当前窗口', style: TextStyle(fontSize: 12.5)),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                  PopupMenuItem(
+                    value: 'toggle_hide',
+                    child: Row(
+                      children: [
+                        Icon(
+                          _hideWindowOnScreenshot
+                              ? Icons.check_box_rounded
+                              : Icons.check_box_outline_blank_rounded,
+                          size: 16,
+                          color:
+                              _hideWindowOnScreenshot
+                                  ? const Color(0xFF07C160)
+                                  : null,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          '截屏时隐藏当前窗口',
+                          style: TextStyle(fontSize: 12.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
           ),
         ),
       ],

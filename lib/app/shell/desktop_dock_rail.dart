@@ -53,182 +53,218 @@ class DesktopDockRail extends ConsumerWidget {
         color: railBg,
         border: Border(right: BorderSide(color: borderColor, width: 0.5)),
       ),
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return ScrollConfiguration(
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 16),
 
-          // ── 中部导航菜单项 ────────────────────────────────────────────────
-          _DockNavItem(
-            icon: Icons.chat_bubble_outline_rounded,
-            activeIcon: Icons.chat_bubble_rounded,
-            label: '消息',
-            isSelected: selected == HomeSection.messages,
-            badgeCount: totalUnread,
-            onTap: () => onSelected(HomeSection.messages),
-          ),
-          const SizedBox(height: 10),
-          _DockNavItem(
-            icon: Icons.contacts_outlined,
-            activeIcon: Icons.contacts_rounded,
-            label: '通讯录',
-            isSelected: selected == HomeSection.contacts,
-            onTap: () => onSelected(HomeSection.contacts),
-          ),
-          const SizedBox(height: 10),
-          _DockNavItem(
-            icon: Icons.grid_view_rounded,
-            activeIcon: Icons.grid_view,
-            label: '工作台',
-            isSelected: selected == HomeSection.workbench,
-            onTap: () => onSelected(HomeSection.workbench),
-          ),
-          const SizedBox(height: 10),
-          // 局域网快传独立入口
-          _DockNavItem(
-            icon: Icons.wifi_tethering_rounded,
-            activeIcon: Icons.wifi_tethering_rounded,
-            label: '局域网快传',
-            isSelected: false,
-            onTap: () {
-              ref.read(windowServiceProvider).openLocalFileServer();
-            },
-          ),
-          const SizedBox(height: 10),
-          _DockNavItem(
-            icon: Icons.explore_outlined,
-            activeIcon: Icons.explore_rounded,
-            label: '探索',
-            isSelected: selected == HomeSection.explore,
-            onTap: () => onSelected(HomeSection.explore),
-          ),
+                      // ── 中部导航菜单项 ────────────────────────────────────────────────
+                      _DockNavItem(
+                        icon: Icons.chat_bubble_outline_rounded,
+                        activeIcon: Icons.chat_bubble_rounded,
+                        label: '消息',
+                        isSelected: selected == HomeSection.messages,
+                        badgeCount: totalUnread,
+                        onTap: () => onSelected(HomeSection.messages),
+                      ),
+                      const SizedBox(height: 10),
+                      _DockNavItem(
+                        icon: Icons.contacts_outlined,
+                        activeIcon: Icons.contacts_rounded,
+                        label: '通讯录',
+                        isSelected: selected == HomeSection.contacts,
+                        onTap: () => onSelected(HomeSection.contacts),
+                      ),
+                      const SizedBox(height: 10),
+                      _DockNavItem(
+                        icon: Icons.grid_view_rounded,
+                        activeIcon: Icons.grid_view,
+                        label: '工作台',
+                        isSelected: selected == HomeSection.workbench,
+                        onTap: () => onSelected(HomeSection.workbench),
+                      ),
+                      const SizedBox(height: 10),
+                      // 局域网快传独立入口
+                      _DockNavItem(
+                        icon: Icons.wifi_tethering_rounded,
+                        activeIcon: Icons.wifi_tethering_rounded,
+                        label: '局域网快传',
+                        isSelected: false,
+                        onTap: () {
+                          ref.read(windowServiceProvider).openLocalFileServer();
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      _DockNavItem(
+                        icon: Icons.explore_outlined,
+                        activeIcon: Icons.explore_rounded,
+                        label: '探索',
+                        isSelected: selected == HomeSection.explore,
+                        onTap: () => onSelected(HomeSection.explore),
+                      ),
 
-          const Spacer(),
+                      const Spacer(),
 
-          // ── 底部辅助操作区 ────────────────────────────────────────────────
-          // 1. 在线设备协同与管理
-          Tooltip(
-            message: '多端登录设备管理',
-            child: _DockActionItem(
-              icon: Icons.devices_rounded,
-              onTap: () {
-                showDialog<void>(
-                  context: context,
-                  builder:
-                      (ctx) => Dialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: 480,
-                            maxHeight: 620,
-                          ),
-                          child: const LoginDevicesPage(),
+                      // ── 底部辅助操作区 ────────────────────────────────────────────────
+                      // 1. 在线设备协同与管理
+                      Tooltip(
+                        message: '多端登录设备管理',
+                        child: _DockActionItem(
+                          icon: Icons.devices_rounded,
+                          onTap: () {
+                            showDialog<void>(
+                              context: context,
+                              builder:
+                                  (ctx) => Dialog(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 480,
+                                        maxHeight: 620,
+                                      ),
+                                      child: const LoginDevicesPage(),
+                                    ),
+                                  ),
+                            );
+                          },
                         ),
                       ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
+                      const SizedBox(height: 8),
 
-          // 2. 主题切换
-          Tooltip(
-            message: themeMode == ThemeMode.dark ? '切换为浅色模式' : '切换为深色模式',
-            child: _DockActionItem(
-              icon:
-                  themeMode == ThemeMode.dark
-                      ? Icons.light_mode_rounded
-                      : Icons.dark_mode_rounded,
-              onTap:
-                  () =>
-                      ref
-                          .read(themeModeControllerProvider.notifier)
-                          .toggleTheme(),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // 3. 全局设置 (独立窗口)
-          Tooltip(
-            message: '设置',
-            child: _DockActionItem(
-              icon: Icons.settings_outlined,
-              onTap: () => ref.read(windowServiceProvider).openSettings(),
-            ),
-          ),
-          const SizedBox(height: 10),
-          const Divider(height: 1, thickness: 0.5, indent: 12, endIndent: 12),
-          const SizedBox(height: 12),
-
-          // ── 最底部：当前身份头像与多身份切换入口 ────────────────────────
-          Builder(
-            builder: (avatarContext) {
-              return Tooltip(
-                message:
-                    currentOwner != null
-                        ? '当前身份：${currentOwner.name}\n(点击切换其它聊天身份)'
-                        : '点击切换聊天身份',
-                preferBelow: false,
-                verticalOffset: 24,
-                child: GestureDetector(
-                  onTap: () {
-                    final renderBox =
-                        avatarContext.findRenderObject() as RenderBox?;
-                    final offset = renderBox?.localToGlobal(Offset.zero);
-                    DesktopChatOwnerPopover.show(
-                      avatarContext,
-                      controller: sessionController,
-                      anchorOffset: Offset(railWidth + 8, offset?.dy ?? 20.0),
-                    );
-                  },
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // 主头像
-                        Container(
-                          padding: const EdgeInsets.all(1.5),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color:
-                                  otherUnread > 0
-                                      ? colorScheme.error
-                                      : colorScheme.primary.withValues(
-                                        alpha: 0.6,
-                                      ),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: AppAvatar(
-                            name: currentOwner?.name ?? '我',
-                            imageUrl: currentOwner?.imageUrl,
-                            radius: 17,
-                          ),
+                      // 2. 主题切换
+                      Tooltip(
+                        message:
+                            themeMode == ThemeMode.dark ? '切换为浅色模式' : '切换为深色模式',
+                        child: _DockActionItem(
+                          icon:
+                              themeMode == ThemeMode.dark
+                                  ? Icons.light_mode_rounded
+                                  : Icons.dark_mode_rounded,
+                          onTap:
+                              () =>
+                                  ref
+                                      .read(
+                                        themeModeControllerProvider.notifier,
+                                      )
+                                      .toggleTheme(),
                         ),
-                        // 跨身份未读总数角标（其他身份有消息时呈现）
-                        if (otherUnread > 0 || otherImmersed > 0)
-                          Positioned(
-                            right: -4,
-                            top: -4,
-                            child: AppBadge(
-                              count: otherUnread,
-                              dot: otherUnread == 0 && otherImmersed > 0,
-                              size: AppBadgeSize.small,
+                      ),
+                      const SizedBox(height: 8),
+
+                      // 3. 全局设置 (独立窗口)
+                      Tooltip(
+                        message: '设置',
+                        child: _DockActionItem(
+                          icon: Icons.settings_outlined,
+                          onTap:
+                              () =>
+                                  ref
+                                      .read(windowServiceProvider)
+                                      .openSettings(),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Divider(
+                        height: 1,
+                        thickness: 0.5,
+                        indent: 12,
+                        endIndent: 12,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ── 最底部：当前身份头像与多身份切换入口 ────────────────────────
+                      Builder(
+                        builder: (avatarContext) {
+                          return Tooltip(
+                            message:
+                                currentOwner != null
+                                    ? '当前身份：${currentOwner.name}\n(点击切换其它聊天身份)'
+                                    : '点击切换聊天身份',
+                            preferBelow: false,
+                            verticalOffset: 24,
+                            child: GestureDetector(
+                              onTap: () {
+                                final renderBox =
+                                    avatarContext.findRenderObject()
+                                        as RenderBox?;
+                                final offset = renderBox?.localToGlobal(
+                                  Offset.zero,
+                                );
+                                DesktopChatOwnerPopover.show(
+                                  avatarContext,
+                                  controller: sessionController,
+                                  anchorOffset: Offset(
+                                    railWidth + 8,
+                                    offset?.dy ?? 20.0,
+                                  ),
+                                );
+                              },
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    // 主头像
+                                    Container(
+                                      padding: const EdgeInsets.all(1.5),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color:
+                                              otherUnread > 0
+                                                  ? colorScheme.error
+                                                  : colorScheme.primary
+                                                      .withValues(alpha: 0.6),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: AppAvatar(
+                                        name: currentOwner?.name ?? '我',
+                                        imageUrl: currentOwner?.imageUrl,
+                                        radius: 17,
+                                      ),
+                                    ),
+                                    // 跨身份未读总数角标（其他身份有消息时呈现）
+                                    if (otherUnread > 0 || otherImmersed > 0)
+                                      Positioned(
+                                        right: -4,
+                                        top: -4,
+                                        child: AppBadge(
+                                          count: otherUnread,
+                                          dot:
+                                              otherUnread == 0 &&
+                                              otherImmersed > 0,
+                                          size: AppBadgeSize.small,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                   ),
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 14),
-        ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

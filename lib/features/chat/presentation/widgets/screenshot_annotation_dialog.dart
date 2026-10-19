@@ -677,7 +677,15 @@ class _ScreenshotAnnotationDialogState
   /// 导出合成标注后的高分辨率 PNG 字节
   Future<Uint8List> _exportAnnotatedImage(Rect displayRect) async {
     if (_decodedImage == null) return widget.imageBytes;
-    if (_annotations.isEmpty) return widget.imageBytes;
+    if (_annotations.isEmpty) {
+      // 无论剪贴板底图是 DIB/BMP 还是其他非标准格式，导出均转为合法的标准 PNG 字节流
+      final byteData =
+          await _decodedImage!.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData != null) {
+        return byteData.buffer.asUint8List();
+      }
+      return widget.imageBytes;
+    }
 
     final imageWidth = _decodedImage!.width.toDouble();
     final imageHeight = _decodedImage!.height.toDouble();

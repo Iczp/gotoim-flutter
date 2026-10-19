@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../chat_settings/data/models/chat_member.dart';
 import '../../../session/presentation/chat_object_avatar.dart';
-import '../../application/chat_controller.dart';
+import 'chat_composer_controller.dart';
 
 /// 群聊 `@` 艾特群成员半屏选择弹窗（ChatMentionBottomSheet）
 ///
@@ -18,7 +18,7 @@ class ChatMentionBottomSheet extends StatefulWidget {
   });
 
   /// 聊天状态控制器
-  final ChatController controller;
+  final ChatComposerController controller;
 
   /// 输入框文本控制器
   final TextEditingController input;

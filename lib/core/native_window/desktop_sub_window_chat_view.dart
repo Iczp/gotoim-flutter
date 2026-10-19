@@ -12,6 +12,12 @@ import '../media/media_preview.dart';
 import '../config/app_environment.dart';
 import '../utils/api_url_resolver.dart';
 
+import 'package:file_picker/file_picker.dart';
+import '../services/file/file_picker_service.dart';
+import '../../features/chat/presentation/widgets/chat_composer.dart';
+import '../../features/chat/presentation/widgets/chat_composer_controller.dart';
+import '../../features/chat_settings/data/models/chat_member.dart';
+
 import '../../core/widgets/app_toast.dart';
 import '../platform/windows/windows_window_adapter.dart';
 import 'native_window_payload.dart';
@@ -50,9 +56,9 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   final Map<String, AttachmentTransferState> _attachments = {};
   bool _isPinned = false;
   bool _isMaximized = false;
-  bool _sendOnEnter = true;
 
   late final WindowMethodChannel _mainIpcChannel;
+  late final SubWindowChatController _subWindowChatController;
 
   @override
   void initState() {
@@ -69,6 +75,89 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
     _mainIpcChannel = const WindowMethodChannel(
       'gotoim/ipc_to_main',
       mode: ChannelMode.bidirectional,
+    );
+
+    _subWindowChatController = SubWindowChatController(
+      sessionUnitId: widget.payload.sessionUnitId ?? '',
+      ownerId: widget.payload.ownerId ?? 0,
+      mainIpcChannel: _mainIpcChannel,
+      onSendMessage: (text, {quote}) {
+        _handleSendMessage(overrideText: text);
+      },
+      onSendImage: (bytes, {caption, fileName}) async {
+        final clientMsgId = 'cmsg_img_${DateTime.now().millisecondsSinceEpoch}';
+        final effectiveName =
+            fileName ?? 'image_${DateTime.now().millisecondsSinceEpoch}.png';
+        if (mounted) {
+          setState(() {
+            _messages.add(
+              _ChatMessage(
+                clientMessageId: clientMsgId,
+                text: caption ?? '[图片]',
+                isMe: true,
+                time: DateTime.now(),
+                state: 'sending',
+              ),
+            );
+          });
+          _scrollToBottom();
+        }
+        try {
+          final res = await _mainIpcChannel.invokeMethod('chat_send_image', {
+            'sessionUnitId': widget.payload.sessionUnitId,
+            'ownerId': widget.payload.ownerId,
+            'bytes': bytes.toList(),
+            'fileName': effectiveName,
+            'caption': caption,
+          });
+          if (res is Map && res['success'] == true && mounted) {
+            setState(() {
+              final idx = _messages.indexWhere(
+                (m) => m.clientMessageId == clientMsgId,
+              );
+              if (idx != -1) {
+                _messages[idx] = _messages[idx].copyWith(
+                  serverId: (res['serverId'] as num?)?.toInt(),
+                  state: res['state']?.toString() ?? 'sent',
+                );
+              }
+            });
+          } else {
+            _markMessageFailed(clientMsgId);
+          }
+        } catch (_) {
+          _markMessageFailed(clientMsgId);
+        }
+      },
+      onSendFiles: (filePaths, {caption}) async {
+        for (final p in filePaths) {
+          final clientMsgId =
+              'cmsg_file_${DateTime.now().millisecondsSinceEpoch}';
+          final fileName = p.split(r'\').last.split('/').last;
+          if (mounted) {
+            setState(() {
+              _messages.add(
+                _ChatMessage(
+                  clientMessageId: clientMsgId,
+                  text: '[文件] $fileName',
+                  isMe: true,
+                  time: DateTime.now(),
+                  state: 'sending',
+                ),
+              );
+            });
+            _scrollToBottom();
+          }
+        }
+        try {
+          await _mainIpcChannel.invokeMethod('chat_send_files', {
+            'sessionUnitId': widget.payload.sessionUnitId,
+            'ownerId': widget.payload.ownerId,
+            'filePaths': filePaths,
+            'caption': caption,
+          });
+        } catch (_) {}
+      },
     );
 
     Future<dynamic> handler(MethodCall call) async {
@@ -236,6 +325,7 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   @override
   void dispose() {
     widget.onRegisterHandler?.call(null);
+    _subWindowChatController.dispose();
     _inputController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
@@ -339,7 +429,6 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
     final bgColor = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5);
     final titleBarColor =
         isDark ? const Color(0xFF232323) : const Color(0xFFEBEBEB);
-    final inputBg = isDark ? const Color(0xFF262626) : Colors.white;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -351,8 +440,22 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
           // 2. 消息内容流
           Expanded(child: _buildMessageList(isDark)),
 
-          // 3. 底部快捷工具与输入区
-          _buildInputArea(isDark, inputBg),
+          // 3. 微信同款 ChatComposer 统一输入区（复用非独立聊天输入框，带高度拖拽、截图、文件粘贴、表情等）
+          ChatComposer(
+            controller: _subWindowChatController,
+            input: _inputController,
+            isDesktop: true,
+            quoteContentBuilder:
+                (quote) => Text(
+                  '${quote.senderName}: ${quote.text}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+          ),
         ],
       ),
     );
@@ -726,242 +829,6 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
       },
     );
   }
-
-  Widget _buildInputArea(bool isDark, Color inputBg) {
-    return Container(
-      decoration: BoxDecoration(
-        color: inputBg,
-        border: Border(
-          top: BorderSide(
-            color: isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000),
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: Column(
-        children: [
-          // 快捷工具栏 (表情、图片、文件、截图)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.sentiment_satisfied_alt_rounded,
-                    size: 20,
-                  ),
-                  tooltip: '表情',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    showToast('请在主窗口或直接使用系统输入法表情', type: ToastType.info);
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.image_outlined, size: 20),
-                  tooltip: '发送图片',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    showToast('独立窗口可通过剪贴板粘贴直接发送图片', type: ToastType.info);
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.folder_open_rounded, size: 20),
-                  tooltip: '发送文件',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    showToast('独立窗口可通过剪贴板粘贴直接发送文件', type: ToastType.info);
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.content_cut_rounded, size: 20),
-                  tooltip: '截图',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    showToast(
-                      '支持使用 Win+Shift+S 截图后直接粘贴发送',
-                      type: ToastType.info,
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-          // 文本输入行与微信同款发送按钮组
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Focus(
-                    onKeyEvent: (node, event) {
-                      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                      final isEnter =
-                          event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.numpadEnter;
-                      if (!isEnter) return KeyEventResult.ignored;
-
-                      final isCtrl = HardwareKeyboard.instance.isControlPressed;
-                      final isShift = HardwareKeyboard.instance.isShiftPressed;
-
-                      if (_sendOnEnter) {
-                        if (isCtrl || isShift) {
-                          return KeyEventResult.ignored; // 换行
-                        } else {
-                          _handleSendMessage();
-                          return KeyEventResult.handled;
-                        }
-                      } else {
-                        if (isCtrl && !isShift) {
-                          _handleSendMessage();
-                          return KeyEventResult.handled;
-                        } else {
-                          return KeyEventResult.ignored; // 换行
-                        }
-                      }
-                    },
-                    child: TextField(
-                      controller: _inputController,
-                      focusNode: _focusNode,
-                      maxLines: 4,
-                      minLines: 1,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                      decoration: InputDecoration(
-                        hintText:
-                            _sendOnEnter
-                                ? '按 Enter 发送，Ctrl+Enter 换行'
-                                : '按 Ctrl+Enter 发送，Enter 换行',
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _inputController,
-                  builder: (context, val, _) {
-                    final hasText = val.text.trim().isNotEmpty;
-                    final bg =
-                        hasText
-                            ? const Color(0xFF07C160)
-                            : (isDark
-                                ? const Color(0xFF2A2A2A)
-                                : const Color(0xFFE9E9E9));
-                    final fg =
-                        hasText
-                            ? Colors.white
-                            : (isDark
-                                ? const Color(0xFF666666)
-                                : const Color(0xFF999999));
-                    final border =
-                        hasText
-                            ? const Color(0xFF06AD56)
-                            : (isDark
-                                ? const Color(0xFF383838)
-                                : const Color(0xFFDCDCDC));
-
-                    return Container(
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: bg,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: border, width: 0.8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          InkWell(
-                            borderRadius: const BorderRadius.horizontal(
-                              left: Radius.circular(3),
-                            ),
-                            onTap: hasText ? _handleSendMessage : null,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 5,
-                              ),
-                              child: Text(
-                                '发送(S)',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: fg,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Container(
-                            width: 0.8,
-                            height: 16,
-                            color: fg.withValues(alpha: 0.25),
-                          ),
-                          PopupMenuButton<bool>(
-                            tooltip: '发送快捷键设置',
-                            icon: Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 16,
-                              color: fg,
-                            ),
-                            padding: EdgeInsets.zero,
-                            offset: const Offset(0, -90),
-                            onSelected: (val) {
-                              setState(() {
-                                _sendOnEnter = val;
-                              });
-                            },
-                            itemBuilder:
-                                (ctx) => [
-                                  PopupMenuItem(
-                                    value: true,
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          _sendOnEnter
-                                              ? Icons.check_rounded
-                                              : null,
-                                          size: 16,
-                                          color: const Color(0xFF07C160),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Text('按 Enter 键发送消息'),
-                                      ],
-                                    ),
-                                  ),
-                                  PopupMenuItem(
-                                    value: false,
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          !_sendOnEnter
-                                              ? Icons.check_rounded
-                                              : null,
-                                          size: 16,
-                                          color: const Color(0xFF07C160),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Text('按 Ctrl+Enter 键发送消息'),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ChatMessage {
@@ -1008,5 +875,191 @@ class _ChatMessage {
       state: state ?? this.state,
       isSystem: isSystem ?? this.isSystem,
     );
+  }
+}
+
+class SubWindowChatController extends ChangeNotifier
+    implements ChatComposerController {
+  SubWindowChatController({
+    required this.sessionUnitId,
+    required this.ownerId,
+    required this.mainIpcChannel,
+    required this.onSendMessage,
+    required this.onSendImage,
+    required this.onSendFiles,
+  });
+
+  final String sessionUnitId;
+  final int ownerId;
+  final WindowMethodChannel mainIpcChannel;
+  final void Function(String text, {domain.ChatMessage? quote}) onSendMessage;
+  final Future<void> Function(
+    Uint8List bytes, {
+    String? caption,
+    String? fileName,
+  })
+  onSendImage;
+  final Future<void> Function(List<String> filePaths, {String? caption})
+  onSendFiles;
+
+  @override
+  bool get isOfficialAccount => false;
+
+  @override
+  List<Map<String, dynamic>> get officialAccountMenus => const [];
+
+  @override
+  bool get isMuted => false;
+
+  @override
+  bool isSending = false;
+
+  domain.ChatMessage? _quoting;
+
+  @override
+  domain.ChatMessage? get quoting => _quoting;
+
+  @override
+  void quoteMessage(domain.ChatMessage message) {
+    _quoting = message;
+    notifyListeners();
+  }
+
+  @override
+  void cancelQuote() {
+    _quoting = null;
+    notifyListeners();
+  }
+
+  @override
+  bool get mentionVisible => false;
+
+  @override
+  String get mentionKeyword => '';
+
+  @override
+  List<ChatMember> get mentionMembers => const [];
+
+  @override
+  bool get mentionLoading => false;
+
+  @override
+  bool get mentionHasMore => false;
+
+  @override
+  void updateMentionInput(String text) {}
+
+  @override
+  void dismissMention() {}
+
+  @override
+  void updateMentionKeyword(String keyword) {}
+
+  @override
+  Future<void> loadMoreMentions() async {}
+
+  @override
+  String toggleMention(String text, ChatMember member) => text;
+
+  @override
+  bool isMemberMentioned(ChatMember member, String text) => false;
+
+  @override
+  Future<bool> hasVoiceRecordingPermission() async => false;
+
+  @override
+  Future<void> startVoiceRecording() async {}
+
+  @override
+  Future<void> cancelVoiceRecording() async {}
+
+  @override
+  Future<void> finishVoiceRecording(Duration duration) async {}
+
+  @override
+  Stream<double> voiceRecordingLevels(Duration interval) =>
+      const Stream.empty();
+
+  @override
+  void send(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final currentQuote = _quoting;
+    _quoting = null;
+    notifyListeners();
+    onSendMessage(trimmed, quote: currentQuote);
+  }
+
+  @override
+  Future<void> sendImageBytes(
+    Uint8List bytes, {
+    String? caption,
+    String? fileName,
+  }) async {
+    await onSendImage(bytes, caption: caption, fileName: fileName);
+  }
+
+  @override
+  Future<void> sendDirectFiles(
+    List<SelectedFile> files, {
+    String? caption,
+  }) async {
+    if (files.isEmpty) return;
+    final paths = files.map((f) => f.originalPath).whereType<String>().toList();
+    if (paths.isEmpty) return;
+    await onSendFiles(paths, caption: caption);
+  }
+
+  @override
+  Future<void> chooseAndSendImages() async {
+    try {
+      final picked = await FilePicker.pickFiles(
+        type: FileType.image,
+        dialogTitle: '选择要发送的图片',
+      );
+      if (picked.isNotEmpty) {
+        final paths = picked.map((f) => f.path).whereType<String>().toList();
+        if (paths.isNotEmpty) {
+          await onSendFiles(paths);
+        }
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> chooseAndSendFile() async {
+    try {
+      final picked = await FilePicker.pickFiles(
+        type: FileType.any,
+        dialogTitle: '选择要发送的文件',
+      );
+      if (picked.isNotEmpty) {
+        final paths = picked.map((f) => f.path).whereType<String>().toList();
+        if (paths.isNotEmpty) {
+          await onSendFiles(paths);
+        }
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> takeAndSendPhoto() async {
+    await chooseAndSendImages();
+  }
+
+  @override
+  Future<void> chooseAndSendVideo() async {
+    try {
+      final picked = await FilePicker.pickFiles(
+        type: FileType.video,
+        dialogTitle: '选择要发送的视频',
+      );
+      if (picked.isNotEmpty) {
+        final paths = picked.map((f) => f.path).whereType<String>().toList();
+        if (paths.isNotEmpty) {
+          await onSendFiles(paths);
+        }
+      }
+    } catch (_) {}
   }
 }

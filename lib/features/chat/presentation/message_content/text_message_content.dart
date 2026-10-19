@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/security/url_security_service.dart';
 
@@ -15,7 +16,7 @@ import 'message_bubble.dart';
 
 /// Renders text messages, including the Markdown dialect supported by chat,
 /// clickable auto-linked URLs, clickable phone numbers, and @mention highlights.
-class TextMessageContent extends StatelessWidget {
+class TextMessageContent extends ConsumerWidget {
   const TextMessageContent({
     required this.message,
     this.presentation = ChatMessagePresentation.normal,
@@ -57,7 +58,11 @@ class TextMessageContent extends StatelessWidget {
     return result;
   }
 
-  Future<void> _handleLinkTap(BuildContext context, String link) async {
+  Future<void> _handleLinkTap(
+    BuildContext context,
+    WidgetRef ref,
+    String link,
+  ) async {
     if (link.startsWith('tel:')) {
       final phone = link.substring(4);
       final confirmed = await showConfirmModal(
@@ -73,7 +78,7 @@ class TextMessageContent extends StatelessWidget {
     }
 
     if (link.startsWith('http://') || link.startsWith('https://')) {
-      await UrlSecurityService.instance.openUrl(context, url: link);
+      await ref.read(urlSecurityServiceProvider).openUrl(context, url: link);
       return;
     }
 
@@ -85,7 +90,7 @@ class TextMessageContent extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (presentation == ChatMessagePresentation.quote) {
       return Text(message.text, maxLines: 1, overflow: TextOverflow.ellipsis);
     }
@@ -95,7 +100,8 @@ class TextMessageContent extends StatelessWidget {
       data: _formatRichText(message.text),
       selectable: false,
       shrinkWrap: true,
-      onTapLink: (text, href, title) => _handleLinkTap(context, href ?? text),
+      onTapLink: (text, href, title) =>
+          _handleLinkTap(context, ref, href ?? text),
       styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
         a: TextStyle(
           color: theme.colorScheme.primary,

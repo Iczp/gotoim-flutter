@@ -93,24 +93,51 @@ class DioApiClient implements ApiClient {
     String fieldName = 'file',
     void Function(int sent, int total)? onProgress,
     bool retryOnUnauthorized = true,
-  }) => _request<T>(
-    path: path,
-    method: 'POST',
-    query: query,
-    dataFactory:
-        () => FormData.fromMap(<String, Object>{
-          fieldName: MultipartFile.fromStream(
-            file.openRead,
-            file.length,
-            filename: file.name,
-          ),
-          if (extraFields != null)
-            for (final entry in extraFields.entries)
-              if (entry.value != null) entry.key: entry.value!,
-        }),
-    retryOnUnauthorized: retryOnUnauthorized,
-    onSendProgress: onProgress,
-  );
+  }) {
+    final mediaType = _resolveMediaType(file.contentType, file.name);
+    return _request<T>(
+      path: path,
+      method: 'POST',
+      query: query,
+      dataFactory:
+          () => FormData.fromMap(<String, Object>{
+            fieldName: MultipartFile.fromStream(
+              file.openRead,
+              file.length,
+              filename: file.name,
+              contentType: mediaType,
+            ),
+            if (extraFields != null)
+              for (final entry in extraFields.entries)
+                if (entry.value != null) entry.key: entry.value!,
+          }),
+      retryOnUnauthorized: retryOnUnauthorized,
+      onSendProgress: onProgress,
+    );
+  }
+
+  static DioMediaType? _resolveMediaType(String? contentType, String fileName) {
+    if (contentType != null && contentType.isNotEmpty) {
+      try {
+        return DioMediaType.parse(contentType);
+      } catch (_) {}
+    }
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.png')) return DioMediaType('image', 'png');
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+      return DioMediaType('image', 'jpeg');
+    }
+    if (lower.endsWith('.gif')) return DioMediaType('image', 'gif');
+    if (lower.endsWith('.webp')) return DioMediaType('image', 'webp');
+    if (lower.endsWith('.bmp')) return DioMediaType('image', 'bmp');
+    if (lower.endsWith('.mp4')) return DioMediaType('video', 'mp4');
+    if (lower.endsWith('.mov')) return DioMediaType('video', 'quicktime');
+    if (lower.endsWith('.mp3')) return DioMediaType('audio', 'mpeg');
+    if (lower.endsWith('.amr')) return DioMediaType('audio', 'amr');
+    if (lower.endsWith('.m4a')) return DioMediaType('audio', 'mp4');
+    if (lower.endsWith('.pdf')) return DioMediaType('application', 'pdf');
+    return null;
+  }
 
   Future<T> _request<T>({
     required String path,
@@ -232,6 +259,7 @@ class DioApiClient implements ApiClient {
           'durationMs': stopwatch.elapsedMilliseconds,
           'requestHeaders': error.requestOptions.headers,
           'responseHeaders': error.response?.headers.map,
+          'responseData': error.response?.data,
         },
       );
       throw _toApiException(error);
