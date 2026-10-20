@@ -95,22 +95,28 @@ class DioApiClient implements ApiClient {
     bool retryOnUnauthorized = true,
   }) {
     final mediaType = _resolveMediaType(file.contentType, file.name);
+    final effectiveFilename = file.name.trim().isNotEmpty
+        ? file.name.trim()
+        : 'upload_${DateTime.now().millisecondsSinceEpoch}.${mediaType?.subtype ?? 'bin'}';
     return _request<T>(
       path: path,
       method: 'POST',
       query: query,
       dataFactory:
-          () => FormData.fromMap(<String, Object>{
-            fieldName: MultipartFile.fromStream(
-              file.openRead,
-              file.length,
-              filename: file.name,
-              contentType: mediaType,
-            ),
-            if (extraFields != null)
-              for (final entry in extraFields.entries)
-                if (entry.value != null) entry.key: entry.value!,
-          }),
+          () => FormData.fromMap(
+            <String, Object>{
+              fieldName: MultipartFile.fromStream(
+                file.openRead,
+                file.length,
+                filename: effectiveFilename,
+                contentType: mediaType,
+              ),
+              if (extraFields != null)
+                for (final entry in extraFields.entries)
+                  if (entry.value != null) entry.key: entry.value!,
+            },
+            ListFormat.multi,
+          ),
       retryOnUnauthorized: retryOnUnauthorized,
       onSendProgress: onProgress,
     );

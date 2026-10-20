@@ -21,6 +21,18 @@ import '../../features/workbench/application/workbench_layout_notifier.dart';
 import '../layout/app_breakpoints.dart';
 import 'desktop_dock_rail.dart';
 
+class CurrentHomeSectionNotifier extends Notifier<HomeSection> {
+  @override
+  HomeSection build() => HomeSection.messages;
+  void setSection(HomeSection section) => state = section;
+}
+
+/// 全局激活的主页面 Tab Section Provider，支持跨组件（如通讯录点击发消息）一键切换
+final currentHomeSectionProvider =
+    NotifierProvider<CurrentHomeSectionNotifier, HomeSection>(
+      CurrentHomeSectionNotifier.new,
+    );
+
 /// Responsive host for the IM's top-level sections.
 class ApplicationShell extends ConsumerStatefulWidget {
   const ApplicationShell({super.key});
@@ -82,6 +94,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       _section = section;
       _visitedSections.add(section);
     });
+    ref.read(currentHomeSectionProvider.notifier).setSection(section);
   }
 
   void _openOwnerDrawer() => _scaffoldKey.currentState?.openDrawer();
@@ -129,6 +142,13 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    // 跨组件页面 Tab 联动同步
+    ref.listen<HomeSection>(currentHomeSectionProvider, (prev, next) {
+      if (next != _section) {
+        _select(next);
+      }
+    });
 
     // 桌面端系统托盘未读数与当前身份自动同步
     ref.listen<int>(

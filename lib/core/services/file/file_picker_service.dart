@@ -92,8 +92,48 @@ class SelectedFile {
     'hasNativePath': hasNativePath,
   };
 
-  static Future<SelectedFile> fromXFile(XFile file, {Uuid? uuid}) async {
-    final rawName = file.name;
+  static Future<SelectedFile> fromBytes(
+    Uint8List bytes, {
+    required String name,
+    String? mimeType,
+    Uuid? uuid,
+  }) async {
+    final effectiveName = name.trim().isNotEmpty
+        ? name.trim()
+        : 'file_${DateTime.now().millisecondsSinceEpoch}.bin';
+    final xfile = XFile.fromData(
+      bytes,
+      name: effectiveName,
+      path: effectiveName,
+      mimeType: mimeType,
+    );
+    final extension = _extensionOf(effectiveName);
+    return SelectedFile._(
+      id: (uuid ?? const Uuid()).v4(),
+      name: effectiveName,
+      size: bytes.length,
+      extension: extension,
+      mimeType: mimeType ?? _mimeTypeFor(extension),
+      originalUri: Uri(path: effectiveName),
+      originalPath: null,
+      file: xfile,
+    );
+  }
+
+  static Future<SelectedFile> fromXFile(
+    XFile file, {
+    Uuid? uuid,
+    String? fallbackName,
+  }) async {
+    var rawName = file.name.trim();
+    if (rawName.isEmpty && file.path.isNotEmpty) {
+      rawName = file.path.split(RegExp(r'[\\/]')).last.trim();
+    }
+    if (rawName.isEmpty) {
+      rawName = fallbackName?.trim().isNotEmpty == true
+          ? fallbackName!.trim()
+          : 'file_${DateTime.now().millisecondsSinceEpoch}.bin';
+    }
     final name = rawName.split(RegExp(r'[\\/]')).last;
     final extension = _extensionOf(name);
     return SelectedFile._(

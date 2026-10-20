@@ -83,9 +83,7 @@ class ChatMessageList extends StatelessWidget {
                     error: error,
                     onRetry: onLoadMore,
                   )
-                  : Align(
-                    alignment: Alignment.topCenter,
-                    child: RawScrollbar(
+                  : RawScrollbar(
                       controller: scrollController,
                       thumbVisibility: false, // 仅在手指拖拽/滑动时显现，停止后自动淡出
                       thumbColor:
@@ -103,7 +101,7 @@ class ChatMessageList extends StatelessWidget {
                         keyboardDismissBehavior:
                             ScrollViewKeyboardDismissBehavior.manual,
                         reverse: true,
-                        shrinkWrap: true,
+                        shrinkWrap: false,
                         findChildIndexCallback: (key) {
                           if (key is! ValueKey<String>) return null;
                           final index = messages.indexWhere(
@@ -143,7 +141,6 @@ class ChatMessageList extends StatelessWidget {
                         },
                       ),
                     ),
-                  ),
         ),
       ),
     );

@@ -34,4 +34,6 @@ class LocalFileServerService extends ChangeNotifier {
   Future<void> renameSharedEntry(String path, String name) async {}
   Future<void> deleteSharedEntry(String path) async {}
   Future<void> openSharedFile(String path) async {}
+  Future<void> addLocalFiles(String parentPath, List<String> filePaths) async {}
+  Future<void> revealInExplorer(String path) async {}
 }

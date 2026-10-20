@@ -21,6 +21,36 @@ HWND GetMainWindowHandle() {
   return g_main_window;
 }
 
+static LRESULT CALLBACK ChildViewSubclassProc(
+    HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+    UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+  if (uMsg == WM_NCHITTEST) {
+    HWND top_hwnd = GetAncestor(hwnd, GA_ROOT);
+    if (top_hwnd && IsWindow(top_hwnd) && !IsZoomed(top_hwnd)) {
+      const LONG_PTR style = GetWindowLongPtr(top_hwnd, GWL_STYLE);
+      if (style & WS_THICKFRAME) {
+        RECT rc;
+        if (GetWindowRect(top_hwnd, &rc)) {
+          const int border = 8;
+          const int sx = static_cast<short>(LOWORD(lParam));
+          const int sy = static_cast<short>(HIWORD(lParam));
+          if (sx < rc.left + border || sx >= rc.right - border ||
+              sy < rc.top + border || sy >= rc.bottom - border) {
+            return HTTRANSPARENT;
+          }
+        }
+      }
+    }
+  }
+  return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+void AttachChildViewResizeSubclass(HWND child_hwnd) {
+  if (child_hwnd && IsWindow(child_hwnd)) {
+    SetWindowSubclass(child_hwnd, ChildViewSubclassProc, 2001, 0);
+  }
+}
+
 LRESULT CALLBACK SubWindowSubclassProc(
     HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
@@ -38,6 +68,38 @@ LRESULT CALLBACK SubWindowSubclassProc(
         return 0;
       }
       return 0;
+    }
+    case WM_NCACTIVATE: {
+      return DefSubclassProc(hwnd, WM_NCACTIVATE, wParam, -1);
+    }
+    case WM_NCPAINT: {
+      return 0;
+    }
+    case WM_NCHITTEST: {
+      if (IsZoomed(hwnd)) return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+      const LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+      if (!(style & WS_THICKFRAME)) return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+
+      const int border = 8;
+      const int x = static_cast<short>(LOWORD(lParam));
+      const int y = static_cast<short>(HIWORD(lParam));
+      RECT rc;
+      GetWindowRect(hwnd, &rc);
+
+      const bool left = x < rc.left + border;
+      const bool right = x >= rc.right - border;
+      const bool top = y < rc.top + border;
+      const bool bottom = y >= rc.bottom - border;
+
+      if (top && left) return HTTOPLEFT;
+      if (top && right) return HTTOPRIGHT;
+      if (bottom && left) return HTBOTTOMLEFT;
+      if (bottom && right) return HTBOTTOMRIGHT;
+      if (left) return HTLEFT;
+      if (right) return HTRIGHT;
+      if (top) return HTTOP;
+      if (bottom) return HTBOTTOM;
+      return DefSubclassProc(hwnd, uMsg, wParam, lParam);
     }
     case WM_WINDOWPOSCHANGED: {
       auto* pos = reinterpret_cast<WINDOWPOS*>(lParam);
@@ -67,12 +129,15 @@ LRESULT CALLBACK SubWindowSubclassProc(
 void ConfigureSubWindowNative(HWND sub_hwnd, HWND child_hwnd) {
   if (!sub_hwnd || !IsWindow(sub_hwnd)) return;
   const LONG_PTR style = GetWindowLongPtr(sub_hwnd, GWL_STYLE);
-  const LONG_PTR custom = (style & ~WS_CAPTION) | WS_THICKFRAME | WS_CLIPCHILDREN;
+  const LONG_PTR custom = (style & ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) | WS_THICKFRAME | WS_CLIPCHILDREN;
   if (style != custom) {
     SetWindowLongPtr(sub_hwnd, GWL_STYLE, custom);
   }
   SetWindowSubclass(sub_hwnd, SubWindowSubclassProc, 1001, 0);
-  const MARGINS margins = {0, 0, 1, 0};
+  if (child_hwnd && IsWindow(child_hwnd)) {
+    AttachChildViewResizeSubclass(child_hwnd);
+  }
+  const MARGINS margins = {0, 0, 0, 1};
   DwmExtendFrameIntoClientArea(sub_hwnd, &margins);
   SetWindowPos(sub_hwnd, nullptr, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED |
@@ -121,6 +186,38 @@ class WindowControls : public flutter::Plugin {
               return 0;
             }
             return 0;
+          }
+          if (hwnd == Window() && message == WM_NCACTIVATE) {
+            return DefWindowProc(hwnd, WM_NCACTIVATE, wparam, -1);
+          }
+          if (hwnd == Window() && message == WM_NCPAINT) {
+            return 0;
+          }
+          if (hwnd == Window() && message == WM_NCHITTEST) {
+            if (IsZoomed(hwnd)) return HTCLIENT;
+            const LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+            if (!(style & WS_THICKFRAME)) return HTCLIENT;
+
+            const int border = 8;
+            const int x = static_cast<short>(LOWORD(lparam));
+            const int y = static_cast<short>(HIWORD(lparam));
+            RECT rc;
+            GetWindowRect(hwnd, &rc);
+
+            const bool left = x < rc.left + border;
+            const bool right = x >= rc.right - border;
+            const bool top = y < rc.top + border;
+            const bool bottom = y >= rc.bottom - border;
+
+            if (top && left) return HTTOPLEFT;
+            if (top && right) return HTTOPRIGHT;
+            if (bottom && left) return HTBOTTOMLEFT;
+            if (bottom && right) return HTBOTTOMRIGHT;
+            if (left) return HTLEFT;
+            if (right) return HTRIGHT;
+            if (top) return HTTOP;
+            if (bottom) return HTBOTTOM;
+            return HTCLIENT;
           }
           if (hwnd == Window() && message == kTrayCallback) {
             if (lparam == WM_LBUTTONUP) TrayEvent("left");
@@ -259,12 +356,15 @@ class WindowControls : public flutter::Plugin {
             ? std::get_if<bool>(call.arguments()) : nullptr;
         is_modal_ = modal && *modal;
         if (is_modal_) {
+          LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+          style &= ~(WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CAPTION | WS_SYSMENU);
+          SetWindowLongPtr(hwnd, GWL_STYLE, style);
           if (g_main_window && IsWindow(g_main_window) && g_main_window != hwnd) {
             SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window));
             EnableWindow(g_main_window, FALSE);
           }
           SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                       SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                       SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
           SetForegroundWindow(hwnd);
         } else {
           if (g_main_window && IsWindow(g_main_window)) {
@@ -348,15 +448,14 @@ class WindowControls : public flutter::Plugin {
     if (!hwnd || configured_window_ == hwnd) return;
     configured_window_ = hwnd;
     const LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
-    const LONG_PTR custom = (style & ~WS_CAPTION) | WS_THICKFRAME | WS_CLIPCHILDREN;
+    const LONG_PTR custom = (style & ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) | WS_THICKFRAME | WS_CLIPCHILDREN;
     if (style != custom) {
       SetWindowLongPtr(hwnd, GWL_STYLE, custom);
       SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED |
                    SWP_NOACTIVATE);
     }
-    SetWindowSubclass(hwnd, SubWindowSubclassProc, 1002, 0);
-    const MARGINS margins = {0, 0, 1, 0};
+    const MARGINS margins = {0, 0, 0, 1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
   }
   flutter::PluginRegistrarWindows* registrar_;

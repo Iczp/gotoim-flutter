@@ -435,6 +435,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
 
       case SubWindowType.browser:
         return DesktopBrowserWindow(
+          key: ValueKey('browser_${_currentPayload.url}'),
           initialUrl: _currentPayload.url ?? 'https://www.bing.com',
           title: _currentPayload.title,
           fallbackContent: _currentPayload.fallbackContent,
@@ -488,6 +489,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
                   ),
                 ];
         return DesktopMediaViewerWindow(
+          key: ValueKey(
+            'media_${_currentPayload.url}_${_currentPayload.initialIndex}_${items.length}',
+          ),
           items: items,
           initialIndex: _currentPayload.initialIndex,
           isSubWindow: true,

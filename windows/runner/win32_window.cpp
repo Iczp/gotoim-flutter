@@ -233,6 +233,39 @@ Win32Window::MessageHandler(HWND hwnd,
       }
       return 0;
     }
+
+    case WM_NCACTIVATE:
+      return DefWindowProc(hwnd, WM_NCACTIVATE, wparam, -1);
+
+    case WM_NCPAINT:
+      return 0;
+
+    case WM_NCHITTEST: {
+      if (IsZoomed(hwnd)) return HTCLIENT;
+      const LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+      if (!(style & WS_THICKFRAME)) return HTCLIENT;
+
+      const int border = 8;
+      const int x = static_cast<short>(LOWORD(lparam));
+      const int y = static_cast<short>(HIWORD(lparam));
+      RECT rc;
+      GetWindowRect(hwnd, &rc);
+
+      const bool left = x < rc.left + border;
+      const bool right = x >= rc.right - border;
+      const bool top = y < rc.top + border;
+      const bool bottom = y >= rc.bottom - border;
+
+      if (top && left) return HTTOPLEFT;
+      if (top && right) return HTTOPRIGHT;
+      if (bottom && left) return HTBOTTOMLEFT;
+      if (bottom && right) return HTBOTTOMRIGHT;
+      if (left) return HTLEFT;
+      if (right) return HTRIGHT;
+      if (top) return HTTOP;
+      if (bottom) return HTBOTTOM;
+      return HTCLIENT;
+    }
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);

@@ -1034,12 +1034,11 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   }) async {
     final effectiveName =
         fileName ?? 'image_${DateTime.now().millisecondsSinceEpoch}.png';
-    final xfile = XFile.fromData(
+    final selected = await SelectedFile.fromBytes(
       bytes,
       name: effectiveName,
       mimeType: 'image/png',
     );
-    final selected = await SelectedFile.fromXFile(xfile);
     await sendDirectImage(selected, caption: caption);
   }
 

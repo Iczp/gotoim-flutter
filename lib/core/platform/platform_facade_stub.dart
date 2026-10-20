@@ -2,7 +2,7 @@ import 'platform_contract.dart';
 
 PlatformFacade createPlatformFacade() => const _StubPlatformFacade();
 
-class _StubPlatformFacade implements PlatformFacade {
+class _StubPlatformFacade extends PlatformFacade {
   const _StubPlatformFacade();
 
   @override

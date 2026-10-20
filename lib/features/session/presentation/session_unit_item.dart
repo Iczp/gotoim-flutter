@@ -16,8 +16,11 @@ class SessionUnitItem extends StatelessWidget {
     this.dividerIndent = 74.0,
     this.dividerEndIndent = 0.0,
     this.aiRunning = false,
+    this.isSelected = false,
     this.onLongPress,
     this.onTap,
+    this.onDoubleTap,
+    this.onSecondaryTapDown,
     super.key,
   });
 
@@ -26,8 +29,11 @@ class SessionUnitItem extends StatelessWidget {
   final double dividerIndent;
   final double dividerEndIndent;
   final bool aiRunning;
+  final bool isSelected;
   final VoidCallback? onLongPress;
   final VoidCallback? onTap;
+  final VoidCallback? onDoubleTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
 
   @override
   Widget build(BuildContext context) {
@@ -43,12 +49,17 @@ class SessionUnitItem extends StatelessWidget {
     final badge = _number(raw['publicBadge']);
     final immersed = setting['isImmersed'] == true;
     final isDark = theme.brightness == Brightness.dark;
+    final activeBg = isDark ? const Color(0x3307C160) : const Color(0x1F07C160);
+    final bgColor = isSelected
+        ? activeBg
+        : (item.isPinned ? tokens.sessionPinnedBackground : Colors.transparent);
 
     return Material(
-      color:
-          item.isPinned ? tokens.sessionPinnedBackground : Colors.transparent,
+      color: bgColor,
       child: InkWell(
         onLongPress: onLongPress,
+        onDoubleTap: onDoubleTap,
+        onSecondaryTapDown: onSecondaryTapDown,
         onTap:
             onTap ??
             (item.id.isEmpty
@@ -98,7 +109,10 @@ class SessionUnitItem extends StatelessWidget {
                                   style: (theme.textTheme.titleSmall ??
                                           const TextStyle())
                                       .copyWith(
-                                        fontWeight: FontWeight.w600,
+                                        fontWeight:
+                                            isSelected
+                                                ? FontWeight.w700
+                                                : FontWeight.w600,
                                         fontSize: 15,
                                         color: colorScheme.onSurface,
                                       ),
@@ -179,7 +193,7 @@ class SessionUnitItem extends StatelessWidget {
                 ],
               ),
             ),
-            if (showDivider)
+            if (showDivider && !isSelected)
               PositionedDirectional(
                 start: dividerIndent,
                 end: dividerEndIndent,

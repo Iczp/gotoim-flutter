@@ -146,7 +146,10 @@ class SessionListItemView extends StatelessWidget {
   const SessionListItemView({
     required this.item,
     this.onTap,
+    this.onDoubleTap,
+    this.onSecondaryTapDown,
     this.onLongPress,
+    this.isSelected = false,
     this.showDivider = true,
     this.dividerIndent = 74.0,
     this.dividerEndIndent = 0.0,
@@ -156,7 +159,10 @@ class SessionListItemView extends StatelessWidget {
 
   final SessionListItem item;
   final VoidCallback? onTap;
+  final VoidCallback? onDoubleTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onLongPress;
+  final bool isSelected;
   final bool showDivider;
   final double dividerIndent;
   final double dividerEndIndent;
@@ -168,7 +174,10 @@ class SessionListItemView extends StatelessWidget {
       SessionListItemKind.session => SessionUnitItem(
         key: ValueKey(item.session!.id),
         item: item.session!,
+        isSelected: isSelected,
         onTap: onTap,
+        onDoubleTap: onDoubleTap,
+        onSecondaryTapDown: onSecondaryTapDown,
         onLongPress: onLongPress,
         showDivider: showDivider,
         dividerIndent: dividerIndent,

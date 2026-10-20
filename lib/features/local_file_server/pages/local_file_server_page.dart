@@ -10,6 +10,7 @@ import '../../../core/capabilities/client_capability_models.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../local_file_server.dart';
 import '../local_file_server_controller.dart';
+import 'shared_file_manager_page.dart';
 
 class LocalFileServerPage extends ConsumerStatefulWidget {
   const LocalFileServerPage({super.key});
@@ -192,256 +193,313 @@ class _LocalFileServerPageState extends ConsumerState<LocalFileServerPage> {
     final state = service.state;
     final running = state.status == LocalFileServerStatus.running;
     final capabilities = ref.read(clientCapabilityServiceProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('局域网文件管理')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: FutureBuilder<ClientWifiInfo>(
-              future: _wifiInfo,
-              builder: (context, wifi) {
-                final info = wifi.data;
-                final isWifi = _isWifiConnected(info);
-                return ExpansionTile(
-                  leading: Icon(
-                    isWifi ? Icons.wifi_rounded : Icons.wifi_off_outlined,
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 720;
+        final canPop = Navigator.canPop(context);
+
+        final controls = ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildNetworkCard(capabilities),
+            const SizedBox(height: 12),
+            _buildServerStatusCard(context, service, state, running),
+            if (!isDesktop) ...[
+              const SizedBox(height: 16),
+              FilledButton.tonalIcon(
+                onPressed: () => context.push('/local-file-server/files'),
+                icon: const Icon(Icons.folder_open_outlined),
+                label: const Text('打开 App 资源管理器'),
+              ),
+            ],
+            const SizedBox(height: 16),
+            ..._buildTerminalsSection(context, service, state),
+          ],
+        );
+
+        if (isDesktop) {
+          return Scaffold(
+            appBar: canPop ? AppBar(title: const Text('局域网快传')) : null,
+            body: Row(
+              children: [
+                SizedBox(
+                  width: 380,
+                  child: controls,
+                ),
+                VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.15),
+                ),
+                const Expanded(
+                  child: SharedFileManagerView(embedded: true),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Scaffold(
+          appBar: AppBar(title: const Text('局域网文件管理')),
+          body: controls,
+        );
+      },
+    );
+  }
+
+  Widget _buildNetworkCard(dynamic capabilities) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: FutureBuilder<ClientWifiInfo>(
+        future: _wifiInfo,
+        builder: (context, wifi) {
+          final info = wifi.data;
+          final isWifi = _isWifiConnected(info);
+          return ExpansionTile(
+            leading: Icon(
+              isWifi ? Icons.wifi_rounded : Icons.wifi_off_outlined,
+            ),
+            title: const Text(
+              '网络信息',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            subtitle: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    isWifi
+                        ? '当前 Wi‑Fi · ${info?.ssid ?? 'SSID 暂不可用'}'
+                        : '${_networkLabel(_networkStatus)} · 未确认 Wi‑Fi 连接',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  title: Text(
-                    '网络信息',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                if (info?.ssid == null)
+                  TextButton(
+                    onPressed: _requestSsidPermission,
+                    child: const Text('获取权限'),
                   ),
-                  subtitle: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          isWifi
-                              ? '当前 Wi‑Fi · ${info?.ssid ?? 'SSID 暂不可用'}'
-                              : '${_networkLabel(_networkStatus)} · 未确认 Wi‑Fi 连接',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (info?.ssid == null)
-                        TextButton(
-                          onPressed: _requestSsidPermission,
-                          child: const Text('获取权限'),
-                        ),
-                    ],
-                  ),
+              ],
+            ),
+            children: [
+              ..._networkDetails(info),
+              if (!isWifi)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Text('局域网文件共享需要设备处于同一 Wi‑Fi 网络。'),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Row(
                   children: [
-                    ..._networkDetails(info),
-                    if (!isWifi)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Text('局域网文件共享需要设备处于同一 Wi‑Fi 网络。'),
+                    OutlinedButton.icon(
+                      onPressed: _refreshNetworkInfo,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('刷新'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => capabilities.openWifiSettings(),
+                      child: const Text('打开 Wi‑Fi 设置'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildServerStatusCard(
+    BuildContext context,
+    LocalFileServerService service,
+    LocalFileServerState state,
+    bool running,
+  ) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  running
+                      ? Icons.check_circle
+                      : Icons.pause_circle_outline,
+                  color:
+                      running
+                          ? Colors.green
+                          : Theme.of(context).colorScheme.outline,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _statusText(state.status),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+            if (state.error != null) ...[
+              const SizedBox(height: 12),
+              SelectableText(
+                state.error!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ],
+            if (running) ...[
+              const SizedBox(height: 16),
+              FutureBuilder<ClientWifiInfo>(
+                future: _wifiInfo,
+                builder:
+                    (context, wifi) => Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color:
+                            Theme.of(
+                              context,
+                            ).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          OutlinedButton.icon(
-                            onPressed: _refreshNetworkInfo,
-                            icon: const Icon(Icons.refresh, size: 18),
-                            label: const Text('刷新'),
+                          Icon(
+                            Icons.wifi_rounded,
+                            color:
+                                Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer,
                           ),
-                          const SizedBox(width: 8),
-                          TextButton(
-                            onPressed: () => capabilities.openWifiSettings(),
-                            child: const Text('打开 Wi‑Fi 设置'),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _sharingGuide(wifi.data?.ssid),
+                              style: TextStyle(
+                                color:
+                                    Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimaryContainer,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        running
-                            ? Icons.check_circle
-                            : Icons.pause_circle_outline,
-                        color:
-                            running
-                                ? Colors.green
-                                : Theme.of(context).colorScheme.outline,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _statusText(state.status),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ],
-                  ),
-                  if (state.error != null) ...[
-                    const SizedBox(height: 12),
-                    SelectableText(
-                      state.error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
-                  if (running) ...[
-                    const SizedBox(height: 16),
-                    FutureBuilder<ClientWifiInfo>(
-                      future: _wifiInfo,
-                      builder:
-                          (context, wifi) => Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color:
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.wifi_rounded,
-                                  color:
-                                      Theme.of(
-                                        context,
-                                      ).colorScheme.onPrimaryContainer,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    _sharingGuide(wifi.data?.ssid),
-                                    style: TextStyle(
-                                      color:
-                                          Theme.of(
-                                            context,
-                                          ).colorScheme.onPrimaryContainer,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                    ),
-                    const SizedBox(height: 16),
-                    _CopyField(label: '访问地址', value: state.address!),
-                    const SizedBox(height: 12),
-                    _CopyField(label: '验证码', value: state.verificationCode!),
-                    const SizedBox(height: 16),
-                    Center(
-                      child: QrImageView(data: state.qrLoginUrl!, size: 180),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      '二维码仅可使用一次，5 分钟内有效；输入验证码也可进入。',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed:
-                        state.status == LocalFileServerStatus.starting
-                            ? null
-                            : (running ? service.stop : _startSharing),
-                    icon: Icon(
-                      running
-                          ? Icons.stop_circle_outlined
-                          : Icons.play_arrow_outlined,
-                    ),
-                    label: Text(running ? '关闭文件共享' : '开启文件共享'),
-                  ),
-                  if (Theme.of(context).platform == TargetPlatform.iOS) ...[
-                    const SizedBox(height: 12),
-                    const Text('iOS 在后台或锁屏时可能暂停服务；传输期间请保持 App 在前台。'),
-                  ],
-                ],
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.tonalIcon(
-            onPressed: () => context.push('/local-file-server/files'),
-            icon: const Icon(Icons.folder_open_outlined),
-            label: const Text('打开 App 资源管理器'),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '已连接终端 ${state.terminals.length}',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          if (state.terminals.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('暂无已连接终端。'),
+              const SizedBox(height: 16),
+              _CopyField(label: '访问地址', value: state.address!),
+              const SizedBox(height: 12),
+              _CopyField(label: '验证码', value: state.verificationCode!),
+              const SizedBox(height: 16),
+              Center(
+                child: QrImageView(data: state.qrLoginUrl!, size: 180),
               ),
-            ),
-          ...state.terminals.map(
-            (terminal) => Card(
-              child: ListTile(
-                leading: const Icon(Icons.devices_outlined),
-                title: Text(terminal.name),
-                subtitle: Text(
-                  '${terminal.platform} · ${terminal.ip}\n${_terminalState(terminal)}',
-                ),
-                isThreeLine: true,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextButton(
-                      onPressed: () => service.disconnectTerminal(terminal.id),
-                      child: const Text('断开'),
-                    ),
-                    const Icon(Icons.chevron_right),
-                  ],
-                ),
-                onTap:
-                    () => context.push(
-                      '/local-file-server/terminal/${Uri.encodeComponent(terminal.id)}',
-                    ),
+              const SizedBox(height: 8),
+              const Text(
+                '二维码仅可使用一次，5 分钟内有效；输入验证码也可进入。',
+                textAlign: TextAlign.center,
               ),
-            ),
-          ),
-          if (service.recentTerminals.isNotEmpty) ...[
+            ],
             const SizedBox(height: 16),
-            Text(
-              '最近终端 ${service.recentTerminals.length}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            ...service.recentTerminals.map(
-              (terminal) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.devices_outlined),
-                  title: Text(terminal.name),
-                  subtitle: Text(
-                    '${terminal.platform} · ${terminal.ip}\n已断开 · 最后活动 ${terminal.lastActiveAt.toLocal()}',
-                  ),
-                  isThreeLine: true,
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap:
-                      () => context.push(
-                        '/local-file-server/terminal/${Uri.encodeComponent(terminal.id)}',
-                      ),
-                ),
+            FilledButton.icon(
+              onPressed:
+                  state.status == LocalFileServerStatus.starting
+                      ? null
+                      : (running ? service.stop : _startSharing),
+              icon: Icon(
+                running
+                    ? Icons.stop_circle_outlined
+                    : Icons.play_arrow_outlined,
               ),
+              label: Text(running ? '关闭文件共享' : '开启文件共享'),
             ),
+            if (Theme.of(context).platform == TargetPlatform.iOS) ...[
+              const SizedBox(height: 12),
+              const Text('iOS 在后台或锁屏时可能暂停服务；传输期间请保持 App 在前台。'),
+            ],
           ],
-        ],
+        ),
       ),
     );
+  }
+
+  List<Widget> _buildTerminalsSection(
+    BuildContext context,
+    LocalFileServerService service,
+    LocalFileServerState state,
+  ) {
+    return [
+      Text(
+        '已连接终端 ${state.terminals.length}',
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      const SizedBox(height: 8),
+      if (state.terminals.isEmpty)
+        const Card(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('暂无已连接终端。'),
+          ),
+        ),
+      ...state.terminals.map(
+        (terminal) => Card(
+          child: ListTile(
+            leading: const Icon(Icons.devices_outlined),
+            title: Text(terminal.name),
+            subtitle: Text(
+              '${terminal.platform} · ${terminal.ip}\n${_terminalState(terminal)}',
+            ),
+            isThreeLine: true,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(
+                  onPressed: () => service.disconnectTerminal(terminal.id),
+                  child: const Text('断开'),
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+            onTap:
+                () => context.push(
+                  '/local-file-server/terminal/${Uri.encodeComponent(terminal.id)}',
+                ),
+          ),
+        ),
+      ),
+      if (service.recentTerminals.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Text(
+          '最近终端 ${service.recentTerminals.length}',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        ...service.recentTerminals.map(
+          (terminal) => Card(
+            child: ListTile(
+              leading: const Icon(Icons.devices_outlined),
+              title: Text(terminal.name),
+              subtitle: Text(
+                '${terminal.platform} · ${terminal.ip}\n已断开 · 最后活动 ${terminal.lastActiveAt.toLocal()}',
+              ),
+              isThreeLine: true,
+              trailing: const Icon(Icons.chevron_right),
+              onTap:
+                  () => context.push(
+                    '/local-file-server/terminal/${Uri.encodeComponent(terminal.id)}',
+                  ),
+            ),
+          ),
+        ),
+      ],
+    ];
   }
 
   String _statusText(LocalFileServerStatus status) {

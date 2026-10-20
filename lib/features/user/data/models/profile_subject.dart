@@ -100,12 +100,17 @@ class ProfileData {
         originalNickname.isNotEmpty && originalNickname != displayName;
 
     accountCode = firstNonEmpty(<Object?>[
+      destination['code'],
+      destination['accountCode'],
       owner['code'],
       subject.raw['code'],
+      subject.raw['accountCode'],
       subject.id,
     ]);
 
     region = firstNonEmpty(<Object?>[
+      destination['area'],
+      destination['region'],
       owner['area'],
       owner['region'],
       subject.raw['area'],
@@ -113,15 +118,21 @@ class ProfileData {
     ]);
 
     phone = firstNonEmpty(<Object?>[
+      destination['phone'],
+      destination['phoneNumber'],
       owner['phone'],
       owner['phoneNumber'],
       subject.raw['phone'],
       subject.raw['phoneNumber'],
     ]);
 
-    gender = asInt(owner['gender']) ?? asInt(subject.raw['gender']) ?? 0;
+    gender = asInt(destination['gender']) ??
+        asInt(owner['gender']) ??
+        asInt(subject.raw['gender']) ??
+        0;
 
     description = firstNonEmpty(<Object?>[
+      destination['description'],
       owner['description'],
       subject.raw['description'],
     ]);

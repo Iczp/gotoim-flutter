@@ -110,11 +110,14 @@ class TextMessageContent extends ConsumerWidget {
       ),
     );
 
+    final effectiveMaxWidth = maxWidth ?? double.infinity;
+    final effectiveMinWidth =
+        effectiveMaxWidth < 22.0 ? effectiveMaxWidth : 22.0;
     final bubble = ConstrainedBox(
       constraints: BoxConstraints(
-        minWidth: 22,
+        minWidth: effectiveMinWidth,
         minHeight: context.appTokens.chatMessageMinHeight,
-        maxWidth: maxWidth ?? double.infinity,
+        maxWidth: effectiveMaxWidth,
       ),
       child: MessageBubble(message: message, child: content),
     );

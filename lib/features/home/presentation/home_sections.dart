@@ -9,6 +9,7 @@ import '../../session/presentation/desktop_session_split_view.dart';
 import '../../session/presentation/session_list_page.dart';
 import '../../explore/presentation/explore_page.dart';
 import '../../contact/presentation/contacts_page.dart';
+import '../../contact/presentation/desktop_contacts_split_view.dart';
 import '../../workbench/presentation/workbench_page.dart';
 import '../../mine/presentation/mine_page.dart';
 
@@ -38,6 +39,9 @@ class HomeSectionPage extends ConsumerWidget {
       return SessionListPage(onOpenOwnerDrawer: onOpenOwnerDrawer);
     }
     if (section == HomeSection.contacts) {
+      if (isDesktop) {
+        return const DesktopContactsSplitView();
+      }
       return const ContactsPage();
     }
     if (section == HomeSection.workbench) {

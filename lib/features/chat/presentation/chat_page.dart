@@ -157,6 +157,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// 消息列表滚动控制器
   final ScrollController _scrollController = ScrollController();
 
+  /// 页面 Scaffold 状态 Key（用于桌面端展开右侧设置抽屉）
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   /// 底部输入组件 GlobalKey（用于外部控制失焦或取消录音）
   final GlobalKey<ChatComposerState> _composerKey =
       GlobalKey<ChatComposerState>();
@@ -193,7 +196,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       '| totalActivePages=$_activeInstanceCount'
       '${isDuplicate ? ' ⚠️ [DUPLICATE SESSION INSTANCE DETECTED]' : ''}',
     );
-    if (_activeInstanceCount > 1 || isDuplicate) {
+    if (!widget.isDesktop && (_activeInstanceCount > 1 || isDuplicate)) {
       debugPrint(
         '🚨🚨🚨 [ChatTrace]【检测到多个聊天窗口并发运行】🚨🚨🚨\n'
         '  ▶ 活跃窗口总数: $_activeInstanceCount\n'
@@ -295,6 +298,30 @@ class _ChatPageState extends ConsumerState<ChatPage>
             }
           },
           child: Scaffold(
+            key: _scaffoldKey,
+            endDrawer:
+                widget.isDesktop
+                    ? Drawer(
+                      width: 360,
+                      child: ChatSettingsPage(
+                        ownerId: widget.ownerId,
+                        sessionUnitId: widget.sessionUnitId,
+                        isDrawer: true,
+                        onClose:
+                            () => _scaffoldKey.currentState?.closeEndDrawer(),
+                        onMessagesCleared:
+                            () => controller.handleMessagesCleared(),
+                        onSessionLeft: () {
+                          _scaffoldKey.currentState?.closeEndDrawer();
+                          if (mounted) {
+                            ref
+                                .read(sessionListControllerProvider)
+                                .initialize();
+                          }
+                        },
+                      ),
+                    )
+                    : null,
             resizeToAvoidBottomInset: false,
             floatingActionButton:
                 controller.newMessageCount > 0
@@ -710,6 +737,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// 跳转至聊天会话设置页面（单聊/群聊成员、置顶、免打扰、清空记录等）
   Future<void> _openChatSettings() async {
     _closeInputArea();
+    if (widget.isDesktop) {
+      _scaffoldKey.currentState?.openEndDrawer();
+      return;
+    }
     final result = await context.push<ChatSettingsResult>(
       '/chat/${Uri.encodeComponent(widget.sessionUnitId)}/settings'
       '?ownerId=${widget.ownerId}',
@@ -1167,8 +1198,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
         .map((message) {
           final localFile =
               (message.localFilePath != null &&
-                      !kIsWeb &&
-                      File(message.localFilePath!).existsSync())
+                      message.localFilePath!.isNotEmpty &&
+                      !kIsWeb)
                   ? message.localFilePath
                   : null;
           final sourceUrl =
@@ -1187,8 +1218,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
               controller.attachmentState(message.localId).localPath;
           final validCachedPath =
               (cachedAttachmentPath != null &&
-                      !kIsWeb &&
-                      File(cachedAttachmentPath).existsSync())
+                      cachedAttachmentPath.isNotEmpty &&
+                      !kIsWeb)
                   ? cachedAttachmentPath
                   : localFile;
           return MediaPreviewItem(

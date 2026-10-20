@@ -972,23 +972,28 @@ class DefaultWindowService implements WindowService {
     if (isSubWindow) {
       return _requestMain({'type': 'browser', 'url': url, 'title': title});
     }
-    final targetId = 'browser:$url';
-    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
-      final pending = _pendingCreations[targetId];
-      if (pending != null) await pending;
-      await bringToFront(targetId);
-      return;
+    const targetId = 'tool:browser';
+    final payload = NativeWindowPayload(
+      type: SubWindowType.browser,
+      title: title ?? '网页浏览',
+      targetId: targetId,
+      url: url,
+      fallbackContent: fallbackContent,
+    );
+
+    if (isWindowOpen(targetId)) {
+      final controller = _nativeControllers[targetId];
+      if (controller != null) {
+        final currentTheme = themeModeProvider?.call() ?? 'system';
+        final effectivePayload = payload.copyWith(extra: {'themeMode': currentTheme});
+        await controller.invokeMethod('update_payload', effectivePayload.toJson());
+        await bringToFront(targetId);
+        return;
+      }
     }
 
     if (platformFacade.supportsMultipleWindows) {
       try {
-        final payload = NativeWindowPayload(
-          type: SubWindowType.browser,
-          title: title ?? '网页浏览',
-          targetId: targetId,
-          url: url,
-          fallbackContent: fallbackContent,
-        );
         await _openNativeSubWindow(
           targetId: targetId,
           type: WindowType.browser,
@@ -1051,14 +1056,7 @@ class DefaultWindowService implements WindowService {
       });
     }
 
-    final targetId = 'media:$mediaUrl';
-    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
-      final pending = _pendingCreations[targetId];
-      if (pending != null) await pending;
-      await bringToFront(targetId);
-      return;
-    }
-
+    const targetId = 'tool:media';
     final previewItems =
         items ??
         [
@@ -1075,32 +1073,44 @@ class DefaultWindowService implements WindowService {
           ),
         ];
 
+    final payload = NativeWindowPayload(
+      type: SubWindowType.media,
+      title: title ?? '媒体预览',
+      targetId: targetId,
+      url: mediaUrl,
+      initialIndex: initialIndex,
+      mediaItems:
+          previewItems
+              .map(
+                (i) => {
+                  'id': i.id,
+                  'messageId': i.messageId,
+                  'type': i.type.name,
+                  'source': i.source,
+                  'localPath': i.localPath,
+                  'userId': i.userId,
+                  'chatTarget': i.chatTarget,
+                  'createdAt': i.createdAt?.toIso8601String(),
+                  'fileName': i.fileName,
+                  'thumbnail': i.thumbnail,
+                },
+              )
+              .toList(),
+    );
+
+    if (isWindowOpen(targetId)) {
+      final controller = _nativeControllers[targetId];
+      if (controller != null) {
+        final currentTheme = themeModeProvider?.call() ?? 'system';
+        final effectivePayload = payload.copyWith(extra: {'themeMode': currentTheme});
+        await controller.invokeMethod('update_payload', effectivePayload.toJson());
+        await bringToFront(targetId);
+        return;
+      }
+    }
+
     if (platformFacade.supportsMultipleWindows) {
       try {
-        final payload = NativeWindowPayload(
-          type: SubWindowType.media,
-          title: title ?? '媒体预览',
-          targetId: targetId,
-          url: mediaUrl,
-          initialIndex: initialIndex,
-          mediaItems:
-              previewItems
-                  .map(
-                    (i) => {
-                      'id': i.id,
-                      'messageId': i.messageId,
-                      'type': i.type.name,
-                      'source': i.source,
-                      'localPath': i.localPath,
-                      'userId': i.userId,
-                      'chatTarget': i.chatTarget,
-                      'createdAt': i.createdAt?.toIso8601String(),
-                      'fileName': i.fileName,
-                      'thumbnail': i.thumbnail,
-                    },
-                  )
-                  .toList(),
-        );
         await _openNativeSubWindow(
           targetId: targetId,
           type: WindowType.media,
@@ -1146,11 +1156,12 @@ class DefaultWindowService implements WindowService {
 
     if (platformFacade.supportsMultipleWindows) {
       try {
+        final currentTheme = themeModeProvider?.call() ?? 'system';
         final payload = NativeWindowPayload(
           type: SubWindowType.settings,
           title: '设置',
           targetId: targetId,
-          extra: accountInfoProvider?.call(),
+          extra: {'themeMode': currentTheme},
         );
         await _openNativeSubWindow(
           targetId: targetId,
@@ -1160,7 +1171,7 @@ class DefaultWindowService implements WindowService {
         );
         return;
       } catch (e) {
-        debugPrint('[WindowService] Native settings window error: $e');
+        debugPrint('[WindowService] Native settings error: $e');
       }
     }
 
@@ -1176,7 +1187,14 @@ class DefaultWindowService implements WindowService {
       } finally {
         await closeWindow(targetId);
       }
+      return;
     }
+
+    _registerWindow(
+      targetId: targetId,
+      type: WindowType.settings,
+      title: '设置',
+    );
   }
 
   @override
@@ -1192,10 +1210,12 @@ class DefaultWindowService implements WindowService {
 
     if (platformFacade.supportsMultipleWindows) {
       try {
-        final payload = const NativeWindowPayload(
+        final currentTheme = themeModeProvider?.call() ?? 'system';
+        final payload = NativeWindowPayload(
           type: SubWindowType.diagnostics,
           title: '开发诊断中心',
           targetId: targetId,
+          extra: {'themeMode': currentTheme},
         );
         await _openNativeSubWindow(
           targetId: targetId,
@@ -1237,10 +1257,12 @@ class DefaultWindowService implements WindowService {
 
     if (platformFacade.supportsMultipleWindows) {
       try {
-        final payload = const NativeWindowPayload(
+        final currentTheme = themeModeProvider?.call() ?? 'system';
+        final payload = NativeWindowPayload(
           type: SubWindowType.localFileServer,
           title: '局域网快传',
           targetId: targetId,
+          extra: {'themeMode': currentTheme},
         );
         await _openNativeSubWindow(
           targetId: targetId,
@@ -1303,6 +1325,13 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
   ref.listen(trayGroupedUnreadProvider, (previous, next) {
     unawaited(service.updateTraySnapshot(next));
   });
+  ref.listen(themeModeControllerProvider, (previous, next) {
+    if (previous != next) {
+      unawaited(service.broadcastToAllSubWindows('theme_changed', {
+        'themeMode': next.name,
+      }));
+    }
+  });
   service = DefaultWindowService(
     platformFacade: platformFacade,
     traySnapshotProvider: () => ref.read(trayGroupedUnreadProvider),
@@ -1344,12 +1373,11 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
       final repo = ref.read(messageRepositoryProvider);
       final effectiveName =
           fileName ?? 'image_${DateTime.now().millisecondsSinceEpoch}.png';
-      final xfile = XFile.fromData(
+      final selected = await SelectedFile.fromBytes(
         Uint8List.fromList(bytes),
         name: effectiveName,
         mimeType: 'image/png',
       );
-      final selected = await SelectedFile.fromXFile(xfile);
       final local = await repo.createLocalImage(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,

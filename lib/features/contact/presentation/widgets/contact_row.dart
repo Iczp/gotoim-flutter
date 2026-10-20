@@ -9,58 +9,70 @@ class ContactRow extends StatelessWidget {
     required this.contact,
     required this.showDivider,
     required this.onTap,
+    this.isSelected = false,
+    this.onDoubleTap,
+    this.onSecondaryTapDown,
     super.key,
   });
 
   final ContactEntry contact;
   final bool showDivider;
   final VoidCallback onTap;
+  final bool isSelected;
+  final VoidCallback? onDoubleTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: onTap,
-      child: Row(
-        children: <Widget>[
-          const SizedBox(width: 16),
-          ChatObjectAvatar(
-            name: contact.displayName,
-            imageUrl: contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
-            radius: 21,
-            chatObjectId: contact.destinationId,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Container(
-              height: ContactsPageMetrics.rowExtent,
-              alignment: Alignment.centerLeft,
-              decoration:
-                  showDivider
-                      ? BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: Theme.of(
-                              context,
-                            ).dividerColor.withValues(alpha: .35),
-                            width: .5,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final activeBg = isDark ? const Color(0x3307C160) : const Color(0x1F07C160);
+
+    return Material(
+      color: isSelected ? activeBg : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        onDoubleTap: onDoubleTap,
+        onSecondaryTapDown: onSecondaryTapDown,
+        child: Row(
+          children: <Widget>[
+            const SizedBox(width: 16),
+            ChatObjectAvatar(
+              name: contact.displayName,
+              imageUrl: contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
+              radius: 21,
+              chatObjectId: contact.destinationId,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                height: ContactsPageMetrics.rowExtent,
+                alignment: Alignment.centerLeft,
+                decoration:
+                    showDivider && !isSelected
+                        ? BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: theme.dividerColor.withValues(alpha: .35),
+                              width: .5,
+                            ),
                           ),
-                        ),
-                      )
-                      : null,
-              child: Text(
-                contact.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
+                        )
+                        : null,
+                child: Text(
+                  contact.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

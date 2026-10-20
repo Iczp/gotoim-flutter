@@ -682,7 +682,10 @@ class _ScreenshotAnnotationDialogState
       final byteData =
           await _decodedImage!.toByteData(format: ui.ImageByteFormat.png);
       if (byteData != null) {
-        return byteData.buffer.asUint8List();
+        return byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        );
       }
       return widget.imageBytes;
     }
@@ -716,7 +719,10 @@ class _ScreenshotAnnotationDialogState
     );
     final byteData =
         await exportedImage.toByteData(format: ui.ImageByteFormat.png);
-    return byteData!.buffer.asUint8List();
+    return byteData!.buffer.asUint8List(
+      byteData.offsetInBytes,
+      byteData.lengthInBytes,
+    );
   }
 
   /// 钉在桌面上 (微信同款 Pin to Desktop)

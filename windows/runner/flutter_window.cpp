@@ -45,7 +45,9 @@ bool FlutterWindow::OnCreate() {
     RegisterWindowControls(flutter_view_controller->engine(), top_hwnd);
   });
   SetMainWindowHandle(GetHandle());
-  SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  HWND child_hwnd = flutter_controller_->view()->GetNativeWindow();
+  SetChildContent(child_hwnd);
+  AttachChildViewResizeSubclass(child_hwnd);
   RegisterWindowControls(flutter_controller_->engine(), GetHandle());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {

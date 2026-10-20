@@ -126,6 +126,33 @@ class LocalFileServerService extends ChangeNotifier {
     if (result.type != ResultType.done) throw StateError(result.message);
   }
 
+  Future<void> addLocalFiles(String parentPath, List<String> filePaths) async {
+    await _ensureShareRoot();
+    final parent = _resolve(parentPath);
+    for (final sourcePath in filePaths) {
+      final src = File(sourcePath);
+      if (await src.exists()) {
+        final fileName = _name(src.path);
+        final targetPath = '${parent.path}${Platform.pathSeparator}$fileName';
+        await src.copy(targetPath);
+      }
+    }
+    _broadcast({'type': 'files.changed'});
+    notifyListeners();
+  }
+
+  Future<void> revealInExplorer(String path) async {
+    await _ensureShareRoot();
+    final dir = _resolve(path);
+    if (Platform.isWindows) {
+      await Process.run('explorer.exe', [dir.path]);
+    } else if (Platform.isMacOS) {
+      await Process.run('open', [dir.path]);
+    } else if (Platform.isLinux) {
+      await Process.run('xdg-open', [dir.path]);
+    }
+  }
+
   Future<void> start() async {
     if (_server != null) {
       return;

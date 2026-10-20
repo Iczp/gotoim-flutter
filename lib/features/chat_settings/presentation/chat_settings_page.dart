@@ -25,10 +25,18 @@ class ChatSettingsPage extends ConsumerStatefulWidget {
   const ChatSettingsPage({
     required this.ownerId,
     required this.sessionUnitId,
+    this.isDrawer = false,
+    this.onClose,
+    this.onMessagesCleared,
+    this.onSessionLeft,
     super.key,
   });
   final int ownerId;
   final String sessionUnitId;
+  final bool isDrawer;
+  final VoidCallback? onClose;
+  final VoidCallback? onMessagesCleared;
+  final VoidCallback? onSessionLeft;
 
   @override
   ConsumerState<ChatSettingsPage> createState() => _ChatSettingsPageState();
@@ -64,7 +72,18 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
       animation: controller,
       builder:
           (context, _) => Scaffold(
-            appBar: AppBar(title: const Text('聊天设置')),
+            appBar: AppBar(
+              title: const Text('聊天设置'),
+              leading:
+                  widget.isDrawer
+                      ? IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: '关闭',
+                        onPressed:
+                            widget.onClose ?? () => Navigator.of(context).pop(),
+                      )
+                      : null,
+            ),
             body: RefreshIndicator(
               onRefresh: controller.refresh,
               child: ListView(
@@ -407,6 +426,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     if (!confirmed || !mounted) return;
     try {
       await controller.clearMessages();
+      widget.onMessagesCleared?.call();
       if (mounted) Navigator.pop(context, ChatSettingsResult.messagesCleared);
     } catch (error) {
       if (mounted) {
@@ -426,6 +446,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     if (!confirmed || !mounted) return;
     try {
       await controller.exitChat();
+      widget.onSessionLeft?.call();
       if (mounted) Navigator.pop(context, ChatSettingsResult.sessionLeft);
     } catch (error) {
       if (mounted) showToast('退出群聊失败：$error', type: ToastType.error);
@@ -443,6 +464,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     if (!confirmed || !mounted) return;
     try {
       await controller.unsubscribeOfficial();
+      widget.onSessionLeft?.call();
       if (mounted) Navigator.pop(context, ChatSettingsResult.sessionLeft);
     } catch (error) {
       if (mounted) showToast('取消关注失败：$error', type: ToastType.error);

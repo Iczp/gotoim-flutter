@@ -17,10 +17,18 @@ import 'package:gotoim_flutter/core/services/tray_service.dart';
 import 'package:gotoim_flutter/core/services/window_messenger.dart';
 import 'package:gotoim_flutter/core/services/window_service.dart';
 import 'package:gotoim_flutter/features/auth/application/auth_controller.dart';
+import 'package:gotoim_flutter/features/chat_settings/application/chat_settings_controller.dart';
+import 'package:gotoim_flutter/features/chat_settings/data/models/chat_member.dart';
+import 'package:gotoim_flutter/features/chat_settings/data/repositories/chat_settings_repository.dart';
+import 'package:gotoim_flutter/features/chat_settings/presentation/chat_settings_page.dart';
+import 'package:gotoim_flutter/features/contact/application/contacts_controller.dart';
+import 'package:gotoim_flutter/features/contact/data/models/contact_group.dart';
+import 'package:gotoim_flutter/features/contact/presentation/desktop_contacts_split_view.dart';
 import 'package:gotoim_flutter/features/media/presentation/desktop_media_viewer_window.dart';
 import 'package:gotoim_flutter/features/session/application/session_list_controller.dart';
 import 'package:gotoim_flutter/features/session/data/models/chat_owner.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
+import 'package:gotoim_flutter/features/session/data/repositories/session_repository.dart';
 import 'package:gotoim_flutter/features/session/presentation/desktop_session_split_view.dart';
 import 'package:gotoim_flutter/features/settings/presentation/desktop_settings_window.dart';
 
@@ -32,6 +40,9 @@ class _FakeDesktopPlatformFacade implements PlatformFacade {
 
   @override
   bool get isWeb => false;
+
+  @override
+  bool get isDesktop => true;
 
   @override
   bool get supportsMultipleWindows => true;
@@ -62,7 +73,25 @@ class _MockSessionListController extends ChangeNotifier
   int? get currentOwnerId => 1001;
 
   @override
+  int? get totalCount => _sessions.length;
+
+  @override
   Future<void> initialize({bool forceRemote = false}) async {}
+
+  @override
+  bool get hasMore => false;
+
+  @override
+  bool get isLoading => false;
+
+  @override
+  Object? get error => null;
+
+  @override
+  SessionRealtimeStatus get connectionState => SessionRealtimeStatus.connected;
+
+  @override
+  bool isAiRunning(String id) => false;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -86,6 +115,127 @@ class _MockAuthController extends ChangeNotifier implements AuthController {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+class _MockContactsController extends ChangeNotifier
+    implements ContactsController {
+  _MockContactsController(this._groups);
+
+  final List<ContactGroup> _groups;
+
+  @override
+  List<ContactGroup> get groups => _groups;
+
+  @override
+  int get totalCount => _groups.fold(0, (sum, g) => sum + g.count);
+
+  @override
+  int? get ownerId => 1001;
+
+  @override
+  bool get isLoading => false;
+
+  @override
+  bool get isRefreshing => false;
+
+  @override
+  Object? get error => null;
+
+  @override
+  Future<void> initialize(int? ownerId) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeChatSettingsRepository implements ChatSettingsRepository {
+  @override
+  Future<MemberPage> loadMembers({
+    required int ownerId,
+    required String sessionUnitId,
+    int? cursorScore,
+    String? cursorId,
+    int limit = 30,
+    String keyword = '',
+    bool forceRemote = false,
+  }) async => const MemberPage(<ChatMember>[], false, 0);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeSessionRepository implements SessionRepository {
+  @override
+  Future<SessionSummary?> loadLocalFriendDetail(String sessionUnitId) async =>
+      null;
+
+  @override
+  Future<SessionSummary> loadRemoteFriendDetail({
+    required int ownerId,
+    required String sessionUnitId,
+  }) async => throw UnimplementedError();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final _sampleContactGroups = <ContactGroup>[
+  const ContactGroup(
+    index: 'A',
+    contacts: [
+      ContactEntry(
+        id: 'contact_1',
+        ownerId: 1001,
+        objectType: 0,
+        name: '爱丽丝 (Alice)',
+        rename: '爱丽丝 (Alice)',
+        abbr: 'ALS',
+        nameSpelling: 'ailisi',
+        portrait: '',
+        thumbnail: '',
+        raw: {
+          'id': 'contact_1',
+          'ownerId': 1001,
+          'destination': {
+            'name': '爱丽丝',
+            'displayName': '爱丽丝 (Alice)',
+            'accountCode': 'alice_gotoim',
+            'gender': 2,
+            'region': '中国 上海',
+            'description': '代码即诗歌',
+          },
+        },
+      ),
+    ],
+  ),
+  const ContactGroup(
+    index: 'B',
+    contacts: [
+      ContactEntry(
+        id: 'contact_2',
+        ownerId: 1001,
+        objectType: 0,
+        name: 'Bob 鲍勃',
+        rename: 'Bob 鲍勃',
+        abbr: 'BB',
+        nameSpelling: 'baobo',
+        portrait: '',
+        thumbnail: '',
+        raw: {
+          'id': 'contact_2',
+          'ownerId': 1001,
+          'destination': {
+            'name': '鲍勃',
+            'displayName': 'Bob 鲍勃',
+            'accountCode': 'bob_gotoim',
+            'gender': 1,
+            'region': '中国 北京',
+            'description': '分布式系统与高可用架构师',
+          },
+        },
+      ),
+    ],
+  ),
+];
 
 final _testTheme = ThemeData(
   useMaterial3: true,
@@ -303,7 +453,7 @@ void main() {
         url: 'https://news.qq.com',
         title: '腾讯新闻',
       );
-      expect(windowService.isWindowOpen('browser:https://news.qq.com'), isTrue);
+      expect(windowService.isWindowOpen('tool:browser'), isTrue);
 
       // 打开媒体查看器
       await windowService.openMediaViewer(
@@ -320,7 +470,7 @@ void main() {
         initialIndex: 0,
       );
       expect(
-        windowService.isWindowOpen('media:https://im.gotoim.com/image.png'),
+        windowService.isWindowOpen('tool:media'),
         isTrue,
       );
 
@@ -430,13 +580,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('后端 ABP vNext 实时通信群'), findsOneWidget);
-      expect(find.text('折叠置顶聊天 (2)'), findsOneWidget);
-      expect(find.text('Goto IM 桌面端'), findsOneWidget);
-
-      // 点击展开折叠置顶聊天
-      await tester.tap(find.text('折叠置顶聊天 (2)'));
-      await tester.pumpAndSettle();
-
+      expect(find.text('以上是置顶会话 (2)'), findsOneWidget);
+      expect(find.text('GotoIM 架构师'), findsWidgets);
       expect(find.text('产品研发与架构重构攻坚组'), findsOneWidget);
       expect(find.text('微信桌面端 4.0 视觉专项'), findsOneWidget);
 
@@ -545,8 +690,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('后端 ABP vNext 实时通信群'), findsOneWidget);
-      await tester.tap(find.text('折叠置顶聊天 (2)'));
-      await tester.pumpAndSettle();
+      expect(find.text('以上是置顶会话 (2)'), findsOneWidget);
       expect(find.text('产品研发与架构重构攻坚组'), findsOneWidget);
 
       await _captureToDisk(
@@ -588,8 +732,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('后端 ABP vNext 实时通信群'), findsOneWidget);
-      await tester.tap(find.text('折叠置顶聊天 (2)'));
-      await tester.pumpAndSettle();
+      expect(find.text('以上是置顶会话 (2)'), findsOneWidget);
       expect(find.text('产品研发与架构重构攻坚组'), findsOneWidget);
 
       await _captureToDisk(
@@ -923,6 +1066,116 @@ void main() {
         tester: tester,
         filename: 'screenshot_desktop_tray_menu.png',
       );
+    });
+
+    testWidgets('10. 桌面端通讯录三栏布局 (DesktopContactsSplitView) 渲染、详细资料卡与发消息联动测试', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final repaintKey = GlobalKey();
+      final sessionController = _MockSessionListController(_sampleSessions);
+      final contactsController = _MockContactsController(_sampleContactGroups);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appEnvironmentProvider.overrideWithValue(
+              AppEnvironment.fromDotEnv(AppFlavor.development),
+            ),
+            clientDeviceContextProvider.overrideWithValue(fakeDevice),
+            sessionListControllerProvider.overrideWith((ref) => sessionController),
+            contactsControllerProvider.overrideWith((ref) => contactsController),
+          ],
+          child: MaterialApp(
+            theme: _testTheme,
+            home: RepaintBoundary(
+              key: repaintKey,
+              child: const Scaffold(
+                body: DesktopContactsSplitView(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // 验证中栏快捷入口与联系人列表
+      expect(find.text('新的朋友'), findsOneWidget);
+      expect(find.text('群聊'), findsOneWidget);
+      expect(find.text('标签'), findsOneWidget);
+      expect(find.text('爱丽丝 (Alice)'), findsOneWidget);
+      expect(find.text('Bob 鲍勃'), findsOneWidget);
+
+      // 验证未选择时右栏展示空状态
+      expect(find.text('请从左侧列表中选择联系人查看详细资料'), findsOneWidget);
+
+      // 点击中栏联系人「爱丽丝 (Alice)」
+      await tester.tap(find.text('爱丽丝 (Alice)'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      // 验证第三栏详情卡渲染
+      expect(find.text('微信号: alice_gotoim'), findsOneWidget);
+      expect(find.text('中国 上海'), findsOneWidget);
+      expect(find.text('代码即诗歌'), findsOneWidget);
+      expect(find.text('发消息'), findsOneWidget);
+      expect(find.text('音视频通话'), findsOneWidget);
+
+      // 截取桌面端通讯录三栏渲染图
+      await _captureToDisk(
+        key: repaintKey,
+        tester: tester,
+        filename: 'screenshot_desktop_contacts_wide_1280x800.png',
+      );
+    });
+
+    testWidgets('11. 桌面端聊天设置抽屉模式 (ChatSettingsPage isDrawer) 测试', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      var closed = false;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appEnvironmentProvider.overrideWithValue(
+              AppEnvironment.fromDotEnv(AppFlavor.development),
+            ),
+            chatSettingsRepositoryProvider.overrideWith(
+              (ref) => _FakeChatSettingsRepository(),
+            ),
+            sessionRepositoryProvider.overrideWith(
+              (ref) => _FakeSessionRepository(),
+            ),
+          ],
+          child: MaterialApp(
+            theme: _testTheme,
+            home: ChatSettingsPage(
+              ownerId: 1001,
+              sessionUnitId: 's_pin_1',
+              isDrawer: true,
+              onClose: () => closed = true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.widgetWithText(AppBar, '聊天设置'), findsOneWidget);
+      expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pump();
+
+      expect(closed, isTrue);
     });
   });
 }

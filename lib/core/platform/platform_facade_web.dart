@@ -2,7 +2,7 @@ import 'platform_contract.dart';
 
 PlatformFacade createPlatformFacade() => const _WebPlatformFacade();
 
-class _WebPlatformFacade implements PlatformFacade {
+class _WebPlatformFacade extends PlatformFacade {
   const _WebPlatformFacade();
 
   @override

@@ -54,6 +54,7 @@ class DesktopSettingsWindow extends ConsumerStatefulWidget {
   static Future<void> open(BuildContext context) {
     return showDialog<void>(
       context: context,
+      barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (_) => const DesktopSettingsWindow(),
     );
@@ -550,7 +551,19 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     );
 
     if (widget.isSubWindow) {
-      return Material(color: windowBg, child: SizedBox.expand(child: body));
+      return Material(
+        color: windowBg,
+        child: Container(
+          decoration: BoxDecoration(
+            color: windowBg,
+            border: Border.all(
+              color: isDark ? const Color(0xFF454548) : const Color(0xFFD4D4D8),
+              width: 1.0,
+            ),
+          ),
+          child: SizedBox.expand(child: body),
+        ),
+      );
     }
 
     return Center(
@@ -562,6 +575,10 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
           decoration: BoxDecoration(
             color: windowBg,
             borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? const Color(0xFF454548) : const Color(0xFFD4D4D8),
+              width: 1.0,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.38),
@@ -595,16 +612,38 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
         onClose: _handleClose,
       );
     }
-    return AppBar(
-      title: const Text('设置'),
-      automaticallyImplyLeading: false,
-      actions: [
-        IconButton(
-          tooltip: '关闭',
-          icon: const Icon(Icons.close),
-          onPressed: _handleClose,
-        ),
-      ],
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border(bottom: BorderSide(color: border, width: 0.5)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '设置',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          ),
+          InkWell(
+            borderRadius: BorderRadius.circular(4),
+            onTap: _handleClose,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.close,
+                size: 16,
+                color: isDark ? Colors.white60 : Colors.black54,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
