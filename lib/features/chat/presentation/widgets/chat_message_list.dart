@@ -83,62 +83,65 @@ class ChatMessageList extends StatelessWidget {
                     error: error,
                     onRetry: onLoadMore,
                   )
-                  : RawScrollbar(
-                      controller: scrollController,
-                      thumbVisibility: false, // 仅在手指拖拽/滑动时显现，停止后自动淡出
-                      thumbColor:
-                          isDark
-                              ? Colors.white.withValues(alpha: 0.28)
-                              : Colors.black.withValues(alpha: 0.22),
-                      thickness: 3.0, // 极细 3px
-                      radius: const Radius.circular(2),
-                      fadeDuration: const Duration(milliseconds: 250),
-                      timeToFade: const Duration(milliseconds: 800),
-                      interactive: false, // 纯指示条，不干扰气泡长按或手势
-                      child: ListView.builder(
+                  : Align(
+                      alignment: Alignment.topCenter,
+                      child: RawScrollbar(
                         controller: scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.manual,
-                        reverse: true,
-                        shrinkWrap: false,
-                        findChildIndexCallback: (key) {
-                          if (key is! ValueKey<String>) return null;
-                          final index = messages.indexWhere(
-                            (message) => message.localId == key.value,
-                          );
-                          return index < 0
-                              ? null
-                              : transientItems.length + index;
-                        },
-                        padding: padding,
-                        itemCount: transientItems.length + messages.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index < transientItems.length) {
-                            return transientItems[index];
-                          }
-                          final messageIndex = index - transientItems.length;
-                          if (messageIndex == messages.length) {
-                            return _ChatHistoryFooter(
-                              isLoading: isLoading,
-                              hasMore: hasMore,
-                              error: error,
-                              onLoadMore: onLoadMore,
+                        thumbVisibility: false, // 仅在手指拖拽/滑动时显现，停止后自动淡出
+                        thumbColor:
+                            isDark
+                                ? Colors.white.withValues(alpha: 0.28)
+                                : Colors.black.withValues(alpha: 0.22),
+                        thickness: 3.0, // 极细 3px
+                        radius: const Radius.circular(2),
+                        fadeDuration: const Duration(milliseconds: 250),
+                        timeToFade: const Duration(milliseconds: 800),
+                        interactive: false, // 纯指示条，不干扰气泡长按或手势
+                        child: ListView.builder(
+                          controller: scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.manual,
+                          reverse: true,
+                          shrinkWrap: true,
+                          findChildIndexCallback: (key) {
+                            if (key is! ValueKey<String>) return null;
+                            final index = messages.indexWhere(
+                              (message) => message.localId == key.value,
                             );
-                          }
-                          final message = messages[messageIndex];
-                          final shouldAnimate =
-                              shouldAnimateMessage?.call(message.localId) ??
-                              false;
-                          return _MessageEntryTransition(
-                            key: ValueKey<String>(message.localId),
-                            animate: shouldAnimate,
-                            onAnimationEnd: () {
-                              onMessageAnimated?.call(message.localId);
-                            },
-                            child: itemBuilder(context, message, messageIndex),
-                          );
-                        },
+                            return index < 0
+                                ? null
+                                : transientItems.length + index;
+                          },
+                          padding: padding,
+                          itemCount: transientItems.length + messages.length + 1,
+                          itemBuilder: (context, index) {
+                            if (index < transientItems.length) {
+                              return transientItems[index];
+                            }
+                            final messageIndex = index - transientItems.length;
+                            if (messageIndex == messages.length) {
+                              return _ChatHistoryFooter(
+                                isLoading: isLoading,
+                                hasMore: hasMore,
+                                error: error,
+                                onLoadMore: onLoadMore,
+                              );
+                            }
+                            final message = messages[messageIndex];
+                            final shouldAnimate =
+                                shouldAnimateMessage?.call(message.localId) ??
+                                false;
+                            return _MessageEntryTransition(
+                              key: ValueKey<String>(message.localId),
+                              animate: shouldAnimate,
+                              onAnimationEnd: () {
+                                onMessageAnimated?.call(message.localId);
+                              },
+                              child: itemBuilder(context, message, messageIndex),
+                            );
+                          },
+                        ),
                       ),
                     ),
         ),

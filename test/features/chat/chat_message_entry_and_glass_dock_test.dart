@@ -181,5 +181,53 @@ void main() {
       // 动画完成后已从 animatingIds 移除
       expect(animatingIds.contains('2'), isFalse);
     });
+
+    testWidgets(
+      'When messages do not fill the screen, they are aligned to the top and not stuck at the bottom',
+      (tester) async {
+        tester.view.physicalSize = const Size(400, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        final scroll = ScrollController();
+        addTearDown(scroll.dispose);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 400,
+                height: 800,
+                child: ChatMessageList(
+                  messages: [
+                    createMessage('1', '顶部消息 1'),
+                    createMessage('2', '顶部消息 2'),
+                  ],
+                  scrollController: scroll,
+                  isLoading: false,
+                  hasMore: false,
+                  error: null,
+                  onViewingLatestChanged: (_) {},
+                  onLoadMore: () async {},
+                  onTapOutside: () {},
+                  itemBuilder: (_, message, _) => SizedBox(
+                    height: 50,
+                    child: Text(message.text),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 验证消息位于屏幕顶部（dy < 300），而不是沉在底部（dy > 600）
+        final msg1Top = tester.getTopLeft(find.text('顶部消息 1')).dy;
+        final msg2Top = tester.getTopLeft(find.text('顶部消息 2')).dy;
+
+        expect(msg1Top, lessThan(300.0), reason: '不满屏时，消息应当位于顶部');
+        expect(msg2Top, lessThan(300.0), reason: '不满屏时，消息应当位于顶部');
+      },
+    );
   });
 }
