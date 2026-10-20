@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/compliance/agreement_viewer_page.dart';
 import '../../../core/compliance/privacy_service.dart';
+import '../../../core/native_window/desktop_window_title_bar.dart';
+import '../../../core/platform/windows/windows_window_adapter.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/glass_container.dart';
@@ -39,6 +41,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void initState() {
     super.initState();
     _agreeTerms = ref.read(privacyServiceProvider).hasAgreed;
+    if (WindowsWindowAdapter.isWindows) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WindowsWindowAdapter.setupCustomTitleBar();
+      });
+    }
   }
 
   @override
@@ -151,6 +158,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final colorScheme = theme.colorScheme;
     final themeMode = ref.watch(themeModeProvider);
     final isDark = theme.brightness == Brightness.dark;
+    final isNativeDesktop =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
 
     return Scaffold(
       body: Stack(
@@ -193,7 +205,45 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             ),
           ),
 
-          SafeArea(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (isNativeDesktop)
+                DesktopWindowTitleBar(
+                  title: 'Goto IM',
+                  leading: const Icon(
+                    Icons.chat_bubble_rounded,
+                    size: 16,
+                    color: Color(0xFF07C160),
+                  ),
+                  showPin: false,
+                  backgroundColor: isDark
+                      ? const Color(0xFF1E1E1E).withValues(alpha: 0.85)
+                      : const Color(0xFFF7F7F7).withValues(alpha: 0.85),
+                  actions: [
+                    IconButton(
+                      tooltip: '切换浅色/深色主题',
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        themeMode == ThemeMode.dark
+                            ? Icons.dark_mode_rounded
+                            : themeMode == ThemeMode.light
+                            ? Icons.light_mode_rounded
+                            : Icons.brightness_auto_rounded,
+                        size: 16,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      onPressed: () => ref
+                          .read(themeModeControllerProvider.notifier)
+                          .toggleTheme(),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  onClose: WindowsWindowAdapter.close,
+                ),
+              Expanded(
+                child: SafeArea(
+                  top: !isNativeDesktop,
             child: Stack(
               children: [
                 Positioned(
