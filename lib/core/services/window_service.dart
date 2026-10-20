@@ -12,6 +12,7 @@ import '../../features/chat/application/chat_controller.dart';
 import '../../features/chat/data/models/chat_message.dart';
 import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/data/session_change_bus.dart';
+import '../../features/settings/presentation/desktop_settings_window.dart';
 import '../media/media_preview.dart';
 import '../native_window/native_window_payload.dart';
 import '../platform/platform_facade.dart';
@@ -1183,7 +1184,11 @@ class DefaultWindowService implements WindowService {
         title: '设置',
       );
       try {
-        await context.push('/settings');
+        if (platformFacade.isDesktop) {
+          await DesktopSettingsWindow.open(context);
+        } else {
+          await context.push('/settings');
+        }
       } finally {
         await closeWindow(targetId);
       }

@@ -6,6 +6,7 @@ import '../core/capabilities/client_capability_service.dart';
 import '../core/device/client_device_context.dart';
 import '../core/device/device_registration_api.dart';
 import '../core/database/unified_database.dart';
+import '../core/services/file/file_upload_service.dart';
 import '../core/jsbridge/js_api_dispatcher.dart';
 import '../core/network/api_client.dart';
 import '../core/network/dio_api_client.dart';
@@ -23,6 +24,7 @@ import '../core/services/file/file_picker_service.dart';
 import '../core/services/media/media_service.dart';
 import '../core/services/scan/scan_code_service.dart';
 import '../features/auth/data/openid_connect_auth_repository.dart';
+import 'app_navigation.dart';
 
 /// Composition-root providers. Feature pages depend on repositories/use cases,
 /// not on this transport provider or Dio directly.
@@ -91,18 +93,21 @@ final clientCapabilityServiceProvider = Provider<ClientCapabilityService>(
 
 /// JSON request/response dispatcher used by WebView adapters and diagnostics.
 final jsApiDispatcherProvider = Provider<JsApiDispatcher>(
-  (ref) =>
-      throw UnimplementedError(
-        'JsApiDispatcher must be provided at bootstrap.',
+  (ref) {
+    final environment = ref.watch(appEnvironmentProvider);
+    return JsApiDispatcher(
+      capabilities: ref.watch(clientCapabilityServiceProvider),
+      navigatorProvider: () => rootNavigatorKey.currentState,
+      uploadService: DioFileUploadService(
+        allowedHosts: environment.jsBridgeUploadAllowedHosts,
       ),
+    );
+  },
 );
 
 /// The single SQL database shared by native and Web clients.
 final unifiedDatabaseProvider = Provider<UnifiedDatabase>(
-  (ref) =>
-      throw UnimplementedError(
-        'UnifiedDatabase must be provided at bootstrap.',
-      ),
+  (ref) => UnifiedDatabase.openDefault(),
 );
 
 /// Development-only LAN Remote DevTools server. Bootstrap supplies its single

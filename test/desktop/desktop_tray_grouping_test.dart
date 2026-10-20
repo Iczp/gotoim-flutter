@@ -251,7 +251,7 @@ void main() {
       expect(decoration.border, isNull, reason: '托盘浮窗必须无边框');
     });
 
-    testWidgets('DesktopSettingsWindow 渲染无边框 (border == null)', (tester) async {
+    testWidgets('DesktopSettingsWindow 渲染圆角倒角 (borderRadius == 12)', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1280, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -284,7 +284,7 @@ void main() {
                 (c.decoration as BoxDecoration).boxShadow != null),
       );
       final decoration = settingsContainer.decoration as BoxDecoration;
-      expect(decoration.border, isNull, reason: '设置窗口必须无边框');
+      expect(decoration.borderRadius, BorderRadius.circular(12), reason: '设置窗口必须有12dp圆角倒角');
     });
 
     testWidgets('DesktopBrowserWindow 渲染无边框 (border == null)', (tester) async {

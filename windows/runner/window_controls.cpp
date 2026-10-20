@@ -10,6 +10,14 @@
 #include <memory>
 
 #pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "dwmapi.lib")
+
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+#ifndef DWMWCP_ROUND
+#define DWMWCP_ROUND 2
+#endif
 
 static HWND g_main_window = nullptr;
 
@@ -139,6 +147,8 @@ void ConfigureSubWindowNative(HWND sub_hwnd, HWND child_hwnd) {
   }
   const MARGINS margins = {0, 0, 0, 1};
   DwmExtendFrameIntoClientArea(sub_hwnd, &margins);
+  const int corner_pref = DWMWCP_ROUND;
+  DwmSetWindowAttribute(sub_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_pref, sizeof(corner_pref));
   SetWindowPos(sub_hwnd, nullptr, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED |
                SWP_NOACTIVATE);
@@ -357,8 +367,11 @@ class WindowControls : public flutter::Plugin {
         is_modal_ = modal && *modal;
         if (is_modal_) {
           LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
-          style &= ~(WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CAPTION | WS_SYSMENU);
+          style &= ~(WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CAPTION | WS_SYSMENU);
+          style |= WS_THICKFRAME;
           SetWindowLongPtr(hwnd, GWL_STYLE, style);
+          const int corner_pref = DWMWCP_ROUND;
+          DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_pref, sizeof(corner_pref));
           if (g_main_window && IsWindow(g_main_window) && g_main_window != hwnd) {
             SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window));
             EnableWindow(g_main_window, FALSE);
@@ -457,6 +470,8 @@ class WindowControls : public flutter::Plugin {
     }
     const MARGINS margins = {0, 0, 0, 1};
     DwmExtendFrameIntoClientArea(hwnd, &margins);
+    const int corner_pref = DWMWCP_ROUND;
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_pref, sizeof(corner_pref));
   }
   flutter::PluginRegistrarWindows* registrar_;
   HWND explicit_hwnd_ = nullptr;
