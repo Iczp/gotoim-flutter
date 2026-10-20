@@ -24,6 +24,9 @@ class _FakeDesktopPlatformFacade implements PlatformFacade {
   bool get isWeb => false;
 
   @override
+  bool get isDesktop => true;
+
+  @override
   bool get supportsMultipleWindows => true;
 
   @override

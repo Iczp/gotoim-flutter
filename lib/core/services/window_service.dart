@@ -11,6 +11,7 @@ import '../../features/auth/application/auth_controller.dart';
 import '../../features/chat/application/chat_controller.dart';
 import '../../features/chat/data/models/chat_message.dart';
 import '../../features/session/application/session_list_controller.dart';
+import '../../features/session/data/models/chat_owner.dart';
 import '../../features/session/data/session_change_bus.dart';
 import '../../features/settings/presentation/desktop_settings_window.dart';
 import '../media/media_preview.dart';
@@ -136,6 +137,9 @@ abstract class WindowService {
 
   Future<void> openTrayFlyout();
 
+  /// 切换当前激活的聊天身份并聚焦主视窗
+  Future<void> switchOwner(int ownerId);
+
   /// 激活或置顶已有窗口
   Future<void> bringToFront(String targetId);
 
@@ -213,6 +217,7 @@ class DefaultWindowService implements WindowService {
     this.themeModeProvider,
     this.traySnapshotProvider,
     this.trayCommand,
+    this.switchOwnerHandler,
     this.isSubWindow = false,
   }) {
     _ensureIpcInitialized();
@@ -220,6 +225,7 @@ class DefaultWindowService implements WindowService {
 
   final PlatformFacade platformFacade;
   Future<void> Function(Map arguments)? trayCommand;
+  final Future<void> Function(int ownerId)? switchOwnerHandler;
   final bool isSubWindow;
   final TrayGroupedUnreadState Function()? traySnapshotProvider;
   static const _mainChannel = WindowMethodChannel(
@@ -414,10 +420,22 @@ class DefaultWindowService implements WindowService {
           case 'focus_main':
             await bringToFront('main');
             return true;
+          case 'switch_owner':
+            final args = call.arguments as Map?;
+            final ownerId = (args?['ownerId'] as num?)?.toInt();
+            if (ownerId != null) {
+              await switchOwner(ownerId);
+            }
+            return true;
           case 'open_window':
             final args = call.arguments as Map?;
             final type = args?['type'] as String?;
-            if (type == 'tray') {
+            if (type == 'switch_owner') {
+              final ownerId = (args?['ownerId'] as num?)?.toInt();
+              if (ownerId != null) {
+                await switchOwner(ownerId);
+              }
+            } else if (type == 'tray') {
               await openTrayFlyout();
             } else if (type == 'browser') {
               await openWebBrowser(
@@ -519,6 +537,15 @@ class DefaultWindowService implements WindowService {
       );
     }
     return false;
+  }
+
+  @override
+  Future<void> switchOwner(int ownerId) async {
+    if (isSubWindow) {
+      return _requestMain({'type': 'switch_owner', 'ownerId': ownerId});
+    }
+    await switchOwnerHandler?.call(ownerId);
+    await bringToFront('main');
   }
 
   @override
@@ -986,8 +1013,13 @@ class DefaultWindowService implements WindowService {
       final controller = _nativeControllers[targetId];
       if (controller != null) {
         final currentTheme = themeModeProvider?.call() ?? 'system';
-        final effectivePayload = payload.copyWith(extra: {'themeMode': currentTheme});
-        await controller.invokeMethod('update_payload', effectivePayload.toJson());
+        final effectivePayload = payload.copyWith(
+          extra: {'themeMode': currentTheme},
+        );
+        await controller.invokeMethod(
+          'update_payload',
+          effectivePayload.toJson(),
+        );
         await bringToFront(targetId);
         return;
       }
@@ -1103,8 +1135,13 @@ class DefaultWindowService implements WindowService {
       final controller = _nativeControllers[targetId];
       if (controller != null) {
         final currentTheme = themeModeProvider?.call() ?? 'system';
-        final effectivePayload = payload.copyWith(extra: {'themeMode': currentTheme});
-        await controller.invokeMethod('update_payload', effectivePayload.toJson());
+        final effectivePayload = payload.copyWith(
+          extra: {'themeMode': currentTheme},
+        );
+        await controller.invokeMethod(
+          'update_payload',
+          effectivePayload.toJson(),
+        );
         await bringToFront(targetId);
         return;
       }
@@ -1195,11 +1232,7 @@ class DefaultWindowService implements WindowService {
       return;
     }
 
-    _registerWindow(
-      targetId: targetId,
-      type: WindowType.settings,
-      title: '设置',
-    );
+    _registerWindow(targetId: targetId, type: WindowType.settings, title: '设置');
   }
 
   @override
@@ -1332,14 +1365,32 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
   });
   ref.listen(themeModeControllerProvider, (previous, next) {
     if (previous != next) {
-      unawaited(service.broadcastToAllSubWindows('theme_changed', {
-        'themeMode': next.name,
-      }));
+      unawaited(
+        service.broadcastToAllSubWindows('theme_changed', {
+          'themeMode': next.name,
+        }),
+      );
     }
   });
   service = DefaultWindowService(
     platformFacade: platformFacade,
     traySnapshotProvider: () => ref.read(trayGroupedUnreadProvider),
+    switchOwnerHandler: (ownerId) async {
+      try {
+        final controller = ref.read(sessionListControllerProvider);
+        final target = controller.owners.firstWhere(
+          (o) => o.id == ownerId,
+          orElse:
+              () => ChatOwner(
+                id: ownerId,
+                name: '',
+                imageUrl: null,
+                typeDescription: '',
+              ),
+        );
+        await controller.selectOwner(target);
+      } catch (_) {}
+    },
     themeModeProvider: () {
       try {
         return ref.read(themeModeControllerProvider).name;

@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/application_providers.dart';
+import '../../features/session/application/session_list_controller.dart';
+import '../../features/session/data/datasources/session_dao.dart';
 import '../../features/session/data/models/chat_owner.dart';
 import '../../features/session/data/models/session_summary.dart';
 import 'tray_message_models.dart';
@@ -241,6 +245,14 @@ class TrayGroupedUnreadNotifier extends Notifier<TrayGroupedUnreadState> {
       (sum, s) => sum + s.unreadCount,
     );
 
+    // 保留非当前身份此前已经拉取到的会话详情，避免被覆盖为空
+    final existingSessionsByOwner = <int, List<TraySessionItem>>{};
+    for (final g in state.groups) {
+      if (g.sessions.isNotEmpty) {
+        existingSessionsByOwner[g.ownerId] = g.sessions;
+      }
+    }
+
     final groups = <TrayOwnerGroup>[];
     if (currentGroupTotal > 0 || allOwners.length > 1) {
       groups.add(
@@ -256,9 +268,14 @@ class TrayGroupedUnreadNotifier extends Notifier<TrayGroupedUnreadState> {
     }
 
     // 其它身份的未读统计
+    final ownersToPreload = <int>[];
     for (final owner in allOwners) {
       if (owner.id == currentOwner.id) continue;
       if (owner.unreadCount > 0) {
+        final existing = existingSessionsByOwner[owner.id] ?? const [];
+        if (existing.isEmpty) {
+          ownersToPreload.add(owner.id);
+        }
         groups.add(
           TrayOwnerGroup(
             ownerId: owner.id,
@@ -266,7 +283,7 @@ class TrayGroupedUnreadNotifier extends Notifier<TrayGroupedUnreadState> {
             isCurrent: false,
             roleTitle: owner.typeDescription,
             totalUnread: owner.unreadCount,
-            sessions: const [],
+            sessions: existing,
           ),
         );
       }
@@ -275,6 +292,100 @@ class TrayGroupedUnreadNotifier extends Notifier<TrayGroupedUnreadState> {
     final total = groups.fold<int>(0, (sum, g) => sum + g.totalUnread);
     state = TrayGroupedUnreadState(totalUnread: total, groups: groups);
     _syncWithTrayService();
+
+    // 后台静默加载本地数据库已有会话
+    for (final ownerId in ownersToPreload) {
+      unawaited(_loadLocalSessionsForOwner(ownerId));
+    }
+  }
+
+  Future<void> _loadLocalSessionsForOwner(int ownerId) async {
+    try {
+      final db = ref.read(unifiedDatabaseProvider);
+      final dao = SessionDao(db);
+      final friends = await dao.readPage(ownerId: ownerId, limit: 30);
+      final unread =
+          friends.where((f) => f.unreadCount > 0).map((s) {
+            final dest = s.raw['destination'];
+            final isGroup =
+                s.raw['isGroup'] == true ||
+                (dest is Map &&
+                    (dest['objectType'] == 1 || dest['isGroup'] == true));
+            return TraySessionItem(
+              sessionUnitId: s.id,
+              targetName: s.title,
+              lastMessageText: s.preview,
+              unreadCount: s.unreadCount,
+              lastMessageTime: s.updatedAt ?? DateTime.now(),
+              isGroup: isGroup,
+            );
+          }).toList();
+
+      if (unread.isNotEmpty) {
+        _updateOwnerSessions(ownerId, unread);
+      }
+    } catch (_) {}
+  }
+
+  /// 展开或查看指定身份时，按需拉取该身份的未读会话列表（本地优先，线上兜底）
+  Future<void> fetchSessionsForOwner(int ownerId) async {
+    await _loadLocalSessionsForOwner(ownerId);
+
+    // 若本地无缓存会话，尝试通过 SessionRepository 从服务端拉取
+    final matchedGroup = state.groups.firstWhere(
+      (g) => g.ownerId == ownerId,
+      orElse:
+          () => TrayOwnerGroup(
+            ownerId: ownerId,
+            ownerName: '',
+            isCurrent: false,
+            totalUnread: 0,
+            sessions: const [],
+          ),
+    );
+    if (matchedGroup.sessions.isEmpty && matchedGroup.totalUnread > 0) {
+      try {
+        final repo = ref.read(sessionRepositoryProvider);
+        final result = await repo.loadFriends(ownerId: ownerId, limit: 30);
+        final unread =
+            result.items.where((f) => f.unreadCount > 0).map((s) {
+              final dest = s.raw['destination'];
+              final isGroup =
+                  s.raw['isGroup'] == true ||
+                  (dest is Map &&
+                      (dest['objectType'] == 1 || dest['isGroup'] == true));
+              return TraySessionItem(
+                sessionUnitId: s.id,
+                targetName: s.title,
+                lastMessageText: s.preview,
+                unreadCount: s.unreadCount,
+                lastMessageTime: s.updatedAt ?? DateTime.now(),
+                isGroup: isGroup,
+              );
+            }).toList();
+
+        if (unread.isNotEmpty) {
+          _updateOwnerSessions(ownerId, unread);
+        }
+      } catch (_) {}
+    }
+  }
+
+  void _updateOwnerSessions(int ownerId, List<TraySessionItem> sessions) {
+    var changed = false;
+    final updatedGroups =
+        state.groups.map((g) {
+          if (g.ownerId == ownerId) {
+            changed = true;
+            return g.copyWith(sessions: sessions);
+          }
+          return g;
+        }).toList();
+
+    if (changed) {
+      state = state.copyWith(groups: updatedGroups);
+      _syncWithTrayService();
+    }
   }
 
   /// 直接重置自定义分组数据

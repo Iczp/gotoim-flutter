@@ -87,9 +87,38 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
   }
 
   void _toggleGroup(int ownerId) {
+    final nextCollapsed = !(_collapsedMap[ownerId] ?? false);
     setState(() {
-      _collapsedMap[ownerId] = !(_collapsedMap[ownerId] ?? false);
+      _collapsedMap[ownerId] = nextCollapsed;
     });
+    // 展开时若该身份暂无已加载会话，按需异步拉取
+    if (!nextCollapsed) {
+      final state = ref.read(trayGroupedUnreadProvider);
+      final group = state.groups.firstWhere(
+        (g) => g.ownerId == ownerId,
+        orElse:
+            () => TrayOwnerGroup(
+              ownerId: ownerId,
+              ownerName: '',
+              totalUnread: 0,
+              sessions: const [],
+            ),
+      );
+      if (group.sessions.isEmpty && group.totalUnread > 0) {
+        if (!widget.nativeWindow) {
+          ref
+              .read(trayGroupedUnreadProvider.notifier)
+              .fetchSessionsForOwner(ownerId);
+        }
+      }
+    }
+  }
+
+  Future<void> _handleSwitchOwner(TrayOwnerGroup group) async {
+    _close();
+    showToast('正在切换至【${group.ownerName}】...', type: ToastType.info);
+    final windowService = ref.read(windowServiceProvider);
+    await windowService.switchOwner(group.ownerId);
   }
 
   void _toggleShowAllSessions(int ownerId) {
@@ -523,52 +552,114 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
 
           // 二级会话列表（受 _maxInitialSessionsPerOwner 保护，避免霸屏）
           if (!isCollapsed) ...[
-            ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: visibleSessions.length,
-              itemBuilder: (context, sIndex) {
-                final session = visibleSessions[sIndex];
-                return _buildSessionItem(
-                  group: group,
-                  session: session,
-                  textMain: textMain,
-                  textSecondary: textSecondary,
-                  accentRed: accentRed,
-                );
-              },
-            ),
-            // 当会话超出阈值时，展示“展开其余 N 个会话”微缩条
-            if (remainingCount > 0)
-              InkWell(
-                onTap: () => _toggleShowAllSessions(group.ownerId),
+            if (visibleSessions.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: headerBg.withValues(alpha: 0.4),
-                    borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(8),
-                    ),
+                    color: headerBg.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        showAllSessions
-                            ? '收起部分会话 ▴'
-                            : '展开其余 $remainingCount 个会话 (共 $remainingUnread 条新消息) ▾',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: accentGreen,
+                      Icon(
+                        Icons.mark_chat_unread_outlined,
+                        size: 16,
+                        color: accentRed,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '【${group.ownerName}】有 ${group.totalUnread} 条新消息',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: textMain,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      ElevatedButton(
+                        onPressed: () => _handleSwitchOwner(group),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentGreen,
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        child: const Text(
+                          '切换查看',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
+              )
+            else ...[
+              ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: visibleSessions.length,
+                itemBuilder: (context, sIndex) {
+                  final session = visibleSessions[sIndex];
+                  return _buildSessionItem(
+                    group: group,
+                    session: session,
+                    textMain: textMain,
+                    textSecondary: textSecondary,
+                    accentRed: accentRed,
+                  );
+                },
               ),
+              // 当会话超出阈值时，展示“展开其余 N 个会话”微缩条
+              if (remainingCount > 0)
+                InkWell(
+                  onTap: () => _toggleShowAllSessions(group.ownerId),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: headerBg.withValues(alpha: 0.4),
+                      borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(8),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          showAllSessions
+                              ? '收起部分会话 ▴'
+                              : '展开其余 $remainingCount 个会话 (共 $remainingUnread 条新消息) ▾',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: accentGreen,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ],
         ],
       ),

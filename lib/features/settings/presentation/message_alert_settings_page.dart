@@ -7,9 +7,16 @@ import '../../../core/widgets/cell_group.dart';
 import '../../session/application/message_alert_settings.dart';
 
 class MessageAlertSettingsPage extends ConsumerStatefulWidget {
-  const MessageAlertSettingsPage({required this.sessionUnitId, required this.title, super.key});
+  const MessageAlertSettingsPage({
+    required this.sessionUnitId,
+    required this.title,
+    this.isDialog = false,
+    super.key,
+  });
+
   final String sessionUnitId;
   final String title;
+  final bool isDialog;
 
   @override
   ConsumerState<MessageAlertSettingsPage> createState() => _MessageAlertSettingsPageState();
@@ -64,10 +71,9 @@ class _MessageAlertSettingsPageState extends ConsumerState<MessageAlertSettingsP
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final enabled = session.notificationsEnabled;
-    return Scaffold(
-      appBar: AppBar(title: Text('${widget.title} · 消息提醒')),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    final content = ListView(
+      shrinkWrap: widget.isDialog,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
           CellGroup(title: '提醒方式', children: [
             SwitchListTile(
@@ -121,7 +127,15 @@ class _MessageAlertSettingsPageState extends ConsumerState<MessageAlertSettingsP
             child: Text('应用被系统杀死或 SignalR 离线时，需要服务端 Push（FCM/APNs/HMS）才能提醒；本地通知不能替代远程 Push。'),
           ),
         ],
-      ),
+      );
+
+    if (widget.isDialog) {
+      return content;
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.title} · 消息提醒')),
+      body: content,
     );
   }
 }

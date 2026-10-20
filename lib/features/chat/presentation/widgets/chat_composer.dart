@@ -1133,6 +1133,25 @@ class ChatComposerState extends State<ChatComposer>
     }
   }
 
+  void _insertNewlineAtCursor() {
+    final text = widget.input.text;
+    final selection = widget.input.selection;
+    final start = selection.start;
+    final end = selection.end;
+
+    if (start >= 0 && end >= 0) {
+      final newText = text.replaceRange(start, end, '\n');
+      widget.input.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: start + 1),
+      );
+    } else {
+      widget.input.text = '$text\n';
+      widget.input.selection =
+          TextSelection.collapsed(offset: widget.input.text.length);
+    }
+  }
+
   KeyEventResult _handleDesktopKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
       // 1. 发送消息逻辑 (支持用户快捷键偏好切换)
@@ -1144,7 +1163,10 @@ class ChatComposerState extends State<ChatComposer>
 
         if (_sendOnEnter) {
           // 模式 1: 按 Enter 发送，Shift+Enter 或 Ctrl+Enter 换行
-          if (isShift || isCtrl) {
+          if (isCtrl) {
+            _insertNewlineAtCursor();
+            return KeyEventResult.handled;
+          } else if (isShift) {
             return KeyEventResult.ignored; // 放行系统默认换行
           } else {
             _sendDesktopText();

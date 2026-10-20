@@ -45,6 +45,7 @@ class ChatMessageRow extends StatelessWidget {
     this.contentMenuBuilder,
     this.contentMenuController,
     this.contentMenuOffset = const Offset(0, 6),
+    this.onSecondaryTapDown,
     this.avatarMenuBuilder,
     this.avatarMenuController,
     this.avatarMenuOffset = const Offset(8, 0),
@@ -106,6 +107,9 @@ class ChatMessageRow extends StatelessWidget {
 
   /// 消息气泡内容菜单偏移量
   final Offset contentMenuOffset;
+
+  /// 桌面端鼠标右键消息气泡回调 (Secondary Tap Down)
+  final void Function(TapDownDetails details, ChatMessage message)? onSecondaryTapDown;
 
   /// 头像上下文菜单构建器
   final WidgetBuilder? avatarMenuBuilder;
@@ -346,6 +350,16 @@ class ChatMessageRow extends StatelessWidget {
                     contentBuilder: contentMenuBuilder!,
                     placement: FloatingPlacement.auto,
                     offset: contentMenuOffset,
+                    onSecondaryTap: onSecondaryTapDown != null ? () {} : null,
+                    child: messageContentWidget,
+                  );
+                }
+
+                if (onSecondaryTapDown != null) {
+                  messageContentWidget = GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onSecondaryTapDown: (details) =>
+                        onSecondaryTapDown!(details, message),
                     child: messageContentWidget,
                   );
                 }

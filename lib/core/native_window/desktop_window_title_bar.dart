@@ -83,7 +83,8 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final defaultBg = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFECECEC);
+    final defaultBg =
+        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFECECEC);
 
     return Material(
       color: widget.backgroundColor ?? defaultBg,
@@ -170,15 +171,17 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar> {
                   width: 38,
                   height: widget.height,
                   alignment: Alignment.center,
-                  color: _closeHovered
-                      ? const Color(0xFFE81123)
-                      : Colors.transparent,
+                  color:
+                      _closeHovered
+                          ? const Color(0xFFE81123)
+                          : Colors.transparent,
                   child: Icon(
                     Icons.close_rounded,
                     size: 16,
-                    color: _closeHovered
-                        ? Colors.white
-                        : (isDark ? Colors.white70 : Colors.black87),
+                    color:
+                        _closeHovered
+                            ? Colors.white
+                            : (isDark ? Colors.white70 : Colors.black87),
                   ),
                 ),
               ),

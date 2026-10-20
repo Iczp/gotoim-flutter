@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cell_group.dart';
+import '../../../core/widgets/desktop_dialog.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/media/image_provider_factory.dart';
@@ -12,10 +13,12 @@ import '../../../core/utils/api_url_resolver.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/presentation/chat_object_avatar.dart';
+import '../../settings/presentation/message_alert_settings_page.dart';
 import '../../user/presentation/profile_page.dart';
 import '../application/chat_settings_controller.dart';
 import 'chat_background_page.dart';
 import 'chat_background_preview_page.dart';
+import 'member_list_page.dart';
 import 'member_tile.dart';
 import '../../../core/security/widgets/report_dialog.dart';
 
@@ -234,10 +237,25 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                       title: '消息提醒',
                       subtitle: '本会话的通知、声音、振动与消息预览',
                       showArrow: true,
-                      onTap:
-                          () => context.push(
+                      onTap: () {
+                        if (widget.isDrawer) {
+                          showDesktopModalDialog<void>(
+                            context: context,
+                            title: '消息提醒设置',
+                            subtitle: controller.title,
+                            width: 480,
+                            child: MessageAlertSettingsPage(
+                              sessionUnitId: controller.sessionUnitId,
+                              title: controller.title,
+                              isDialog: true,
+                            ),
+                          );
+                        } else {
+                          context.push(
                             '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/notifications?title=${Uri.encodeQueryComponent(controller.title)}',
-                          ),
+                          );
+                        }
+                      },
                     ),
                     if (controller.objectType == 2)
                       Cell(
@@ -335,6 +353,26 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   }
 
   Future<void> _editGroupName() async {
+    if (widget.isDrawer) {
+      final result = await showPromptModal(
+        context: context,
+        title: '修改群聊名称',
+        initialValue: controller.title,
+        placeholderText: '群聊名称',
+        confirmText: '保存',
+      );
+      if (result != null && result.trim().isNotEmpty && mounted) {
+        try {
+          await controller.setGroupName(result.trim());
+          showToast('群聊名称已更新', type: ToastType.success);
+          await controller.initialize();
+        } catch (e) {
+          showToast('修改失败：$e', type: ToastType.error);
+        }
+      }
+      return;
+    }
+
     final updated = await context.push<bool>(
       '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/group-name?ownerId=${controller.ownerId}&title=${Uri.encodeQueryComponent(controller.title)}',
     );
@@ -505,11 +543,29 @@ class _MemberPreview extends StatelessWidget {
           ),
         if (controller.totalCount > 0 || controller.isGroup)
           TextButton(
-            onPressed:
-                () => context.push(
+            onPressed: () {
+              final isDesktop = MediaQuery.sizeOf(context).width >= 720;
+              if (isDesktop) {
+                showDesktopModalDialog<void>(
+                  context: context,
+                  title: '群聊成员',
+                  subtitle: controller.title,
+                  width: 500,
+                  height: 600,
+                  child: MemberListPage(
+                    ownerId: controller.ownerId,
+                    sessionUnitId: controller.sessionUnitId,
+                    initialTotalCount: controller.totalCount,
+                    isDialog: true,
+                  ),
+                );
+              } else {
+                context.push(
                   '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/members'
                   '?ownerId=${controller.ownerId}&totalCount=${controller.totalCount}',
-                ),
+                );
+              }
+            },
             child: Text(
               controller.totalCount > 0
                   ? '查看更多（${controller.totalCount}）'

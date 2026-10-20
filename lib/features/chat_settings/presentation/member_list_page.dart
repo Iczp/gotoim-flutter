@@ -10,11 +10,13 @@ class MemberListPage extends ConsumerStatefulWidget {
     required this.ownerId,
     required this.sessionUnitId,
     this.initialTotalCount,
+    this.isDialog = false,
     super.key,
   });
   final int ownerId;
   final String sessionUnitId;
   final int? initialTotalCount;
+  final bool isDialog;
 
   @override
   ConsumerState<MemberListPage> createState() => _MemberListPageState();
@@ -50,15 +52,7 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
     animation: controller,
     builder: (context, _) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(
-            controller.totalCount > 0
-                ? '群聊成员 (${controller.totalCount})'
-                : '群聊成员',
-          ),
-        ),
-        body: Column(
+      final content = Column(
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -139,7 +133,21 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
               ),
             ),
           ],
+        );
+
+      if (widget.isDialog) {
+        return content;
+      }
+
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(
+            controller.totalCount > 0
+                ? '群聊成员 (${controller.totalCount})'
+                : '群聊成员',
+          ),
         ),
+        body: content,
       );
     },
   );

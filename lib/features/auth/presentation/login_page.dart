@@ -217,9 +217,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     color: Color(0xFF07C160),
                   ),
                   showPin: false,
-                  backgroundColor: isDark
-                      ? const Color(0xFF1E1E1E).withValues(alpha: 0.85)
-                      : const Color(0xFFF7F7F7).withValues(alpha: 0.85),
+                  backgroundColor:
+                      isDark
+                          ? const Color(0xFF1E1E1E).withValues(alpha: 0.85)
+                          : const Color(0xFFF7F7F7).withValues(alpha: 0.85),
                   actions: [
                     IconButton(
                       tooltip: '切换浅色/深色主题',
@@ -233,9 +234,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         size: 16,
                         color: colorScheme.onSurfaceVariant,
                       ),
-                      onPressed: () => ref
-                          .read(themeModeControllerProvider.notifier)
-                          .toggleTheme(),
+                      onPressed:
+                          () =>
+                              ref
+                                  .read(themeModeControllerProvider.notifier)
+                                  .toggleTheme(),
                     ),
                     const SizedBox(width: 4),
                   ],
@@ -244,206 +247,218 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               Expanded(
                 child: SafeArea(
                   top: !isNativeDesktop,
-            child: Stack(
-              children: [
-                Positioned(
-                  top: 12,
-                  right: 16,
-                  child: IconButton(
-                    tooltip: '切换浅色/深色主题',
-                    icon: Icon(
-                      themeMode == ThemeMode.dark
-                          ? Icons.dark_mode_rounded
-                          : themeMode == ThemeMode.light
-                          ? Icons.light_mode_rounded
-                          : Icons.brightness_auto_rounded,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    onPressed:
-                        () =>
-                            ref
-                                .read(themeModeControllerProvider.notifier)
-                                .toggleTheme(),
-                  ),
-                ),
-                Center(
-                  child: SingleChildScrollView(
-                    physics: const ClampingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 400),
-                      child: GlassContainer(
-                        borderRadius: BorderRadius.circular(22),
-                        blurSigma: 24,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 18,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                isDark
-                                    ? Colors.black.withValues(alpha: 0.4)
-                                    : colorScheme.primary.withValues(
-                                      alpha: 0.08,
-                                    ),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
+                  child: Stack(
+                    children: [
+                      if (!isNativeDesktop)
+                        Positioned(
+                          top: 12,
+                          right: 16,
+                          child: IconButton(
+                            tooltip: '切换浅色/深色主题',
+                            icon: Icon(
+                              themeMode == ThemeMode.dark
+                                  ? Icons.dark_mode_rounded
+                                  : themeMode == ThemeMode.light
+                                  ? Icons.light_mode_rounded
+                                  : Icons.brightness_auto_rounded,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            onPressed:
+                                () =>
+                                    ref
+                                        .read(
+                                          themeModeControllerProvider.notifier,
+                                        )
+                                        .toggleTheme(),
                           ),
-                        ],
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const Center(
-                                child: GotoImLogo(
-                                  size: 54,
-                                  enableBreathing: true,
-                                  heroTag: 'app_brand_logo',
-                                ),
+                        ),
+                      Center(
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 400),
+                            child: GlassContainer(
+                              borderRadius: BorderRadius.circular(22),
+                              blurSigma: 24,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 18,
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                _isRegister ? '加入 Goto IM' : 'Goto IM',
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                  fontSize: 22,
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      isDark
+                                          ? Colors.black.withValues(alpha: 0.4)
+                                          : colorScheme.primary.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 8),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _isRegister ? '创建即时通讯协同账号' : '跨平台统一即时通讯客户端',
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              if (_isQrLogin)
-                                const LoginQrSignIn()
-                              else
-                                _PasswordForm(
-                                  isRegister: _isRegister,
-                                  usernameController: _usernameController,
-                                  passwordController: _passwordController,
-                                  confirmPasswordController:
-                                      _confirmPasswordController,
-                                  obscurePassword: _obscurePassword,
-                                  obscureConfirmPassword:
-                                      _obscureConfirmPassword,
-                                  isBusy: auth.isBusy,
-                                  errorMessage: auth.errorMessage,
-                                  agreeTerms: _agreeTerms,
-                                  onAgreeChanged: (val) {
-                                    setState(() {
-                                      _agreeTerms = val ?? false;
-                                    });
-                                  },
-                                  onOpenUserAgreement: _openUserAgreement,
-                                  onOpenPrivacyPolicy: _openPrivacyPolicy,
-                                  onObscureChanged:
-                                      () => setState(
-                                        () =>
-                                            _obscurePassword =
-                                                !_obscurePassword,
-                                      ),
-                                  onObscureConfirmChanged:
-                                      () => setState(
-                                        () =>
-                                            _obscureConfirmPassword =
-                                                !_obscureConfirmPassword,
-                                      ),
-                                  onSubmit: _submit,
-                                ),
-                              const SizedBox(height: 8),
-                              if (!_isQrLogin && !_isRegister)
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                              ],
+                              child: Form(
+                                key: _formKey,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
-                                    TextButton(
-                                      onPressed:
-                                          auth.isBusy
-                                              ? null
-                                              : () {
-                                                setState(() {
-                                                  _isRegister = true;
-                                                  _formKey.currentState
-                                                      ?.reset();
-                                                });
-                                              },
-                                      child: const Text(
-                                        '没有账号？立即注册',
-                                        style: TextStyle(fontSize: 13),
+                                    const Center(
+                                      child: GotoImLogo(
+                                        size: 54,
+                                        enableBreathing: true,
+                                        heroTag: 'app_brand_logo',
                                       ),
                                     ),
-                                    TextButton.icon(
-                                      onPressed:
-                                          auth.isBusy
-                                              ? null
-                                              : () => setState(
-                                                () => _isQrLogin = true,
-                                              ),
-                                      icon: const Icon(
-                                        Icons.qr_code_scanner_rounded,
-                                        size: 16,
-                                      ),
-                                      label: const Text(
-                                        '扫码登录',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      _isRegister ? '加入 Goto IM' : 'Goto IM',
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.headlineSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
+                                            fontSize: 22,
+                                          ),
                                     ),
-                                  ],
-                                )
-                              else if (_isRegister)
-                                Center(
-                                  child: TextButton(
-                                    onPressed:
-                                        auth.isBusy
-                                            ? null
-                                            : () {
-                                              setState(() {
-                                                _isRegister = false;
-                                                _formKey.currentState?.reset();
-                                              });
-                                            },
-                                    child: const Text(
-                                      '已有账号？返回登录',
-                                      style: TextStyle(fontSize: 13),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _isRegister
+                                          ? '创建即时通讯协同账号'
+                                          : '跨平台统一即时通讯客户端',
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
                                     ),
-                                  ),
-                                )
-                              else
-                                Center(
-                                  child: TextButton.icon(
-                                    onPressed:
-                                        auth.isBusy
-                                            ? null
-                                            : () => setState(
-                                              () => _isQrLogin = false,
+                                    const SizedBox(height: 16),
+                                    if (_isQrLogin)
+                                      const LoginQrSignIn()
+                                    else
+                                      _PasswordForm(
+                                        isRegister: _isRegister,
+                                        usernameController: _usernameController,
+                                        passwordController: _passwordController,
+                                        confirmPasswordController:
+                                            _confirmPasswordController,
+                                        obscurePassword: _obscurePassword,
+                                        obscureConfirmPassword:
+                                            _obscureConfirmPassword,
+                                        isBusy: auth.isBusy,
+                                        errorMessage: auth.errorMessage,
+                                        agreeTerms: _agreeTerms,
+                                        onAgreeChanged: (val) {
+                                          setState(() {
+                                            _agreeTerms = val ?? false;
+                                          });
+                                        },
+                                        onOpenUserAgreement: _openUserAgreement,
+                                        onOpenPrivacyPolicy: _openPrivacyPolicy,
+                                        onObscureChanged:
+                                            () => setState(
+                                              () =>
+                                                  _obscurePassword =
+                                                      !_obscurePassword,
                                             ),
-                                    icon: const Icon(
-                                      Icons.password_rounded,
-                                      size: 16,
-                                    ),
-                                    label: const Text('使用账号密码登录'),
-                                  ),
+                                        onObscureConfirmChanged:
+                                            () => setState(
+                                              () =>
+                                                  _obscureConfirmPassword =
+                                                      !_obscureConfirmPassword,
+                                            ),
+                                        onSubmit: _submit,
+                                      ),
+                                    const SizedBox(height: 8),
+                                    if (!_isQrLogin && !_isRegister)
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          TextButton(
+                                            onPressed:
+                                                auth.isBusy
+                                                    ? null
+                                                    : () {
+                                                      setState(() {
+                                                        _isRegister = true;
+                                                        _formKey.currentState
+                                                            ?.reset();
+                                                      });
+                                                    },
+                                            child: const Text(
+                                              '没有账号？立即注册',
+                                              style: TextStyle(fontSize: 13),
+                                            ),
+                                          ),
+                                          TextButton.icon(
+                                            onPressed:
+                                                auth.isBusy
+                                                    ? null
+                                                    : () => setState(
+                                                      () => _isQrLogin = true,
+                                                    ),
+                                            icon: const Icon(
+                                              Icons.qr_code_scanner_rounded,
+                                              size: 16,
+                                            ),
+                                            label: const Text(
+                                              '扫码登录',
+                                              style: TextStyle(fontSize: 13),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    else if (_isRegister)
+                                      Center(
+                                        child: TextButton(
+                                          onPressed:
+                                              auth.isBusy
+                                                  ? null
+                                                  : () {
+                                                    setState(() {
+                                                      _isRegister = false;
+                                                      _formKey.currentState
+                                                          ?.reset();
+                                                    });
+                                                  },
+                                          child: const Text(
+                                            '已有账号？返回登录',
+                                            style: TextStyle(fontSize: 13),
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      Center(
+                                        child: TextButton.icon(
+                                          onPressed:
+                                              auth.isBusy
+                                                  ? null
+                                                  : () => setState(
+                                                    () => _isQrLogin = false,
+                                                  ),
+                                          icon: const Icon(
+                                            Icons.password_rounded,
+                                            size: 16,
+                                          ),
+                                          label: const Text('使用账号密码登录'),
+                                        ),
+                                      ),
+                                  ],
                                 ),
-                            ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),

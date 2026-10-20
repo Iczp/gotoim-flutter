@@ -26,6 +26,7 @@ import '../../../core/theme/chat_appearance_controller.dart';
 import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/half_page_sheet.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/desktop_dialog.dart';
 import '../../../core/widgets/floating_popover.dart';
 import '../../../core/widgets/measure_size.dart';
 import '../../../core/widgets/target_picker/target_picker.dart';
@@ -876,6 +877,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 items: menuItems,
                 layoutMode: ChatMessageMenuLayoutMode.doubleRow,
               ),
+      onSecondaryTapDown:
+          (widget.isDesktop || MediaQuery.sizeOf(context).width >= 720)
+              ? (details, msg) =>
+                  _showDesktopMessageContextMenu(details, msg, menuItems)
+              : null,
       avatarMenuController: avatarMenuController,
       avatarMenuBuilder:
           avatarMenuItems.isEmpty
@@ -953,7 +959,112 @@ class _ChatPageState extends ConsumerState<ChatPage>
     ];
   }
 
+  Future<void> _showDesktopMessageContextMenu(
+    TapDownDetails details,
+    ChatMessage message,
+    List<ChatMessageMenuItem> menuItems,
+  ) async {
+    if (menuItems.isEmpty) return;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    final position = RelativeRect.fromRect(
+      details.globalPosition & const Size(1, 1),
+      Offset.zero & overlay.size,
+    );
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final selectedId = await showMenu<String>(
+      context: context,
+      position: position,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.8,
+        ),
+      ),
+      items: menuItems.map((item) {
+        return PopupMenuItem<String>(
+          value: item.id,
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              Icon(
+                item.icon,
+                size: 16,
+                color: item.destructive
+                    ? Theme.of(context).colorScheme.error
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                item.label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: item.destructive
+                      ? Theme.of(context).colorScheme.error
+                      : Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+
+    if (selectedId != null) {
+      for (final item in menuItems) {
+        if (item.id == selectedId) {
+          item.onTap?.call();
+          break;
+        }
+      }
+    }
+  }
+
   void _showMuteMemberDialog(ChatMessage message) {
+    final options = <String>['10 分钟', '1 小时', '1 天', '7 天', '永久禁言'];
+    final isDesktop =
+        widget.isDesktop || MediaQuery.sizeOf(context).width >= 720;
+
+    if (isDesktop) {
+      showDesktopModalDialog<void>(
+        context: context,
+        title: '成员禁言设置',
+        subtitle: '对「${message.senderName}」设置禁言时长',
+        width: 360,
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
+            for (final opt in options)
+              ListTile(
+                title: Text(opt, style: const TextStyle(fontSize: 14)),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('已对「${message.senderName}」禁言 $opt'),
+                      ),
+                    );
+                  }
+                },
+              ),
+          ],
+        ),
+      );
+      return;
+    }
+
     showModalBottomSheet<void>(
       context: context,
       isDismissible: true,
@@ -962,7 +1073,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (bottomSheetContext) {
-        final options = <String>['10 分钟', '1 小时', '1 天', '7 天', '永久禁言'];
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,

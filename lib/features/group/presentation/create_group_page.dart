@@ -10,7 +10,9 @@ import '../../session/data/models/session_summary.dart';
 import '../data/room_api.dart';
 
 class CreateGroupPage extends ConsumerStatefulWidget {
-  const CreateGroupPage({super.key});
+  const CreateGroupPage({this.isDialog = false, super.key});
+
+  final bool isDialog;
 
   @override
   ConsumerState<CreateGroupPage> createState() => _CreateGroupPageState();
@@ -210,16 +212,9 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('创建群聊'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => context.pop(),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+    final content = ListView(
+      shrinkWrap: widget.isDialog,
+      padding: const EdgeInsets.symmetric(vertical: 12),
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -315,7 +310,21 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
               ),
             ),
         ],
+      );
+
+    if (widget.isDialog) {
+      return content;
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('创建群聊'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          onPressed: () => context.pop(),
+        ),
       ),
+      body: content,
     );
   }
 }

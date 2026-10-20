@@ -9,9 +9,14 @@ import '../../session/application/session_list_controller.dart';
 import '../data/contact_api.dart';
 
 class AddFriendPage extends ConsumerStatefulWidget {
-  const AddFriendPage({this.initialKeyword, super.key});
+  const AddFriendPage({
+    this.initialKeyword,
+    this.isDialog = false,
+    super.key,
+  });
 
   final String? initialKeyword;
+  final bool isDialog;
 
   @override
   ConsumerState<AddFriendPage> createState() => _AddFriendPageState();
@@ -154,16 +159,9 @@ class _AddFriendPageState extends ConsumerState<AddFriendPage> {
     final colorScheme = theme.colorScheme;
     final currentOwner = ref.watch(sessionListControllerProvider).currentOwner;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('添加好友'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => context.pop(),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+    final content = ListView(
+      shrinkWrap: widget.isDialog,
+      padding: const EdgeInsets.symmetric(vertical: 12),
         children: [
           // 搜索框
           Padding(
@@ -295,7 +293,21 @@ class _AddFriendPageState extends ConsumerState<AddFriendPage> {
               _buildSearchResultTile(context, item),
           ],
         ],
+      );
+
+    if (widget.isDialog) {
+      return content;
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('添加好友'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          onPressed: () => context.pop(),
+        ),
       ),
+      body: content,
     );
   }
 
@@ -333,6 +345,9 @@ class _AddFriendPageState extends ConsumerState<AddFriendPage> {
       trailing: isFriend
           ? OutlinedButton(
               onPressed: () {
+                if (widget.isDialog) {
+                  Navigator.of(context).pop();
+                }
                 context.push(
                   '/chat?sessionUnitId=$unitId&title=${Uri.encodeComponent(name)}',
                 );

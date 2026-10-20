@@ -4,7 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/services/window_service.dart';
 import '../../../core/widgets/app_avatar.dart';
+import '../../../core/widgets/desktop_dialog.dart';
 import '../../chat/presentation/chat_page.dart';
+import '../../contact/presentation/add_friend_page.dart';
+import '../../group/presentation/create_group_page.dart';
+import '../../mine/presentation/my_qr_code_dialog.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/session_summary.dart';
 import 'desktop_chat_owner_popover.dart';
@@ -523,11 +527,26 @@ class _DesktopSessionSplitViewState
                           offset: const Offset(0, 36),
                           onSelected: (val) {
                             if (val == 'create_group') {
-                              context.push('/create-group');
+                              showDesktopModalDialog<void>(
+                                context: context,
+                                title: '发起群聊',
+                                width: 480,
+                                height: 560,
+                                child: const CreateGroupPage(isDialog: true),
+                              );
                             } else if (val == 'add_friend') {
-                              context.push('/add-friend');
+                              showDesktopModalDialog<void>(
+                                context: context,
+                                title: '添加好友',
+                                width: 520,
+                                height: 600,
+                                child: const AddFriendPage(isDialog: true),
+                              );
                             } else if (val == 'scan') {
-                              context.push('/scan-login/scan');
+                              final currentOwner = ref
+                                  .read(sessionListControllerProvider)
+                                  .currentOwner;
+                              MyQrCodeDialog.show(context, owner: currentOwner);
                             }
                           },
                           itemBuilder:
