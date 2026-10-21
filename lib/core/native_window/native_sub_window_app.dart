@@ -238,6 +238,28 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
       } else if (_currentPayload.type == SubWindowType.settings) {
         // Modal sub-window disabling parent window (Electron-style parent/modal)
         WindowsWindowAdapter.setModal(true);
+      } else {
+        // Ensure all other new sub-windows are centered on screen with responsive sizes
+        switch (_currentPayload.type) {
+          case SubWindowType.chat:
+            WindowsWindowAdapter.center(width: 880, height: 640);
+            break;
+          case SubWindowType.diagnostics:
+            WindowsWindowAdapter.center(width: 960, height: 700);
+            break;
+          case SubWindowType.localFileServer:
+            WindowsWindowAdapter.center(width: 860, height: 620);
+            break;
+          case SubWindowType.browser:
+            WindowsWindowAdapter.center(width: 1024, height: 720);
+            break;
+          case SubWindowType.media:
+            WindowsWindowAdapter.center(width: 960, height: 700);
+            break;
+          default:
+            WindowsWindowAdapter.center();
+            break;
+        }
       }
     });
     WindowsWindowAdapter.onCloseRequested = _handleClose;
@@ -348,6 +370,12 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         case 'setModal':
           final enable = call.arguments != false;
           await WindowsWindowAdapter.setModal(enable);
+          return true;
+        case 'center':
+          final args = call.arguments as Map?;
+          final w = args?['width'] as int?;
+          final h = args?['height'] as int?;
+          await WindowsWindowAdapter.center(width: w, height: h);
           return true;
         case 'close':
           await _handleClose();

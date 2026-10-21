@@ -70,6 +70,13 @@ class WindowsWindowAdapter {
     await _invoke('setModal', modal);
   }
 
+  static Future<void> center({int? width, int? height}) async {
+    await _invoke('center', {
+      if (width != null) 'width': width,
+      if (height != null) 'height': height,
+    });
+  }
+
   static Future<void> bringToFront() async {
     await _invoke('restore');
   }

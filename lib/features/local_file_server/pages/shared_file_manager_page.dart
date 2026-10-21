@@ -472,36 +472,41 @@ class _SharedFileManagerViewState extends ConsumerState<SharedFileManagerView> {
             ),
           );
         }
-        return grid
-            ? GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate:
-                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 180,
-                    mainAxisExtent: 168,
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final availableWidth = constraints.maxWidth - 24;
+            final crossAxisCount = (availableWidth / 150).floor().clamp(1, 8);
+            return grid
+                ? GridView.builder(
+                  padding: const EdgeInsets.all(12),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    mainAxisExtent: 160,
                     crossAxisSpacing: 10,
                     mainAxisSpacing: 10,
                   ),
-              itemCount: files.length,
-              itemBuilder:
-                  (_, i) => _Grid(
-                    file: files[i],
-                    onOpen: open,
-                    onMenu: menu,
-                  ),
-            )
-            : ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: files.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 6),
-              itemBuilder:
-                  (_, i) => _Row(
-                    file: files[i],
-                    compact: compact,
-                    onOpen: open,
-                    onMenu: menu,
-                  ),
-            );
+                  itemCount: files.length,
+                  itemBuilder:
+                      (_, i) => _Grid(
+                        file: files[i],
+                        onOpen: open,
+                        onMenu: menu,
+                      ),
+                )
+                : ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: files.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
+                  itemBuilder:
+                      (_, i) => _Row(
+                        file: files[i],
+                        compact: compact,
+                        onOpen: open,
+                        onMenu: menu,
+                      ),
+                );
+          },
+        );
       },
     );
   }
@@ -576,17 +581,29 @@ class _Grid extends StatelessWidget {
       onTap: () => onOpen(file),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _Icon(file, large: true),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => onMenu(file),
-                  icon: const Icon(Icons.more_vert),
+                Flexible(
+                  child: _Icon(file, large: true),
+                ),
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    splashRadius: 16,
+                    constraints: const BoxConstraints(),
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => onMenu(file),
+                    icon: const Icon(Icons.more_vert, size: 18),
+                  ),
                 ),
               ],
             ),
@@ -597,6 +614,7 @@ class _Grid extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
+            const SizedBox(height: 2),
             Text(
               info(file),
               maxLines: 1,

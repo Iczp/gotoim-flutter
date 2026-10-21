@@ -128,16 +128,34 @@ bool Win32Window::Create(const std::wstring& title,
   const wchar_t* window_class =
       WindowClassRegistrar::GetInstance()->GetWindowClass();
 
-  const POINT target_point = {static_cast<LONG>(origin.x),
-                              static_cast<LONG>(origin.y)};
-  HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
+  POINT cursor_pos;
+  GetCursorPos(&cursor_pos);
+  HMONITOR monitor = (origin.x >= 0 && origin.y >= 0)
+      ? MonitorFromPoint(POINT{static_cast<LONG>(origin.x), static_cast<LONG>(origin.y)}, MONITOR_DEFAULTTONEAREST)
+      : MonitorFromPoint(cursor_pos, MONITOR_DEFAULTTOPRIMARY);
+
+  MONITORINFO info{sizeof(MONITORINFO)};
+  GetMonitorInfo(monitor, &info);
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
+  int scaled_width = Scale(size.width, scale_factor);
+  int scaled_height = Scale(size.height, scale_factor);
+  int work_w = info.rcWork.right - info.rcWork.left;
+  int work_h = info.rcWork.bottom - info.rcWork.top;
+  if (scaled_width > work_w) scaled_width = work_w;
+  if (scaled_height > work_h) scaled_height = work_h;
+
+  int x = (origin.x >= 0)
+      ? Scale(origin.x, scale_factor)
+      : (info.rcWork.left + (work_w - scaled_width) / 2);
+  int y = (origin.y >= 0)
+      ? Scale(origin.y, scale_factor)
+      : (info.rcWork.top + (work_h - scaled_height) / 2);
+
   HWND window = CreateWindow(
       window_class, title.c_str(), (WS_OVERLAPPEDWINDOW & ~WS_CAPTION) | WS_THICKFRAME | WS_CLIPCHILDREN,
-      Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
-      Scale(size.width, scale_factor), Scale(size.height, scale_factor),
+      x, y, scaled_width, scaled_height,
       nullptr, nullptr, GetModuleHandle(nullptr), this);
 
   if (!window) {

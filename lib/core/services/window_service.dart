@@ -959,6 +959,10 @@ class DefaultWindowService implements WindowService {
             try {
               await cachedController.invokeMethod('setModal', true);
             } catch (_) {}
+          } else if (type != WindowType.profileCard && type != WindowType.tray) {
+            try {
+              await cachedController.invokeMethod('center');
+            } catch (_) {}
           }
           await cachedController.show();
           await cachedController.invokeMethod('bringToFront');
@@ -986,6 +990,11 @@ class DefaultWindowService implements WindowService {
         ),
       );
       if (showImmediately) {
+        if (type == WindowType.settings) {
+          try {
+            await controller.invokeMethod('setModal', true);
+          } catch (_) {}
+        }
         await controller.show();
       } else {
         await controller.hide();
@@ -1110,9 +1119,6 @@ class DefaultWindowService implements WindowService {
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
       if (pending != null) await pending;
-      try {
-        await _nativeControllers[targetId]?.invokeMethod('setModal', true);
-      } catch (_) {}
       await bringToFront(targetId);
       return;
     }
@@ -1425,9 +1431,6 @@ class DefaultWindowService implements WindowService {
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
       if (pending != null) await pending;
-      try {
-        await _nativeControllers[targetId]?.invokeMethod('setModal', true);
-      } catch (_) {}
       await bringToFront(targetId);
       return;
     }
@@ -1475,9 +1478,6 @@ class DefaultWindowService implements WindowService {
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
       if (pending != null) await pending;
-      try {
-        await _nativeControllers[targetId]?.invokeMethod('setModal', true);
-      } catch (_) {}
       await bringToFront(targetId);
       return;
     }

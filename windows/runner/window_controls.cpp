@@ -29,6 +29,46 @@ HWND GetMainWindowHandle() {
   return g_main_window;
 }
 
+void CenterWindowOnMonitor(HWND hwnd, HWND ref_hwnd = nullptr, int desired_w = 0, int desired_h = 0) {
+  if (!hwnd || !IsWindow(hwnd)) return;
+
+  HMONITOR monitor = nullptr;
+  if (ref_hwnd && IsWindow(ref_hwnd) && IsWindowVisible(ref_hwnd) && !IsIconic(ref_hwnd)) {
+    monitor = MonitorFromWindow(ref_hwnd, MONITOR_DEFAULTTONEAREST);
+  } else {
+    POINT cursor;
+    if (GetCursorPos(&cursor)) {
+      monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY);
+    } else {
+      monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    }
+  }
+
+  MONITORINFO info{sizeof(MONITORINFO)};
+  if (!GetMonitorInfo(monitor, &info)) {
+    return;
+  }
+
+  const UINT dpi = GetDpiForWindow(hwnd);
+  RECT cur_rc;
+  GetWindowRect(hwnd, &cur_rc);
+
+  int width = (desired_w > 0) ? MulDiv(desired_w, dpi, 96) : (cur_rc.right - cur_rc.left);
+  int height = (desired_h > 0) ? MulDiv(desired_h, dpi, 96) : (cur_rc.bottom - cur_rc.top);
+
+  int work_w = info.rcWork.right - info.rcWork.left;
+  int work_h = info.rcWork.bottom - info.rcWork.top;
+
+  if (width > work_w) width = work_w;
+  if (height > work_h) height = work_h;
+
+  int x = info.rcWork.left + (work_w - width) / 2;
+  int y = info.rcWork.top + (work_h - height) / 2;
+
+  SetWindowPos(hwnd, nullptr, x, y, width, height,
+               SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
 static LRESULT CALLBACK ChildViewSubclassProc(
     HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
@@ -121,6 +161,16 @@ LRESULT CALLBACK SubWindowSubclassProc(
       }
       break;
     }
+    case WM_SHOWWINDOW: {
+      if (wParam == FALSE) {
+        HWND main = GetMainWindowHandle();
+        if (main && IsWindow(main) && !IsWindowEnabled(main)) {
+          EnableWindow(main, TRUE);
+          SetForegroundWindow(main);
+        }
+      }
+      break;
+    }
     case WM_DESTROY: {
       HWND main = GetMainWindowHandle();
       if (main && IsWindow(main)) {
@@ -149,9 +199,7 @@ void ConfigureSubWindowNative(HWND sub_hwnd, HWND child_hwnd) {
   DwmExtendFrameIntoClientArea(sub_hwnd, &margins);
   const int corner_pref = DWMWCP_ROUND;
   DwmSetWindowAttribute(sub_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_pref, sizeof(corner_pref));
-  SetWindowPos(sub_hwnd, nullptr, 0, 0, 0, 0,
-               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED |
-               SWP_NOACTIVATE);
+  CenterWindowOnMonitor(sub_hwnd, g_main_window);
   if (child_hwnd && IsWindow(child_hwnd)) {
     RECT rc;
     GetClientRect(sub_hwnd, &rc);
@@ -360,6 +408,25 @@ class WindowControls : public flutter::Plugin {
       } else if (method == "destroy") {
         allow_destroy_ = true;
         PostMessage(hwnd, WM_CLOSE, 0, 0);
+      } else if (method == "center") {
+        const auto* args = call.arguments()
+            ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+        int w = 0, h = 0;
+        if (args) {
+          auto it_w = args->find(flutter::EncodableValue("width"));
+          if (it_w != args->end()) {
+            if (const auto* val = std::get_if<int32_t>(&it_w->second)) w = *val;
+            else if (const auto* val = std::get_if<int64_t>(&it_w->second)) w = static_cast<int>(*val);
+            else if (const auto* val = std::get_if<double>(&it_w->second)) w = static_cast<int>(*val);
+          }
+          auto it_h = args->find(flutter::EncodableValue("height"));
+          if (it_h != args->end()) {
+            if (const auto* val = std::get_if<int32_t>(&it_h->second)) h = *val;
+            else if (const auto* val = std::get_if<int64_t>(&it_h->second)) h = static_cast<int>(*val);
+            else if (const auto* val = std::get_if<double>(&it_h->second)) h = static_cast<int>(*val);
+          }
+        }
+        CenterWindowOnMonitor(hwnd, (hwnd != g_main_window) ? g_main_window : nullptr, w, h);
       } else if (method == "pin") {
         const bool* pinned = call.arguments()
             ? std::get_if<bool>(call.arguments()) : nullptr;
@@ -574,6 +641,13 @@ class WindowControls : public flutter::Plugin {
     DwmExtendFrameIntoClientArea(hwnd, &margins);
     const int corner_pref = DWMWCP_ROUND;
     DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_pref, sizeof(corner_pref));
+    if (hwnd == g_main_window) {
+      RECT rc;
+      GetWindowRect(hwnd, &rc);
+      if (rc.left <= 20 && rc.top <= 20) {
+        CenterWindowOnMonitor(hwnd, nullptr);
+      }
+    }
   }
   flutter::PluginRegistrarWindows* registrar_;
   HWND explicit_hwnd_ = nullptr;
