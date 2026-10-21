@@ -79,6 +79,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
             final windowService = ref.read(windowServiceProvider);
             windowService.prewarmProfileCard();
             windowService.prewarmTrayFlyout();
+            windowService.prewarmScreenCapture();
           });
         }
       }

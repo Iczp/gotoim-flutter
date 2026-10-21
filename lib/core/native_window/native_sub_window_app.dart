@@ -17,6 +17,7 @@ import '../../features/diagnostics/presentation/app_statistic_diagnostics_page.d
 import '../../features/diagnostics/presentation/article_message_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/auth_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/chat_bubble_diagnostics_page.dart';
+import '../../features/chat/presentation/widgets/desktop_screen_capture_view.dart';
 import '../../features/diagnostics/presentation/chat_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/connection_test_page.dart';
 import '../../features/diagnostics/presentation/database_diagnostics_page.dart';
@@ -230,8 +231,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
       WindowsWindowAdapter.setupCustomTitleBar();
       _refreshTraySnapshot();
       if (_currentPayload.type == SubWindowType.tray ||
-          _currentPayload.type == SubWindowType.profileCard) {
-        // Flyout sub-windows must remain hidden on launch until explicitly triggered
+          _currentPayload.type == SubWindowType.profileCard ||
+          _currentPayload.type == SubWindowType.screenCapture) {
+        // Flyout/tool sub-windows must remain hidden on launch until explicitly triggered
         // and must never show on the Windows taskbar.
         WindowsWindowAdapter.setToolWindow(true);
         WindowsWindowAdapter.hide();
@@ -362,6 +364,14 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           if (_childMethodHandler != null) {
             await _childMethodHandler!(call);
           }
+          return true;
+        case 'show_screen_capture':
+          if (_childMethodHandler != null) {
+            await _childMethodHandler!(call);
+          }
+          return true;
+        case 'hide_screen_capture':
+          await WindowsWindowAdapter.hide();
           return true;
         case 'tray_flyout':
           await _refreshTraySnapshot();
@@ -511,6 +521,13 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         );
       case SubWindowType.tray:
         return const Scaffold(body: DesktopTrayMessageBox(nativeWindow: true));
+      case SubWindowType.screenCapture:
+        return DesktopScreenCaptureView(
+          onClose: _handleClose,
+          onRegisterMethodHandler: (handler) {
+            _childMethodHandler = handler;
+          },
+        );
       case SubWindowType.settings:
         return DesktopSettingsWindow(
           isSubWindow: true,

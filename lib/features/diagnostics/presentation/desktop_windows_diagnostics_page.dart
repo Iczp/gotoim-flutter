@@ -288,12 +288,13 @@ class _DesktopWindowsDiagnosticsPageState
       final windowService = ref.read(windowServiceProvider);
       await windowService.prewarmProfileCard();
       await windowService.prewarmTrayFlyout();
+      await windowService.prewarmScreenCapture();
       sw.stop();
       setState(() {
         _status = '成功';
         _elapsedMs = sw.elapsedMilliseconds;
         _lastResult =
-            '已成功在后台预热常驻无边框子窗口：\n1. tool:profile_card (悬浮资料卡)\n2. tool:tray (托盘新消息悬浮窗)\n状态：常驻后台保持预热，鼠标悬浮或新消息到达呼出零延迟';
+            '已成功在后台预热常驻子窗口：\n1. tool:profile_card (悬浮资料卡)\n2. tool:tray (托盘新消息悬浮窗)\n3. tool:screen_capture (截图标注工作台)\n状态：常驻后台保持预热，呼出零延迟 (支持8锚点缩放与直接涂鸦)';
       });
     } catch (e, st) {
       sw.stop();

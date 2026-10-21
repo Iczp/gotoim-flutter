@@ -5,34 +5,45 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../platform/platform_facade.dart';
 import 'clipboard_service.dart';
+import 'window_service.dart';
 
 /// 跨平台屏幕截图服务契约 (ScreenCaptureService)
 abstract class ScreenCaptureService {
-  /// 触发屏幕截取
-  /// - Windows 10/11: 调起原生现代截图工具 (ms-screenclip: / Win+Shift+S 体验)；
-  /// - 截屏完成后，Windows 会自动将图像存入系统剪贴板；
-  /// - 本服务监听剪贴板图像变更，返回捕获的图像字节流 (Uint8List)；
+  /// 触发屏幕截取并返回捕获标注后的图像字节流 (Uint8List)
+  /// - 桌面端：调起独立常驻复用的截图标注工作台 (支持 8 锚点调整与涂鸦标注)；
   /// - 若用户取消或超时则返回 null。
-  Future<Uint8List?> capture();
+  Future<Uint8List?> capture({bool hideMainWindow = true});
 }
 
 class DesktopScreenCaptureService implements ScreenCaptureService {
   DesktopScreenCaptureService({
     required this.clipboardService,
     required this.platformFacade,
+    this.windowService,
   });
 
   final ClipboardService clipboardService;
   final PlatformFacade platformFacade;
+  final WindowService? windowService;
 
   @override
-  Future<Uint8List?> capture() async {
+  Future<Uint8List?> capture({bool hideMainWindow = true}) async {
     if (kIsWeb) {
       debugPrint('[ScreenCaptureService] Web 平台截图暂不支持原生剪贴');
       return null;
     }
 
     if (Platform.isWindows) {
+      // 优先使用常驻复用、具备 8 锚点选区调整与内嵌直接涂鸦的独立截图标注窗口
+      if (windowService != null && platformFacade.supportsMultipleWindows) {
+        final captured = await windowService!.captureScreenInteractive(
+          hideMainWindow: hideMainWindow,
+        );
+        if (captured != null && captured.isNotEmpty) {
+          return captured;
+        }
+        return null;
+      }
       return _captureWindows();
     } else if (Platform.isMacOS) {
       return _captureMacOS();
@@ -116,8 +127,10 @@ class DesktopScreenCaptureService implements ScreenCaptureService {
 final screenCaptureServiceProvider = Provider<ScreenCaptureService>((ref) {
   final clipboardService = ref.watch(clipboardServiceProvider);
   final platformFacade = ref.watch(platformFacadeProvider);
+  final windowService = ref.watch(windowServiceProvider);
   return DesktopScreenCaptureService(
     clipboardService: clipboardService,
     platformFacade: platformFacade,
+    windowService: windowService,
   );
 });

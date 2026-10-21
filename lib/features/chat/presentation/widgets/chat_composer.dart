@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/platform/platform_facade.dart';
 import '../../../../core/services/clipboard_service.dart';
 import '../../../../core/services/screen_capture_service.dart';
 import '../../../../core/theme/app_theme_tokens.dart';
@@ -20,8 +20,6 @@ import 'chat_quote_preview.dart';
 import 'chat_recording_panel.dart';
 import 'clipboard_files_confirm_dialog.dart';
 import 'clipboard_image_confirm_dialog.dart';
-import 'screenshot_annotation_dialog.dart';
-import '../../../../core/platform/windows/windows_window_adapter.dart';
 
 /// 底部消息输入与操作区组件（ChatComposer）
 ///
@@ -31,7 +29,7 @@ import '../../../../core/platform/windows/windows_window_adapter.dart';
 /// 3. 表情与附件功能面板切换：软键盘与功能托盘平滑高度无缝衔接；
 /// 4. 引用回复：顶部浮层展示被引用消息，支持一键移除引用；
 /// 5. 群聊 `@` 艾特触发：输入 `@` 字符自动唤起成员选择浮层。
-class ChatComposer extends StatefulWidget {
+class ChatComposer extends ConsumerStatefulWidget {
   const ChatComposer({
     required this.controller,
     required this.input,
@@ -57,10 +55,10 @@ class ChatComposer extends StatefulWidget {
   final bool isDesktop;
 
   @override
-  State<ChatComposer> createState() => ChatComposerState();
+  ConsumerState<ChatComposer> createState() => ChatComposerState();
 }
 
-class ChatComposerState extends State<ChatComposer>
+class ChatComposerState extends ConsumerState<ChatComposer>
     with WidgetsBindingObserver {
   final FocusNode _focusNode = FocusNode();
   final PageController _pageController = PageController();
@@ -1035,35 +1033,15 @@ class ChatComposerState extends State<ChatComposer>
   /// 触发桌面端屏幕截图 (截图按钮或 Alt+A 快捷键触发)
   Future<void> _handleDesktopScreenshot() async {
     try {
-      showToast('正在启动截图工具，请截取选区...', type: ToastType.info);
-      if (_hideWindowOnScreenshot &&
-          !kIsWeb &&
-          defaultTargetPlatform == TargetPlatform.windows) {
-        await WindowsWindowAdapter.minimize();
-        await Future<void>.delayed(const Duration(milliseconds: 260));
-      }
-      final screenCapture = DesktopScreenCaptureService(
-        clipboardService: SystemClipboardService(),
-        platformFacade: createPlatformFacade(),
+      final screenCapture = ref.read(screenCaptureServiceProvider);
+      final imageBytes = await screenCapture.capture(
+        hideMainWindow: _hideWindowOnScreenshot,
       );
-      final imageBytes = await screenCapture.capture();
-      if (_hideWindowOnScreenshot &&
-          !kIsWeb &&
-          defaultTargetPlatform == TargetPlatform.windows) {
-        await WindowsWindowAdapter.bringToFront();
-      }
       if (imageBytes != null && imageBytes.isNotEmpty && mounted) {
-        final result = await ScreenshotAnnotationDialog.show(
-          context,
-          imageBytes: imageBytes,
+        await widget.controller.sendImageBytes(
+          imageBytes,
+          fileName: 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png',
         );
-        if (result != null && result.confirmed) {
-          await widget.controller.sendImageBytes(
-            result.imageBytes,
-            caption: result.caption,
-            fileName: 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png',
-          );
-        }
       }
     } catch (e) {
       debugPrint('[ChatComposer] 屏幕截图异常: $e');

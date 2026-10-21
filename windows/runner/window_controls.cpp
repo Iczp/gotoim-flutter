@@ -210,6 +210,16 @@ void ConfigureSubWindowNative(HWND sub_hwnd, HWND child_hwnd) {
 namespace {
 constexpr UINT kTrayCallback = WM_APP + 0x48;
 constexpr UINT kShowTrayMenu = WM_APP + 0x49;
+
+std::string Narrow(const std::wstring& value) {
+  if (value.empty()) return {};
+  const int count = WideCharToMultiByte(CP_UTF8, 0, value.data(),
+      static_cast<int>(value.size()), nullptr, 0, nullptr, nullptr);
+  std::string result(count, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, value.data(),
+      static_cast<int>(value.size()), result.data(), count, nullptr, nullptr);
+  return result;
+}
 std::wstring Wide(const std::string& value) {
   if (value.empty()) return {};
   const int count = MultiByteToWideChar(CP_UTF8, 0, value.data(),
@@ -547,6 +557,107 @@ class WindowControls : public flutter::Plugin {
             SetForegroundWindow(hwnd);
           }
         }
+      } else if (method == "captureScreen") {
+        int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (vw <= 0) vw = GetSystemMetrics(SM_CXSCREEN);
+        if (vh <= 0) vh = GetSystemMetrics(SM_CYSCREEN);
+
+        HDC hScreenDC = GetDC(nullptr);
+        HDC hMemDC = CreateCompatibleDC(hScreenDC);
+        HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC, vw, vh);
+        HGDIOBJ hOld = SelectObject(hMemDC, hBitmap);
+        BitBlt(hMemDC, 0, 0, vw, vh, hScreenDC, vx, vy, SRCCOPY | CAPTUREBLT);
+        SelectObject(hMemDC, hOld);
+
+        BITMAPINFO bih = {};
+        bih.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bih.bmiHeader.biWidth = vw;
+        bih.bmiHeader.biHeight = vh;
+        bih.bmiHeader.biPlanes = 1;
+        bih.bmiHeader.biBitCount = 32;
+        bih.bmiHeader.biCompression = BI_RGB;
+        DWORD row_size = ((vw * 32 + 31) / 32) * 4;
+        DWORD image_size = row_size * vh;
+        bih.bmiHeader.biSizeImage = image_size;
+
+        DWORD total_file_size = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + image_size;
+        std::vector<uint8_t> buffer(total_file_size);
+        BITMAPFILEHEADER* bfh = reinterpret_cast<BITMAPFILEHEADER*>(buffer.data());
+        bfh->bfType = 0x4D42; // "BM"
+        bfh->bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+        bfh->bfSize = total_file_size;
+        bfh->bfReserved1 = 0;
+        bfh->bfReserved2 = 0;
+        memcpy(buffer.data() + sizeof(BITMAPFILEHEADER), &bih.bmiHeader, sizeof(BITMAPINFOHEADER));
+
+        GetDIBits(hMemDC, hBitmap, 0, vh, buffer.data() + bfh->bfOffBits, &bih, DIB_RGB_COLORS);
+
+        DeleteObject(hBitmap);
+        DeleteDC(hMemDC);
+        ReleaseDC(nullptr, hScreenDC);
+
+        wchar_t temp_dir[MAX_PATH];
+        GetTempPathW(MAX_PATH, temp_dir);
+        std::wstring file_path = std::wstring(temp_dir) + L"gotoim_screen_raw.bmp";
+        HANDLE hFile = CreateFileW(file_path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile != INVALID_HANDLE_VALUE) {
+          DWORD written = 0;
+          WriteFile(hFile, buffer.data(), static_cast<DWORD>(buffer.size()), &written, nullptr);
+          CloseHandle(hFile);
+        }
+
+        flutter::EncodableMap res;
+        res[flutter::EncodableValue("path")] = flutter::EncodableValue(Narrow(file_path));
+        res[flutter::EncodableValue("x")] = flutter::EncodableValue(static_cast<int32_t>(vx));
+        res[flutter::EncodableValue("y")] = flutter::EncodableValue(static_cast<int32_t>(vy));
+        res[flutter::EncodableValue("width")] = flutter::EncodableValue(static_cast<int32_t>(vw));
+        res[flutter::EncodableValue("height")] = flutter::EncodableValue(static_cast<int32_t>(vh));
+        const UINT dpi = GetDpiForWindow(hwnd);
+        res[flutter::EncodableValue("dpi")] = flutter::EncodableValue(static_cast<int32_t>(dpi));
+        result->Success(flutter::EncodableValue(res));
+        return;
+      } else if (method == "showScreenCapture") {
+        const auto* args = call.arguments()
+            ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+        int x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (w <= 0) w = GetSystemMetrics(SM_CXSCREEN);
+        if (h <= 0) h = GetSystemMetrics(SM_CYSCREEN);
+        if (args) {
+          const auto read_num = [args](const char* key, int def) -> int {
+            auto it = args->find(flutter::EncodableValue(key));
+            if (it != args->end()) {
+              if (const auto* val_i = std::get_if<int32_t>(&it->second)) return *val_i;
+              if (const auto* val_l = std::get_if<int64_t>(&it->second)) return static_cast<int>(*val_l);
+              if (const auto* val_d = std::get_if<double>(&it->second)) return static_cast<int>(*val_d);
+            }
+            return def;
+          };
+          x = read_num("x", x);
+          y = read_num("y", y);
+          w = read_num("width", w);
+          h = read_num("height", h);
+        }
+
+        LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+        style &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+        style |= WS_POPUP;
+        SetWindowLongPtr(hwnd, GWL_STYLE, style);
+
+        LONG_PTR ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        ex_style = (ex_style & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW;
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex_style);
+
+        SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h,
+                     SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        SetForegroundWindow(hwnd);
+        result->Success(flutter::EncodableValue(true));
+        return;
       } else if (method == "getWindowRect") {
         RECT rc;
         GetWindowRect(hwnd, &rc);

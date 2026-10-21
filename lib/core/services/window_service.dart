@@ -37,6 +37,7 @@ enum WindowType {
   browser,
   tray,
   profileCard,
+  screenCapture,
 }
 
 /// 窗口记录，用于管理和防止重复创建相同会话/应用的窗口
@@ -185,6 +186,12 @@ abstract class WindowService {
     required int ownerId,
     required String sessionUnitId,
   });
+
+  /// 预热常驻桌面截图标注工具窗口
+  Future<void> prewarmScreenCapture();
+
+  /// 唤醒独立截图标注窗口进行桌面截取，返回标注合成后的图像字节流
+  Future<Uint8List?> captureScreenInteractive({bool hideMainWindow = true});
 }
 
 typedef MessageSenderCallback =
@@ -275,6 +282,7 @@ class DefaultWindowService implements WindowService {
       <String, WindowController>{};
   static const int _maxReusableControllers = 10;
   final Map<String, Future<void>> _pendingCreations = <String, Future<void>>{};
+  Completer<Uint8List?>? _screenCaptureCompleter;
 
   final StreamController<List<WindowRecord>> _streamController =
       StreamController<List<WindowRecord>>.broadcast();
@@ -425,6 +433,26 @@ class DefaultWindowService implements WindowService {
               await broadcastToAllSubWindows('theme_changed', {
                 'themeMode': mode,
               });
+            }
+            return true;
+
+          case 'screen_capture_result':
+            final args = call.arguments as Map?;
+            final bytesList = (args?['bytes'] as List?)?.cast<int>();
+            final imageBytes =
+                bytesList != null && bytesList.isNotEmpty
+                    ? Uint8List.fromList(bytesList)
+                    : null;
+            if (_screenCaptureCompleter != null &&
+                !_screenCaptureCompleter!.isCompleted) {
+              _screenCaptureCompleter!.complete(imageBytes);
+            }
+            return true;
+
+          case 'screen_capture_cancel':
+            if (_screenCaptureCompleter != null &&
+                !_screenCaptureCompleter!.isCompleted) {
+              _screenCaptureCompleter!.complete(null);
             }
             return true;
 
@@ -617,6 +645,13 @@ class DefaultWindowService implements WindowService {
         await _nativeControllers[targetId]?.invokeMethod('setModal', false);
         await WindowsWindowAdapter.setModal(false);
       } catch (_) {}
+    }
+    if (targetId == 'tool:screen_capture') {
+      if (_screenCaptureCompleter != null &&
+          !_screenCaptureCompleter!.isCompleted) {
+        _screenCaptureCompleter!.complete(null);
+      }
+      _screenCaptureCompleter = null;
     }
     final currentController = _nativeControllers[targetId];
     if (windowId != null &&
@@ -881,6 +916,100 @@ class DefaultWindowService implements WindowService {
   }
 
   @override
+  Future<void> prewarmScreenCapture() async {
+    if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
+    const targetId = 'tool:screen_capture';
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) return;
+    try {
+      await _openNativeSubWindow(
+        targetId: targetId,
+        type: WindowType.screenCapture,
+        title: 'GotoIM 截图',
+        payload: const NativeWindowPayload(
+          type: SubWindowType.screenCapture,
+          title: 'GotoIM 截图',
+          targetId: targetId,
+        ),
+        showImmediately: false,
+      );
+    } catch (_) {}
+  }
+
+  @override
+  Future<Uint8List?> captureScreenInteractive({bool hideMainWindow = true}) async {
+    if (isSubWindow) {
+      debugPrint('[WindowService] 子窗口不支持直接发起全局截屏');
+      return null;
+    }
+    const targetId = 'tool:screen_capture';
+
+    // 1. 若配置了截屏时隐藏主窗口，先最小化并微量延迟等待 Windows 桌面重绘
+    if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      await WindowsWindowAdapter.minimize();
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+    }
+
+    // 2. 底层 Win32 瞬间捕获全屏幕虚拟桌面位图
+    final capResult = await WindowsWindowAdapter.captureScreen();
+    if (capResult == null) {
+      if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        await WindowsWindowAdapter.bringToFront();
+      }
+      return null;
+    }
+
+    final rawPath = capResult['path'] as String? ?? '';
+    final vx = (capResult['x'] as num?)?.toInt() ?? 0;
+    final vy = (capResult['y'] as num?)?.toInt() ?? 0;
+    final vw = (capResult['width'] as num?)?.toInt() ?? 1920;
+    final vh = (capResult['height'] as num?)?.toInt() ?? 1080;
+    final dpi = (capResult['dpi'] as num?)?.toInt() ?? 96;
+
+    // 3. 复用或预热常驻截图标注子窗口
+    final pending = _pendingCreations[targetId];
+    if (pending != null) {
+      await pending;
+    } else if (!isWindowOpen(targetId)) {
+      await prewarmScreenCapture();
+    }
+    final controller = _nativeControllers[targetId];
+    if (controller == null) {
+      if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        await WindowsWindowAdapter.bringToFront();
+      }
+      return null;
+    }
+
+    _screenCaptureCompleter = Completer<Uint8List?>();
+
+    // 4. 将截取的底图与虚拟屏幕尺寸传递至常驻子窗口，并瞬间唤醒置顶全屏
+    try {
+      await controller.invokeMethod('show_screen_capture', {
+        'imagePath': rawPath,
+        'x': vx,
+        'y': vy,
+        'width': vw,
+        'height': vh,
+        'dpi': dpi,
+      });
+    } catch (e) {
+      debugPrint('[WindowService] 唤醒截图窗口异常: $e');
+      if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        await WindowsWindowAdapter.bringToFront();
+      }
+      return null;
+    }
+
+    final resultBytes = await _screenCaptureCompleter!.future;
+    _screenCaptureCompleter = null;
+
+    if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      await WindowsWindowAdapter.bringToFront();
+    }
+    return resultBytes;
+  }
+
+  @override
   Future<void> openTrayFlyout() async {
     if (isSubWindow) return _requestMain({'type': 'tray'});
     const targetId = 'tool:tray';
@@ -959,7 +1088,9 @@ class DefaultWindowService implements WindowService {
             try {
               await cachedController.invokeMethod('setModal', true);
             } catch (_) {}
-          } else if (type != WindowType.profileCard && type != WindowType.tray) {
+          } else if (type != WindowType.profileCard &&
+              type != WindowType.tray &&
+              type != WindowType.screenCapture) {
             try {
               await cachedController.invokeMethod('center');
             } catch (_) {}

@@ -117,6 +117,33 @@ class WindowsWindowAdapter {
     });
   }
 
+  static Future<Map<String, dynamic>?> captureScreen() async {
+    if (!isWindows) return null;
+    try {
+      final res = await _channel.invokeMethod<Map>('captureScreen');
+      if (res != null) {
+        return Map<String, dynamic>.from(res);
+      }
+    } catch (e) {
+      debugPrint('[WindowsWindowAdapter] captureScreen error: $e');
+    }
+    return null;
+  }
+
+  static Future<void> showScreenCapture({
+    int? x,
+    int? y,
+    int? width,
+    int? height,
+  }) async {
+    await _invoke('showScreenCapture', {
+      if (x != null) 'x': x,
+      if (y != null) 'y': y,
+      if (width != null) 'width': width,
+      if (height != null) 'height': height,
+    });
+  }
+
   static Future<Map<String, int>?> getWindowRect() async {
     if (!isWindows) return null;
     try {
