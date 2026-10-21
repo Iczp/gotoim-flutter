@@ -149,6 +149,8 @@ class SessionListItemView extends StatelessWidget {
     this.onDoubleTap,
     this.onSecondaryTapDown,
     this.onLongPress,
+    this.onAvatarHover,
+    this.onAvatarLeave,
     this.isSelected = false,
     this.showDivider = true,
     this.dividerIndent = 74.0,
@@ -162,6 +164,8 @@ class SessionListItemView extends StatelessWidget {
   final VoidCallback? onDoubleTap;
   final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onLongPress;
+  final void Function(Rect rect, SessionSummary session)? onAvatarHover;
+  final VoidCallback? onAvatarLeave;
   final bool isSelected;
   final bool showDivider;
   final double dividerIndent;
@@ -179,6 +183,8 @@ class SessionListItemView extends StatelessWidget {
         onDoubleTap: onDoubleTap,
         onSecondaryTapDown: onSecondaryTapDown,
         onLongPress: onLongPress,
+        onAvatarHover: onAvatarHover,
+        onAvatarLeave: onAvatarLeave,
         showDivider: showDivider,
         dividerIndent: dividerIndent,
         dividerEndIndent: dividerEndIndent,

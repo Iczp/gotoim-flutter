@@ -21,6 +21,8 @@ class SessionUnitItem extends StatelessWidget {
     this.onTap,
     this.onDoubleTap,
     this.onSecondaryTapDown,
+    this.onAvatarHover,
+    this.onAvatarLeave,
     super.key,
   });
 
@@ -34,6 +36,8 @@ class SessionUnitItem extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
   final GestureTapDownCallback? onSecondaryTapDown;
+  final void Function(Rect rect, SessionSummary session)? onAvatarHover;
+  final VoidCallback? onAvatarLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -78,17 +82,36 @@ class SessionUnitItem extends StatelessWidget {
               child: Row(
                 children: [
                   const SizedBox(width: 16),
-                  ChatObjectAvatar(
-                    name:
-                        (destination['displayName'] ??
-                                destination['name'] ??
-                                item.title)
-                            .toString(),
-                    imageUrl:
-                        (destination['thumbnail'] ?? destination['portrait'])
-                            ?.toString(),
-                    radius: 24,
-                    chatObjectId: item.destinationId,
+                  Builder(
+                    builder: (avatarCtx) {
+                      return MouseRegion(
+                        onEnter: (e) {
+                          if (onAvatarHover != null) {
+                            final box =
+                                avatarCtx.findRenderObject() as RenderBox?;
+                            if (box != null && box.hasSize) {
+                              final origin = box.localToGlobal(Offset.zero);
+                              final rect = origin & box.size;
+                              onAvatarHover!(rect, item);
+                            }
+                          }
+                        },
+                        onExit: (_) => onAvatarLeave?.call(),
+                        child: ChatObjectAvatar(
+                          name:
+                              (destination['displayName'] ??
+                                      destination['name'] ??
+                                      item.title)
+                                  .toString(),
+                          imageUrl:
+                              (destination['thumbnail'] ??
+                                      destination['portrait'])
+                                  ?.toString(),
+                          radius: 24,
+                          chatObjectId: item.destinationId,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(width: 14),
                   Expanded(

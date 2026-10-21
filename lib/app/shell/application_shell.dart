@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import '../../core/native/native.dart';
 import '../../core/platform/windows/windows_window_adapter.dart';
 import '../../core/services/tray_grouped_unread_provider.dart';
 import '../../core/services/tray_service.dart';
+import '../../core/services/window_service.dart';
 import '../../core/theme/tab_glass_controller.dart';
 import '../../core/widgets/app_badge.dart';
 import '../../core/widgets/glass_container.dart';
@@ -70,6 +72,15 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       // Both services start only after the existing privacy agreement check.
       if (mounted) {
         unawaited(ref.read(trayServiceProvider).initialize());
+        if (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+          Future.delayed(const Duration(milliseconds: 1500), () {
+            if (!mounted) return;
+            final windowService = ref.read(windowServiceProvider);
+            windowService.prewarmProfileCard();
+            windowService.prewarmTrayFlyout();
+          });
+        }
       }
       await ref
           .read(appUpdateServiceProvider)

@@ -280,10 +280,7 @@ class DesktopTrayService with TrayListener implements TrayService {
     if (menuItem.key == 'show_app') {
       windowService.bringToFront('main');
     } else if (menuItem.key == 'open_unread_flyout') {
-      final context = rootNavigatorKey.currentContext;
-      if (context != null && context.mounted) {
-        DesktopTrayMessageBox.show(context);
-      }
+      unawaited(windowService.openTrayFlyout());
     } else if (menuItem.key == 'exit_app') {
       dispose();
       exit(0);
@@ -386,7 +383,12 @@ final Provider<TrayService> trayServiceProvider = Provider<TrayService>((ref) {
     return const NoopTrayService();
   }
   final windowService = ref.watch(windowServiceProvider);
-  final tray = DesktopTrayService(windowService: windowService);
+  final tray = DesktopTrayService(
+    windowService: windowService,
+    onOpenFlyout: () async {
+      await windowService.openTrayFlyout();
+    },
+  );
   // Wire the existing instance in one direction. Reading trayServiceProvider
   // from windowServiceProvider's IPC handler creates a Riverpod dependency cycle.
   if (windowService is DefaultWindowService) {

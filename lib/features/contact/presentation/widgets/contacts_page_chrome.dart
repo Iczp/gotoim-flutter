@@ -1,9 +1,14 @@
+import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme_tokens.dart';
+import '../../../../core/widgets/desktop_dialog.dart';
+import '../add_friend_page.dart';
+import '../../../search/presentation/search_page.dart';
 
 /// Shared visual constants for the contacts page.
 abstract final class ContactsPageMetrics {
@@ -177,12 +182,46 @@ class ContactsTitleBar extends StatelessWidget {
                       const Spacer(),
                       IconButton(
                         tooltip: '搜索联系人',
-                        onPressed: () => context.push('/search'),
+                        onPressed: () {
+                          final isDesktop = (!kIsWeb &&
+                                  (Platform.isWindows ||
+                                      Platform.isMacOS ||
+                                      Platform.isLinux)) ||
+                              MediaQuery.sizeOf(context).width >= 720;
+                          if (isDesktop) {
+                            showDesktopModalDialog<void>(
+                              context: context,
+                              title: '搜索联系人',
+                              width: 580,
+                              height: 600,
+                              child: const SearchPage(isDialog: true),
+                            );
+                          } else {
+                            context.push('/search');
+                          }
+                        },
                         icon: const Icon(Icons.search),
                       ),
                       IconButton(
                         tooltip: '添加好友',
-                        onPressed: () => context.push('/add-friend'),
+                        onPressed: () {
+                          final isDesktop = (!kIsWeb &&
+                                  (Platform.isWindows ||
+                                      Platform.isMacOS ||
+                                      Platform.isLinux)) ||
+                              MediaQuery.sizeOf(context).width >= 720;
+                          if (isDesktop) {
+                            showDesktopModalDialog<void>(
+                              context: context,
+                              title: '添加好友',
+                              width: 520,
+                              height: 600,
+                              child: const AddFriendPage(isDialog: true),
+                            );
+                          } else {
+                            context.push('/add-friend');
+                          }
+                        },
                         icon: const Icon(Icons.add),
                       ),
                     ],

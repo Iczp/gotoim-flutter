@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../browser/app_webview_page.dart';
 import '../../widgets/app_toast.dart';
+import '../../widgets/desktop_dialog.dart';
 import '../url_security_level.dart';
 import '../widgets/appeal_dialog.dart';
 import '../widgets/report_dialog.dart';
@@ -557,6 +561,58 @@ class _UrlInterstitialPageState extends State<UrlInterstitialPage> {
   }
 
   void _showMoreActions(BuildContext context) {
+    final isDesktop = (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+        MediaQuery.sizeOf(context).width >= 720;
+
+    if (isDesktop) {
+      showDesktopModalDialog<void>(
+        context: context,
+        title: '更多操作',
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.copy_rounded),
+              title: const Text('复制网页链接'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _copyUrl();
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.verified_outlined, color: Color(0xFF07C160)),
+              title: const Text('网站误报申诉 / 申请加白'),
+              subtitle: const Text(
+                '如认为该网站系正规官方业务，可申请加入平台受信白名单',
+                style: TextStyle(fontSize: 11),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _openAppealDialog();
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.report_problem_outlined, color: Colors.red),
+              title: const Text('投诉与举报违规'),
+              subtitle: const Text(
+                '涉嫌欺诈、色情、仿冒钓鱼等违规内容举报',
+                style: TextStyle(fontSize: 11),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _openReportDialog();
+              },
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(

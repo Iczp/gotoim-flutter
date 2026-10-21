@@ -15,6 +15,7 @@ import '../../session/data/models/session_summary.dart';
 import '../../session/presentation/chat_object_avatar.dart';
 import '../../settings/presentation/message_alert_settings_page.dart';
 import '../../user/presentation/profile_page.dart';
+import '../../group_management/presentation/group_management_page.dart';
 import '../application/chat_settings_controller.dart';
 import 'chat_background_page.dart';
 import 'chat_background_preview_page.dart';
@@ -266,9 +267,28 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                         onTap:
                             controller.sessionId == null
                                 ? null
-                                : () => context.push(
-                                  '/group-management/${Uri.encodeComponent(controller.sessionId!)}',
-                                ),
+                                : () {
+                                    final isDesktop =
+                                        widget.isDrawer ||
+                                        MediaQuery.sizeOf(context).width >= 720;
+                                    if (isDesktop) {
+                                      showDesktopModalDialog<void>(
+                                        context: context,
+                                        title: '群管理',
+                                        subtitle: controller.title,
+                                        width: 580,
+                                        height: 620,
+                                        child: GroupManagementPage(
+                                          sessionId: controller.sessionId!,
+                                          isDialog: true,
+                                        ),
+                                      );
+                                    } else {
+                                      context.push(
+                                        '/group-management/${Uri.encodeComponent(controller.sessionId!)}',
+                                      );
+                                    }
+                                  },
                       ),
                     Cell(
                       icon: const Icon(Icons.notifications_off_outlined),

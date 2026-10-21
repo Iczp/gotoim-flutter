@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -11,6 +13,7 @@ import '../../features/session/data/models/session_summary.dart';
 import '../widgets/app_avatar.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/avatar_preferences.dart';
+import '../widgets/desktop_dialog.dart';
 import '../widgets/target_picker/forward_target_picker.dart';
 import '../security/widgets/report_dialog.dart';
 import 'forward_link_confirm_dialog.dart';
@@ -54,6 +57,32 @@ Future<void> showBrowserMoreSheet(
   VoidCallback? onMinimizeToFloat,
   List<BrowserMoreAction>? customActions,
 }) {
+  final isDesktop = (!kIsWeb &&
+          (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+      MediaQuery.sizeOf(context).width >= 720;
+
+  if (isDesktop) {
+    return showDesktopModalDialog<void>(
+      context: context,
+      width: 480,
+      title: '网页操作',
+      subtitle: title ?? url,
+      child: _BrowserMoreSheetContent(
+        url: url,
+        title: title,
+        parentContext: context,
+        onRefresh: onRefresh,
+        onToggleMode: onToggleMode,
+        toggleModeLabel: toggleModeLabel,
+        toggleModeIcon: toggleModeIcon,
+        onAdjustFontSize: onAdjustFontSize,
+        onMinimizeToFloat: onMinimizeToFloat,
+        customActions: customActions,
+        isDialog: true,
+      ),
+    );
+  }
+
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -87,6 +116,7 @@ class _BrowserMoreSheetContent extends ConsumerStatefulWidget {
     this.onAdjustFontSize,
     this.onMinimizeToFloat,
     this.customActions,
+    this.isDialog = false,
   });
 
   final String url;
@@ -99,6 +129,7 @@ class _BrowserMoreSheetContent extends ConsumerStatefulWidget {
   final VoidCallback? onAdjustFontSize;
   final VoidCallback? onMinimizeToFloat;
   final List<BrowserMoreAction>? customActions;
+  final bool isDialog;
 
   @override
   ConsumerState<_BrowserMoreSheetContent> createState() =>
@@ -449,8 +480,10 @@ class _BrowserMoreSheetContentState
 
     return Container(
       decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+        color: widget.isDialog ? Colors.transparent : backgroundColor,
+        borderRadius: widget.isDialog
+            ? BorderRadius.zero
+            : const BorderRadius.vertical(top: Radius.circular(14)),
       ),
       child: SafeArea(
         top: false,
@@ -583,29 +616,31 @@ class _BrowserMoreSheetContentState
 
             const SizedBox(height: 14),
 
-            // ── 分隔粗线（微信风格 7px 浅灰槽） ─────────────────────────────
-            Container(
-              height: 7,
-              color: isDark ? const Color(0xFF1B1B1B) : const Color(0xFFEBEBEB),
-            ),
+            if (!widget.isDialog) ...[
+              // ── 分隔粗线（微信风格 7px 浅灰槽） ─────────────────────────────
+              Container(
+                height: 7,
+                color: isDark ? const Color(0xFF1B1B1B) : const Color(0xFFEBEBEB),
+              ),
 
-            // ── 底部「取消」按钮（微信经典蓝 #576B95） ─────────────────────
-            InkWell(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(
-                height: 52,
-                alignment: Alignment.center,
-                color: isDark ? const Color(0xFF242424) : Colors.white,
-                child: const Text(
-                  '取消',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF576B95),
+              // ── 底部「取消」按钮（微信经典蓝 #576B95） ─────────────────────
+              InkWell(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  height: 52,
+                  alignment: Alignment.center,
+                  color: isDark ? const Color(0xFF242424) : Colors.white,
+                  child: const Text(
+                    '取消',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF576B95),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),

@@ -20,6 +20,34 @@ class ProfileSubject {
     this.editableAvatar = false,
   });
 
+  factory ProfileSubject.fromMap(Map<String, dynamic> map) {
+    final kindStr = map['kind'] as String?;
+    final kind = ProfileKind.values.firstWhere(
+      (k) => k.name == kindStr,
+      orElse: () => ProfileKind.member,
+    );
+    final rawMap = map['raw'];
+    return ProfileSubject(
+      kind: kind,
+      id: map['id']?.toString() ?? '',
+      name: map['name']?.toString() ?? '用户',
+      avatarUrl: map['avatarUrl']?.toString() ?? '',
+      subtitle: map['subtitle']?.toString() ?? '',
+      editableAvatar: map['editableAvatar'] == true,
+      raw: rawMap is Map ? Map<String, dynamic>.from(rawMap) : map,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'kind': kind.name,
+    'id': id,
+    'name': name,
+    'avatarUrl': avatarUrl,
+    'subtitle': subtitle,
+    'editableAvatar': editableAvatar,
+    'raw': raw,
+  };
+
   factory ProfileSubject.member(ChatMember member) => ProfileSubject(
     kind: ProfileKind.member,
     id: member.id,

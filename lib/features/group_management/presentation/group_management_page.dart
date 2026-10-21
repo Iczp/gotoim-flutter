@@ -5,8 +5,15 @@ import '../application/group_management_controller.dart';
 import '../data/group_management_api.dart';
 
 class GroupManagementPage extends ConsumerStatefulWidget {
-  const GroupManagementPage({required this.sessionId, super.key});
+  const GroupManagementPage({
+    required this.sessionId,
+    this.isDialog = false,
+    super.key,
+  });
+
   final String sessionId;
+  final bool isDialog;
+
   @override
   ConsumerState<GroupManagementPage> createState() =>
       _GroupManagementPageState();
@@ -14,6 +21,7 @@ class GroupManagementPage extends ConsumerStatefulWidget {
 
 class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
   late final GroupManagementController controller;
+
   @override
   void initState() {
     super.initState();
@@ -32,33 +40,54 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
-    builder:
-        (context, _) => DefaultTabController(
+    builder: (context, _) {
+      final tabContent =
+          controller.loading
+              ? const Center(child: CircularProgressIndicator())
+              : TabBarView(
+                children: <Widget>[
+                  _organizations(),
+                  _roles(),
+                  _permissions(),
+                ],
+              );
+
+      if (widget.isDialog) {
+        return DefaultTabController(
           length: 3,
-          child: Scaffold(
-            appBar: AppBar(
-              title: const Text('群管理'),
-              bottom: const TabBar(
+          child: Column(
+            children: [
+              const TabBar(
                 tabs: <Widget>[
                   Tab(text: '组织部门'),
                   Tab(text: '角色'),
                   Tab(text: '权限'),
                 ],
               ),
-            ),
-            floatingActionButton: _addButton(),
-            body:
-                controller.loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : TabBarView(
-                      children: <Widget>[
-                        _organizations(),
-                        _roles(),
-                        _permissions(),
-                      ],
-                    ),
+              Expanded(child: tabContent),
+            ],
           ),
+        );
+      }
+
+      return DefaultTabController(
+        length: 3,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('群管理'),
+            bottom: const TabBar(
+              tabs: <Widget>[
+                Tab(text: '组织部门'),
+                Tab(text: '角色'),
+                Tab(text: '权限'),
+              ],
+            ),
+          ),
+          floatingActionButton: _addButton(),
+          body: tabContent,
         ),
+      );
+    },
   );
 
   Widget? _addButton() => FloatingActionButton.small(
@@ -119,8 +148,9 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
   );
 
   Widget _permissions() {
-    if (controller.selectedRoleId == null)
+    if (controller.selectedRoleId == null) {
       return const Center(child: Text('请先创建并选择角色'));
+    }
     return _list(
       controller.permissions,
       empty: '暂无权限定义',

@@ -350,6 +350,10 @@ class WindowControls : public flutter::Plugin {
         ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
         SetForegroundWindow(hwnd);
       } else if (method == "hide") {
+        if (is_modal_ && g_main_window && IsWindow(g_main_window)) {
+          EnableWindow(g_main_window, TRUE);
+          SetForegroundWindow(g_main_window);
+        }
         ShowWindow(hwnd, SW_HIDE);
       } else if (method == "close") {
         PostMessage(hwnd, WM_CLOSE, 0, 0);
@@ -376,8 +380,25 @@ class WindowControls : public flutter::Plugin {
             SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window));
             EnableWindow(g_main_window, FALSE);
           }
-          SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                       SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+          const UINT dpi = GetDpiForWindow(hwnd);
+          const int physical_w = MulDiv(720, dpi, 96);
+          const int physical_h = MulDiv(560, dpi, 96);
+          int x = 0;
+          int y = 0;
+          if (g_main_window && IsWindow(g_main_window)) {
+            RECT main_rc;
+            GetWindowRect(g_main_window, &main_rc);
+            x = main_rc.left + ((main_rc.right - main_rc.left) - physical_w) / 2;
+            y = main_rc.top + ((main_rc.bottom - main_rc.top) - physical_h) / 2;
+          } else {
+            HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO info{sizeof(MONITORINFO)};
+            GetMonitorInfo(monitor, &info);
+            x = info.rcWork.left + ((info.rcWork.right - info.rcWork.left) - physical_w) / 2;
+            y = info.rcWork.top + ((info.rcWork.bottom - info.rcWork.top) - physical_h) / 2;
+          }
+          SetWindowPos(hwnd, HWND_TOP, x, y, physical_w, physical_h,
+                       SWP_FRAMECHANGED | SWP_SHOWWINDOW);
           SetForegroundWindow(hwnd);
         } else {
           if (g_main_window && IsWindow(g_main_window)) {
@@ -385,8 +406,32 @@ class WindowControls : public flutter::Plugin {
             SetForegroundWindow(g_main_window);
           }
         }
+      } else if (method == "setToolWindow") {
+        const bool* enable = call.arguments()
+            ? std::get_if<bool>(call.arguments()) : nullptr;
+        bool is_tool = enable ? *enable : true;
+        LONG_PTR ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        if (is_tool) {
+          ex_style = (ex_style & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW;
+        } else {
+          ex_style = (ex_style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW;
+        }
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex_style);
+        if (g_main_window && IsWindow(g_main_window) && hwnd != g_main_window) {
+          SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window));
+        }
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
       } else if (method == "trayFlyout") {
         auto_hide_ = true;
+        LONG_PTR ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        if ((ex_style & WS_EX_TOOLWINDOW) == 0 || (ex_style & WS_EX_APPWINDOW) != 0) {
+          ex_style = (ex_style & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW;
+          SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex_style);
+        }
+        if (g_main_window && IsWindow(g_main_window) && hwnd != g_main_window) {
+          SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window));
+        }
         POINT cursor;
         GetCursorPos(&cursor);
         MONITORINFO monitor{sizeof(MONITORINFO)};
@@ -399,6 +444,63 @@ class WindowControls : public flutter::Plugin {
         SetWindowPos(hwnd, HWND_TOPMOST, work.right - width - 8,
                      work.bottom - height - 8, width, height, SWP_SHOWWINDOW);
         SetForegroundWindow(hwnd);
+      } else if (method == "positionFlyout") {
+        auto_hide_ = true;
+        LONG_PTR ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        if ((ex_style & WS_EX_TOOLWINDOW) == 0 || (ex_style & WS_EX_APPWINDOW) != 0) {
+          ex_style = (ex_style & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW;
+          SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex_style);
+        }
+        if (g_main_window && IsWindow(g_main_window) && hwnd != g_main_window) {
+          SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window));
+        }
+        const auto* args = call.arguments()
+            ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+        if (args) {
+          const auto read_num = [args](const char* key, int def) -> int {
+            auto it = args->find(flutter::EncodableValue(key));
+            if (it != args->end()) {
+              if (const auto* val = std::get_if<int32_t>(&it->second)) return *val;
+              if (const auto* val = std::get_if<int64_t>(&it->second)) return static_cast<int>(*val);
+              if (const auto* val = std::get_if<double>(&it->second)) return static_cast<int>(*val);
+            }
+            return def;
+          };
+          const int x = read_num("x", 0);
+          const int y = read_num("y", 0);
+          const int w = read_num("width", 380);
+          const int h = read_num("height", 420);
+          bool no_activate = true;
+          auto no_act_it = args->find(flutter::EncodableValue("noActivate"));
+          if (no_act_it != args->end()) {
+            if (const auto* b = std::get_if<bool>(&no_act_it->second)) no_activate = *b;
+          }
+          SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h,
+                       SWP_SHOWWINDOW | (no_activate ? SWP_NOACTIVATE : 0));
+          if (!no_activate) {
+            SetForegroundWindow(hwnd);
+          }
+        }
+      } else if (method == "getWindowRect") {
+        RECT rc;
+        GetWindowRect(hwnd, &rc);
+        POINT pt{0, 0};
+        ClientToScreen(hwnd, &pt);
+        RECT client_rc;
+        GetClientRect(hwnd, &client_rc);
+        flutter::EncodableMap result_map;
+        result_map[flutter::EncodableValue("left")] = flutter::EncodableValue(static_cast<int32_t>(rc.left));
+        result_map[flutter::EncodableValue("top")] = flutter::EncodableValue(static_cast<int32_t>(rc.top));
+        result_map[flutter::EncodableValue("right")] = flutter::EncodableValue(static_cast<int32_t>(rc.right));
+        result_map[flutter::EncodableValue("bottom")] = flutter::EncodableValue(static_cast<int32_t>(rc.bottom));
+        result_map[flutter::EncodableValue("clientLeft")] = flutter::EncodableValue(static_cast<int32_t>(pt.x));
+        result_map[flutter::EncodableValue("clientTop")] = flutter::EncodableValue(static_cast<int32_t>(pt.y));
+        result_map[flutter::EncodableValue("clientWidth")] = flutter::EncodableValue(static_cast<int32_t>(client_rc.right - client_rc.left));
+        result_map[flutter::EncodableValue("clientHeight")] = flutter::EncodableValue(static_cast<int32_t>(client_rc.bottom - client_rc.top));
+        const UINT dpi = GetDpiForWindow(hwnd);
+        result_map[flutter::EncodableValue("dpi")] = flutter::EncodableValue(static_cast<int32_t>(dpi));
+        result->Success(flutter::EncodableValue(result_map));
+        return;
       } else {
         result->NotImplemented();
         return;

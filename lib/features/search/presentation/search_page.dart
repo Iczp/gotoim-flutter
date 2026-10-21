@@ -1,16 +1,26 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_navigation.dart';
+import '../../../app/shell/application_shell.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_modal.dart';
+import '../../../core/widgets/desktop_dialog.dart';
+import '../../contact/presentation/add_friend_page.dart';
+import '../../home/presentation/home_sections.dart';
+import '../../session/presentation/desktop_session_split_view.dart';
 import '../application/search_controller.dart';
 import '../domain/search_models.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
-  const SearchPage({super.key});
+  const SearchPage({this.isDialog = false, super.key});
+
+  final bool isDialog;
 
   @override
   ConsumerState<SearchPage> createState() => _SearchPageState();
@@ -56,6 +66,36 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     super.dispose();
   }
 
+  void _navigateToChat({
+    required BuildContext context,
+    required String sessionUnitId,
+    int? ownerId,
+    String? title,
+  }) {
+    final isDesktop = (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+        MediaQuery.sizeOf(context).width >= 720;
+
+    if (isDesktop) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      ref
+          .read(currentHomeSectionProvider.notifier)
+          .setSection(HomeSection.messages);
+      ref
+          .read(selectedDesktopSessionUnitIdProvider.notifier)
+          .select(sessionUnitId);
+    } else {
+      SafeChatNavigator.pushChat(
+        context,
+        '/chat/${Uri.encodeComponent(sessionUnitId)}'
+        '?ownerId=${ownerId ?? 0}'
+        '&title=${Uri.encodeQueryComponent(title ?? '')}',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -78,7 +118,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           elevation: 0,
           backgroundColor: theme.scaffoldBackgroundColor,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            icon: Icon(
+              widget.isDialog
+                  ? Icons.close_rounded
+                  : Icons.arrow_back_ios_new_rounded,
+              size: 20,
+            ),
             onPressed: () {
               if (searchState.selectedCategory != SearchCategory.all) {
                 controller.setCategory(SearchCategory.all);
@@ -445,11 +490,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               onTap: () {
                 controller.recordKeyword(keyword);
                 final ownerId = contact.ownerId ?? 0;
-                SafeChatNavigator.pushChat(
-                  context,
-                  '/chat/${Uri.encodeComponent(contact.id)}'
-                  '?ownerId=$ownerId'
-                  '&title=${Uri.encodeQueryComponent(contact.title)}',
+                _navigateToChat(
+                  context: context,
+                  sessionUnitId: contact.id,
+                  ownerId: ownerId,
+                  title: contact.title,
                 );
               },
             ),
@@ -499,10 +544,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   : null,
               onTap: () {
                 controller.recordKeyword(keyword);
-                SafeChatNavigator.pushChat(
-                  context,
-                  '/chat/${Uri.encodeComponent(msg.sessionUnitId)}'
-                  '?title=${Uri.encodeQueryComponent(msg.sessionTitle ?? '')}',
+                _navigateToChat(
+                  context: context,
+                  sessionUnitId: msg.sessionUnitId,
+                  title: msg.sessionTitle,
                 );
               },
             ),
@@ -575,10 +620,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       ),
                       onPressed: () {
                         controller.recordKeyword(keyword);
-                        SafeChatNavigator.pushChat(
-                          context,
-                          '/chat/${Uri.encodeComponent(remote.id)}'
-                          '?title=${Uri.encodeQueryComponent(remote.name)}',
+                        _navigateToChat(
+                          context: context,
+                          sessionUnitId: remote.id,
+                          title: remote.name,
                         );
                       },
                       child: const Text('发消息'),
@@ -590,9 +635,26 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       ),
                       onPressed: () {
                         controller.recordKeyword(keyword);
-                        context.push(
-                          '/add-friend?keyword=${Uri.encodeComponent(remote.name)}',
-                        );
+                        final isDesktop = (!kIsWeb &&
+                                (Platform.isWindows ||
+                                    Platform.isMacOS ||
+                                    Platform.isLinux)) ||
+                            MediaQuery.sizeOf(context).width >= 720;
+                        if (isDesktop) {
+                          showDesktopModalDialog<void>(
+                            context: context,
+                            title: '添加好友',
+                            width: 520,
+                            child: AddFriendPage(
+                              initialKeyword: remote.name,
+                              isDialog: true,
+                            ),
+                          );
+                        } else {
+                          context.push(
+                            '/add-friend?keyword=${Uri.encodeComponent(remote.name)}',
+                          );
+                        }
                       },
                       child: const Text('加好友'),
                     ),

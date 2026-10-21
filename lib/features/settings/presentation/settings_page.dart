@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,13 +7,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/compliance/agreement_viewer_page.dart';
 import '../../../core/compliance/privacy_service.dart';
+import '../../../core/services/window_service.dart';
 import '../../../core/theme/font_scale_controller.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cell_group.dart';
+import '../../../core/widgets/desktop_dialog.dart';
+import '../../account/presentation/account_profile_page.dart';
 import '../../app_update/application/app_update_service.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../session/presentation/login_devices_page.dart';
+import 'theme_settings_page.dart';
 
 /// 设置总入口页面
 class SettingsPage extends ConsumerWidget {
@@ -105,6 +112,9 @@ class SettingsPage extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final fontScale = ref.watch(fontScaleProvider);
     final fontLevel = FontScaleLevel.fromScale(fontScale);
+    final isDesktop = (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+        MediaQuery.sizeOf(context).width >= 720;
 
     final themeModeLabel = switch (themeMode) {
       ThemeMode.system => '跟随系统',
@@ -128,7 +138,18 @@ class SettingsPage extends ConsumerWidget {
                 title: '个人信息',
                 subtitle: '头像、昵称、签名与基础设置',
                 showArrow: true,
-                onTap: () => context.push('/account/profile'),
+                onTap: () {
+                  if (isDesktop) {
+                    showDesktopModalDialog<void>(
+                      context: context,
+                      title: '个人信息',
+                      width: 480,
+                      child: const AccountProfilePage(isDialog: true),
+                    );
+                  } else {
+                    context.push('/account/profile');
+                  }
+                },
               ),
               Cell(
                 icon: const Icon(Icons.manage_accounts_outlined),
@@ -142,7 +163,18 @@ class SettingsPage extends ConsumerWidget {
                 title: '登录设备',
                 subtitle: '已登录设备列表与下线管理',
                 showArrow: true,
-                onTap: () => context.push('/devices'),
+                onTap: () {
+                  if (isDesktop) {
+                    showDesktopModalDialog<void>(
+                      context: context,
+                      title: '登录设备管理',
+                      width: 520,
+                      child: const LoginDevicesPage(isDialog: true),
+                    );
+                  } else {
+                    context.push('/devices');
+                  }
+                },
               ),
               Cell(
                 icon: const Icon(Icons.no_accounts_outlined, color: Colors.redAccent),
@@ -165,14 +197,31 @@ class SettingsPage extends ConsumerWidget {
                 subtitle: '深浅模式、字体大小、过界动效与毛玻璃',
                 value: '$themeModeLabel · ${fontLevel.label}',
                 showArrow: true,
-                onTap: () => context.push('/settings/theme'),
+                onTap: () {
+                  if (isDesktop) {
+                    showDesktopModalDialog<void>(
+                      context: context,
+                      title: '外观与主题',
+                      width: 440,
+                      child: const ThemeSettingsPage(),
+                    );
+                  } else {
+                    context.push('/settings/theme');
+                  }
+                },
               ),
               Cell(
                 icon: const Icon(Icons.folder_shared_outlined),
                 title: '局域网文件管理',
                 subtitle: 'HTTP 文件收发与 Web 终端',
                 showArrow: true,
-                onTap: () => context.push('/local-file-server'),
+                onTap: () {
+                  if (isDesktop) {
+                    ref.read(windowServiceProvider).openLocalFileServer();
+                  } else {
+                    context.push('/local-file-server');
+                  }
+                },
               ),
               Cell(
                 icon: const Icon(Icons.qr_code_scanner_rounded),
@@ -240,7 +289,13 @@ class SettingsPage extends ConsumerWidget {
                   title: '开发诊断中心',
                   subtitle: '全套架构、Realtime、Native 及诊断',
                   showArrow: true,
-                  onTap: () => context.push('/diagnostics'),
+                  onTap: () {
+                    if (isDesktop) {
+                      ref.read(windowServiceProvider).openDiagnostics();
+                    } else {
+                      context.push('/diagnostics');
+                    }
+                  },
                 ),
             ],
           ),

@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,10 @@ import 'package:go_router/go_router.dart';
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/widgets/app_badge.dart';
+import '../../../core/widgets/desktop_dialog.dart';
+import '../../contact/presentation/add_friend_page.dart';
+import '../../group/presentation/create_group_page.dart';
+import '../../search/presentation/search_page.dart';
 import '../data/models/chat_owner.dart';
 import 'chat_object_avatar.dart';
 
@@ -126,7 +132,24 @@ class CurrentOwnerHeader extends ConsumerWidget {
                         IconButton(
                           icon: const Icon(Icons.search_rounded),
                           tooltip: '搜索',
-                          onPressed: () => context.push('/search'),
+                          onPressed: () {
+                            final isDesktop = (!kIsWeb &&
+                                    (Platform.isWindows ||
+                                        Platform.isMacOS ||
+                                        Platform.isLinux)) ||
+                                MediaQuery.sizeOf(context).width >= 720;
+                            if (isDesktop) {
+                              showDesktopModalDialog<void>(
+                                context: context,
+                                title: '搜索',
+                                width: 580,
+                                height: 600,
+                                child: const SearchPage(isDialog: true),
+                              );
+                            } else {
+                              context.push('/search');
+                            }
+                          },
                         ),
                         Builder(
                           builder: (buttonContext) {
@@ -167,15 +190,40 @@ class CurrentOwnerHeader extends ConsumerWidget {
       _HeaderMenuRoute(
         targetRect: targetRect,
         onSelected: (value) {
+          final isDesktop = (!kIsWeb &&
+                  (Platform.isWindows ||
+                      Platform.isMacOS ||
+                      Platform.isLinux)) ||
+              MediaQuery.sizeOf(pageContext).width >= 720;
           switch (value) {
             case 'scan':
               ref
                   .read(unifiedScanDispatcherProvider)
                   .openAndDispatch(pageContext, ref);
             case 'add_friend':
-              pageContext.push('/add-friend');
+              if (isDesktop) {
+                showDesktopModalDialog<void>(
+                  context: pageContext,
+                  title: '添加好友',
+                  width: 520,
+                  height: 600,
+                  child: const AddFriendPage(isDialog: true),
+                );
+              } else {
+                pageContext.push('/add-friend');
+              }
             case 'create_group':
-              pageContext.push('/create-group');
+              if (isDesktop) {
+                showDesktopModalDialog<void>(
+                  context: pageContext,
+                  title: '发起群聊',
+                  width: 480,
+                  height: 560,
+                  child: const CreateGroupPage(isDialog: true),
+                );
+              } else {
+                pageContext.push('/create-group');
+              }
           }
         },
       ),

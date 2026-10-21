@@ -1,9 +1,13 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/deep_link/deep_link_service.dart';
 import '../../../core/services/task/app_task_manager.dart';
+import '../../../core/widgets/desktop_dialog.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../application/workbench_layout_notifier.dart';
 import '../data/workbench_models.dart';
@@ -92,6 +96,24 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
 
   void _showAddWidgetSheet() {
     final notifier = ref.read(workbenchLayoutProvider.notifier);
+    final isDesktop = (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+        MediaQuery.sizeOf(context).width >= 720;
+
+    if (isDesktop) {
+      showDesktopModalDialog<void>(
+        context: context,
+        title: '添加组件到工作台',
+        subtitle: '选择不同规格的微应用或数据看板组件',
+        width: 500,
+        height: 520,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: _buildAddWidgetItems(context, notifier),
+        ),
+      );
+      return;
+    }
 
     showModalBottomSheet<void>(
       context: context,
@@ -102,8 +124,8 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
-        final maxHeight = MediaQuery.of(context).size.height * 0.75;
+      builder: (sheetContext) {
+        final maxHeight = MediaQuery.of(sheetContext).size.height * 0.75;
         return SafeArea(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight),
@@ -113,154 +135,166 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '添加组件到工作台',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '添加组件到工作台',
+                        style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.add_to_home_screen),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(sheetContext),
+                      ),
+                    ],
                   ),
-                  title: const Text('1x1 标准快捷应用'),
-                  subtitle: const Text('标准单位格快捷入口'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    final now = DateTime.now().millisecondsSinceEpoch;
-                    notifier.addItem(
-                      WorkbenchGridItem(
-                        id: 'custom_app_$now',
-                        title: '新应用',
-                        type: WorkbenchGridItemType.app,
-                        x: 0,
-                        y: 0,
-                        extra: {'icon': 'apps', 'color': 0xFF009688},
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.view_stream_outlined),
-                  ),
-                  title: const Text('2x1 快捷胶囊卡片'),
-                  subtitle: const Text('占两列一行的紧凑状态卡片'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    final now = DateTime.now().millisecondsSinceEpoch;
-                    notifier.addItem(
-                      WorkbenchGridItem(
-                        id: 'custom_capsule_$now',
-                        title: '快捷便签',
-                        type: WorkbenchGridItemType.cardWidget,
-                        x: 0,
-                        y: 0,
-                        spanX: 2,
-                        spanY: 1,
-                        extra: {
-                          'subtitle': '随时记录业务待办',
-                          'icon': 'widgets',
-                        },
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.dashboard_outlined),
-                  ),
-                  title: const Text('2x2 中型数据卡片'),
-                  subtitle: const Text('两行两列中型看板'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    final now = DateTime.now().millisecondsSinceEpoch;
-                    notifier.addItem(
-                      WorkbenchGridItem(
-                        id: 'custom_card_$now',
-                        title: '团队看板',
-                        type: WorkbenchGridItemType.cardWidget,
-                        x: 0,
-                        y: 0,
-                        spanX: 2,
-                        spanY: 2,
-                        extra: {
-                          'stat1Label': '已完成',
-                          'stat1Value': '19',
-                          'stat2Label': '跟进中',
-                          'stat2Value': '7',
-                        },
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.campaign_outlined),
-                  ),
-                  title: const Text('4x1 通栏通知横幅'),
-                  subtitle: const Text('占满4列全宽的单行公告条'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    final now = DateTime.now().millisecondsSinceEpoch;
-                    notifier.addItem(
-                      WorkbenchGridItem(
-                        id: 'custom_notice_$now',
-                        title: '温馨提示：本周例会时间调整为下午3点',
-                        type: WorkbenchGridItemType.banner,
-                        x: 0,
-                        y: 0,
-                        spanX: 4,
-                        spanY: 1,
-                        extra: {'icon': 'campaign'},
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.fullscreen),
-                  ),
-                  title: const Text('4x2 全屏贴边 Banner (无边距)'),
-                  subtitle: const Text('占满4列全宽且无左右边距贴边展示'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    final now = DateTime.now().millisecondsSinceEpoch;
-                    notifier.addItem(
-                      WorkbenchGridItem(
-                        id: 'custom_banner_$now',
-                        title: '探索 GotoIM 企业数字化方案',
-                        type: WorkbenchGridItemType.banner,
-                        x: 0,
-                        y: 0,
-                        spanX: 4,
-                        spanY: 2,
-                        edgeToEdge: true,
-                        extra: {
-                          'subtitle': '一站式赋能企业协同与实时通讯',
-                          'actionText': '查看详情',
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  _buildAddWidgetItems(sheetContext, notifier),
+                ],
+              ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAddWidgetItems(
+    BuildContext ctx,
+    WorkbenchLayoutNotifier notifier,
+  ) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          leading: const CircleAvatar(
+            child: Icon(Icons.add_to_home_screen),
+          ),
+          title: const Text('1x1 标准快捷应用'),
+          subtitle: const Text('标准单位格快捷入口'),
+          onTap: () {
+            Navigator.pop(ctx);
+            final now = DateTime.now().millisecondsSinceEpoch;
+            notifier.addItem(
+              WorkbenchGridItem(
+                id: 'custom_app_$now',
+                title: '新应用',
+                type: WorkbenchGridItemType.app,
+                x: 0,
+                y: 0,
+                extra: {'icon': 'apps', 'color': 0xFF009688},
+              ),
+            );
+          },
         ),
-      );
-    },
-  );
+        ListTile(
+          leading: const CircleAvatar(
+            child: Icon(Icons.view_stream_outlined),
+          ),
+          title: const Text('2x1 快捷胶囊卡片'),
+          subtitle: const Text('占两列一行的紧凑状态卡片'),
+          onTap: () {
+            Navigator.pop(ctx);
+            final now = DateTime.now().millisecondsSinceEpoch;
+            notifier.addItem(
+              WorkbenchGridItem(
+                id: 'custom_capsule_$now',
+                title: '快捷便签',
+                type: WorkbenchGridItemType.cardWidget,
+                x: 0,
+                y: 0,
+                spanX: 2,
+                spanY: 1,
+                extra: {
+                  'subtitle': '随时记录业务待办',
+                  'icon': 'widgets',
+                },
+              ),
+            );
+          },
+        ),
+        ListTile(
+          leading: const CircleAvatar(
+            child: Icon(Icons.dashboard_outlined),
+          ),
+          title: const Text('2x2 中型数据卡片'),
+          subtitle: const Text('两行两列中型看板'),
+          onTap: () {
+            Navigator.pop(ctx);
+            final now = DateTime.now().millisecondsSinceEpoch;
+            notifier.addItem(
+              WorkbenchGridItem(
+                id: 'custom_card_$now',
+                title: '团队看板',
+                type: WorkbenchGridItemType.cardWidget,
+                x: 0,
+                y: 0,
+                spanX: 2,
+                spanY: 2,
+                extra: {
+                  'stat1Label': '已完成',
+                  'stat1Value': '19',
+                  'stat2Label': '跟进中',
+                  'stat2Value': '7',
+                },
+              ),
+            );
+          },
+        ),
+        ListTile(
+          leading: const CircleAvatar(
+            child: Icon(Icons.campaign_outlined),
+          ),
+          title: const Text('4x1 通栏通知横幅'),
+          subtitle: const Text('占满4列全宽的单行公告条'),
+          onTap: () {
+            Navigator.pop(ctx);
+            final now = DateTime.now().millisecondsSinceEpoch;
+            notifier.addItem(
+              WorkbenchGridItem(
+                id: 'custom_notice_$now',
+                title: '温馨提示：本周例会时间调整为下午3点',
+                type: WorkbenchGridItemType.banner,
+                x: 0,
+                y: 0,
+                spanX: 4,
+                spanY: 1,
+                extra: {'icon': 'campaign'},
+              ),
+            );
+          },
+        ),
+        ListTile(
+          leading: const CircleAvatar(
+            child: Icon(Icons.fullscreen),
+          ),
+          title: const Text('4x2 全屏贴边 Banner (无边距)'),
+          subtitle: const Text('占满4列全宽且无左右边距贴边展示'),
+          onTap: () {
+            Navigator.pop(ctx);
+            final now = DateTime.now().millisecondsSinceEpoch;
+            notifier.addItem(
+              WorkbenchGridItem(
+                id: 'custom_banner_$now',
+                title: '探索 GotoIM 企业数字化方案',
+                type: WorkbenchGridItemType.banner,
+                x: 0,
+                y: 0,
+                spanX: 4,
+                spanY: 2,
+                edgeToEdge: true,
+                extra: {
+                  'subtitle': '一站式赋能企业协同与实时通讯',
+                  'actionText': '查看详情',
+                },
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 
   @override

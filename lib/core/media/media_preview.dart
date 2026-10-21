@@ -13,6 +13,7 @@ import '../services/scan/qr_action_resolver.dart';
 import '../services/window_service.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/app_toast.dart';
+import '../widgets/desktop_dialog.dart';
 import '../widgets/target_picker/target_picker.dart';
 import 'image_provider_factory.dart';
 import 'image_viewer.dart';
@@ -238,6 +239,101 @@ abstract class MediaPreview {
     final dividerColor = isDark ? const Color(0xFF333333) : const Color(0xFFF2F2F2);
     final gapColor = isDark ? const Color(0xFF181818) : const Color(0xFFF7F7F7);
     final textColor = isDark ? Colors.white : const Color(0xFF191919);
+
+    final isDesktop = (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+        MediaQuery.sizeOf(context).width >= 720;
+
+    if (isDesktop) {
+      await showDesktopModalDialog<void>(
+        context: context,
+        title: item.type == MediaPreviewType.video ? '视频操作' : '图片操作',
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 1. 发送给朋友 / 转发
+            ListTile(
+              leading: Icon(Icons.send_rounded, color: textColor),
+              title: const Text('发送给朋友', style: TextStyle(fontSize: 15)),
+              onTap: () async {
+                Navigator.of(context).pop();
+                if (onShare != null) {
+                  onShare();
+                } else {
+                  await _handleForwardMedia(
+                    context: context,
+                    ref: ref,
+                    item: item,
+                  );
+                }
+              },
+            ),
+            Divider(height: 1, thickness: 0.5, color: dividerColor),
+
+            // 2. 保存图片 / 保存视频
+            ListTile(
+              leading: Icon(Icons.download_rounded, color: textColor),
+              title: Text(
+                item.type == MediaPreviewType.video ? '保存视频' : '保存图片',
+                style: const TextStyle(fontSize: 15),
+              ),
+              onTap: () async {
+                Navigator.of(context).pop();
+                if (onDownload != null) {
+                  onDownload();
+                } else {
+                  try {
+                    final cached = await effectiveDownloader.getCachedPath(item);
+                    final targetPath = (cached != null && cached.isNotEmpty)
+                        ? cached
+                        : await effectiveDownloader.download(item);
+                    if (targetPath.isNotEmpty) {
+                      if (item.type == MediaPreviewType.image) {
+                        await MediaGallerySaver.saveImage(targetPath);
+                        showToast('已保存到系统相册', type: ToastType.success);
+                      } else {
+                        await MediaGallerySaver.saveVideo(targetPath);
+                        showToast('已保存到系统相册', type: ToastType.success);
+                      }
+                    }
+                  } catch (e) {
+                    showToast('保存相册失败: $e', type: ToastType.error);
+                  }
+                }
+              },
+            ),
+
+            // 3. ⭐ 如果识别到了二维码，显示识别项
+            if (qrAction != null) ...[
+              Divider(height: 1, thickness: 0.5, color: dividerColor),
+              ListTile(
+                leading: Icon(
+                  qrAction.icon,
+                  color: const Color(0xFF07C160),
+                ),
+                title: Text(
+                  qrAction.title,
+                  style: const TextStyle(
+                    color: Color(0xFF07C160),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () async {
+                  final act = qrAction;
+                  Navigator.of(context).pop();
+                  if (act != null) {
+                    await act.onExecute(context, ref);
+                  }
+                },
+              ),
+            ],
+          ],
+        ),
+      );
+      return;
+    }
 
     await showModalBottomSheet<void>(
       context: context,

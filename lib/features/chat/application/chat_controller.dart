@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart' show XFile;
 
 import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../../core/native/native.dart';
 import '../../../core/services/clipboard_service.dart';
@@ -642,10 +643,17 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
       );
     } catch (exception, stackTrace) {
       if (_isDisposed) return;
-      error = exception;
-      debugPrint(
-        '[loadMore][ERROR] session=$sessionUnitId error=$exception\n$stackTrace',
-      );
+      if (exception is ApiException && exception.statusCode == 403) {
+        hasMore = false;
+        debugPrint(
+          '[loadMore][FORBIDDEN] session=$sessionUnitId Server denied history access (403). Marked hasMore=false.',
+        );
+      } else {
+        error = exception;
+        debugPrint(
+          '[loadMore][ERROR] session=$sessionUnitId error=$exception\n$stackTrace',
+        );
+      }
     } finally {
       isLoading = false;
       if (!_isDisposed) {

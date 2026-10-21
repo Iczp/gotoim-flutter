@@ -50,6 +50,8 @@ class ChatMessageRow extends StatelessWidget {
     this.avatarMenuController,
     this.avatarMenuOffset = const Offset(8, 0),
     this.onTap,
+    this.onAvatarHover,
+    this.onAvatarLeave,
     this.showAvatar = true,
     this.showMyAvatar,
     this.showPeerAvatar,
@@ -119,6 +121,12 @@ class ChatMessageRow extends StatelessWidget {
 
   /// 头像上下文菜单偏移量
   final Offset avatarMenuOffset;
+
+  /// 桌面端头像鼠标移入回调
+  final void Function(Rect rect)? onAvatarHover;
+
+  /// 桌面端头像鼠标移出回调
+  final VoidCallback? onAvatarLeave;
 
   /// 点击播放语音消息回调（标记已听）
   final Future<void> Function() onVoiceOpened;
@@ -320,6 +328,29 @@ class ChatMessageRow extends StatelessWidget {
                       placement: FloatingPlacement.avatar,
                       offset: avatarMenuOffset,
                       vibrateCount: 1,
+                      child: av,
+                    );
+                  }
+                  final avatarKey = GlobalKey();
+                  av = KeyedSubtree(
+                    key: avatarKey,
+                    child: av,
+                  );
+                  if (onAvatarHover != null) {
+                    av = MouseRegion(
+                      onEnter: (_) {
+                        final renderBox =
+                            avatarKey.currentContext?.findRenderObject()
+                                as RenderBox?;
+                        if (renderBox != null && renderBox.hasSize) {
+                          final offset = renderBox.localToGlobal(Offset.zero);
+                          final rect = offset & renderBox.size;
+                          onAvatarHover!(rect);
+                        }
+                      },
+                      onExit: (_) {
+                        onAvatarLeave?.call();
+                      },
                       child: av,
                     );
                   }

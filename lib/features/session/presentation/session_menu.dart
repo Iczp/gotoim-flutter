@@ -1,7 +1,12 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/native/native.dart';
+import '../../../core/widgets/desktop_dialog.dart';
+import '../../chat_settings/presentation/chat_settings_page.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/session_summary.dart';
 import 'chat_object_avatar.dart';
@@ -20,21 +25,52 @@ class SessionMenuSheet extends StatelessWidget {
     required SessionSummary session,
   }) async {
     AppHaptics.medium();
-    final action = await showModalBottomSheet<SessionMenuAction>(
-      context: context,
-      useRootNavigator: true,
-      isDismissible: true,
-      enableDrag: true,
-      barrierColor: Colors.black54,
-      showDragHandle: true,
-      builder: (_) => SessionMenuSheet(session: session),
-    );
+    final isDesktop = (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+        MediaQuery.sizeOf(context).width >= 720;
+
+    final action = isDesktop
+        ? await showDesktopModalDialog<SessionMenuAction>(
+            context: context,
+            title: session.title,
+            width: 360,
+            child: SessionMenuSheet(session: session),
+          )
+        : await showModalBottomSheet<SessionMenuAction>(
+            context: context,
+            useRootNavigator: true,
+            isDismissible: true,
+            enableDrag: true,
+            barrierColor: Colors.black54,
+            showDragHandle: true,
+            builder: (_) => SessionMenuSheet(session: session),
+          );
     if (action == null || !context.mounted) return;
 
     if (action == SessionMenuAction.settings) {
+      final ownerId =
+          session.ownerId ?? controller.currentOwner?.id ?? 0;
+      if (isDesktop) {
+        showDesktopModalDialog<void>(
+          context: context,
+          title: '聊天设置 - ${session.title}',
+          width: 520,
+          height: 640,
+          child: ChatSettingsPage(
+            ownerId: ownerId,
+            sessionUnitId: session.id,
+            isDrawer: true,
+            onClose: () => Navigator.of(context).pop(),
+            onMessagesCleared: () {
+              controller.refreshChanges();
+            },
+          ),
+        );
+        return;
+      }
       await context.push(
         '/chat/${Uri.encodeComponent(session.id)}/settings'
-        '?ownerId=${session.ownerId ?? controller.currentOwner?.id ?? 0}',
+        '?ownerId=$ownerId',
       );
       return;
     }

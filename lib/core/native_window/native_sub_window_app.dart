@@ -32,6 +32,8 @@ import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/local_file_server/pages/shared_file_manager_page.dart';
 import '../../features/media/presentation/desktop_media_viewer_window.dart';
 import '../../features/settings/presentation/desktop_settings_window.dart';
+import '../../features/user/data/models/profile_subject.dart';
+import 'desktop_profile_card_view.dart';
 import 'desktop_sub_window_chat_view.dart';
 import 'desktop_window_title_bar.dart';
 import 'native_window_payload.dart';
@@ -227,8 +229,15 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WindowsWindowAdapter.setupCustomTitleBar();
       _refreshTraySnapshot();
-      if (_currentPayload.type == SubWindowType.tray) {
-        WindowsWindowAdapter.showTrayFlyout();
+      if (_currentPayload.type == SubWindowType.tray ||
+          _currentPayload.type == SubWindowType.profileCard) {
+        // Flyout sub-windows must remain hidden on launch until explicitly triggered
+        // and must never show on the Windows taskbar.
+        WindowsWindowAdapter.setToolWindow(true);
+        WindowsWindowAdapter.hide();
+      } else if (_currentPayload.type == SubWindowType.settings) {
+        // Modal sub-window disabling parent window (Electron-style parent/modal)
+        WindowsWindowAdapter.setModal(true);
       }
     });
     WindowsWindowAdapter.onCloseRequested = _handleClose;
@@ -306,8 +315,39 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             await _childMethodHandler!(call);
           }
           return true;
+        case 'position_flyout':
+          if (call.arguments is Map) {
+            final map = call.arguments as Map;
+            final x = (map['x'] as num?)?.toInt() ?? 0;
+            final y = (map['y'] as num?)?.toInt() ?? 0;
+            final w = (map['width'] as num?)?.toInt() ?? 380;
+            final h = (map['height'] as num?)?.toInt() ?? 420;
+            final noActivate = map['noActivate'] != false;
+            await WindowsWindowAdapter.positionFlyout(
+              x: x,
+              y: y,
+              width: w,
+              height: h,
+              noActivate: noActivate,
+            );
+          }
+          return true;
         case 'account_logout':
           await _handleLogout(notifyMain: false);
+          return true;
+        case 'hide_profile':
+          await WindowsWindowAdapter.hide();
+          if (_childMethodHandler != null) {
+            await _childMethodHandler!(call);
+          }
+          return true;
+        case 'tray_flyout':
+          await _refreshTraySnapshot();
+          await WindowsWindowAdapter.showTrayFlyout();
+          return true;
+        case 'setModal':
+          final enable = call.arguments != false;
+          await WindowsWindowAdapter.setModal(enable);
           return true;
         case 'close':
           await _handleClose();
@@ -350,6 +390,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         (_currentPayload.type == SubWindowType.media ||
             _currentPayload.type == SubWindowType.browser)) {
       setState(() => _visible = false);
+    }
+    if (_currentPayload.type == SubWindowType.settings) {
+      await WindowsWindowAdapter.setModal(false);
     }
     try {
       await _mainIpcChannel.invokeMethod('sub_window_closed', {
@@ -423,6 +466,21 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
   Widget _buildSubWindowContent() {
     if (!_visible) return const SizedBox.shrink();
     switch (_currentPayload.type) {
+      case SubWindowType.profileCard:
+        final rawMember = _currentPayload.extra?['profileSubject'];
+        final initialSubject = rawMember is Map
+            ? ProfileSubject.fromMap(Map<String, dynamic>.from(rawMember))
+            : null;
+        return Scaffold(
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          body: DesktopProfileCardView(
+            initialSubject: initialSubject,
+            onClose: _handleClose,
+            onRegisterMethodHandler: (handler) {
+              _childMethodHandler = handler;
+            },
+          ),
+        );
       case SubWindowType.tray:
         return const Scaffold(body: DesktopTrayMessageBox(nativeWindow: true));
       case SubWindowType.settings:
@@ -435,12 +493,15 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
 
       case SubWindowType.browser:
         return DesktopBrowserWindow(
-          key: ValueKey('browser_${_currentPayload.url}'),
+          key: const ValueKey('desktop_browser_window'),
           initialUrl: _currentPayload.url ?? 'https://www.bing.com',
           title: _currentPayload.title,
           fallbackContent: _currentPayload.fallbackContent,
           isSubWindow: true,
           onClose: _handleClose,
+          onRegisterMethodHandler: (handler) {
+            _childMethodHandler = handler;
+          },
         );
 
       case SubWindowType.media:

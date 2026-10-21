@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/desktop_dialog.dart';
 import '../local_file_server.dart';
 import '../local_file_server_controller.dart';
 
@@ -123,6 +126,42 @@ class _SharedFileManagerViewState extends ConsumerState<SharedFileManagerView> {
   }
 
   Future<void> menu(SharedFile f) async {
+    final isDesktop = (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+        MediaQuery.sizeOf(context).width >= 720;
+
+    if (isDesktop) {
+      await showDesktopModalDialog<void>(
+        context: context,
+        title: f.name,
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!f.isDirectory)
+              ListTile(
+                leading: const Icon(Icons.open_in_new),
+                title: const Text('系统方式打开'),
+                onTap: () {
+                  Navigator.pop(context);
+                  service.openSharedFile(f.path);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('删除', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(context);
+                await service.deleteSharedEntry(f.path);
+                refresh();
+              },
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     await showModalBottomSheet<void>(
       context: context,
       builder:

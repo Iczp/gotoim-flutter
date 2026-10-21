@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,13 +9,17 @@ import '../../../../core/device/client_device_context.dart';
 import '../../../../core/widgets/app_modal.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/cell_group.dart';
+import '../../../../core/widgets/desktop_dialog.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../session/presentation/login_devices_page.dart';
 
 /// 账号设置与个人信息页面
 ///
 /// 参考 UniApp 路径: `src/pages/account/profile.vue`
 class AccountProfilePage extends ConsumerStatefulWidget {
-  const AccountProfilePage({super.key});
+  const AccountProfilePage({this.isDialog = false, super.key});
+
+  final bool isDialog;
 
   @override
   ConsumerState<AccountProfilePage> createState() => _AccountProfilePageState();
@@ -46,16 +53,14 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
       }
     } catch (e) {
       if (mounted) {
-        showToast('Token 刷新失败：$e', type: ToastType.error);
+        showToast('Token 刷新异常: $e', type: ToastType.error);
       }
     } finally {
-      if (mounted) {
-        setState(() => _refreshingToken = false);
-      }
+      if (mounted) setState(() => _refreshingToken = false);
     }
   }
 
-  Future<void> _clearCache() async {
+  Future<void> _confirmClearCache() async {
     final confirmed = await showConfirmModal(
       context: context,
       title: '清理本地缓存',
@@ -128,6 +133,11 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
             ? currentUser.roles
             : _extractRoles(userInfo);
 
+    final tenantMap =
+        authState.applicationConfiguration?.raw['currentTenant'] as Map?;
+    final tenantName = tenantMap?['name']?.toString() ?? '默认主机 (Host)';
+    final tenantId = tenantMap?['id']?.toString();
+
     final lastRefreshed = authState.lastTokenRefreshedAt;
     final lastRefreshedText =
         lastRefreshed != null
@@ -135,174 +145,196 @@ class _AccountProfilePageState extends ConsumerState<AccountProfilePage> {
                 '${lastRefreshed.hour.toString().padLeft(2, '0')}:${lastRefreshed.minute.toString().padLeft(2, '0')}:${lastRefreshed.second.toString().padLeft(2, '0')}'
             : '有效中';
 
+    final body = RefreshIndicator(
+      onRefresh: _onRefresh,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        children: [
+          // ── 1. 基本信息 ──────────────────────────────────────────────
+          CellGroup(
+            children: [
+              if (currentUser?.id != null && currentUser!.id!.isNotEmpty)
+                Cell(title: '用户ID', value: currentUser.id!, canCopy: true),
+              Cell(title: '账号', value: account, canCopy: true),
+              Cell(title: '名称', value: displayName, canCopy: true),
+              Cell(
+                title: '邮箱',
+                value: email,
+                showArrow: true,
+                canCopy: true,
+              ),
+              Cell(
+                title: '手机',
+                value: phoneNumber,
+                showArrow: true,
+                canCopy: true,
+              ),
+            ],
+          ),
+
+          // ── 2. 角色组 ────────────────────────────────────────────────
+          CellGroup(
+            title: '角色',
+            children: roles
+                .map(
+                  (role) => Cell(
+                    title: role,
+                    valueWidget: const Icon(
+                      Icons.shield_outlined,
+                      size: 16,
+                      color: Color(0xFF07C160),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+
+          // ── 3. 租户信息 ──────────────────────────────────────────────
+          CellGroup(
+            title: '租户',
+            children: [
+              Cell(
+                title: '租户名称',
+                value: tenantName,
+              ),
+              if (tenantId != null && tenantId.isNotEmpty)
+                Cell(
+                  title: '租户ID',
+                  value: tenantId,
+                  canCopy: true,
+                ),
+            ],
+          ),
+
+          // ── 4. 存储与缓存 ────────────────────────────────────────────
+          CellGroup(
+            children: [
+              Cell(
+                icon: const Icon(Icons.cleaning_services_outlined, size: 20),
+                title: '清理本地缓存',
+                subtitle: '清理临时图片、音视频文件缓存',
+                showArrow: true,
+                onTap: _confirmClearCache,
+              ),
+            ],
+          ),
+
+          // ── 5. 设备环境 ──────────────────────────────────────────────
+          CellGroup(
+            title: '设备信息',
+            children: [
+              Cell(
+                title: 'Device ID',
+                value: deviceContext.deviceId.isNotEmpty
+                    ? deviceContext.deviceId
+                    : 'Unknown',
+                canCopy: true,
+              ),
+              Cell(
+                title: 'Device Type',
+                value: deviceContext.deviceType.isNotEmpty
+                    ? deviceContext.deviceType
+                    : 'Unknown',
+              ),
+              Cell(
+                title: 'Brand',
+                value: deviceContext.brand.isNotEmpty
+                    ? deviceContext.brand
+                    : 'Unknown',
+              ),
+              Cell(
+                title: 'Model',
+                value: deviceContext.model.isNotEmpty
+                    ? deviceContext.model
+                    : 'Unknown',
+              ),
+              Cell(
+                title: 'OS',
+                value: deviceContext.platform.isNotEmpty
+                    ? deviceContext.platform
+                    : 'Unknown',
+              ),
+              Cell(
+                title: '登录设备',
+                showArrow: true,
+                onTap: () {
+                  final isDesktop = (!kIsWeb &&
+                          (Platform.isWindows ||
+                              Platform.isMacOS ||
+                              Platform.isLinux)) ||
+                      MediaQuery.sizeOf(context).width >= 720;
+                  if (isDesktop) {
+                    showDesktopModalDialog<void>(
+                      context: context,
+                      title: '登录设备管理',
+                      width: 520,
+                      child: const LoginDevicesPage(isDialog: true),
+                    );
+                  } else {
+                    context.push('/devices');
+                  }
+                },
+              ),
+            ],
+          ),
+
+          // ── 6. 令牌与系统 ────────────────────────────────────────────
+          CellGroup(
+            children: [
+              Cell(
+                icon: const Icon(Icons.token_outlined, size: 20),
+                title: '刷新Token',
+                value: _refreshingToken ? '刷新中...' : lastRefreshedText,
+                showArrow: true,
+                onTap: _handleRefreshToken,
+              ),
+              Cell(
+                icon: const Icon(Icons.touch_app_outlined, size: 20),
+                title: '版本',
+                valueWidget: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'GotoIM v${deviceContext.appVersion}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // ── 7. 退出登录 ──────────────────────────────────────────────
+          CellGroup(
+            margin: const EdgeInsets.only(bottom: 32),
+            children: [
+              Cell(
+                title: '退出登录',
+                titleColor: Colors.red,
+                isCentered: true,
+                onTap: _confirmLogout,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    if (widget.isDialog) {
+      return body;
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('账号'), centerTitle: true),
-      body: RefreshIndicator(
-        onRefresh: _onRefresh,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          children: [
-            // ── 1. 基本信息 ──────────────────────────────────────────────
-            CellGroup(
-              children: [
-                if (currentUser?.id != null && currentUser!.id!.isNotEmpty)
-                  Cell(title: '用户ID', value: currentUser.id!, canCopy: true),
-                Cell(title: '账号', value: account, canCopy: true),
-                Cell(title: '名称', value: displayName, canCopy: true),
-                Cell(
-                  title: '邮箱',
-                  value: email,
-                  showArrow: true,
-                  canCopy: true,
-                ),
-                Cell(
-                  title: '手机',
-                  value: phoneNumber,
-                  showArrow: true,
-                  canCopy: true,
-                ),
-              ],
-            ),
-
-            // ── 2. 角色组 ────────────────────────────────────────────────
-            CellGroup(
-              title: '角色',
-              children: roles
-                  .map((role) => Cell(title: role, showArrow: true))
-                  .toList(),
-            ),
-
-            // ── 3. 缓存管理 ──────────────────────────────────────────────
-            CellGroup(
-              title: '缓存',
-              children: [
-                Cell(
-                  title: '本地缓存',
-                  value: '约 12.8 MB',
-                  showArrow: true,
-                  onTap: _clearCache,
-                ),
-              ],
-            ),
-
-            // ── 4. 安全 ──────────────────────────────────────────────────
-            CellGroup(
-              title: '安全',
-              children: [
-                const Cell(title: '登录日志', showArrow: true),
-                Cell(
-                  title: '授权',
-                  showArrow: true,
-                  valueWidget: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '0',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            // ── 5. 设备信息 ──────────────────────────────────────────────
-            CellGroup(
-              title: '设备',
-              children: [
-                Cell(
-                  title: 'ID(${deviceContext.deviceType})',
-                  value: deviceContext.deviceId.isNotEmpty
-                      ? (deviceContext.deviceId.length > 16
-                          ? '${deviceContext.deviceId.substring(0, 16)}...'
-                          : deviceContext.deviceId)
-                      : '本地设备',
-                  canCopy: true,
-                  copyValue: deviceContext.deviceId,
-                ),
-                Cell(
-                  title: 'Brand',
-                  value: deviceContext.brand.isNotEmpty
-                      ? deviceContext.brand
-                      : 'Unknown',
-                ),
-                Cell(
-                  title: 'Model',
-                  value: deviceContext.model.isNotEmpty
-                      ? deviceContext.model
-                      : 'Unknown',
-                ),
-                Cell(
-                  title: 'OS',
-                  value: deviceContext.platform.isNotEmpty
-                      ? deviceContext.platform
-                      : 'Unknown',
-                ),
-                Cell(
-                  title: '登录设备',
-                  showArrow: true,
-                  onTap: () => context.push('/devices'),
-                ),
-              ],
-            ),
-
-            // ── 6. 令牌与系统 ────────────────────────────────────────────
-            CellGroup(
-              children: [
-                Cell(
-                  icon: const Icon(Icons.token_outlined, size: 20),
-                  title: '刷新Token',
-                  value: _refreshingToken ? '刷新中...' : lastRefreshedText,
-                  showArrow: true,
-                  onTap: _handleRefreshToken,
-                ),
-                Cell(
-                  icon: const Icon(Icons.touch_app_outlined, size: 20),
-                  title: '版本',
-                  valueWidget: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'GotoIM v${deviceContext.appVersion}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            // ── 7. 退出登录 ──────────────────────────────────────────────
-            CellGroup(
-              margin: const EdgeInsets.only(bottom: 32),
-              children: [
-                Cell(
-                  title: '退出登录',
-                  titleColor: Colors.red,
-                  isCentered: true,
-                  onTap: _confirmLogout,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+      body: body,
     );
   }
 }

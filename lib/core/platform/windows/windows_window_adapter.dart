@@ -86,7 +86,40 @@ class WindowsWindowAdapter {
     await _invoke('hide');
   }
 
+  static Future<void> setToolWindow(bool enable) async {
+    await _invoke('setToolWindow', enable);
+  }
+
   static Future<void> showTrayFlyout() async {
     await _invoke('trayFlyout');
+  }
+
+  static Future<void> positionFlyout({
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+    bool noActivate = true,
+  }) async {
+    await _invoke('positionFlyout', {
+      'x': x,
+      'y': y,
+      'width': width,
+      'height': height,
+      'noActivate': noActivate,
+    });
+  }
+
+  static Future<Map<String, int>?> getWindowRect() async {
+    if (!isWindows) return null;
+    try {
+      final res = await _channel.invokeMethod<Map>('getWindowRect');
+      if (res == null) return null;
+      return res.map(
+        (key, value) => MapEntry(key.toString(), (value as num).toInt()),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -1,7 +1,11 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/widgets/desktop_dialog.dart';
 
 /// 显示文本消息部分选择弹窗。
 Future<void> showChatTextSelectionSheet(
@@ -11,6 +15,49 @@ Future<void> showChatTextSelectionSheet(
   final theme = Theme.of(context);
   final colorScheme = theme.colorScheme;
   final mediaQuery = MediaQuery.of(context);
+
+  final isDesktop = (!kIsWeb &&
+          (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+      mediaQuery.size.width >= 720;
+
+  if (isDesktop) {
+    return showDesktopModalDialog<void>(
+      context: context,
+      title: '选择文本',
+      width: 540,
+      height: 460,
+      titleActions: [
+        TextButton.icon(
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          ),
+          icon: const Icon(Icons.copy, size: 15),
+          label: const Text('复制全文'),
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: text));
+            showToast('已复制全文');
+            Navigator.of(context).pop();
+          },
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: SelectionArea(
+          child: SelectableText(
+            text,
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.6,
+              color: colorScheme.onSurface,
+            ),
+            cursorColor: colorScheme.primary,
+            showCursor: true,
+          ),
+        ),
+      ),
+    );
+  }
 
   return showModalBottomSheet<void>(
     context: context,

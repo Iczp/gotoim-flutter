@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show ThemeMode;
+import 'package:flutter/material.dart' show Rect, ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,11 +14,13 @@ import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/data/models/chat_owner.dart';
 import '../../features/session/data/session_change_bus.dart';
 import '../../features/settings/presentation/desktop_settings_window.dart';
+import '../browser/desktop_browser_window.dart';
 import '../media/media_preview.dart';
 import '../native_window/native_window_payload.dart';
 import '../platform/platform_facade.dart';
 import '../platform/windows/windows_window_adapter.dart';
 import '../theme/theme_mode_controller.dart';
+import '../widgets/desktop_tray_message_box.dart';
 import 'file/file_picker_service.dart';
 import 'tray_grouped_unread_provider.dart';
 import 'tray_message_models.dart';
@@ -34,6 +36,7 @@ enum WindowType {
   settings,
   browser,
   tray,
+  profileCard,
 }
 
 /// 窗口记录，用于管理和防止重复创建相同会话/应用的窗口
@@ -136,6 +139,21 @@ abstract class WindowService {
   Future<void> openDiagnostics();
 
   Future<void> openTrayFlyout();
+
+  /// 预热托盘未读消息独立浮窗（后台常驻不显示）
+  Future<void> prewarmTrayFlyout();
+
+  /// 预热头像资料卡独立浮窗（后台常驻不显示）
+  Future<void> prewarmProfileCard();
+
+  /// 移动并无夺焦展示头像资料卡浮窗
+  Future<void> showProfileCardAt({
+    required Map<String, dynamic> subjectData,
+    required Rect localRect,
+  });
+
+  /// 隐藏头像资料卡浮窗
+  Future<void> hideProfileCard();
 
   /// 切换当前激活的聊天身份并聚焦主视窗
   Future<void> switchOwner(int ownerId);
@@ -596,6 +614,7 @@ class DefaultWindowService implements WindowService {
   Future<void> closeWindow(String targetId, {String? windowId}) async {
     if (targetId == 'tool:settings') {
       try {
+        await _nativeControllers[targetId]?.invokeMethod('setModal', false);
         await WindowsWindowAdapter.setModal(false);
       } catch (_) {}
     }
@@ -746,6 +765,122 @@ class DefaultWindowService implements WindowService {
   }
 
   @override
+  Future<void> prewarmTrayFlyout() async {
+    if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
+    const targetId = 'tool:tray';
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) return;
+    final snapshot =
+        traySnapshotProvider?.call() ?? TrayGroupedUnreadState.empty;
+    try {
+      await _openNativeSubWindow(
+        targetId: targetId,
+        type: WindowType.tray,
+        title: '未读消息',
+        payload: NativeWindowPayload(
+          type: SubWindowType.tray,
+          title: '未读消息',
+          targetId: targetId,
+          extra: {'traySnapshot': snapshot.toJson()},
+        ),
+        showImmediately: false,
+      );
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> prewarmProfileCard() async {
+    if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
+    const targetId = 'tool:profile_card';
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) return;
+    try {
+      await _openNativeSubWindow(
+        targetId: targetId,
+        type: WindowType.profileCard,
+        title: '资料卡',
+        payload: const NativeWindowPayload(
+          type: SubWindowType.profileCard,
+          title: '资料卡',
+          targetId: targetId,
+        ),
+        showImmediately: false,
+      );
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> showProfileCardAt({
+    required Map<String, dynamic> subjectData,
+    required Rect localRect,
+  }) async {
+    if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
+    const targetId = 'tool:profile_card';
+    final pending = _pendingCreations[targetId];
+    if (pending != null) {
+      await pending;
+    } else if (!isWindowOpen(targetId)) {
+      await prewarmProfileCard();
+    }
+    final controller = _nativeControllers[targetId];
+    if (controller == null) return;
+
+    final windowRect = await WindowsWindowAdapter.getWindowRect();
+    final int dpi = windowRect?['dpi'] ?? 96;
+    final double scale = dpi / 96.0;
+    final int clientLeft =
+        windowRect?['clientLeft'] ?? (windowRect?['left'] ?? 0);
+    final int clientTop =
+        windowRect?['clientTop'] ?? (windowRect?['top'] ?? 0);
+    final int clientWidth = windowRect?['clientWidth'] ??
+        ((windowRect?['right'] ?? (clientLeft + 1280)) - clientLeft);
+    final int clientHeight = windowRect?['clientHeight'] ??
+        ((windowRect?['bottom'] ?? (clientTop + 800)) - clientTop);
+    final int winRight = clientLeft + clientWidth;
+    final int winBottom = clientTop + clientHeight;
+
+    final int cardPhysicalWidth = (380 * scale).round();
+    final int cardPhysicalHeight = (420 * scale).round();
+
+    final int avatarPhysicalRight =
+        clientLeft + (localRect.right * scale).round();
+    final int avatarPhysicalLeft =
+        clientLeft + (localRect.left * scale).round();
+    final int avatarPhysicalTop =
+        clientTop + (localRect.top * scale).round();
+
+    // Default: flyout appears to the right of the avatar with 8px margin
+    int targetX = avatarPhysicalRight + (8 * scale).round();
+    // If it exceeds the right edge, pop to the left of the avatar
+    if (targetX + cardPhysicalWidth > winRight) {
+      targetX = avatarPhysicalLeft - cardPhysicalWidth - (8 * scale).round();
+    }
+    int targetY = avatarPhysicalTop - (8 * scale).round();
+    if (targetY < clientTop) targetY = clientTop + (4 * scale).round();
+    if (targetY + cardPhysicalHeight > winBottom) {
+      targetY = winBottom - cardPhysicalHeight - (4 * scale).round();
+    }
+
+    await controller.invokeMethod('update_profile', subjectData);
+    await controller.invokeMethod('position_flyout', {
+      'x': targetX,
+      'y': targetY,
+      'width': cardPhysicalWidth,
+      'height': cardPhysicalHeight,
+      'noActivate': true,
+    });
+  }
+
+  @override
+  Future<void> hideProfileCard() async {
+    const targetId = 'tool:profile_card';
+    final controller = _nativeControllers[targetId];
+    if (controller != null) {
+      try {
+        await controller.invokeMethod('hide_profile');
+      } catch (_) {}
+    }
+  }
+
+  @override
   Future<void> openTrayFlyout() async {
     if (isSubWindow) return _requestMain({'type': 'tray'});
     const targetId = 'tool:tray';
@@ -756,20 +891,32 @@ class DefaultWindowService implements WindowService {
         'tray_update',
         snapshot.toJson(),
       );
+      await _nativeControllers[targetId]?.invokeMethod('tray_flyout');
       await bringToFront(targetId);
       return;
     }
-    await _openNativeSubWindow(
-      targetId: targetId,
-      type: WindowType.tray,
-      title: '未读消息',
-      payload: NativeWindowPayload(
-        type: SubWindowType.tray,
-        title: '未读消息',
-        targetId: targetId,
-        extra: {'traySnapshot': snapshot.toJson()},
-      ),
-    );
+    if (platformFacade.supportsMultipleWindows) {
+      try {
+        await _openNativeSubWindow(
+          targetId: targetId,
+          type: WindowType.tray,
+          title: '未读消息',
+          payload: NativeWindowPayload(
+            type: SubWindowType.tray,
+            title: '未读消息',
+            targetId: targetId,
+            extra: {'traySnapshot': snapshot.toJson()},
+          ),
+        );
+        return;
+      } catch (e) {
+        debugPrint('[WindowService] openTrayFlyout native error: $e');
+      }
+    }
+    final context = rootNavigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      DesktopTrayMessageBox.show(context);
+    }
   }
 
   /// 创建真正的原生顶层操作系统窗口 (HWND)
@@ -778,6 +925,7 @@ class DefaultWindowService implements WindowService {
     required WindowType type,
     required String title,
     required NativeWindowPayload payload,
+    bool showImmediately = true,
   }) async {
     final pending = _pendingCreations[targetId];
     if (pending != null) {
@@ -806,8 +954,17 @@ class DefaultWindowService implements WindowService {
           );
           await cachedController.invokeMethod('chat_refresh');
         } catch (_) {}
-        await cachedController.show();
-        await cachedController.invokeMethod('bringToFront');
+        if (showImmediately) {
+          if (type == WindowType.settings) {
+            try {
+              await cachedController.invokeMethod('setModal', true);
+            } catch (_) {}
+          }
+          await cachedController.show();
+          await cachedController.invokeMethod('bringToFront');
+        } else {
+          await cachedController.hide();
+        }
         _nativeControllers[targetId] = cachedController;
         _registry[targetId] = WindowRecord(
           targetId: targetId,
@@ -828,7 +985,11 @@ class DefaultWindowService implements WindowService {
           hiddenAtLaunch: true,
         ),
       );
-      await controller.show();
+      if (showImmediately) {
+        await controller.show();
+      } else {
+        await controller.hide();
+      }
       _nativeControllers[targetId] = controller;
       _registry[targetId] = WindowRecord(
         targetId: targetId,
@@ -949,6 +1110,9 @@ class DefaultWindowService implements WindowService {
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
       if (pending != null) await pending;
+      try {
+        await _nativeControllers[targetId]?.invokeMethod('setModal', true);
+      } catch (_) {}
       await bringToFront(targetId);
       return;
     }
@@ -1016,10 +1180,17 @@ class DefaultWindowService implements WindowService {
         final effectivePayload = payload.copyWith(
           extra: {'themeMode': currentTheme},
         );
-        await controller.invokeMethod(
-          'update_payload',
-          effectivePayload.toJson(),
-        );
+        try {
+          await controller.invokeMethod('browser_add_tab', {
+            'url': url,
+            'title': title,
+          });
+        } catch (_) {
+          await controller.invokeMethod(
+            'update_payload',
+            effectivePayload.toJson(),
+          );
+        }
         await bringToFront(targetId);
         return;
       }
@@ -1041,6 +1212,15 @@ class DefaultWindowService implements WindowService {
 
     final context = rootNavigatorKey.currentContext;
     if (context != null && context.mounted) {
+      if (platformFacade.isDesktop) {
+        await DesktopBrowserWindow.open(
+          context,
+          url: url,
+          title: title,
+          fallbackContent: fallbackContent,
+        );
+        return;
+      }
       _registerWindow(
         targetId: targetId,
         type: WindowType.browser,
@@ -1188,6 +1368,9 @@ class DefaultWindowService implements WindowService {
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
       if (pending != null) await pending;
+      try {
+        await _nativeControllers[targetId]?.invokeMethod('setModal', true);
+      } catch (_) {}
       await bringToFront(targetId);
       return;
     }
@@ -1242,6 +1425,9 @@ class DefaultWindowService implements WindowService {
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
       if (pending != null) await pending;
+      try {
+        await _nativeControllers[targetId]?.invokeMethod('setModal', true);
+      } catch (_) {}
       await bringToFront(targetId);
       return;
     }
@@ -1289,6 +1475,9 @@ class DefaultWindowService implements WindowService {
     if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       final pending = _pendingCreations[targetId];
       if (pending != null) await pending;
+      try {
+        await _nativeControllers[targetId]?.invokeMethod('setModal', true);
+      } catch (_) {}
       await bringToFront(targetId);
       return;
     }

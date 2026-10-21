@@ -9,6 +9,7 @@ enum SubWindowType {
   diagnostics,
   localFileServer,
   tray,
+  profileCard,
 }
 
 /// 原生子窗口启动载荷（跨 Flutter 引擎序列化参数）

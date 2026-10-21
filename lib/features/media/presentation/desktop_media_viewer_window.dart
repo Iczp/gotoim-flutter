@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/media/media_preview.dart';
@@ -19,7 +21,7 @@ import '../../session/application/session_list_controller.dart';
 
 /// 桌面端微信同款独立媒体查看窗口 (DesktopMediaViewerWindow - 查看图片/视频)
 ///
-/// 遵循微信 4.0 桌面端多媒体独立视窗规范（参考截图 3）：
+/// 遵循微信 4.0 桌面端多媒体独立视窗规范：
 /// 1. 顶部专业工具栏：
 ///    - 📌 置顶切换 (Pin)
 ///    - ← 上一张 / 下一张 → 翻页控制
@@ -27,11 +29,15 @@ import '../../session/application/session_list_controller.dart';
 ///    - 🔍+ 放大 / 🔍- 缩小 / 1:1 原始比例还原
 ///    - ⟳ 顺时针旋转 90°
 ///    - 💾 保存/下载多媒体到本地
-///    - ··· 更多菜单 (转发、复制、识别图中二维码、在文件夹中定位)
+///    - ··· 更多菜单 (另存为、复制图片/视频、二维码识别、在文件夹中定位等)
 ///    - 最小化、最大化、关闭窗口控制按钮
-/// 2. 交互与快捷键：
+/// 2. 右键上下文菜单与多媒体交互 (Context Menu):
+///    - 图片：复制图片 (二进制写入剪贴板)、另存为... (系统文件对话框)、在文件夹中显示、复制链接、旋转、缩放、识别图中二维码、转发
+///    - 视频：播放/暂停、静音/恢复、循环播放、倍速切换 (0.5x~2.0x)、视频另存为...、复制视频文件、复制链接、在文件夹中显示、系统播放器打开、转发
+/// 3. 交互与快捷键：
+///    - 鼠标右键：调起微信同款暗色右键上下文菜单
 ///    - 鼠标滚轮平滑缩放、双击还原
-///    - 键盘 Esc 关闭、左右箭头切换、R 旋转
+///    - 快捷键：Ctrl+C 复制、Ctrl+S 另存为、空格 播放/暂停、Esc 关闭、左右箭头切换、R 顺时针旋转
 class DesktopMediaViewerWindow extends ConsumerStatefulWidget {
   const DesktopMediaViewerWindow({
     required this.items,
@@ -86,6 +92,12 @@ class _DesktopMediaViewerWindowState
   VideoPlayerController? _videoController;
   MediaPreviewItem? _downloadingVideo;
   String? _videoError;
+
+  // 视频播放选项与菜单状态
+  bool _isMuted = false;
+  bool _isLooping = false;
+  double _playbackSpeed = 1.0;
+  bool _isShowingContextMenu = false;
 
   @override
   void initState() {
@@ -143,6 +155,9 @@ class _DesktopMediaViewerWindowState
             .timeout(const Duration(seconds: 20))
             .then((_) {
               if (mounted && identical(_videoController, controller)) {
+                controller.setVolume(_isMuted ? 0.0 : 1.0);
+                controller.setLooping(_isLooping);
+                controller.setPlaybackSpeed(_playbackSpeed);
                 setState(() {
                   _videoError = null;
                 });
@@ -193,27 +208,244 @@ class _DesktopMediaViewerWindowState
     }
   }
 
+  /// 获取当前媒体的本地路径（已缓存或下载）
+  Future<String?> _ensureDownloadedLocalPath() async {
+    final item = _currentItem;
+    if (item.localPath != null && item.localPath!.isNotEmpty) {
+      if (await File(item.localPath!).exists()) {
+        return item.localPath;
+      }
+    }
+    // 检查缓存
+    final downloader = widget.downloader ?? DefaultMediaDownloader.instance;
+    final cached = await downloader.getCachedPath(item);
+    if (cached != null && cached.isNotEmpty && await File(cached).exists()) {
+      return cached;
+    }
+    // 检查源是否是本地文件
+    if (!item.source.startsWith('http://') && !item.source.startsWith('https://')) {
+      if (await File(item.source).exists()) {
+        return item.source;
+      }
+    }
+    // 若未下载则尝试下载
+    try {
+      final downloaded = await downloader.download(item);
+      if (downloaded.isNotEmpty && await File(downloaded).exists()) {
+        return downloaded;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// 获取当前媒体字节流
+  Future<Uint8List?> _getCurrentItemBytes() async {
+    final item = _currentItem;
+    if (item.bytes != null && item.bytes!.isNotEmpty) {
+      return item.bytes;
+    }
+    final localPath = await _ensureDownloadedLocalPath();
+    if (localPath != null && await File(localPath).exists()) {
+      try {
+        return await File(localPath).readAsBytes();
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  /// 获取默认另存为文件名
+  String _getDefaultFileName() {
+    final item = _currentItem;
+    if (item.fileName != null && item.fileName!.trim().isNotEmpty) {
+      return item.fileName!.trim();
+    }
+    final isVideo = item.type == MediaPreviewType.video;
+    final defaultExt = isVideo ? 'mp4' : 'jpg';
+    final src = item.source;
+    final uri = Uri.tryParse(src);
+    if (uri != null && uri.pathSegments.isNotEmpty) {
+      final last = uri.pathSegments.last.split('?').first;
+      if (last.contains('.')) return last;
+    }
+    return 'media_${DateTime.now().millisecondsSinceEpoch}.$defaultExt';
+  }
+
+  /// 复制图片到剪贴板 (二进制图片数据)
+  Future<void> _copyImage() async {
+    try {
+      showToast('正在复制图片...', type: ToastType.info);
+      final bytes = await _getCurrentItemBytes();
+      if (bytes == null || bytes.isEmpty) {
+        showToast('获取图片数据失败', type: ToastType.error);
+        return;
+      }
+      await Pasteboard.writeImage(bytes);
+      showToast('图片已成功复制到剪贴板', type: ToastType.success);
+    } catch (e) {
+      showToast('复制图片失败: $e', type: ToastType.error);
+    }
+  }
+
+  /// 复制视频文件到系统剪贴板 (文件列表格式)
+  Future<void> _copyVideoFile() async {
+    try {
+      showToast('正在准备复制视频...', type: ToastType.info);
+      final localPath = await _ensureDownloadedLocalPath();
+      if (localPath != null && await File(localPath).exists()) {
+        await Pasteboard.writeFiles([localPath]);
+        showToast('视频文件已复制到剪贴板', type: ToastType.success);
+      } else {
+        await Clipboard.setData(ClipboardData(text: _currentItem.playableSource));
+        showToast('已复制视频地址', type: ToastType.success);
+      }
+    } catch (e) {
+      showToast('复制视频失败: $e', type: ToastType.error);
+    }
+  }
+
+  /// 媒体文件另存为 (调起系统另存为对话框)
+  Future<void> _saveMediaAs() async {
+    try {
+      final item = _currentItem;
+      final isVideo = item.type == MediaPreviewType.video;
+      final defaultName = _getDefaultFileName();
+
+      showToast('正在准备文件...', type: ToastType.info);
+      final localPath = await _ensureDownloadedLocalPath();
+      Uint8List? bytes;
+      if (localPath != null && await File(localPath).exists()) {
+        bytes = await File(localPath).readAsBytes();
+      } else {
+        bytes = await _getCurrentItemBytes();
+      }
+
+      final uri = await FilePicker.saveFile(
+        dialogTitle: isVideo ? '视频另存为' : '图片另存为',
+        fileName: defaultName,
+        type: isVideo ? FileType.video : FileType.image,
+        bytes: bytes ?? Uint8List(0),
+      );
+
+      if (uri == null) {
+        return;
+      }
+      final filePath = uri.toFilePath();
+      if (filePath.isEmpty) return;
+
+      final targetFile = File(filePath);
+      if (!targetFile.existsSync() || targetFile.lengthSync() == 0) {
+        if (localPath != null && await File(localPath).exists()) {
+          await File(localPath).copy(filePath);
+        } else if (bytes != null && bytes.isNotEmpty) {
+          await targetFile.writeAsBytes(bytes);
+        }
+      }
+
+      final displayName = targetFile.uri.pathSegments.isNotEmpty
+          ? targetFile.uri.pathSegments.last
+          : defaultName;
+      showToast('已另存为: $displayName', type: ToastType.success);
+    } catch (e) {
+      showToast('另存为失败: $e', type: ToastType.error);
+    }
+  }
+
+  /// 在文件管理器 / Explorer 中定位显示文件
+  Future<void> _locateInFolder() async {
+    try {
+      showToast('正在定位文件...', type: ToastType.info);
+      final localPath = await _ensureDownloadedLocalPath();
+      if (localPath == null || !await File(localPath).exists()) {
+        showToast('媒体文件尚未在本地缓存', type: ToastType.info);
+        return;
+      }
+      if (Platform.isWindows) {
+        await Process.run('explorer.exe', ['/select,', localPath]);
+      } else {
+        await OpenFilex.open(File(localPath).parent.path);
+      }
+    } catch (e) {
+      showToast('定位文件失败: $e', type: ToastType.error);
+    }
+  }
+
+  /// 播放/暂停视频
+  Future<void> _togglePlayPause() async {
+    final controller = _videoController;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (controller.value.isPlaying) {
+      await controller.pause();
+    } else {
+      if (controller.value.isCompleted) {
+        await controller.seekTo(Duration.zero);
+      }
+      await controller.play();
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// 静音/取消静音
+  Future<void> _toggleMute() async {
+    final controller = _videoController;
+    final newMuted = !_isMuted;
+    setState(() {
+      _isMuted = newMuted;
+    });
+    if (controller != null && controller.value.isInitialized) {
+      await controller.setVolume(newMuted ? 0.0 : 1.0);
+    }
+    showToast(newMuted ? '已静音' : '已恢复声音', type: ToastType.info);
+  }
+
+  /// 循环播放切换
+  Future<void> _toggleLooping() async {
+    final controller = _videoController;
+    final newLoop = !_isLooping;
+    setState(() {
+      _isLooping = newLoop;
+    });
+    if (controller != null && controller.value.isInitialized) {
+      await controller.setLooping(newLoop);
+    }
+    showToast(newLoop ? '已开启循环播放' : '已关闭循环播放', type: ToastType.info);
+  }
+
+  /// 切换倍速
+  Future<void> _changePlaybackSpeed(double speed) async {
+    final controller = _videoController;
+    setState(() {
+      _playbackSpeed = speed;
+    });
+    if (controller != null && controller.value.isInitialized) {
+      await controller.setPlaybackSpeed(speed);
+    }
+    showToast('播放倍速已设为 ${speed}x', type: ToastType.info);
+  }
+
+  /// 调起系统默认播放器
   Future<void> _openWithDefaultPlayer() async {
     final item = _currentItem;
-    final source = item.playableSource;
     try {
       showToast('正在调起系统默认播放器...', type: ToastType.info);
-      if (source.startsWith('http://') || source.startsWith('https://')) {
-        final uri = Uri.tryParse(source);
+      final localPath = await _ensureDownloadedLocalPath();
+      final targetSource = localPath ?? item.playableSource;
+
+      if (targetSource.startsWith('http://') || targetSource.startsWith('https://')) {
+        final uri = Uri.tryParse(targetSource);
         if (uri == null || (!uri.isScheme('http') && !uri.isScheme('https'))) {
           showToast('非法多媒体网络地址', type: ToastType.error);
           return;
         }
         if (Platform.isWindows) {
           // 不使用 cmd.exe 解释器，直接传给系统进程避免参数注入
-          await Process.run('explorer.exe', [source]);
+          await Process.run('explorer.exe', [targetSource]);
         } else {
-          await OpenFilex.open(source);
+          await OpenFilex.open(targetSource);
         }
       } else {
-        final res = await OpenFilex.open(source);
+        final res = await OpenFilex.open(targetSource);
         if (res.type != ResultType.done && Platform.isWindows) {
-          await Process.run('explorer.exe', [source]);
+          await Process.run('explorer.exe', [targetSource]);
         }
       }
     } catch (e) {
@@ -341,6 +573,319 @@ class _DesktopMediaViewerWindowState
     showToast('已发送给: $targetNames', type: ToastType.success);
   }
 
+  /// 弹出桌面端多媒体右键上下文菜单
+  Future<void> _showContextMenu(BuildContext context, Offset position) async {
+    if (_isShowingContextMenu) return;
+    _isShowingContextMenu = true;
+    try {
+      final item = _currentItem;
+      final isVideo = item.type == MediaPreviewType.video;
+      final isPlaying = _videoController?.value.isPlaying ?? false;
+
+      final selected = await showMenu<String>(
+        context: context,
+        position: RelativeRect.fromLTRB(
+          position.dx,
+          position.dy,
+          position.dx + 1,
+          position.dy + 1,
+        ),
+        color: const Color(0xFF282828),
+        elevation: 10,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Color(0x2AFFFFFF), width: 0.5),
+        ),
+        items: isVideo
+            ? _buildVideoMenuItems(isPlaying)
+            : _buildImageMenuItems(),
+      );
+
+      if (selected == null || !mounted) return;
+      await _handleContextMenuAction(selected, position);
+    } finally {
+      _isShowingContextMenu = false;
+    }
+  }
+
+  /// 处理菜单动作分发
+  Future<void> _handleContextMenuAction(String action, Offset position) async {
+    switch (action) {
+      case 'copy_image':
+        await _copyImage();
+        break;
+      case 'copy_video_file':
+        await _copyVideoFile();
+        break;
+      case 'save_as':
+        await _saveMediaAs();
+        break;
+      case 'locate_in_folder':
+        await _locateInFolder();
+        break;
+      case 'copy_link':
+        await Clipboard.setData(ClipboardData(text: _currentItem.playableSource));
+        showToast('已复制媒体链接', type: ToastType.success);
+        break;
+      case 'qr':
+        await _handleScanQr();
+        break;
+      case 'forward':
+        await _handleForward();
+        break;
+      case 'rotate':
+        _rotate();
+        break;
+      case 'reset_zoom':
+        _resetZoom();
+        break;
+      case 'zoom_in':
+        _zoomIn();
+        break;
+      case 'zoom_out':
+        _zoomOut();
+        break;
+      case 'toggle_play':
+        await _togglePlayPause();
+        break;
+      case 'toggle_mute':
+        await _toggleMute();
+        break;
+      case 'toggle_loop':
+        await _toggleLooping();
+        break;
+      case 'speed':
+        final pos = position == Offset.zero
+            ? Offset(MediaQuery.of(context).size.width / 2, 80)
+            : position;
+        final speed = await showMenu<double>(
+          context: context,
+          position: RelativeRect.fromLTRB(
+            pos.dx + 60,
+            pos.dy,
+            pos.dx + 61,
+            pos.dy + 1,
+          ),
+          color: const Color(0xFF282828),
+          elevation: 10,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: Color(0x2AFFFFFF), width: 0.5),
+          ),
+          items: [0.5, 1.0, 1.25, 1.5, 2.0].map((s) {
+            final isCur = (_playbackSpeed - s).abs() < 0.01;
+            return PopupMenuItem<double>(
+              value: s,
+              height: 34,
+              child: Row(
+                children: [
+                  Icon(
+                    isCur ? Icons.check_rounded : null,
+                    size: 16,
+                    color: const Color(0xFF07C160),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    s == 1.0 ? '1.0x (正常)' : '${s}x',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isCur ? const Color(0xFF07C160) : Colors.white,
+                      fontWeight: isCur ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        );
+        if (speed != null) {
+          await _changePlaybackSpeed(speed);
+        }
+        break;
+      case 'open_default':
+        await _openWithDefaultPlayer();
+        break;
+    }
+  }
+
+  PopupMenuItem<String> _buildMenuItem({
+    required String value,
+    required IconData icon,
+    required String label,
+    String? shortcut,
+    bool isDestructive = false,
+    bool checked = false,
+    bool hasCheck = false,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Row(
+        children: [
+          if (hasCheck) ...[
+            Icon(
+              checked ? Icons.check_rounded : null,
+              size: 16,
+              color: const Color(0xFF07C160),
+            ),
+            const SizedBox(width: 8),
+          ] else ...[
+            Icon(
+              icon,
+              size: 16,
+              color: isDestructive ? const Color(0xFFFA5151) : Colors.white70,
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDestructive ? const Color(0xFFFA5151) : Colors.white,
+              ),
+            ),
+          ),
+          if (shortcut != null) ...[
+            const SizedBox(width: 16),
+            Text(
+              shortcut,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.white38,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<PopupMenuEntry<String>> _buildImageMenuItems() {
+    return [
+      _buildMenuItem(
+        value: 'copy_image',
+        icon: Icons.copy_rounded,
+        label: '复制图片',
+        shortcut: 'Ctrl+C',
+      ),
+      _buildMenuItem(
+        value: 'save_as',
+        icon: Icons.save_as_outlined,
+        label: '另存为...',
+        shortcut: 'Ctrl+S',
+      ),
+      _buildMenuItem(
+        value: 'locate_in_folder',
+        icon: Icons.folder_open_rounded,
+        label: '在文件夹中显示',
+      ),
+      _buildMenuItem(
+        value: 'copy_link',
+        icon: Icons.link_rounded,
+        label: '复制图片链接',
+      ),
+      const PopupMenuDivider(height: 10),
+      _buildMenuItem(
+        value: 'qr',
+        icon: Icons.qr_code_scanner_rounded,
+        label: '识别图中二维码',
+      ),
+      _buildMenuItem(
+        value: 'forward',
+        icon: Icons.forward_rounded,
+        label: '发送给朋友',
+      ),
+      const PopupMenuDivider(height: 10),
+      _buildMenuItem(
+        value: 'rotate',
+        icon: Icons.rotate_right_rounded,
+        label: '顺时针旋转 90°',
+        shortcut: 'R',
+      ),
+      _buildMenuItem(
+        value: 'reset_zoom',
+        icon: Icons.aspect_ratio_rounded,
+        label: '原始大小 (1:1)',
+        shortcut: '双击',
+      ),
+      _buildMenuItem(
+        value: 'zoom_in',
+        icon: Icons.zoom_in_rounded,
+        label: '放大',
+        shortcut: '+',
+      ),
+      _buildMenuItem(
+        value: 'zoom_out',
+        icon: Icons.zoom_out_rounded,
+        label: '缩小',
+        shortcut: '-',
+      ),
+    ];
+  }
+
+  List<PopupMenuEntry<String>> _buildVideoMenuItems(bool isPlaying) {
+    return [
+      _buildMenuItem(
+        value: 'toggle_play',
+        icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+        label: isPlaying ? '暂停' : '播放',
+        shortcut: '空格',
+      ),
+      _buildMenuItem(
+        value: 'toggle_mute',
+        icon: _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+        label: _isMuted ? '取消静音' : '静音',
+      ),
+      _buildMenuItem(
+        value: 'toggle_loop',
+        icon: Icons.repeat_rounded,
+        label: _isLooping ? '关闭循环播放' : '循环播放',
+        checked: _isLooping,
+        hasCheck: true,
+      ),
+      _buildMenuItem(
+        value: 'speed',
+        icon: Icons.speed_rounded,
+        label: '播放倍速 (${_playbackSpeed}x)...',
+      ),
+      const PopupMenuDivider(height: 10),
+      _buildMenuItem(
+        value: 'save_as',
+        icon: Icons.save_as_outlined,
+        label: '视频另存为...',
+        shortcut: 'Ctrl+S',
+      ),
+      _buildMenuItem(
+        value: 'copy_video_file',
+        icon: Icons.file_copy_rounded,
+        label: '复制视频文件',
+      ),
+      _buildMenuItem(
+        value: 'copy_link',
+        icon: Icons.link_rounded,
+        label: '复制视频链接',
+      ),
+      _buildMenuItem(
+        value: 'locate_in_folder',
+        icon: Icons.folder_open_rounded,
+        label: '在文件夹中显示',
+      ),
+      const PopupMenuDivider(height: 10),
+      _buildMenuItem(
+        value: 'open_default',
+        icon: Icons.open_in_new_rounded,
+        label: '用系统播放器打开',
+      ),
+      _buildMenuItem(
+        value: 'forward',
+        icon: Icons.forward_rounded,
+        label: '发送给朋友',
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
@@ -358,56 +903,62 @@ class _DesktopMediaViewerWindowState
         // 1. 顶部多媒体专属工具栏
         _buildViewerTopBar(context),
 
-        // 2. 媒体主展示画布
+        // 2. 媒体主展示画布 (支持右键菜单)
         Expanded(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // 核心视窗
-              Center(
-                child: RotatedBox(
-                  quarterTurns: _rotationQuarterTurns,
-                  child: InteractiveViewer(
-                    transformationController: _transformController,
-                    minScale: 0.2,
-                    maxScale: 6.0,
-                    clipBehavior: Clip.none,
-                    child: _buildMediaContent(),
-                  ),
-                ),
-              ),
-
-              // 左侧快速翻页指示按钮
-              if (_currentIndex > 0)
-                Positioned(
-                  left: 16,
-                  child: _buildNavArrowButton(
-                    icon: Icons.chevron_left_rounded,
-                    onTap: () => _goTo(_currentIndex - 1),
-                    tooltip: '上一张',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTapDown: (details) {
+              _showContextMenu(context, details.globalPosition);
+            },
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // 核心视窗
+                Center(
+                  child: RotatedBox(
+                    quarterTurns: _rotationQuarterTurns,
+                    child: InteractiveViewer(
+                      transformationController: _transformController,
+                      minScale: 0.2,
+                      maxScale: 6.0,
+                      clipBehavior: Clip.none,
+                      child: _buildMediaContent(),
+                    ),
                   ),
                 ),
 
-              // 右侧快速翻页指示按钮
-              if (_currentIndex < widget.items.length - 1)
-                Positioned(
-                  right: 16,
-                  child: _buildNavArrowButton(
-                    icon: Icons.chevron_right_rounded,
-                    onTap: () => _goTo(_currentIndex + 1),
-                    tooltip: '下一张',
+                // 左侧快速翻页指示按钮
+                if (_currentIndex > 0)
+                  Positioned(
+                    left: 16,
+                    child: _buildNavArrowButton(
+                      icon: Icons.chevron_left_rounded,
+                      onTap: () => _goTo(_currentIndex - 1),
+                      tooltip: '上一张',
+                    ),
                   ),
-                ),
 
-              // 底部折叠缩略图条 (当 _showThumbnails 为 true)
-              if (_showThumbnails && widget.items.length > 1)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: _buildThumbnailStrip(),
-                ),
-            ],
+                // 右侧快速翻页指示按钮
+                if (_currentIndex < widget.items.length - 1)
+                  Positioned(
+                    right: 16,
+                    child: _buildNavArrowButton(
+                      icon: Icons.chevron_right_rounded,
+                      onTap: () => _goTo(_currentIndex + 1),
+                      tooltip: '下一张',
+                    ),
+                  ),
+
+                // 底部折叠缩略图条 (当 _showThumbnails 为 true)
+                if (_showThumbnails && widget.items.length > 1)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: _buildThumbnailStrip(),
+                  ),
+              ],
+            ),
           ),
         ),
       ],
@@ -451,6 +1002,8 @@ class _DesktopMediaViewerWindowState
       autofocus: true,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
+          final isCtrlOrCmd = HardwareKeyboard.instance.isControlPressed ||
+              HardwareKeyboard.instance.isMetaPressed;
           if (event.logicalKey == LogicalKeyboardKey.escape) {
             if (widget.onClose != null) {
               widget.onClose!();
@@ -458,6 +1011,21 @@ class _DesktopMediaViewerWindowState
               Navigator.of(context).pop();
             }
             return KeyEventResult.handled;
+          } else if (isCtrlOrCmd && event.logicalKey == LogicalKeyboardKey.keyC) {
+            if (_currentItem.type == MediaPreviewType.image) {
+              _copyImage();
+            } else {
+              _copyVideoFile();
+            }
+            return KeyEventResult.handled;
+          } else if (isCtrlOrCmd && event.logicalKey == LogicalKeyboardKey.keyS) {
+            _saveMediaAs();
+            return KeyEventResult.handled;
+          } else if (event.logicalKey == LogicalKeyboardKey.space) {
+            if (_currentItem.type == MediaPreviewType.video) {
+              _togglePlayPause();
+              return KeyEventResult.handled;
+            }
           } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
             _goTo(_currentIndex - 1);
             return KeyEventResult.handled;
@@ -679,60 +1247,20 @@ class _DesktopMediaViewerWindowState
                         ),
                         tooltip: '更多操作',
                         color: const Color(0xFF282828),
+                        elevation: 10,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: Color(0x2AFFFFFF), width: 0.5),
+                        ),
                         onSelected: (val) {
-                          if (val == 'forward') {
-                            _handleForward();
-                          } else if (val == 'qr') {
-                            _handleScanQr();
-                          } else if (val == 'copy') {
-                            Clipboard.setData(
-                              ClipboardData(text: _currentItem.playableSource),
-                            );
-                            showToast('已复制媒体地址', type: ToastType.success);
-                          }
+                          _handleContextMenuAction(val, Offset.zero);
                         },
                         itemBuilder:
-                            (_) => [
-                              const PopupMenuItem(
-                                value: 'forward',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.forward_rounded, size: 16),
-                                    SizedBox(width: 8),
-                                    Text('转发', style: TextStyle(fontSize: 13)),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'qr',
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.qr_code_scanner_rounded,
-                                      size: 16,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      '识别图中二维码',
-                                      style: TextStyle(fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'copy',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.content_copy_rounded, size: 16),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      '复制媒体链接',
-                                      style: TextStyle(fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                            (_) => _currentItem.type == MediaPreviewType.video
+                                ? _buildVideoMenuItems(
+                                  _videoController?.value.isPlaying ?? false,
+                                )
+                                : _buildImageMenuItems(),
                       ),
                     ],
                   ),
@@ -923,18 +1451,7 @@ class _DesktopMediaViewerWindowState
                           : Icons.play_circle_fill,
                       color: Colors.white.withValues(alpha: 0.8),
                     ),
-                    onPressed: () async {
-                      final controller = _videoController;
-                      if (controller == null) return;
-                      if (controller.value.isPlaying) {
-                        await controller.pause();
-                      } else {
-                        if (controller.value.isCompleted) {
-                          await controller.seekTo(Duration.zero);
-                        }
-                        await controller.play();
-                      }
-                    },
+                    onPressed: _togglePlayPause,
                   ),
             ),
           ],

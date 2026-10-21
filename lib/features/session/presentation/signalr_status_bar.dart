@@ -1,8 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/window_service.dart';
+import '../../../core/widgets/desktop_dialog.dart';
 import '../application/session_list_controller.dart';
 
 /// Interactive status banner showing SignalR connection status, error reasons,
@@ -97,6 +101,27 @@ class SignalRStatusBar extends StatelessWidget {
   }
 
   void _openTroubleshootSheet(BuildContext context) {
+    final isDesktop = (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
+        MediaQuery.sizeOf(context).width >= 720;
+
+    if (isDesktop) {
+      showDesktopModalDialog<void>(
+        context: context,
+        title: '网络连接状态排查',
+        width: 500,
+        height: 440,
+        child: _SignalRTroubleshootSheet(
+          state: state,
+          onReconnect: onReconnect,
+          errorDescription: errorDescription,
+          hubUrl: hubUrl,
+          isDesktop: true,
+        ),
+      );
+      return;
+    }
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -121,12 +146,14 @@ class _SignalRTroubleshootSheet extends StatefulWidget {
     required this.onReconnect,
     this.errorDescription,
     this.hubUrl,
+    this.isDesktop = false,
   });
 
   final SessionRealtimeStatus state;
   final Future<void> Function() onReconnect;
   final String? errorDescription;
   final String? hubUrl;
+  final bool isDesktop;
 
   @override
   State<_SignalRTroubleshootSheet> createState() =>
@@ -413,6 +440,14 @@ class _SignalRTroubleshootSheetState extends State<_SignalRTroubleshootSheet> {
                   TextButton.icon(
                     onPressed: () {
                       Navigator.of(context).pop();
+                      if (widget.isDesktop) {
+                        try {
+                          ProviderScope.containerOf(context, listen: false)
+                              .read(windowServiceProvider)
+                              .openDiagnostics();
+                          return;
+                        } catch (_) {}
+                      }
                       context.push('/diagnostics/connection');
                     },
                     icon: const Icon(Icons.network_check_outlined, size: 18),
@@ -421,6 +456,14 @@ class _SignalRTroubleshootSheetState extends State<_SignalRTroubleshootSheet> {
                   TextButton.icon(
                     onPressed: () {
                       Navigator.of(context).pop();
+                      if (widget.isDesktop) {
+                        try {
+                          ProviderScope.containerOf(context, listen: false)
+                              .read(windowServiceProvider)
+                              .openDiagnostics();
+                          return;
+                        } catch (_) {}
+                      }
                       context.push('/diagnostics/signalr');
                     },
                     icon: const Icon(Icons.analytics_outlined, size: 18),

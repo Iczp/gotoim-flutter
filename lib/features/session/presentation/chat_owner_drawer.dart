@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +10,8 @@ import '../../../core/network/abp/abp_current_user.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_badge.dart';
+import '../../../core/widgets/desktop_dialog.dart';
+import '../../account/presentation/account_profile_page.dart';
 import '../../auth/application/auth_controller.dart';
 import '../application/session_list_controller.dart';
 
@@ -222,7 +227,21 @@ class CurrentUserAccountTile extends ConsumerWidget {
       trailing: const Icon(Icons.chevron_right, size: 18),
       onTap: () {
         Navigator.pop(context);
-        context.push('/account/profile');
+        final isDesktop = (!kIsWeb &&
+                (Platform.isWindows ||
+                    Platform.isMacOS ||
+                    Platform.isLinux)) ||
+            MediaQuery.sizeOf(context).width >= 720;
+        if (isDesktop) {
+          showDesktopModalDialog<void>(
+            context: context,
+            title: '个人信息',
+            width: 480,
+            child: const AccountProfilePage(isDialog: true),
+          );
+        } else {
+          context.push('/account/profile');
+        }
       },
     );
   }

@@ -1,11 +1,15 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/services/window_service.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/desktop_dialog.dart';
 import '../../chat/presentation/chat_page.dart';
+import '../../chat_settings/presentation/chat_settings_page.dart';
 import '../../contact/presentation/add_friend_page.dart';
 import '../../group/presentation/create_group_page.dart';
 import '../../mine/presentation/my_qr_code_dialog.dart';
@@ -70,6 +74,14 @@ class _DesktopSessionSplitViewState
   int? _activeOwnerId;
   String _searchKeyword = '';
   double _sessionPaneWidth = 290.0;
+  Timer? _avatarHoverTimer;
+  Timer? _avatarLeaveTimer;
+  OverlayEntry? _contextMenuEntry;
+
+  void _dismissContextMenu() {
+    _contextMenuEntry?.remove();
+    _contextMenuEntry = null;
+  }
 
   @override
   void initState() {
@@ -144,6 +156,9 @@ class _DesktopSessionSplitViewState
 
   @override
   void dispose() {
+    _dismissContextMenu();
+    _avatarHoverTimer?.cancel();
+    _avatarLeaveTimer?.cancel();
     _cachedChats.clear();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -151,7 +166,49 @@ class _DesktopSessionSplitViewState
     super.dispose();
   }
 
+  void _onAvatarHover(Rect rect, SessionSummary session) {
+    if (kIsWeb ||
+        (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
+      return;
+    }
+    _avatarLeaveTimer?.cancel();
+    _avatarHoverTimer?.cancel();
+    _avatarHoverTimer = Timer(const Duration(milliseconds: 300), () {
+      final raw = session.raw;
+      final destination =
+          (raw['destination'] as Map?)?.cast<String, dynamic>() ?? {};
+      final subjectData = {
+        'id': session.destinationId?.toString() ?? session.id,
+        'displayName':
+            destination['displayName'] ?? destination['name'] ?? session.title,
+        'name': destination['name'] ?? session.title,
+        'thumbnail': destination['thumbnail'] ?? destination['portrait'],
+        'portrait': destination['portrait'],
+        'gender': destination['gender'],
+        'statusText': destination['statusText'],
+        'code': destination['code'],
+      };
+      ref.read(windowServiceProvider).showProfileCardAt(
+        subjectData: subjectData,
+        localRect: rect,
+      );
+    });
+  }
+
+  void _onAvatarLeave() {
+    if (kIsWeb ||
+        (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
+      return;
+    }
+    _avatarHoverTimer?.cancel();
+    _avatarLeaveTimer?.cancel();
+    _avatarLeaveTimer = Timer(const Duration(milliseconds: 200), () {
+      ref.read(windowServiceProvider).hideProfileCard();
+    });
+  }
+
   void _selectSession(SessionSummary session) {
+    _dismissContextMenu();
     final ownerId = widget.controller.currentOwner?.id ?? 0;
     _touchCachedChat(session.id, session.title, ownerId);
     setState(() {
@@ -172,176 +229,260 @@ class _DesktopSessionSplitViewState
     );
   }
 
-  Future<void> _showSessionContextMenu(
+  void _showSessionContextMenu(
     TapDownDetails details,
     SessionSummary session,
-  ) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
+  ) {
+    _dismissContextMenu();
+    final overlay = Overlay.of(context);
+    final renderBox = overlay.context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
 
-    final position = RelativeRect.fromRect(
-      details.globalPosition & const Size(1, 1),
-      Offset.zero & overlay.size,
+    final screenSize = renderBox.size;
+    const double menuWidth = 160.0;
+    const double menuEstimatedHeight = 220.0;
+
+    double left = details.globalPosition.dx;
+    double top = details.globalPosition.dy;
+
+    if (left + menuWidth > screenSize.width - 8) {
+      left = (screenSize.width - menuWidth - 8).clamp(8.0, screenSize.width);
+    }
+    if (top + menuEstimatedHeight > screenSize.height - 8) {
+      top = (screenSize.height - menuEstimatedHeight - 8).clamp(8.0, screenSize.height);
+    }
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    _contextMenuEntry = OverlayEntry(
+      builder: (ctx) {
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: TapRegion(
+                groupId: 'desktop_session_context_menu',
+                onTapOutside: (_) => _dismissContextMenu(),
+                child: Material(
+                  elevation: 8,
+                  shadowColor: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
+                  color: colorScheme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : colorScheme.outlineVariant.withValues(alpha: 0.5),
+                      width: 0.8,
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Container(
+                    width: menuWidth,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildContextMenuItem(
+                          icon: Icons.open_in_new_rounded,
+                          label: '在独立窗口打开',
+                          onTap: () {
+                            _dismissContextMenu();
+                            _openInStandaloneWindow(session);
+                          },
+                        ),
+                        Divider(
+                          height: 8,
+                          thickness: 0.5,
+                          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                        ),
+                        _buildContextMenuItem(
+                          icon: session.isPinned
+                              ? Icons.push_pin_outlined
+                              : Icons.push_pin_rounded,
+                          label: session.isPinned ? '取消置顶' : '置顶聊天',
+                          onTap: () async {
+                            _dismissContextMenu();
+                            await _handleTopping(session);
+                          },
+                        ),
+                        _buildContextMenuItem(
+                          icon: session.isImmersed
+                              ? Icons.notifications_active_outlined
+                              : Icons.notifications_off_outlined,
+                          label: session.isImmersed ? '开启消息通知' : '消息免打扰',
+                          onTap: () async {
+                            _dismissContextMenu();
+                            await _handleImmersed(session);
+                          },
+                        ),
+                        _buildContextMenuItem(
+                          icon: Icons.settings_outlined,
+                          label: '聊天设置',
+                          onTap: () {
+                            _dismissContextMenu();
+                            _openChatSettings(session);
+                          },
+                        ),
+                        Divider(
+                          height: 8,
+                          thickness: 0.5,
+                          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                        ),
+                        _buildContextMenuItem(
+                          icon: Icons.delete_sweep_outlined,
+                          label: '清空聊天记录',
+                          iconColor: colorScheme.error,
+                          textColor: colorScheme.error,
+                          onTap: () async {
+                            _dismissContextMenu();
+                            await _handleClearMessages(session);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
 
-    final action = await showMenu<String>(
-      context: context,
-      position: position,
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      items: [
-        const PopupMenuItem<String>(
-          value: 'standalone',
-          height: 36,
-          child: Row(
-            children: [
-              Icon(Icons.open_in_new_rounded, size: 16),
-              SizedBox(width: 8),
-              Text('在独立窗口打开', style: TextStyle(fontSize: 13)),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(height: 8),
-        PopupMenuItem<String>(
-          value: 'topping',
-          height: 36,
-          child: Row(
-            children: [
-              Icon(
-                session.isPinned
-                    ? Icons.push_pin_outlined
-                    : Icons.push_pin_rounded,
-                size: 16,
-              ),
-              SizedBox(width: 8),
-              Text(
-                session.isPinned ? '取消置顶' : '置顶聊天',
-                style: const TextStyle(fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        PopupMenuItem<String>(
-          value: 'immersed',
-          height: 36,
-          child: Row(
-            children: [
-              Icon(
-                session.isImmersed
-                    ? Icons.notifications_active_outlined
-                    : Icons.notifications_off_outlined,
-                size: 16,
-              ),
-              SizedBox(width: 8),
-              Text(
-                session.isImmersed ? '开启消息通知' : '消息免打扰',
-                style: const TextStyle(fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'settings',
-          height: 36,
-          child: Row(
-            children: [
-              Icon(Icons.settings_outlined, size: 16),
-              SizedBox(width: 8),
-              Text('聊天设置', style: TextStyle(fontSize: 13)),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(height: 8),
-        PopupMenuItem<String>(
-          value: 'clear',
-          height: 36,
-          child: Row(
-            children: [
-              Icon(
-                Icons.delete_sweep_outlined,
-                size: 16,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '清空聊天记录',
+    overlay.insert(_contextMenuEntry!);
+  }
+
+  Widget _buildContextMenuItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? iconColor,
+    Color? textColor,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: iconColor ?? colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
                 style: TextStyle(
                   fontSize: 13,
-                  color: Theme.of(context).colorScheme.error,
+                  color: textColor ?? colorScheme.onSurface,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleTopping(SessionSummary session) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.controller.setTopping(session, !session.isPinned);
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(session.isPinned ? '已取消置顶' : '已置顶')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('操作失败：$e')));
+      }
+    }
+  }
+
+  Future<void> _handleImmersed(SessionSummary session) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.controller.setImmersed(session, !session.isImmersed);
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              session.isImmersed ? '已开启消息通知' : '已关闭消息通知',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('操作失败：$e')));
+      }
+    }
+  }
+
+  void _openChatSettings(SessionSummary session) {
+    final ownerId =
+        session.ownerId ?? widget.controller.currentOwner?.id ?? 0;
+    if (mounted) {
+      showDesktopModalDialog<void>(
+        context: context,
+        title: '聊天设置 - ${session.title}',
+        width: 520,
+        height: 640,
+        child: ChatSettingsPage(
+          ownerId: ownerId,
+          sessionUnitId: session.id,
+          isDrawer: true,
+          onClose: () => Navigator.of(context).pop(),
+          onMessagesCleared: () {
+            ref.read(sessionListControllerProvider).refreshChanges();
+          },
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleClearMessages(SessionSummary session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('清空聊天记录'),
+            content: Text('确定清空“${session.title}”的全部聊天记录吗？'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('清空'),
               ),
             ],
           ),
-        ),
-      ],
     );
-
-    if (action == null || !mounted) return;
-
-    if (action == 'standalone') {
-      _openInStandaloneWindow(session);
-      return;
-    }
-
-    if (action == 'settings') {
-      final ownerId =
-          session.ownerId ?? widget.controller.currentOwner?.id ?? 0;
-      if (mounted) {
-        context.push(
-          '/chat/${Uri.encodeComponent(session.id)}/settings?ownerId=$ownerId',
-        );
-      }
-      return;
-    }
+    if (confirmed != true || !mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
-
-    if (action == 'clear') {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder:
-            (dialogContext) => AlertDialog(
-              title: const Text('清空聊天记录'),
-              content: Text('确定清空“${session.title}”的全部聊天记录吗？'),
-              actions: <Widget>[
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  child: const Text('清空'),
-                ),
-              ],
-            ),
-      );
-      if (confirmed != true || !mounted) return;
-    }
-
     try {
-      switch (action) {
-        case 'topping':
-          await widget.controller.setTopping(session, !session.isPinned);
-        case 'immersed':
-          await widget.controller.setImmersed(session, !session.isImmersed);
-        case 'clear':
-          await widget.controller.clearMessages(session);
-      }
+      await widget.controller.clearMessages(session);
       if (mounted) {
-        final message = switch (action) {
-          'topping' => session.isPinned ? '已取消置顶' : '已置顶',
-          'immersed' => session.isImmersed ? '已开启消息通知' : '已关闭消息通知',
-          'clear' => '聊天记录已清空',
-          _ => '',
-        };
-        if (message.isNotEmpty) {
-          messenger.showSnackBar(SnackBar(content: Text(message)));
-        }
+        messenger.showSnackBar(const SnackBar(content: Text('聊天记录已清空')));
       }
-    } catch (error) {
+    } catch (e) {
       if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('操作失败：$error')));
+        messenger.showSnackBar(SnackBar(content: Text('操作失败：$e')));
       }
     }
   }
@@ -380,9 +521,11 @@ class _DesktopSessionSplitViewState
       }
     });
 
-    // 保护：如果当前选中的 session 并不属于当前身份的会话列表，安全重置选择
+    // 保护：如果当前选中的 session 既不在当前会话列表中，也不在已缓存会话中，且会话列表非空，安全重置选择
     if (_selectedSessionUnitId != null &&
-        !allSessions.any((s) => s.id == _selectedSessionUnitId)) {
+        allSessions.isNotEmpty &&
+        !allSessions.any((s) => s.id == _selectedSessionUnitId) &&
+        !_cachedChats.containsKey(_selectedSessionUnitId!)) {
       _selectedSessionUnitId = null;
       _selectedTitle = null;
     }
@@ -755,6 +898,9 @@ class _DesktopSessionSplitViewState
                                                 session,
                                               )
                                           : null,
+                                  onAvatarHover:
+                                      session != null ? _onAvatarHover : null,
+                                  onAvatarLeave: _onAvatarLeave,
                                   onLongPress:
                                       session != null
                                           ? () => SessionMenuSheet.show(

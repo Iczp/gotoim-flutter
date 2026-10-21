@@ -9,9 +9,15 @@ import '../../../core/services/tray_grouped_unread_provider.dart';
 import '../../../core/services/tray_service.dart';
 import '../../../core/services/window_service.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/desktop_dialog.dart';
 import '../../../core/widgets/desktop_tray_message_box.dart';
+import '../../account/presentation/account_profile_page.dart';
 import '../../chat/presentation/widgets/clipboard_files_confirm_dialog.dart';
 import '../../chat/presentation/widgets/clipboard_image_confirm_dialog.dart';
+import '../../contact/presentation/add_friend_page.dart';
+import '../../group/presentation/create_group_page.dart';
+import '../../search/presentation/search_page.dart';
+import '../../session/presentation/login_devices_page.dart';
 
 /// 桌面端独立窗口测试诊断中心
 class DesktopWindowsDiagnosticsPage extends ConsumerStatefulWidget {
@@ -39,6 +45,15 @@ class _DesktopWindowsDiagnosticsPageState
   final TextEditingController _unreadCountController = TextEditingController(
     text: '5',
   );
+  final TextEditingController _profileNameController = TextEditingController(
+    text: '张小龙',
+  );
+  final TextEditingController _profileDeptController = TextEditingController(
+    text: '微信事业群 / 研发部',
+  );
+  final TextEditingController _profileStatusController = TextEditingController(
+    text: '正在写代码...',
+  );
   bool _isBlinking = true;
 
   String _status = '未执行';
@@ -53,6 +68,9 @@ class _DesktopWindowsDiagnosticsPageState
     _imageUrlController.dispose();
     _videoUrlController.dispose();
     _unreadCountController.dispose();
+    _profileNameController.dispose();
+    _profileDeptController.dispose();
+    _profileStatusController.dispose();
     super.dispose();
   }
 
@@ -64,6 +82,9 @@ class _DesktopWindowsDiagnosticsPageState
       _videoUrlController.text =
           'https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4';
       _unreadCountController.text = '5';
+      _profileNameController.text = '张小龙';
+      _profileDeptController.text = '微信事业群 / 研发部';
+      _profileStatusController.text = '正在写代码...';
       _isBlinking = true;
       _status = '已恢复默认设置';
       _lastResult = '参数已重置';
@@ -255,6 +276,229 @@ class _DesktopWindowsDiagnosticsPageState
         _error = '$e\n$st';
       });
     }
+  }
+
+  Future<void> _testPrewarmSubWindows() async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中...';
+      _error = null;
+    });
+    try {
+      final windowService = ref.read(windowServiceProvider);
+      await windowService.prewarmProfileCard();
+      await windowService.prewarmTrayFlyout();
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult =
+            '已成功在后台预热常驻无边框子窗口：\n1. tool:profile_card (悬浮资料卡)\n2. tool:tray (托盘新消息悬浮窗)\n状态：常驻后台保持预热，鼠标悬浮或新消息到达呼出零延迟';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
+  }
+
+  Future<void> _testShowProfileCard() async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中...';
+      _error = null;
+    });
+    try {
+      final windowService = ref.read(windowServiceProvider);
+      final subjectData = {
+        'id': 'diag_user_888',
+        'displayName': _profileNameController.text.trim(),
+        'name': _profileNameController.text.trim(),
+        'department': _profileDeptController.text.trim(),
+        'statusText': _profileStatusController.text.trim(),
+        'gender': 1,
+      };
+      await windowService.showProfileCardAt(
+        subjectData: subjectData,
+        localRect: const Rect.fromLTWH(260, 240, 50, 50),
+      );
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult =
+            '已呼出悬浮无边框资料卡窗口\n姓名: ${_profileNameController.text}\n部门: ${_profileDeptController.text}\n状态: ${_profileStatusController.text}\n坐标: (260, 240)\n特性：无边框、阴影、移出自动隐藏、常驻后台不销毁';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
+  }
+
+  Future<void> _testHideProfileCard() async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中...';
+      _error = null;
+    });
+    try {
+      final windowService = ref.read(windowServiceProvider);
+      await windowService.hideProfileCard();
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult = '已成功隐藏悬浮资料卡窗口 (保持后台常驻，不销毁)';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
+  }
+
+  Future<void> _testNativeTrayFlyout() async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中...';
+      _error = null;
+    });
+    try {
+      final windowService = ref.read(windowServiceProvider);
+      await windowService.openTrayFlyout();
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult = '已成功调起原生无边框托盘新消息聚合浮窗 (屏幕右下角任务栏平滑滑出)';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
+  }
+
+  Future<void> _testMultiTabBrowserSequence() async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中...';
+      _error = null;
+    });
+    try {
+      final windowService = ref.read(windowServiceProvider);
+      await windowService.openWebBrowser(
+        url: 'https://news.qq.com',
+        title: '腾讯新闻',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      await windowService.openWebBrowser(
+        url: 'https://www.bing.com',
+        title: '必应搜索',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      await windowService.openWebBrowser(
+        url: 'https://flutter.dev',
+        title: 'Flutter 官网',
+      );
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult =
+            '已成功连续向桌面内置浏览器追加 3 个不同标签页：\n1. 腾讯新闻 (https://news.qq.com)\n2. 必应搜索 (https://www.bing.com)\n3. Flutter 官网 (https://flutter.dev)\n特性：打开新链接不覆盖已有页面，而是增加 Tab，各个标签页 WebView 独立隔离且滚动条与状态保留！';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
+  }
+
+  void _testOpenDesktopSearch() {
+    showDesktopModalDialog<void>(
+      context: context,
+      title: '搜索会话与好友',
+      width: 580,
+      height: 600,
+      child: const SearchPage(isDialog: true),
+    );
+    setState(() {
+      _status = '成功';
+      _lastResult = '已弹出桌面端居中搜索模态对话框 (消除全屏与移动端滑动条)';
+    });
+  }
+
+  void _testOpenDesktopCreateGroup() {
+    showDesktopModalDialog<void>(
+      context: context,
+      title: '发起群聊',
+      width: 480,
+      height: 560,
+      child: const CreateGroupPage(isDialog: true),
+    );
+    setState(() {
+      _status = '成功';
+      _lastResult = '已弹出桌面端居中发起群聊模态对话框';
+    });
+  }
+
+  void _testOpenDesktopAddFriend() {
+    showDesktopModalDialog<void>(
+      context: context,
+      title: '添加好友',
+      width: 520,
+      height: 600,
+      child: const AddFriendPage(isDialog: true),
+    );
+    setState(() {
+      _status = '成功';
+      _lastResult = '已弹出桌面端居中添加好友模态对话框';
+    });
+  }
+
+  void _testOpenDesktopAccountProfile() {
+    showDesktopModalDialog<void>(
+      context: context,
+      title: '个人信息',
+      width: 500,
+      height: 580,
+      child: const AccountProfilePage(isDialog: true),
+    );
+    setState(() {
+      _status = '成功';
+      _lastResult = '已弹出桌面端居中个人信息模态对话框';
+    });
+  }
+
+  void _testOpenDesktopLoginDevices() {
+    showDesktopModalDialog<void>(
+      context: context,
+      title: '登录设备管理',
+      width: 560,
+      height: 520,
+      child: const LoginDevicesPage(isDialog: true),
+    );
+    setState(() {
+      _status = '成功';
+      _lastResult = '已弹出桌面端居中登录设备管理模态对话框';
+    });
   }
 
   Future<void> _testOpenTrayFlyout() async {
@@ -784,7 +1028,79 @@ class _DesktopWindowsDiagnosticsPageState
 
           const SizedBox(height: 16),
 
-          // 2. 输入参数
+          // 2. 常驻子窗口预热与复用状态监视
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        '常驻子窗口预热与复用状态监视',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.bolt_rounded, size: 16),
+                        label: const Text('一键预热全部常驻窗口'),
+                        onPressed: _testPrewarmSubWindows,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final ws = ref.watch(windowServiceProvider);
+                      final isProfileCardReady =
+                          ws.isWindowOpen('tool:profile_card');
+                      final isTrayReady = ws.isWindowOpen('tool:tray');
+                      final isBrowserOpen = ws.isWindowOpen('tool:browser');
+                      final isSettingsOpen = ws.isWindowOpen('tool:settings');
+
+                      return Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          _buildWindowStatusChip(
+                            '资料卡 (profile_card)',
+                            isProfileCardReady,
+                            '鼠标悬浮呼出 / 离开隐藏',
+                          ),
+                          _buildWindowStatusChip(
+                            '托盘通知 (tray)',
+                            isTrayReady,
+                            '新消息右下角滑出 / 常驻不退出',
+                          ),
+                          _buildWindowStatusChip(
+                            '浏览器 (browser)',
+                            isBrowserOpen,
+                            'Multi-Tab 多标签页复用',
+                          ),
+                          _buildWindowStatusChip(
+                            '独立设置 (settings)',
+                            isSettingsOpen,
+                            '桌面居中模态独立视窗',
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // 3. 输入参数
           Card(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -812,6 +1128,41 @@ class _DesktopWindowsDiagnosticsPageState
                     controller: _urlTitleController,
                     decoration: const InputDecoration(
                       labelText: '网页标题',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _profileNameController,
+                          decoration: const InputDecoration(
+                            labelText: '资料卡测试姓名',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _profileDeptController,
+                          decoration: const InputDecoration(
+                            labelText: '测试部门 / 身份',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _profileStatusController,
+                    decoration: const InputDecoration(
+                      labelText: '资料卡个性签名 / 状态',
                       isDense: true,
                       border: OutlineInputBorder(),
                     ),
@@ -870,112 +1221,245 @@ class _DesktopWindowsDiagnosticsPageState
 
           const SizedBox(height: 16),
 
-          // 3. 执行按钮区
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF07C160),
-                ),
-                icon: const Icon(Icons.mark_chat_unread_rounded, size: 16),
-                label: const Text('弹出托盘未读浮窗 (按聊天对象分组)'),
-                onPressed: _testOpenTrayFlyout,
+          // 4. 执行操作套件
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '执行操作套件 (符合 AGENTS.md 规范)',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ── 方向一：悬浮资料卡 ──
+                  const Text(
+                    '方向一：悬浮无边框资料卡独立窗口 (鼠标悬停呼出、离开隐藏、常驻不销毁)',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        icon: const Icon(Icons.badge_outlined, size: 16),
+                        label: const Text('呼出悬浮资料卡 (坐标 260, 240)'),
+                        onPressed: _testShowProfileCard,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.visibility_off_outlined, size: 16),
+                        label: const Text('隐藏悬浮资料卡 (常驻后台)'),
+                        onPressed: _testHideProfileCard,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(height: 1, thickness: 0.5),
+                  const SizedBox(height: 10),
+
+                  // ── 方向二：托盘新消息悬浮窗 ──
+                  const Text(
+                    '方向二：托盘新消息轻量常驻悬浮窗 (预热与实时提醒、右下角滑出)',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF07C160),
+                        ),
+                        icon: const Icon(Icons.mark_chat_unread_rounded, size: 16),
+                        label: const Text('调起原生托盘常驻浮窗 (右下角滑出)'),
+                        onPressed: _testNativeTrayFlyout,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                        label: const Text('应用内托盘浮窗 (模态预览)'),
+                        onPressed: _testOpenTrayFlyout,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.add_comment_rounded, size: 16),
+                        label: const Text('模拟新消息到达 (+1)'),
+                        onPressed: _testSimulateMessage,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.playlist_add_check_rounded, size: 16),
+                        label: const Text('注入测试未读数据 (Mock)'),
+                        onPressed: _testLoadSampleData,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.notifications_active_rounded, size: 16),
+                        label: const Text('更新托盘角标数字'),
+                        onPressed: _testUpdateTrayBadge,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.menu_open, size: 16),
+                        label: const Text('显示系统托盘菜单'),
+                        onPressed: () => ref.read(trayServiceProvider).showContextMenu(),
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.done_all_rounded, size: 16),
+                        label: const Text('一键清空未读'),
+                        onPressed: _testClearUnread,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(height: 1, thickness: 0.5),
+                  const SizedBox(height: 10),
+
+                  // ── 方向三：内置浏览器多标签页复用 ──
+                  const Text(
+                    '方向三：内置浏览器多标签页 (Multi-Tab) 复用机制 (打开新链接增加 Tab 不覆盖)',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        icon: const Icon(Icons.tab_rounded, size: 16),
+                        label: const Text('一键连续追加 3 个不同 Tab 复用测试'),
+                        onPressed: _testMultiTabBrowserSequence,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                        label: const Text('打开当前输入 URL 浏览器窗口'),
+                        onPressed: _testOpenBrowser,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(height: 1, thickness: 0.5),
+                  const SizedBox(height: 10),
+
+                  // ── 桌面居中模态对话框套件预览 ──
+                  const Text(
+                    '桌面居中模态对话框套件 (消除移动端全屏与底部滑动条)',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.search_rounded, size: 16),
+                        label: const Text('搜索会话与好友 (模态框)'),
+                        onPressed: _testOpenDesktopSearch,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.group_add_rounded, size: 16),
+                        label: const Text('发起群聊 (模态框)'),
+                        onPressed: _testOpenDesktopCreateGroup,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.person_add_rounded, size: 16),
+                        label: const Text('添加好友 (模态框)'),
+                        onPressed: _testOpenDesktopAddFriend,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.account_box_rounded, size: 16),
+                        label: const Text('个人信息 (模态框)'),
+                        onPressed: _testOpenDesktopAccountProfile,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.devices_rounded, size: 16),
+                        label: const Text('登录设备管理 (模态框)'),
+                        onPressed: _testOpenDesktopLoginDevices,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(height: 1, thickness: 0.5),
+                  const SizedBox(height: 10),
+
+                  // ── 独立窗口视窗与多媒体 ──
+                  const Text(
+                    '媒体查看器、聊天独立窗口与剪贴板操作',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        icon: const Icon(Icons.photo_library_outlined, size: 16),
+                        label: const Text('独立图片/视频窗口'),
+                        onPressed: _testOpenMediaViewer,
+                      ),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.play_circle_outline, size: 16),
+                        label: const Text('独立视频播放'),
+                        onPressed: _testOpenVideoViewer,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.download_for_offline_outlined, size: 16),
+                        label: const Text('下载后验证本地视频'),
+                        onPressed: () => _testOpenVideoViewer(cacheFirst: true),
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.settings_outlined, size: 16),
+                        label: const Text('独立设置窗口'),
+                        onPressed: _testOpenSettings,
+                      ),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF07C160),
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                        label: const Text('独立聊天窗口 (HWND)'),
+                        onPressed: _testOpenStandaloneChat,
+                      ),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1E88E5),
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.crop_free_rounded, size: 16),
+                        label: const Text('桌面截图 (Alt+A)'),
+                        onPressed: _testTriggerScreenCapture,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.image_search_rounded, size: 16),
+                        label: const Text('读取剪贴板图片并确认 (Ctrl+V)'),
+                        onPressed: _testReadClipboardImage,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.file_copy_rounded, size: 16),
+                        label: const Text('读取剪贴板文件并确认 (Ctrl+V)'),
+                        onPressed: _testReadClipboardFiles,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(
+                          Icons.photo_size_select_actual_outlined,
+                          size: 16,
+                        ),
+                        label: const Text('模拟弹窗: 图片确认发送'),
+                        onPressed: _testMockImageConfirmDialog,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.drive_folder_upload_outlined, size: 16),
+                        label: const Text('模拟弹窗: 多文件确认发送'),
+                        onPressed: _testMockFilesConfirmDialog,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              FilledButton.icon(
-                icon: const Icon(Icons.notifications_active_rounded, size: 16),
-                label: const Text('更新托盘角标数字'),
-                onPressed: _testUpdateTrayBadge,
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.menu_open, size: 16),
-                label: const Text('显示真实托盘菜单'),
-                onPressed:
-                    () => ref.read(trayServiceProvider).showContextMenu(),
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.add_comment_rounded, size: 16),
-                label: const Text('模拟接收新消息 (+1)'),
-                onPressed: _testSimulateMessage,
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.playlist_add_check_rounded, size: 16),
-                label: const Text('注入测试未读数据 (Mock)'),
-                onPressed: _testLoadSampleData,
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.done_all_rounded, size: 16),
-                label: const Text('一键清空未读'),
-                onPressed: _testClearUnread,
-              ),
-              FilledButton.icon(
-                icon: const Icon(Icons.open_in_browser_rounded, size: 16),
-                label: const Text('打开独立浏览器窗口'),
-                onPressed: _testOpenBrowser,
-              ),
-              FilledButton.icon(
-                icon: const Icon(Icons.photo_library_outlined, size: 16),
-                label: const Text('打开独立图片/视频窗口'),
-                onPressed: _testOpenMediaViewer,
-              ),
-              FilledButton.icon(
-                icon: const Icon(Icons.play_circle_outline, size: 16),
-                label: const Text('打开独立视频播放诊断'),
-                onPressed: _testOpenVideoViewer,
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.download_for_offline_outlined, size: 16),
-                label: const Text('下载后验证本地视频'),
-                onPressed: () => _testOpenVideoViewer(cacheFirst: true),
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.settings_outlined, size: 16),
-                label: const Text('打开独立设置窗口'),
-                onPressed: _testOpenSettings,
-              ),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF07C160),
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
-                label: const Text('打开独立聊天窗口 (HWND)'),
-                onPressed: _testOpenStandaloneChat,
-              ),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E88E5),
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.crop_free_rounded, size: 16),
-                label: const Text('桌面截图测试 (Alt+A)'),
-                onPressed: _testTriggerScreenCapture,
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.image_search_rounded, size: 16),
-                label: const Text('读取剪贴板图片并确认 (Ctrl+V)'),
-                onPressed: _testReadClipboardImage,
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.file_copy_rounded, size: 16),
-                label: const Text('读取剪贴板文件并确认 (Ctrl+V)'),
-                onPressed: _testReadClipboardFiles,
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(
-                  Icons.photo_size_select_actual_outlined,
-                  size: 16,
-                ),
-                label: const Text('模拟弹窗: 图片确认发送'),
-                onPressed: _testMockImageConfirmDialog,
-              ),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.drive_folder_upload_outlined, size: 16),
-                label: const Text('模拟弹窗: 多文件确认发送'),
-                onPressed: _testMockFilesConfirmDialog,
-              ),
-            ],
+            ),
           ),
 
           const SizedBox(height: 16),
@@ -1102,6 +1586,53 @@ class _DesktopWindowsDiagnosticsPageState
         const SizedBox(width: 4),
         Text(platform, style: const TextStyle(fontSize: 11)),
       ],
+    );
+  }
+
+  Widget _buildWindowStatusChip(String title, bool active, String desc) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: active
+            ? const Color(0xFF07C160).withValues(alpha: 0.12)
+            : Colors.grey.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: active
+              ? const Color(0xFF07C160).withValues(alpha: 0.35)
+              : Colors.grey.withValues(alpha: 0.2),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            active ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+            size: 14,
+            color: active ? const Color(0xFF07C160) : Colors.grey,
+          ),
+          const SizedBox(width: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: active ? const Color(0xFF07C160) : null,
+                ),
+              ),
+              Text(
+                desc,
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

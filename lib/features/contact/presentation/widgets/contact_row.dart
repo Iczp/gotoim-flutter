@@ -12,6 +12,8 @@ class ContactRow extends StatelessWidget {
     this.isSelected = false,
     this.onDoubleTap,
     this.onSecondaryTapDown,
+    this.onAvatarHover,
+    this.onAvatarLeave,
     super.key,
   });
 
@@ -21,6 +23,8 @@ class ContactRow extends StatelessWidget {
   final bool isSelected;
   final VoidCallback? onDoubleTap;
   final GestureTapDownCallback? onSecondaryTapDown;
+  final void Function(Rect rect, ContactEntry contact)? onAvatarHover;
+  final VoidCallback? onAvatarLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -37,11 +41,29 @@ class ContactRow extends StatelessWidget {
         child: Row(
           children: <Widget>[
             const SizedBox(width: 16),
-            ChatObjectAvatar(
-              name: contact.displayName,
-              imageUrl: contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
-              radius: 21,
-              chatObjectId: contact.destinationId,
+            Builder(
+              builder: (avatarCtx) {
+                return MouseRegion(
+                  onEnter: (e) {
+                    if (onAvatarHover != null) {
+                      final box = avatarCtx.findRenderObject() as RenderBox?;
+                      if (box != null && box.hasSize) {
+                        final origin = box.localToGlobal(Offset.zero);
+                        final rect = origin & box.size;
+                        onAvatarHover!(rect, contact);
+                      }
+                    }
+                  },
+                  onExit: (_) => onAvatarLeave?.call(),
+                  child: ChatObjectAvatar(
+                    name: contact.displayName,
+                    imageUrl:
+                        contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
+                    radius: 21,
+                    chatObjectId: contact.destinationId,
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 12),
             Expanded(

@@ -5,9 +5,14 @@ import '../application/session_list_controller.dart';
 import '../data/models/logged_in_device.dart';
 
 class LoginDevicesPage extends ConsumerStatefulWidget {
-  const LoginDevicesPage({this.onlineOnly = false, super.key});
+  const LoginDevicesPage({
+    this.onlineOnly = false,
+    this.isDialog = false,
+    super.key,
+  });
 
   final bool onlineOnly;
+  final bool isDialog;
 
   @override
   ConsumerState<LoginDevicesPage> createState() => _LoginDevicesPageState();
@@ -16,6 +21,7 @@ class LoginDevicesPage extends ConsumerStatefulWidget {
 class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
   final Set<String> _loggingOut = {};
   String _key(LoggedInDevice device) => "${device.appId}:${device.deviceId}";
+
   @override
   void initState() {
     super.initState();
@@ -35,47 +41,29 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
   @override
   Widget build(BuildContext context) {
     final controller = ref.watch(sessionListControllerProvider);
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.onlineOnly ? '当前在线' : '设备管理')),
-      body: RefreshIndicator(
-        onRefresh:
-            widget.onlineOnly
-                ? controller.loadOnlineDevices
-                : () => Future.wait<void>([
-                  controller.loadDevices(),
-                  controller.loadOnlineDevices(),
-                ]),
-        child:
-            (widget.onlineOnly &&
-                        controller.onlineDevices.isEmpty &&
-                        controller.isLoadingOnlineDevices) ||
-                    (!widget.onlineOnly &&
-                        controller.devices.isEmpty &&
-                        controller.isLoadingDevices)
-                ? const Center(child: CircularProgressIndicator())
-                : ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.only(top: 8, bottom: 8),
-                  children: <Widget>[
-                    if (!widget.onlineOnly) ...[
-                      _SectionTitle('我的设备（${controller.devices.length}）'),
-                      ...controller.devices.map(
-                        (device) => _DeviceCard(
-                          device: device,
-                          isCurrent:
-                              device.deviceId == controller.currentDeviceId,
-                          busy: _loggingOut.contains(_key(device)),
-                          onForceLogout:
-                              () => _confirmForceLogout(
-                                context,
-                                controller,
-                                device,
-                              ),
-                        ),
-                      ),
-                    ],
-                    _SectionTitle('当前在线（${controller.onlineDevices.length}）'),
-                    ...controller.onlineDevices.map(
+    final body = RefreshIndicator(
+      onRefresh:
+          widget.onlineOnly
+              ? controller.loadOnlineDevices
+              : () => Future.wait<void>([
+                controller.loadDevices(),
+                controller.loadOnlineDevices(),
+              ]),
+      child:
+          (widget.onlineOnly &&
+                      controller.onlineDevices.isEmpty &&
+                      controller.isLoadingOnlineDevices) ||
+                  (!widget.onlineOnly &&
+                      controller.devices.isEmpty &&
+                      controller.isLoadingDevices)
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(top: 8, bottom: 8),
+                children: <Widget>[
+                  if (!widget.onlineOnly) ...[
+                    _SectionTitle('我的设备（${controller.devices.length}）'),
+                    ...controller.devices.map(
                       (device) => _DeviceCard(
                         device: device,
                         isCurrent:
@@ -90,8 +78,32 @@ class _LoginDevicesPageState extends ConsumerState<LoginDevicesPage> {
                       ),
                     ),
                   ],
-                ),
-      ),
+                  _SectionTitle('当前在线（${controller.onlineDevices.length}）'),
+                  ...controller.onlineDevices.map(
+                    (device) => _DeviceCard(
+                      device: device,
+                      isCurrent:
+                          device.deviceId == controller.currentDeviceId,
+                      busy: _loggingOut.contains(_key(device)),
+                      onForceLogout:
+                          () => _confirmForceLogout(
+                            context,
+                            controller,
+                            device,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+    );
+
+    if (widget.isDialog) {
+      return body;
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.onlineOnly ? '当前在线' : '设备管理')),
+      body: body,
     );
   }
 

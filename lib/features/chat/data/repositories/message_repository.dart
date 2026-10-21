@@ -392,6 +392,12 @@ class MessageRepository {
         '[loadHistory][ERROR] session=$sessionUnitId '
         'maxMessageId=$maxMessageId error=$error',
       );
+      if (error is ApiException && error.statusCode == 403) {
+        // Forbidden: Server explicitly denied history access for this sessionUnit.
+        // Mark loadedAll to prevent continuous failing requests and return local messages.
+        await _dao.markLoadedAll(sessionUnitId, true);
+        return MessagePage(local, false);
+      }
       if (local.isNotEmpty) return MessagePage(local, true);
       rethrow;
     }

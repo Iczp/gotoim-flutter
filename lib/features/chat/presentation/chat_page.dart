@@ -36,6 +36,7 @@ import '../data/models/chat_message.dart';
 import '../../chat_settings/data/models/chat_member.dart';
 import '../../chat_settings/application/chat_settings_controller.dart';
 import '../../chat_settings/presentation/member_profile_sheet.dart';
+import '../../user/data/models/profile_subject.dart';
 import '../../chat_settings/presentation/chat_settings_page.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/session_change_bus.dart';
@@ -251,6 +252,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     controller.dispose();
     _quoteHighlightTimer?.cancel();
     input.dispose();
+    _avatarHoverTimer?.cancel();
+    _avatarLeaveTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -823,6 +826,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
               : null,
       myChatObjectId: controller.effectiveOwnerId,
       onUserTap: () => _showSenderProfile(message),
+      onAvatarHover: (rect) => _onAvatarHover(message, rect),
+      onAvatarLeave: _onAvatarLeave,
       onSessionUnitTap: _showSessionUnitProfile,
       onVoiceOpened: () => controller.markVoiceOpened(message),
       onLinkTap: () => _openLink(message),
@@ -1507,6 +1512,50 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
       return current.createdAt!.difference(older!.createdAt!).abs() >
           const Duration(minutes: 5);
+    });
+  }
+
+  Timer? _avatarHoverTimer;
+  Timer? _avatarLeaveTimer;
+
+  void _onAvatarHover(ChatMessage message, Rect rect) {
+    if (kIsWeb ||
+        (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
+      return;
+    }
+    _avatarLeaveTimer?.cancel();
+    _avatarHoverTimer?.cancel();
+    _avatarHoverTimer = Timer(const Duration(milliseconds: 250), () {
+      final sender = <String, dynamic>{...message.senderSessionUnit};
+      sender.putIfAbsent(
+        'id',
+        () => message.senderSessionUnitId ?? message.sessionUnitId,
+      );
+      if (sender['owner'] == null) {
+        sender['owner'] = <String, dynamic>{
+          'displayName': message.senderName,
+          if (message.senderAvatarUrl != null)
+            'thumbnail': message.senderAvatarUrl,
+        };
+      }
+      final member = ChatMember.fromJson(sender);
+      final subject = ProfileSubject.member(member);
+      ref.read(windowServiceProvider).showProfileCardAt(
+        subjectData: subject.toMap(),
+        localRect: rect,
+      );
+    });
+  }
+
+  void _onAvatarLeave() {
+    if (kIsWeb ||
+        (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
+      return;
+    }
+    _avatarHoverTimer?.cancel();
+    _avatarLeaveTimer?.cancel();
+    _avatarLeaveTimer = Timer(const Duration(milliseconds: 200), () {
+      ref.read(windowServiceProvider).hideProfileCard();
     });
   }
 

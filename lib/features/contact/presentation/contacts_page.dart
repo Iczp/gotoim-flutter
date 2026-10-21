@@ -1,8 +1,13 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/app_navigation.dart';
+import '../../../core/services/window_service.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../user/presentation/profile_page.dart';
 import '../application/contacts_controller.dart';
@@ -39,6 +44,50 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   List<ContactGroup> _offsetGroups = const <ContactGroup>[];
   Object? _dismissedError;
   bool _isManualRetrying = false;
+  Timer? _avatarHoverTimer;
+  Timer? _avatarLeaveTimer;
+
+  void _onAvatarHover(Rect rect, ContactEntry contact) {
+    if (kIsWeb ||
+        (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
+      return;
+    }
+    _avatarLeaveTimer?.cancel();
+    _avatarHoverTimer?.cancel();
+    _avatarHoverTimer = Timer(const Duration(milliseconds: 300), () {
+      final dest =
+          (contact.raw['destination'] as Map?)?.cast<String, dynamic>() ?? {};
+      final subjectData = {
+        'id': contact.destinationId?.toString() ?? contact.id,
+        'displayName': contact.displayName,
+        'name': contact.name.isNotEmpty ? contact.name : contact.displayName,
+        'thumbnail': contact.avatarUrl.isEmpty ? null : contact.avatarUrl,
+        'portrait': contact.portrait.isEmpty ? null : contact.portrait,
+        'department':
+            contact.raw['department']?.toString() ??
+            dest['department']?.toString(),
+        'statusText':
+            contact.raw['statusText']?.toString() ??
+            dest['statusText']?.toString(),
+      };
+      ref.read(windowServiceProvider).showProfileCardAt(
+        subjectData: subjectData,
+        localRect: rect,
+      );
+    });
+  }
+
+  void _onAvatarLeave() {
+    if (kIsWeb ||
+        (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
+      return;
+    }
+    _avatarHoverTimer?.cancel();
+    _avatarLeaveTimer?.cancel();
+    _avatarLeaveTimer = Timer(const Duration(milliseconds: 200), () {
+      ref.read(windowServiceProvider).hideProfileCard();
+    });
+  }
 
   Future<void> _handleRetrySync() async {
     setState(() {
@@ -67,6 +116,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
 
   @override
   void dispose() {
+    _avatarHoverTimer?.cancel();
+    _avatarLeaveTimer?.cancel();
     _scrollController
       ..removeListener(_updateActiveIndex)
       ..dispose();
@@ -284,6 +335,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                 contact: contact,
                 showDivider: index + 1 < group.contacts.length,
                 onTap: () => _openContactProfile(context, contact, ownerId),
+                onAvatarHover: _onAvatarHover,
+                onAvatarLeave: _onAvatarLeave,
               );
             }, childCount: group.contacts.length),
           ),
