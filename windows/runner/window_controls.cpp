@@ -413,18 +413,17 @@ class WindowControls : public flutter::Plugin {
             ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
         int w = 0, h = 0;
         if (args) {
-          auto it_w = args->find(flutter::EncodableValue("width"));
-          if (it_w != args->end()) {
-            if (const auto* val = std::get_if<int32_t>(&it_w->second)) w = *val;
-            else if (const auto* val = std::get_if<int64_t>(&it_w->second)) w = static_cast<int>(*val);
-            else if (const auto* val = std::get_if<double>(&it_w->second)) w = static_cast<int>(*val);
-          }
-          auto it_h = args->find(flutter::EncodableValue("height"));
-          if (it_h != args->end()) {
-            if (const auto* val = std::get_if<int32_t>(&it_h->second)) h = *val;
-            else if (const auto* val = std::get_if<int64_t>(&it_h->second)) h = static_cast<int>(*val);
-            else if (const auto* val = std::get_if<double>(&it_h->second)) h = static_cast<int>(*val);
-          }
+          const auto read_dim = [args](const char* key, int def) -> int {
+            auto it = args->find(flutter::EncodableValue(key));
+            if (it != args->end()) {
+              if (const auto* val_i = std::get_if<int32_t>(&it->second)) return *val_i;
+              if (const auto* val_l = std::get_if<int64_t>(&it->second)) return static_cast<int>(*val_l);
+              if (const auto* val_d = std::get_if<double>(&it->second)) return static_cast<int>(*val_d);
+            }
+            return def;
+          };
+          w = read_dim("width", 0);
+          h = read_dim("height", 0);
         }
         CenterWindowOnMonitor(hwnd, (hwnd != g_main_window) ? g_main_window : nullptr, w, h);
       } else if (method == "pin") {
@@ -527,9 +526,9 @@ class WindowControls : public flutter::Plugin {
           const auto read_num = [args](const char* key, int def) -> int {
             auto it = args->find(flutter::EncodableValue(key));
             if (it != args->end()) {
-              if (const auto* val = std::get_if<int32_t>(&it->second)) return *val;
-              if (const auto* val = std::get_if<int64_t>(&it->second)) return static_cast<int>(*val);
-              if (const auto* val = std::get_if<double>(&it->second)) return static_cast<int>(*val);
+              if (const auto* val_i = std::get_if<int32_t>(&it->second)) return *val_i;
+              if (const auto* val_l = std::get_if<int64_t>(&it->second)) return static_cast<int>(*val_l);
+              if (const auto* val_d = std::get_if<double>(&it->second)) return static_cast<int>(*val_d);
             }
             return def;
           };
