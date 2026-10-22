@@ -509,7 +509,17 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     );
 
     if (widget.isSubWindow) {
-      return Material(color: windowBg, child: SizedBox.expand(child: body));
+      Widget content = Material(color: windowBg, child: SizedBox.expand(child: body));
+      if (!_isDocked) {
+        content = Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) {
+            WindowsWindowAdapter.bringToFront();
+          },
+          child: content,
+        );
+      }
+      return content;
     }
 
     return Center(
@@ -990,7 +1000,6 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_horiz_rounded, size: 18),
       tooltip: '更多选项',
-      visualDensity: VisualDensity.compact,
       offset: const Offset(0, 36),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
@@ -1221,7 +1230,6 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             ],
           ],
     );
-  }
   }
 
   Widget _buildWebPreviewPlaceholder(

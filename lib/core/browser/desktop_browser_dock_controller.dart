@@ -73,10 +73,32 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
       '[BrowserDock Dart] requestDock called: url=$url, title=$title, currentStatus=${state.status}',
     );
     if (state.isTransitioning) return;
+
+    final targetUrl = url ?? state.currentUrl ?? 'https://www.bing.com';
+    final targetTitle = title ?? state.currentTitle ?? '网页浏览';
+
+    // 如果当前已经是吸附嵌入状态，直接在已嵌入的浏览器中添加新标签页，不重新触发 docking 遮罩
+    if (state.isDocked) {
+      state = state.copyWith(
+        currentUrl: targetUrl,
+        currentTitle: targetTitle,
+      );
+      try {
+        final windowService = ref.read(windowServiceProvider);
+        await windowService.openWebBrowser(
+          url: targetUrl,
+          title: targetTitle,
+        );
+      } catch (e) {
+        debugPrint('[BrowserDock Dart] add tab to docked browser failed: $e');
+      }
+      return;
+    }
+
     state = state.copyWith(
       status: BrowserDockingStatus.docking,
-      currentUrl: url ?? state.currentUrl ?? 'https://www.bing.com',
-      currentTitle: title ?? state.currentTitle ?? '网页浏览',
+      currentUrl: targetUrl,
+      currentTitle: targetTitle,
       clearError: true,
     );
 

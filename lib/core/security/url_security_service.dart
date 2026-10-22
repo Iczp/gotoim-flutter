@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -67,6 +69,83 @@ class UrlSecurityService {
     return _repository.checkUrl(url);
   }
 
+  /// 桌面端强力阻断拦截对话框
+  static Future<void> showDesktopBlockedDialog(
+    BuildContext context, {
+    required UrlSecurityCheckResult checkResult,
+  }) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              '已停止访问该网页',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '该网址已被安全风控系统强力拦截：',
+              style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black87),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: SelectableText(
+                checkResult.url,
+                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+              ),
+            ),
+            if ((checkResult.interceptReason != null && checkResult.interceptReason!.isNotEmpty) ||
+                checkResult.message.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                '拦截原因：${checkResult.interceptReason ?? checkResult.message}',
+                style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: checkResult.url));
+              showToast('链接已复制', type: ToastType.success);
+            },
+            child: const Text('复制链接'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('我知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 应用内统一打开 URL 入口（集成三阶段防护逻辑：白名单直接打开、未知第三方显示风险中转页/警示弹窗、黑名单强阻断）
   ///
   /// - [useInterstitialPage]: 是否优先使用微信同款全屏中转页（默认 true，若为 false 则展示弹窗）；
@@ -77,8 +156,12 @@ class UrlSecurityService {
     String? fallbackContent,
     bool useInterstitialPage = true,
   }) async {
-    final trimmed = url.trim();
+    var trimmed = url.trim();
     if (trimmed.isEmpty) return;
+
+    if (trimmed.toLowerCase().startsWith('www.')) {
+      trimmed = 'https://$trimmed';
+    }
 
     // 1. 处理特定非网页 Scheme (tel:)
     if (trimmed.startsWith('tel:')) {
@@ -109,6 +192,24 @@ class UrlSecurityService {
     final checkResult = await _repository.checkUrl(trimmed);
 
     if (!context.mounted) return;
+
+    final isDesktop =
+        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+
+    if (isDesktop) {
+      if (checkResult.level == UrlSecurityLevel.blocked) {
+        await showDesktopBlockedDialog(context, checkResult: checkResult);
+        return;
+      }
+      // 桌面端遵循 PC IM（微信电脑版）体验：无论是安全白名单还是普通第三方网址，直接在桌面浏览器中打开
+      await AppWebViewPage.open(
+        context,
+        url: trimmed,
+        title: title,
+        fallbackContent: fallbackContent,
+      );
+      return;
+    }
 
     // 4. 根据安全等级分流处理
     switch (checkResult.level) {

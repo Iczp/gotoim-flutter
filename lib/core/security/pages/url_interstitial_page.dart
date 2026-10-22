@@ -10,6 +10,7 @@ import '../../browser/app_webview_page.dart';
 import '../../widgets/app_toast.dart';
 import '../../widgets/desktop_dialog.dart';
 import '../url_security_level.dart';
+import '../url_security_service.dart';
 import '../widgets/appeal_dialog.dart';
 import '../widgets/report_dialog.dart';
 
@@ -39,6 +40,22 @@ class UrlInterstitialPage extends StatefulWidget {
     String? title,
     String? fallbackContent,
   }) {
+    final isDesktop =
+        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    if (isDesktop) {
+      if (checkResult.isBlocked) {
+        return UrlSecurityService.showDesktopBlockedDialog(
+          context,
+          checkResult: checkResult,
+        );
+      }
+      return AppWebViewPage.open(
+        context,
+        url: checkResult.url,
+        title: title,
+        fallbackContent: fallbackContent,
+      );
+    }
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => UrlInterstitialPage(
@@ -82,6 +99,18 @@ class _UrlInterstitialPageState extends State<UrlInterstitialPage> {
   }
 
   void _proceedToInternalWeb() {
+    final isDesktop =
+        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    if (isDesktop) {
+      Navigator.of(context).pop();
+      AppWebViewPage.open(
+        context,
+        url: widget.checkResult.url,
+        title: widget.title,
+        fallbackContent: widget.fallbackContent,
+      );
+      return;
+    }
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => AppWebViewPage(

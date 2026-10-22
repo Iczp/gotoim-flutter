@@ -31,7 +31,7 @@ class TextMessageContent extends ConsumerWidget {
   final VoidCallback? onRetry;
 
   static final _urlRegex = RegExp(
-    r'(?<!\]\()(https?:\/\/[^\s\)\>]+)',
+    r'(?<!\]\()(https?:\/\/[^\s\)\>]+|www\.[^\s\)\>]+)',
     caseSensitive: false,
   );
   static final _phoneRegex = RegExp(r'(?<![\d\w])(1[3-9]\d{9})(?![\d\w])');
@@ -43,7 +43,8 @@ class TextMessageContent extends ConsumerWidget {
     // Replace raw URLs with Markdown links if not already inside a markdown link
     result = result.replaceAllMapped(_urlRegex, (match) {
       final url = match.group(1)!;
-      return '[$url]($url)';
+      final target = url.toLowerCase().startsWith('www.') ? 'https://$url' : url;
+      return '[$url]($target)';
     });
     // Replace phone numbers with tel: links
     result = result.replaceAllMapped(_phoneRegex, (match) {
@@ -77,8 +78,13 @@ class TextMessageContent extends ConsumerWidget {
       return;
     }
 
-    if (link.startsWith('http://') || link.startsWith('https://')) {
-      await ref.read(urlSecurityServiceProvider).openUrl(context, url: link);
+    var targetUrl = link.trim();
+    if (targetUrl.toLowerCase().startsWith('www.')) {
+      targetUrl = 'https://$targetUrl';
+    }
+
+    if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+      await ref.read(urlSecurityServiceProvider).openUrl(context, url: targetUrl);
       return;
     }
 
