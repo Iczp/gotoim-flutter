@@ -116,7 +116,7 @@ class SessionUnitItem extends StatelessWidget {
                   const SizedBox(width: 14),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -125,6 +125,7 @@ class SessionUnitItem extends StatelessWidget {
                           Row(
                             children: [
                               Expanded(
+                                flex: 3,
                                 child: Text(
                                   item.title,
                                   maxLines: 1,
@@ -142,17 +143,20 @@ class SessionUnitItem extends StatelessWidget {
                                 ),
                               ),
                               if (item.updatedAt != null) ...[
-                                const SizedBox(width: 8),
-                                RelativeTimeText(
-                                  time: item.updatedAt!,
-                                  style: (theme.textTheme.labelSmall ??
-                                          const TextStyle())
-                                      .copyWith(
-                                        color: colorScheme.onSurfaceVariant
-                                            .withValues(
-                                              alpha: isDark ? 0.6 : 0.5,
-                                            ),
-                                      ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  flex: 2,
+                                  child: RelativeTimeText(
+                                    time: item.updatedAt!,
+                                    style: (theme.textTheme.labelSmall ??
+                                            const TextStyle())
+                                        .copyWith(
+                                          color: colorScheme.onSurfaceVariant
+                                              .withValues(
+                                                alpha: isDark ? 0.6 : 0.5,
+                                              ),
+                                        ),
+                                  ),
                                 ),
                               ],
                             ],

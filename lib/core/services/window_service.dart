@@ -299,7 +299,7 @@ class DefaultWindowService implements WindowService {
     try {
       const mainIpcChannel = WindowMethodChannel(
         'gotoim/ipc_to_main',
-        mode: ChannelMode.unidirectional,
+        mode: ChannelMode.bidirectional,
       );
       mainIpcChannel.setMethodCallHandler((call) async {
         switch (call.method) {

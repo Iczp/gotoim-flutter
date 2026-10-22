@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/media/media_preview.dart';
@@ -87,7 +88,10 @@ class _DesktopScreenCaptureViewState
   List<Offset> _currentBrushPoints = [];
 
   // IPC 通道
-  static const _mainIpcChannel = MethodChannel('gotoim/ipc_to_main');
+  static const _mainIpcChannel = WindowMethodChannel(
+    'gotoim/ipc_to_main',
+    mode: ChannelMode.bidirectional,
+  );
 
   final FocusNode _focusNode = FocusNode();
 
