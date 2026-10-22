@@ -253,7 +253,13 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             WindowsWindowAdapter.center(width: 860, height: 620);
             break;
           case SubWindowType.browser:
-            WindowsWindowAdapter.center(width: 1024, height: 720);
+            final initW =
+                (widget.payload.extra?['initialWidth'] as num?)?.toInt() ??
+                1024;
+            final initH =
+                (widget.payload.extra?['initialHeight'] as num?)?.toInt() ??
+                720;
+            WindowsWindowAdapter.center(width: initW, height: initH);
             break;
           case SubWindowType.media:
             WindowsWindowAdapter.center(width: 960, height: 700);

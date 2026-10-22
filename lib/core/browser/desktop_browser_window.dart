@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform, Process;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -89,6 +90,31 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   bool _isMaximized = false;
   bool _isDocked = false;
   final ScrollController _tabScrollController = ScrollController();
+  bool _initialLoadReported = false;
+  Timer? _initialLoadTimeoutTimer;
+
+  void _reportInitialLoadComplete() {
+    if (_initialLoadReported) return;
+    _initialLoadReported = true;
+    _initialLoadTimeoutTimer?.cancel();
+    _initialLoadTimeoutTimer = null;
+    if (widget.isSubWindow) {
+      try {
+        const ipc = WindowMethodChannel(
+          'gotoim/ipc_to_main',
+          mode: ChannelMode.unidirectional,
+        );
+        ipc.invokeMethod('browser_load_completed', {
+          'url': _tabs.isNotEmpty ? _tabs.first.url : widget.initialUrl,
+          'title': _tabs.isNotEmpty ? _tabs.first.title : widget.title,
+        });
+      } catch (e) {
+        debugPrint(
+          '[Browser SubWindow] report browser_load_completed error: $e',
+        );
+      }
+    }
+  }
 
   BrowserTabItem get _currentTab =>
       _tabs.isNotEmpty && _activeTabIndex < _tabs.length
@@ -107,6 +133,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     _tabs.add(firstTab);
 
     if (widget.isSubWindow) {
+      _initialLoadTimeoutTimer = Timer(const Duration(seconds: 6), () {
+        _reportInitialLoadComplete();
+      });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         WindowsWindowAdapter.setupCustomTitleBar();
         WindowsWindowAdapter.isDocked().then((docked) {
@@ -173,6 +202,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
   @override
   void dispose() {
+    _initialLoadTimeoutTimer?.cancel();
     _tabScrollController.dispose();
     super.dispose();
   }
@@ -579,6 +609,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                   tab.isLoading = false;
                 }
               });
+              if (progress >= 100) {
+                _reportInitialLoadComplete();
+              }
             },
             onTitleChanged: (controller, title) {
               if (!mounted || title == null || title.isEmpty) return;
@@ -605,6 +638,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 tab.canGoForward = canForward;
                 if (url != null) tab.url = url.toString();
               });
+              _reportInitialLoadComplete();
             },
             onReceivedError: (controller, request, error) {
               if (!mounted ||
@@ -616,6 +650,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 tab.isLoading = false;
                 tab.errorMessage = error.description;
               });
+              _reportInitialLoadComplete();
             },
           )
         else
@@ -1237,6 +1272,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     BrowserTabItem tab,
     bool isDark,
   ) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reportInitialLoadComplete();
+    });
     return Container(
       color: isDark ? const Color(0xFF181818) : const Color(0xFFFAFAFA),
       alignment: Alignment.center,

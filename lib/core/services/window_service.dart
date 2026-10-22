@@ -102,6 +102,9 @@ class WindowRecord {
 /// 2. 移动端 / Web 端：自动降级为当前 App 内部页面导航（保持一致的调用语法）；
 /// 3. 幂等激活：同一 Session 或应用已打开时，激活已有窗口，不重复创建。
 abstract class WindowService {
+  /// 是否运行在独立原生子视窗引擎内
+  bool get isSubWindow => false;
+
   /// 打开或激活独立聊天窗口
   Future<void> openChat({
     required String sessionUnitId,
@@ -121,6 +124,9 @@ abstract class WindowService {
     required String url,
     String? title,
     String? fallbackContent,
+    bool showImmediately = true,
+    int? initialWidth,
+    int? initialHeight,
   });
 
   /// 打开或激活独立多媒体/文档预览窗口 (查看图片/视频)
@@ -251,7 +257,10 @@ class DefaultWindowService implements WindowService {
 
   final PlatformFacade platformFacade;
   Future<void> Function(Map arguments)? trayCommand;
+  void Function(Map? arguments)? onBrowserLoadCompleted;
+  Future<void> Function(String url, String? title)? onBrowserDockRequested;
   final Future<void> Function(int ownerId)? switchOwnerHandler;
+  @override
   final bool isSubWindow;
   final TrayGroupedUnreadState Function()? traySnapshotProvider;
   static const _mainChannel = WindowMethodChannel(
@@ -467,6 +476,10 @@ class DefaultWindowService implements WindowService {
           case 'focus_main':
             await bringToFront('main');
             return true;
+          case 'browser_load_completed':
+            final args = call.arguments as Map?;
+            onBrowserLoadCompleted?.call(args);
+            return true;
           case 'request_dock_browser':
             final dockArgs = call.arguments as Map?;
             final dockUrl = dockArgs?['url'] as String?;
@@ -507,10 +520,16 @@ class DefaultWindowService implements WindowService {
             } else if (type == 'tray') {
               await openTrayFlyout();
             } else if (type == 'browser') {
-              await openWebBrowser(
-                url: args!['url'] as String,
-                title: args['title'] as String?,
-              );
+              final url = args!['url'] as String;
+              final title = args['title'] as String?;
+              if (onBrowserDockRequested != null) {
+                await onBrowserDockRequested!(url, title);
+              } else {
+                await openWebBrowser(
+                  url: url,
+                  title: title,
+                );
+              }
             } else if (type == 'media') {
               await openMediaViewer(
                 mediaUrl: args!['url'] as String,
@@ -596,6 +615,14 @@ class DefaultWindowService implements WindowService {
         targetId.toLowerCase() == 'tool:fileserver') {
       return _registry.containsKey('tool:fileserver') ||
           _registry.containsKey('tool:localFileServer');
+    }
+    if (targetId.startsWith('browser:')) {
+      return _registry.containsKey('tool:browser') ||
+          _registry.containsKey(targetId);
+    }
+    if (targetId.startsWith('media:')) {
+      return _registry.containsKey('tool:media') ||
+          _registry.containsKey(targetId);
     }
     // Only support legacy 2-part chat key fallback (chat:sessionUnitId)
     final parts = targetId.split(':');
@@ -1413,6 +1440,9 @@ class DefaultWindowService implements WindowService {
     required String url,
     String? title,
     String? fallbackContent,
+    bool showImmediately = true,
+    int? initialWidth,
+    int? initialHeight,
   }) async {
     if (isSubWindow) {
       return _requestMain({'type': 'browser', 'url': url, 'title': title});
@@ -1424,6 +1454,10 @@ class DefaultWindowService implements WindowService {
       targetId: targetId,
       url: url,
       fallbackContent: fallbackContent,
+      extra: {
+        if (initialWidth != null) 'initialWidth': initialWidth,
+        if (initialHeight != null) 'initialHeight': initialHeight,
+      },
     );
 
     if (isWindowOpen(targetId)) {
@@ -1431,7 +1465,10 @@ class DefaultWindowService implements WindowService {
       if (controller != null) {
         final currentTheme = themeModeProvider?.call() ?? 'system';
         final effectivePayload = payload.copyWith(
-          extra: {'themeMode': currentTheme},
+          extra: {
+            ...?payload.extra,
+            'themeMode': currentTheme,
+          },
         );
         try {
           await controller.invokeMethod('browser_add_tab', {
@@ -1444,7 +1481,9 @@ class DefaultWindowService implements WindowService {
             effectivePayload.toJson(),
           );
         }
-        await bringToFront(targetId);
+        if (showImmediately) {
+          await bringToFront(targetId);
+        }
         return;
       }
     }
@@ -1456,6 +1495,7 @@ class DefaultWindowService implements WindowService {
           type: WindowType.browser,
           title: title ?? '网页浏览',
           payload: payload,
+          showImmediately: showImmediately,
         );
         return;
       } catch (e) {

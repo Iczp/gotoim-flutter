@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -63,9 +65,28 @@ class DesktopBrowserDockState {
 /// 桌面端浏览器吸附挂载状态管理器 (Notifier)
 class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
   @override
-  DesktopBrowserDockState build() => const DesktopBrowserDockState();
+  DesktopBrowserDockState build() {
+    _registerWindowServiceCallbacks();
+    return const DesktopBrowserDockState();
+  }
 
   static const String browserTargetId = 'tool:browser';
+
+  bool _isPageLoaded = false;
+  ({int viewX, int viewY, int width, int height})? _pendingBounds;
+  Timer? _loadTimeoutTimer;
+
+  void _registerWindowServiceCallbacks() {
+    final windowService = ref.read(windowServiceProvider);
+    if (windowService is DefaultWindowService) {
+      windowService.onBrowserLoadCompleted = (_) {
+        onBrowserLoadCompleted();
+      };
+      windowService.onBrowserDockRequested = (url, title) async {
+        await requestDock(url: url, title: title);
+      };
+    }
+  }
 
   /// 请求以嵌入模式打开指定网址，或将已存在的独立浏览器吸附到右侧
   Future<void> requestDock({String? url, String? title}) async {
@@ -89,6 +110,10 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
       return;
     }
 
+    _isPageLoaded = false;
+    _pendingBounds = null;
+    _loadTimeoutTimer?.cancel();
+
     state = state.copyWith(
       status: BrowserDockingStatus.docking,
       currentUrl: targetUrl,
@@ -96,26 +121,91 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
       clearError: true,
     );
 
+    _registerWindowServiceCallbacks();
+
     // 确保主窗口恢复显示并处于前台
     try {
       final windowService = ref.read(windowServiceProvider);
       await windowService.bringToFront('main');
     } catch (_) {}
 
-    // 确保原生独立浏览器窗口已启动/预热（若尚未打开，以 hidden 模式创建）
+    // 设置安全超时：若网页加载超过 7 秒仍未通知完成，强制触发吸附挂载
+    _loadTimeoutTimer = Timer(const Duration(seconds: 7), () {
+      if (state.status == BrowserDockingStatus.docking && !_isPageLoaded) {
+        debugPrint(
+          '[BrowserDock Dart] Page load timeout, triggering dock commit',
+        );
+        onBrowserLoadCompleted();
+      }
+    });
+
+    // 浏览器在后台静默打开（尺寸默认就是点位大小，showImmediately: false）
     try {
       final windowService = ref.read(windowServiceProvider);
       await windowService.openWebBrowser(
         url: state.currentUrl!,
         title: state.currentTitle,
+        showImmediately: false,
+        initialWidth: state.width.round(),
       );
     } catch (e) {
       debugPrint('[BrowserDock Dart] openWebBrowser failed: $e');
+      _loadTimeoutTimer?.cancel();
+      _loadTimeoutTimer = null;
       state = state.copyWith(
         status: BrowserDockingStatus.unattached,
         lastError: e.toString(),
       );
     }
+  }
+
+  /// 占位区域完成 PostFrameCallback 物理像素计算后，记录待吸附边界
+  void updatePendingBounds({
+    required int viewX,
+    required int viewY,
+    required int width,
+    required int height,
+  }) {
+    _pendingBounds = (
+      viewX: viewX,
+      viewY: viewY,
+      width: width,
+      height: height,
+    );
+    debugPrint(
+      '[BrowserDock Dart] updatePendingBounds: ($_pendingBounds), isPageLoaded=$_isPageLoaded, status=${state.status}',
+    );
+
+    // 如果网页已在后台完全加载完毕，立即执行 Win32 挂载
+    if (_isPageLoaded && state.status == BrowserDockingStatus.docking) {
+      _executeDockCommit();
+    }
+  }
+
+  /// 后台浏览器页面加载完成回调通知
+  void onBrowserLoadCompleted() {
+    debugPrint(
+      '[BrowserDock Dart] onBrowserLoadCompleted: status=${state.status}, pendingBounds=$_pendingBounds',
+    );
+    _loadTimeoutTimer?.cancel();
+    _loadTimeoutTimer = null;
+    _isPageLoaded = true;
+
+    // 如果占位区域物理尺寸已完成测量，立即执行 Win32 挂载
+    if (state.status == BrowserDockingStatus.docking && _pendingBounds != null) {
+      _executeDockCommit();
+    }
+  }
+
+  Future<bool> _executeDockCommit() async {
+    if (_pendingBounds == null) return false;
+    final b = _pendingBounds!;
+    return commitDock(
+      viewX: b.viewX,
+      viewY: b.viewY,
+      width: b.width,
+      height: b.height,
+    );
   }
 
   /// 占位区域完成 PostFrameCallback 物理像素计算后，执行挂载
@@ -196,6 +286,10 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
       '[BrowserDock Dart] requestUndock called: status=${state.status}, isTransitioning=${state.isTransitioning}, showWindow=$showWindow',
     );
     if (state.isTransitioning || !state.isDocked) return;
+    _loadTimeoutTimer?.cancel();
+    _loadTimeoutTimer = null;
+    _isPageLoaded = false;
+    _pendingBounds = null;
     state = state.copyWith(status: BrowserDockingStatus.undocking);
 
     try {
@@ -224,6 +318,10 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
   /// 关闭内嵌浏览器分栏
   Future<void> closeDocked() async {
     debugPrint('[BrowserDock Dart] closeDocked called');
+    _loadTimeoutTimer?.cancel();
+    _loadTimeoutTimer = null;
+    _isPageLoaded = false;
+    _pendingBounds = null;
     if (state.isDocked) {
       // 1. 在完全不可见状态下脱离挂载，彻底避免闪现独立窗口
       await requestUndock(showWindow: false);

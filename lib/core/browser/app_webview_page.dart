@@ -304,6 +304,13 @@ class AppWebViewPage extends ConsumerStatefulWidget {
         final windowService = container.read(windowServiceProvider);
 
         if (!kIsWeb && Platform.isWindows) {
+          if (windowService.isSubWindow) {
+            return windowService.openWebBrowser(
+              url: url,
+              title: title,
+              fallbackContent: fallbackContent,
+            );
+          }
           container
               .read(desktopBrowserDockProvider.notifier)
               .requestDock(url: url, title: title);
