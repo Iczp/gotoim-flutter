@@ -47,7 +47,7 @@ flutter run --dart-define=APP_ENV=development
 在 `.env` 中填写用户密码、access token、refresh token 或 MinIO 凭据。真实登录
 前，需由后端完成生产环境地址及公开 `AUTH_CLIENT_ID` 的注册。
 
-## Token 生命周期
+## Token 生命周期与刷新保护
 
 - `SecureTokenStorage` 是唯一的 Token 持久化实现。UI 和 Repository 只依赖
   `TokenStorage` 抽象。
@@ -57,15 +57,47 @@ flutter run --dart-define=APP_ENV=development
 - `DioApiClient` 自动附加 `Authorization: Bearer <access-token>`。
 - 所有认证与业务 HTTP 请求均附加 `Accept`、`App-Device-Id`、
   `App-Device-Type`、`App-Id`、`App-Version`。设备 ID 首次启动时生成并稳定保存。
-- 收到 401 时只会启动一个 `refresh_token` 请求。并发的 401 请求等待同一个
-  Future，成功后使用新 Token 各自重试一次。
-- 刷新失败时清除本地 Token，路由跳转到 `/login`。
+- **预判性提前续期**：通过 `shouldRefreshJwt(token)` 在 Token 到期前 5 分钟提前触发续期，减少刚好在边界过期带来的 401 抖动。
+- **全局单飞刷新（Single In-Flight）**：
+  - 无论是业务 HTTP 遇到 401，还是 SignalR 连接/重连前的预判刷新，全部收敛到 `OpenIdConnectAuthRepository.refreshSession()` 的单一 `_globalRefreshInFlight` Future。
+  - 所有并发请求等待同一刷新结果，成功后使用新 Token 重试，禁止并发向 `/connect/token` 发起多个刷新请求。
+- **OAuth 刷新令牌轮换（Refresh Token Rotation）防御**：
+  - OpenIddict 默认启用了 Refresh Token 轮换机制：每个 Refresh Token 仅允许兑换一次（One-time use）。兑换成功后会下发新 Refresh Token 并废弃旧 Token。
+  - 若旧 Token 被二次提交，服务端将视为令牌重放/窃听攻击，返回 `invalid_grant: The specified refresh token has already been redeemed` 并吊销该会话下的所有 Token。
+  - 客户端通过内存单飞锁与写入落盘原子保护，防止并发请求拿旧 Token 触发已被兑换异常；一旦收到此类致命拒绝异常（`TokenRefreshRejectedException`），将判定为会话不可逆失效并立即断路退出。
+- 刷新失败时清除本地 Token，断开长连接，路由平滑跳转到 `/login`。
 - SignalR 在连接或重连前，都通过回调读取同一安全存储中的最新 access token。
 
 当前 Token 适配器没有调用注销/撤销端点，因为既有 UniApp 项目里的撤销地址为
 `/connect/revocat`。Flutter 已按该既有契约实现：退出登录时依次撤销 access 和
 refresh token；无论撤销结果如何都会断开 SignalR 并清除本地凭据。若后端迁移到
 标准 OAuth `/connect/revocation`，只需修改 `AUTH_REVOCATION_PATH`。
+
+## 会话失效解耦架构（SessionInvalidator）
+
+为了彻底避免底层传输层反向依赖上层状态导致的 Riverpod 循环依赖（`CircularDependencyError`），系统引入了独立的事件总线对象 `SessionInvalidator`：
+
+```text
+       UI / Page
+           │ (watch)
+           ▼
+    AuthController ──(watch)──> SignalRGateway / ApiClient
+           │                               │
+       (register)                     (invalidate)
+           │                               │
+           ▼                               ▼
+    SessionInvalidator ◄───────────────────┘ (通过 sessionInvalidatorProvider 解耦)
+```
+
+1. **单向依赖原则**：
+   - `authControllerProvider` 依赖并监听 `signalRGatewayProvider`、`apiClientProvider`。
+   - `SignalRGateway` 与 `ApiClient` 等传输层**严禁**直接通过 `ref.read(authControllerProvider)` 调用登出逻辑。
+2. **总线解耦注册**：
+   - `AuthController` 初始化时将其 `sessionInvalidated` 回调注册到 `SessionInvalidator` 中，并在销毁时注销。
+   - 无论是 `DioApiClient`（401 重试失败）还是 `SignalRNetcoreGateway`（主动刷新/重连鉴权被拒），统一只调用 `sessionInvalidator.invalidate(reason: ...)`。
+3. **并发与清理闭环**：
+   - `SessionInvalidator` 与 `AuthController` 内部带有防重叠锁（`_invalidating`），即使 HTTP 与 WebSocket 同时判定 401，也仅会执行一次清理。
+   - 清理步骤：清除本地 SecureTokenStorage -> 断开 SignalR 连接 -> 清除本地 ABP 配置缓存 -> 执行 `_onAccountChanged`（通知并 invalidate 所有账号级状态 Provider） -> 将 `_status` 置为 `unauthenticated` -> GoRouter 检测到未认证并平滑重定向至 `/login`。
 
 ## 界面与路由
 

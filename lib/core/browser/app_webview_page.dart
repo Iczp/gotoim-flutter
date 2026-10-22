@@ -29,7 +29,10 @@ import '../widgets/app_modal.dart';
 Color? parseCssColor(String? raw) {
   if (raw == null) return null;
   final str = raw.trim().toLowerCase();
-  if (str.isEmpty || str == 'transparent' || str == 'inherit' || str == 'initial') {
+  if (str.isEmpty ||
+      str == 'transparent' ||
+      str == 'inherit' ||
+      str == 'initial') {
     return null;
   }
   if (str == 'black') return Colors.black;
@@ -69,7 +72,10 @@ Color? parseCssColor(String? raw) {
     final g = int.tryParse(rgbMatch.group(2)!) ?? 0;
     final b = int.tryParse(rgbMatch.group(3)!) ?? 0;
     final aStr = rgbMatch.group(4);
-    final a = aStr != null ? ((double.tryParse(aStr) ?? 1.0) * 255).round().clamp(0, 255) : 255;
+    final a =
+        aStr != null
+            ? ((double.tryParse(aStr) ?? 1.0) * 255).round().clamp(0, 255)
+            : 255;
     return Color.fromARGB(a, r, g, b);
   }
 
@@ -78,10 +84,17 @@ Color? parseCssColor(String? raw) {
   ).firstMatch(str);
   if (hslMatch != null) {
     final h = (double.tryParse(hslMatch.group(1)!) ?? 0.0) % 360.0;
-    final s = ((double.tryParse(hslMatch.group(2)!) ?? 0.0) / 100.0).clamp(0.0, 1.0);
-    final l = ((double.tryParse(hslMatch.group(3)!) ?? 0.0) / 100.0).clamp(0.0, 1.0);
+    final s = ((double.tryParse(hslMatch.group(2)!) ?? 0.0) / 100.0).clamp(
+      0.0,
+      1.0,
+    );
+    final l = ((double.tryParse(hslMatch.group(3)!) ?? 0.0) / 100.0).clamp(
+      0.0,
+      1.0,
+    );
     final aStr = hslMatch.group(4);
-    final a = aStr != null ? (double.tryParse(aStr) ?? 1.0).clamp(0.0, 1.0) : 1.0;
+    final a =
+        aStr != null ? (double.tryParse(aStr) ?? 1.0).clamp(0.0, 1.0) : 1.0;
     return HSLColor.fromAHSL(a, h, s, l).toColor();
   }
 
@@ -291,18 +304,9 @@ class AppWebViewPage extends ConsumerStatefulWidget {
         final windowService = container.read(windowServiceProvider);
 
         if (!kIsWeb && Platform.isWindows) {
-          final dockState = container.read(desktopBrowserDockProvider);
-          if (windowService.isWindowOpen('tool:browser') && !dockState.isDocked) {
-            return windowService.openWebBrowser(
-              url: url,
-              title: title,
-              fallbackContent: fallbackContent,
-            );
-          }
-          container.read(desktopBrowserDockProvider.notifier).requestDock(
-            url: url,
-            title: title,
-          );
+          container
+              .read(desktopBrowserDockProvider.notifier)
+              .requestDock(url: url, title: title);
           return Future<void>.value();
         }
 
@@ -323,11 +327,12 @@ class AppWebViewPage extends ConsumerStatefulWidget {
     }
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => AppWebViewPage(
-          initialUrl: url,
-          title: title,
-          fallbackContent: fallbackContent,
-        ),
+        builder:
+            (_) => AppWebViewPage(
+              initialUrl: url,
+              title: title,
+              fallbackContent: fallbackContent,
+            ),
       ),
     );
   }
@@ -359,7 +364,9 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
   Future<void> _detectHtmlTheme() async {
     if (_controller == null || !mounted) return;
     try {
-      final res = await _controller!.evaluateJavascript(source: _kThemeDetectJs);
+      final res = await _controller!.evaluateJavascript(
+        source: _kThemeDetectJs,
+      );
       if (res != null && mounted) {
         _applyThemeColor(res.toString());
       }
@@ -408,15 +415,17 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
       url: _currentUrl,
       title: _pageTitle.isNotEmpty ? _pageTitle : widget.title,
       onRefresh: _showPureText ? null : _reload,
-      onToggleMode: widget.fallbackContent != null && widget.fallbackContent!.isNotEmpty
-          ? () {
-              setState(() {
-                _showPureText = !_showPureText;
-              });
-            }
-          : null,
+      onToggleMode:
+          widget.fallbackContent != null && widget.fallbackContent!.isNotEmpty
+              ? () {
+                setState(() {
+                  _showPureText = !_showPureText;
+                });
+              }
+              : null,
       toggleModeLabel: _showPureText ? '切换网页版' : '查看纯文本',
-      toggleModeIcon: _showPureText ? Icons.language_rounded : Icons.article_outlined,
+      toggleModeIcon:
+          _showPureText ? Icons.language_rounded : Icons.article_outlined,
       onMinimizeToFloat: () {
         final nav = Navigator.of(context);
         final manager = ref.read(floatingWindowManagerProvider);
@@ -459,14 +468,16 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
     final isDark = theme.brightness == Brightness.dark;
 
     // 优先响应 HTML meta theme-color / dark 样式，未声明时平滑回退至 App 深浅色
-    final Color effectiveBarColor = _htmlThemeColor ?? (isDark ? const Color(0xFF1E1E1E) : Colors.white);
+    final Color effectiveBarColor =
+        _htmlThemeColor ?? (isDark ? const Color(0xFF1E1E1E) : Colors.white);
     final bool isBarDark = effectiveBarColor.computeLuminance() < 0.5;
     final Color foregroundColor = isBarDark ? Colors.white : Colors.black87;
     final Color subtitleColor = isBarDark ? Colors.white54 : Colors.black38;
 
-    final displayTitle = _pageTitle.isNotEmpty
-        ? _pageTitle
-        : (widget.title?.isNotEmpty == true ? widget.title! : '网页');
+    final displayTitle =
+        _pageTitle.isNotEmpty
+            ? _pageTitle
+            : (widget.title?.isNotEmpty == true ? widget.title! : '网页');
 
     return PopScope(
       canPop: true,
@@ -477,15 +488,16 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           foregroundColor: foregroundColor,
           iconTheme: IconThemeData(color: foregroundColor),
           actionsIconTheme: IconThemeData(color: foregroundColor),
-          systemOverlayStyle: isBarDark
-              ? SystemUiOverlayStyle.light.copyWith(
-                  statusBarColor: Colors.transparent,
-                  systemNavigationBarColor: effectiveBarColor,
-                )
-              : SystemUiOverlayStyle.dark.copyWith(
-                  statusBarColor: Colors.transparent,
-                  systemNavigationBarColor: effectiveBarColor,
-                ),
+          systemOverlayStyle:
+              isBarDark
+                  ? SystemUiOverlayStyle.light.copyWith(
+                    statusBarColor: Colors.transparent,
+                    systemNavigationBarColor: effectiveBarColor,
+                  )
+                  : SystemUiOverlayStyle.dark.copyWith(
+                    statusBarColor: Colors.transparent,
+                    systemNavigationBarColor: effectiveBarColor,
+                  ),
           elevation: 0.5,
           scrolledUnderElevation: 1,
           leading: IconButton(
@@ -541,14 +553,17 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
                   value: _progress > 0.05 ? _progress : null,
                   minHeight: 2.2,
                   backgroundColor: Colors.transparent,
-                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF07C160)),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF07C160),
+                  ),
                 ),
 
               // ── 正文内容：纯文本 fallback 视图 或 InAppWebView ───────────
               Expanded(
-                child: _showPureText && widget.fallbackContent != null
-                    ? _buildPureTextView(theme, isDark)
-                    : _buildWebView(isDark),
+                child:
+                    _showPureText && widget.fallbackContent != null
+                        ? _buildPureTextView(theme, isDark)
+                        : _buildWebView(isDark),
               ),
             ],
           ),
@@ -559,7 +574,8 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
 
   Widget _buildWebView(bool isDark) {
     if (InAppWebViewPlatform.instance == null) {
-      if (widget.fallbackContent != null && widget.fallbackContent!.isNotEmpty) {
+      if (widget.fallbackContent != null &&
+          widget.fallbackContent!.isNotEmpty) {
         return _buildPureTextView(Theme.of(context), isDark);
       }
       return Center(
@@ -678,7 +694,9 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
               // 安全风控沙箱：非官方受信白名单域名，阻断调用特权 Native JSBridge 敏感接口
               final securityService = ref.read(urlSecurityServiceProvider);
               if (!securityService.isTrustedDomain(_currentUrl)) {
-                debugPrint('[GotoIMBridge] 阻断非受信任域名的 Native JSBridge 调用: $_currentUrl');
+                debugPrint(
+                  '[GotoIMBridge] 阻断非受信任域名的 Native JSBridge 调用: $_currentUrl',
+                );
                 return jsonEncode({
                   'success': false,
                   'error': {
@@ -707,13 +725,15 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
             } else if (args[0] is String) {
               data['current'] = args[0].toString();
               if (args.length > 1 && args[1] is List) {
-                data['urls'] = (args[1] as List).map((e) => e.toString()).toList();
+                data['urls'] =
+                    (args[1] as List).map((e) => e.toString()).toList();
               }
               if (args.length > 2 && args[2] is int) {
                 data['index'] = args[2];
               }
             } else if (args[0] is List) {
-              data['urls'] = (args[0] as List).map((e) => e.toString()).toList();
+              data['urls'] =
+                  (args[0] as List).map((e) => e.toString()).toList();
               if (args.length > 1 && args[1] != null) {
                 if (args[1] is int) {
                   data['index'] = args[1];
@@ -735,13 +755,16 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
               }
               if (trimmed.startsWith('//')) {
                 final pageUri = Uri.tryParse(_currentUrl);
-                final scheme = (pageUri != null && pageUri.scheme.isNotEmpty)
-                    ? pageUri.scheme
-                    : 'https';
+                final scheme =
+                    (pageUri != null && pageUri.scheme.isNotEmpty)
+                        ? pageUri.scheme
+                        : 'https';
                 return '$scheme:$trimmed';
               }
               final pageUri = Uri.tryParse(_currentUrl);
-              if (pageUri != null && pageUri.hasScheme && pageUri.host.isNotEmpty) {
+              if (pageUri != null &&
+                  pageUri.hasScheme &&
+                  pageUri.host.isNotEmpty) {
                 try {
                   return pageUri.resolve(trimmed).toString();
                 } catch (_) {}
@@ -754,10 +777,11 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
               data['current'] = normalizeUrl(data['current'].toString());
             }
             if (data['urls'] is List) {
-              data['urls'] = (data['urls'] as List)
-                  .map((e) => normalizeUrl(e?.toString() ?? ''))
-                  .where((e) => e.isNotEmpty)
-                  .toList();
+              data['urls'] =
+                  (data['urls'] as List)
+                      .map((e) => normalizeUrl(e?.toString() ?? ''))
+                      .where((e) => e.isNotEmpty)
+                      .toList();
             }
 
             final resp = await dispatcher.dispatch(
@@ -793,7 +817,8 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           callback: (args) async {
             if (args.isEmpty || !mounted) return false;
             try {
-              final map = args[0] is Map ? (args[0] as Map) : <dynamic, dynamic>{};
+              final map =
+                  args[0] is Map ? (args[0] as Map) : <dynamic, dynamic>{};
               final rawSrc = map['src']?.toString() ?? '';
               if (rawSrc.isEmpty) return false;
 
@@ -808,13 +833,16 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
                 }
                 if (trimmed.startsWith('//')) {
                   final pageUri = Uri.tryParse(_currentUrl);
-                  final scheme = (pageUri != null && pageUri.scheme.isNotEmpty)
-                      ? pageUri.scheme
-                      : 'https';
+                  final scheme =
+                      (pageUri != null && pageUri.scheme.isNotEmpty)
+                          ? pageUri.scheme
+                          : 'https';
                   return '$scheme:$trimmed';
                 }
                 final pageUri = Uri.tryParse(_currentUrl);
-                if (pageUri != null && pageUri.hasScheme && pageUri.host.isNotEmpty) {
+                if (pageUri != null &&
+                    pageUri.hasScheme &&
+                    pageUri.host.isNotEmpty) {
                   try {
                     return pageUri.resolve(trimmed).toString();
                   } catch (_) {}
@@ -866,9 +894,10 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           callback: (args) async {
             try {
               final dispatcher = ref.read(jsApiDispatcherProvider);
-              final map = args.isNotEmpty && args[0] is Map
-                  ? (args[0] as Map).cast<String, dynamic>()
-                  : <String, dynamic>{};
+              final map =
+                  args.isNotEmpty && args[0] is Map
+                      ? (args[0] as Map).cast<String, dynamic>()
+                      : <String, dynamic>{};
               final resp = await dispatcher.dispatch(
                 JsBridgeRequest(
                   id: 'shim_scan_code_${DateTime.now().millisecondsSinceEpoch}',
@@ -909,13 +938,16 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
               }
               if (trimmed.startsWith('//')) {
                 final pageUri = Uri.tryParse(_currentUrl);
-                final scheme = (pageUri != null && pageUri.scheme.isNotEmpty)
-                    ? pageUri.scheme
-                    : 'https';
+                final scheme =
+                    (pageUri != null && pageUri.scheme.isNotEmpty)
+                        ? pageUri.scheme
+                        : 'https';
                 return '$scheme:$trimmed';
               }
               final pageUri = Uri.tryParse(_currentUrl);
-              if (pageUri != null && pageUri.hasScheme && pageUri.host.isNotEmpty) {
+              if (pageUri != null &&
+                  pageUri.hasScheme &&
+                  pageUri.host.isNotEmpty) {
                 try {
                   return pageUri.resolve(trimmed).toString();
                 } catch (_) {}
@@ -993,7 +1025,8 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
           handlerName: 'getAppContext',
           callback: (_) async {
             try {
-              final isDark = mounted && Theme.of(context).brightness == Brightness.dark;
+              final isDark =
+                  mounted && Theme.of(context).brightness == Brightness.dark;
               final tokenStorage = ref.read(tokenStorageProvider);
               final token = await tokenStorage.readAccessToken();
               final auth = ref.read(authControllerProvider);
@@ -1006,31 +1039,39 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
               return <String, dynamic>{
                 'token': token,
                 'theme': isDark ? 'dark' : 'light',
-                'user': auth.currentUser != null
-                    ? <String, dynamic>{
-                        'id': auth.currentUser!.id,
-                        'userName': auth.currentUser!.userName,
-                        'name': auth.currentUser!.name,
-                        'email': auth.currentUser!.email,
-                        'phoneNumber': auth.currentUser!.phoneNumber,
-                      }
-                    : null,
-                'currentChatObject': currentOwner != null
-                    ? <String, dynamic>{
-                        'id': currentOwner.id,
-                        'name': currentOwner.name,
-                        'portrait': resolveApiUrl(currentOwner.imageUrl, apiBaseUrl),
-                        'objectType': currentOwner.typeDescription,
-                      }
-                    : null,
-                'availableChatObjects': owners
-                    .map((o) => <String, dynamic>{
-                          'id': o.id,
-                          'name': o.name,
-                          'portrait': resolveApiUrl(o.imageUrl, apiBaseUrl),
-                          'objectType': o.typeDescription,
-                        })
-                    .toList(),
+                'user':
+                    auth.currentUser != null
+                        ? <String, dynamic>{
+                          'id': auth.currentUser!.id,
+                          'userName': auth.currentUser!.userName,
+                          'name': auth.currentUser!.name,
+                          'email': auth.currentUser!.email,
+                          'phoneNumber': auth.currentUser!.phoneNumber,
+                        }
+                        : null,
+                'currentChatObject':
+                    currentOwner != null
+                        ? <String, dynamic>{
+                          'id': currentOwner.id,
+                          'name': currentOwner.name,
+                          'portrait': resolveApiUrl(
+                            currentOwner.imageUrl,
+                            apiBaseUrl,
+                          ),
+                          'objectType': currentOwner.typeDescription,
+                        }
+                        : null,
+                'availableChatObjects':
+                    owners
+                        .map(
+                          (o) => <String, dynamic>{
+                            'id': o.id,
+                            'name': o.name,
+                            'portrait': resolveApiUrl(o.imageUrl, apiBaseUrl),
+                            'objectType': o.typeDescription,
+                          },
+                        )
+                        .toList(),
               };
             } catch (e) {
               debugPrint('[WebViewBridge] getAppContext error: $e');
@@ -1044,12 +1085,12 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
             try {
               if (args.isNotEmpty && args[0] != null) {
                 final target = args[0] is Map ? args[0] as Map : {};
-                final targetId = int.tryParse(target['id']?.toString() ?? '') ?? 0;
+                final targetId =
+                    int.tryParse(target['id']?.toString() ?? '') ?? 0;
                 final sessionList = ref.read(sessionListControllerProvider);
-                final targetOwner = sessionList.owners.cast<ChatOwner?>().firstWhere(
-                      (o) => o?.id == targetId,
-                      orElse: () => null,
-                    );
+                final targetOwner = sessionList.owners
+                    .cast<ChatOwner?>()
+                    .firstWhere((o) => o?.id == targetId, orElse: () => null);
                 if (targetOwner != null) {
                   await sessionList.selectOwner(targetOwner);
                   return true;
@@ -1140,7 +1181,8 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
       onReceivedError: (controller, request, error) {
         if (!mounted) return;
         // 仅主框架错误才阻断显示错误页，避免第三方统计/埋点或子资源 404 导致整屏阻断
-        if (request.isForMainFrame != false && error.type != WebResourceErrorType.CANCELLED) {
+        if (request.isForMainFrame != false &&
+            error.type != WebResourceErrorType.CANCELLED) {
           setState(() {
             _isLoading = false;
             _errorMessage = error.description;

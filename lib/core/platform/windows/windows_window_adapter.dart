@@ -214,11 +214,15 @@ class WindowsWindowAdapter {
   }
 
   /// 从主窗口脱离挂载，恢复为独立的 Windows 系统顶层窗口
-  static Future<bool> undockFromParent() async {
+  static Future<bool> undockFromParent({bool showWindow = true}) async {
     if (!isWindows) return false;
-    debugPrint('[BrowserDock Adapter] undockFromParent calling native');
+    debugPrint(
+      '[BrowserDock Adapter] undockFromParent calling native, showWindow=$showWindow',
+    );
     try {
-      final res = await _channel.invokeMethod<bool>('undockFromParent');
+      final res = await _channel.invokeMethod<bool>('undockFromParent', {
+        'showWindow': showWindow,
+      });
       debugPrint(
         '[BrowserDock Adapter] undockFromParent native returned: $res',
       );

@@ -75,7 +75,17 @@ HWND GetMainChildContentHandle() {
   return nullptr;
 }
 
+static int s_last_hole_x = -1, s_last_hole_y = -1, s_last_hole_w = -1, s_last_hole_h = -1;
+
 static void UpdateMainViewClipHole(int x, int y, int w, int h) {
+  if (s_last_hole_x == x && s_last_hole_y == y && s_last_hole_w == w && s_last_hole_h == h) {
+    return;
+  }
+  s_last_hole_x = x;
+  s_last_hole_y = y;
+  s_last_hole_w = w;
+  s_last_hole_h = h;
+
   HWND child_view = GetMainChildContentHandle();
   if (!child_view || !IsWindow(child_view)) {
     DockLog("[BrowserDock C++] UpdateMainViewClipHole: child_view is invalid");
@@ -101,7 +111,7 @@ static void UpdateMainViewClipHole(int x, int y, int w, int h) {
   DeleteObject(full_rgn);
   DeleteObject(hole_rgn);
 
-  if (SetWindowRgn(child_view, final_rgn, TRUE)) {
+  if (SetWindowRgn(child_view, final_rgn, FALSE)) {
     DockLog("[BrowserDock C++] UpdateMainViewClipHole applied: view=%dx%d, hole=(%d, %d, %d, %d)",
             view_w, view_h, x, y, w, h);
   } else {
@@ -113,6 +123,7 @@ static void UpdateMainViewClipHole(int x, int y, int w, int h) {
 
 static void ResetMainViewClipHole() {
   HWND child_view = GetMainChildContentHandle();
+  s_last_hole_x = s_last_hole_y = s_last_hole_w = s_last_hole_h = -1;
   if (child_view && IsWindow(child_view)) {
     SetWindowRgn(child_view, nullptr, TRUE);
     DockLog("[BrowserDock C++] ResetMainViewClipHole restored full rendering region");
@@ -1029,21 +1040,32 @@ class WindowControls : public flutter::Plugin {
           UpdateMainViewClipHole(x, y, effective_w, effective_h);
 
           SetWindowPos(hwnd, HWND_TOP, client_x, client_y, effective_w, effective_h,
-                       SWP_NOACTIVATE);
+                       SWP_NOACTIVATE | SWP_NOCOPYBITS);
 
           HWND sub_child = GetWindow(hwnd, GW_CHILD);
           if (sub_child && IsWindow(sub_child)) {
-            MoveWindow(sub_child, 0, 0, effective_w, effective_h, TRUE);
-            InvalidateRect(sub_child, NULL, TRUE);
+            SetWindowPos(sub_child, NULL, 0, 0, effective_w, effective_h,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
           }
-          InvalidateRect(hwnd, NULL, TRUE);
           DockLog("[BrowserDock C++] updateDockedBounds: (x=%d, y=%d, w=%d, h=%d) -> client=(%d, %d), effective=(%d, %d)",
                   x, y, w, h, client_x, client_y, effective_w, effective_h);
         }
         result->Success(flutter::EncodableValue(true));
         return;
       } else if (method == "undockFromParent") {
-        DockLog("[BrowserDock C++] undockFromParent called: hwnd=0x%p", hwnd);
+        bool show_window = true;
+        const auto* args = call.arguments()
+            ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+        if (args) {
+          auto it = args->find(flutter::EncodableValue("showWindow"));
+          if (it != args->end()) {
+            if (const auto* val_b = std::get_if<bool>(&it->second)) {
+              show_window = *val_b;
+            }
+          }
+        }
+        DockLog("[BrowserDock C++] undockFromParent called: hwnd=0x%p, showWindow=%s",
+                hwnd, show_window ? "true" : "false");
         auto it = g_dock_snapshots.find(hwnd);
         if (it != g_dock_snapshots.end() && it->second.is_docked) {
           const auto& s = it->second;
@@ -1066,24 +1088,34 @@ class WindowControls : public flutter::Plugin {
           // 4. 清除 Owner 关系，确保子窗口不附属于主窗口（无 Owner-Owned 约束）
           SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, 0);
 
-          // 5. 恢复原始位置与状态，刷新窗口框架并置顶激活
+          // 5. 恢复原始位置与状态
           SetWindowPlacement(hwnd, &s.placement);
-          SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                       SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
-          BringWindowToTop(hwnd);
-          SetForegroundWindow(hwnd);
-          SetActiveWindow(hwnd);
+          if (show_window) {
+            SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+            BringWindowToTop(hwnd);
+            SetForegroundWindow(hwnd);
+            SetActiveWindow(hwnd);
+          } else {
+            ShowWindow(hwnd, SW_HIDE);
+            SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW);
+          }
 
           HWND sub_child = GetWindow(hwnd, GW_CHILD);
           if (sub_child && IsWindow(sub_child)) {
             RECT rc;
             GetClientRect(hwnd, &rc);
             MoveWindow(sub_child, 0, 0, rc.right - rc.left, rc.bottom - rc.top, TRUE);
-            InvalidateRect(sub_child, NULL, TRUE);
-            UpdateWindow(sub_child);
+            if (show_window) {
+              InvalidateRect(sub_child, NULL, TRUE);
+              UpdateWindow(sub_child);
+            }
           }
-          InvalidateRect(hwnd, NULL, TRUE);
-          UpdateWindow(hwnd);
+          if (show_window) {
+            InvalidateRect(hwnd, NULL, TRUE);
+            UpdateWindow(hwnd);
+          }
 
           g_dock_snapshots.erase(it);
           DockLog("[BrowserDock C++] undockFromParent complete");

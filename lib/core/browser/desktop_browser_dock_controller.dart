@@ -79,16 +79,10 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
 
     // 如果当前已经是吸附嵌入状态，直接在已嵌入的浏览器中添加新标签页，不重新触发 docking 遮罩
     if (state.isDocked) {
-      state = state.copyWith(
-        currentUrl: targetUrl,
-        currentTitle: targetTitle,
-      );
+      state = state.copyWith(currentUrl: targetUrl, currentTitle: targetTitle);
       try {
         final windowService = ref.read(windowServiceProvider);
-        await windowService.openWebBrowser(
-          url: targetUrl,
-          title: targetTitle,
-        );
+        await windowService.openWebBrowser(url: targetUrl, title: targetTitle);
       } catch (e) {
         debugPrint('[BrowserDock Dart] add tab to docked browser failed: $e');
       }
@@ -197,9 +191,9 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
   }
 
   /// 请求从聊天右侧脱离挂载，恢复为独立系统窗口 (Pop out)
-  Future<void> requestUndock() async {
+  Future<void> requestUndock({bool showWindow = true}) async {
     debugPrint(
-      '[BrowserDock Dart] requestUndock called: status=${state.status}, isTransitioning=${state.isTransitioning}',
+      '[BrowserDock Dart] requestUndock called: status=${state.status}, isTransitioning=${state.isTransitioning}, showWindow=$showWindow',
     );
     if (state.isTransitioning || !state.isDocked) return;
     state = state.copyWith(status: BrowserDockingStatus.undocking);
@@ -207,10 +201,10 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
     try {
       final windowService = ref.read(windowServiceProvider);
       if (windowService is DefaultWindowService) {
-        final res = await windowService.sendBrowserUndockCommand();
-        debugPrint(
-          '[BrowserDock Dart] sendBrowserUndockCommand result: $res',
+        final res = await windowService.sendBrowserUndockCommand(
+          showWindow: showWindow,
         );
+        debugPrint('[BrowserDock Dart] sendBrowserUndockCommand result: $res');
       }
     } catch (e) {
       debugPrint('[BrowserDock Dart] requestUndock error: $e');
@@ -231,10 +225,10 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
   Future<void> closeDocked() async {
     debugPrint('[BrowserDock Dart] closeDocked called');
     if (state.isDocked) {
-      // 先脱离挂载
-      await requestUndock();
+      // 1. 在完全不可见状态下脱离挂载，彻底避免闪现独立窗口
+      await requestUndock(showWindow: false);
     }
-    // 关闭/隐藏浏览器窗口
+    // 2. 关闭/隐藏浏览器窗口控制器
     try {
       final windowService = ref.read(windowServiceProvider);
       await windowService.closeWindow(browserTargetId);

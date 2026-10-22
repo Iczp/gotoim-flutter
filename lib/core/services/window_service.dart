@@ -474,10 +474,9 @@ class DefaultWindowService implements WindowService {
             await bringToFront('main');
             final container = rootProviderContainer;
             if (container != null) {
-              await container.read(desktopBrowserDockProvider.notifier).requestDock(
-                url: dockUrl,
-                title: dockTitle,
-              );
+              await container
+                  .read(desktopBrowserDockProvider.notifier)
+                  .requestDock(url: dockUrl, title: dockTitle);
             }
             return true;
 
@@ -715,18 +714,22 @@ class DefaultWindowService implements WindowService {
   }
 
   /// 向浏览器子窗口下发从主窗口脱离挂载恢复为独立窗口的命令
-  Future<bool> sendBrowserUndockCommand() async {
+  Future<bool> sendBrowserUndockCommand({bool showWindow = true}) async {
     const targetId = 'tool:browser';
     final controller = _nativeControllers[targetId];
     if (controller == null) {
-      debugPrint('[WindowService] sendBrowserUndockCommand: controller is null');
+      debugPrint(
+        '[WindowService] sendBrowserUndockCommand: controller is null',
+      );
       return false;
     }
     try {
       debugPrint(
-        '[WindowService] invoking undock_from_parent on controller (windowId=${controller.windowId})',
+        '[WindowService] invoking undock_from_parent on controller (windowId=${controller.windowId}, showWindow=$showWindow)',
       );
-      final res = await controller.invokeMethod<bool>('undock_from_parent');
+      final res = await controller.invokeMethod<bool>('undock_from_parent', {
+        'showWindow': showWindow,
+      });
       debugPrint('[WindowService] undock_from_parent invoke completed: $res');
       return res ?? false;
     } catch (e) {
@@ -900,7 +903,8 @@ class DefaultWindowService implements WindowService {
   Future<void> prewarmTrayFlyout() async {
     if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
     const targetId = 'tool:tray';
-    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) return;
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId))
+      return;
     final snapshot =
         traySnapshotProvider?.call() ?? TrayGroupedUnreadState.empty;
     try {
@@ -923,7 +927,8 @@ class DefaultWindowService implements WindowService {
   Future<void> prewarmProfileCard() async {
     if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
     const targetId = 'tool:profile_card';
-    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) return;
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId))
+      return;
     try {
       await _openNativeSubWindow(
         targetId: targetId,
@@ -960,11 +965,12 @@ class DefaultWindowService implements WindowService {
     final double scale = dpi / 96.0;
     final int clientLeft =
         windowRect?['clientLeft'] ?? (windowRect?['left'] ?? 0);
-    final int clientTop =
-        windowRect?['clientTop'] ?? (windowRect?['top'] ?? 0);
-    final int clientWidth = windowRect?['clientWidth'] ??
+    final int clientTop = windowRect?['clientTop'] ?? (windowRect?['top'] ?? 0);
+    final int clientWidth =
+        windowRect?['clientWidth'] ??
         ((windowRect?['right'] ?? (clientLeft + 1280)) - clientLeft);
-    final int clientHeight = windowRect?['clientHeight'] ??
+    final int clientHeight =
+        windowRect?['clientHeight'] ??
         ((windowRect?['bottom'] ?? (clientTop + 800)) - clientTop);
     final int winRight = clientLeft + clientWidth;
     final int winBottom = clientTop + clientHeight;
@@ -976,8 +982,7 @@ class DefaultWindowService implements WindowService {
         clientLeft + (localRect.right * scale).round();
     final int avatarPhysicalLeft =
         clientLeft + (localRect.left * scale).round();
-    final int avatarPhysicalTop =
-        clientTop + (localRect.top * scale).round();
+    final int avatarPhysicalTop = clientTop + (localRect.top * scale).round();
 
     // Default: flyout appears to the right of the avatar with 8px margin
     int targetX = avatarPhysicalRight + (8 * scale).round();
@@ -1016,7 +1021,8 @@ class DefaultWindowService implements WindowService {
   Future<void> prewarmScreenCapture() async {
     if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
     const targetId = 'tool:screen_capture';
-    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) return;
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId))
+      return;
     try {
       await _openNativeSubWindow(
         targetId: targetId,
@@ -1033,7 +1039,9 @@ class DefaultWindowService implements WindowService {
   }
 
   @override
-  Future<Uint8List?> captureScreenInteractive({bool hideMainWindow = true}) async {
+  Future<Uint8List?> captureScreenInteractive({
+    bool hideMainWindow = true,
+  }) async {
     _ensureIpcInitialized();
     if (isSubWindow) {
       debugPrint('[WindowService] 子窗口不支持直接发起全局截屏');
@@ -1042,7 +1050,9 @@ class DefaultWindowService implements WindowService {
     const targetId = 'tool:screen_capture';
 
     // 1. 若配置了截屏时隐藏主窗口，先最小化并微量延迟等待 Windows 桌面重绘
-    if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+    if (hideMainWindow &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.windows) {
       await WindowsWindowAdapter.minimize();
       await Future<void>.delayed(const Duration(milliseconds: 220));
     }
@@ -1050,7 +1060,9 @@ class DefaultWindowService implements WindowService {
     // 2. 底层 Win32 瞬间捕获全屏幕虚拟桌面位图
     final capResult = await WindowsWindowAdapter.captureScreen();
     if (capResult == null) {
-      if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      if (hideMainWindow &&
+          !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.windows) {
         await WindowsWindowAdapter.bringToFront();
       }
       return null;
@@ -1072,7 +1084,9 @@ class DefaultWindowService implements WindowService {
     }
     final controller = _nativeControllers[targetId];
     if (controller == null) {
-      if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      if (hideMainWindow &&
+          !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.windows) {
         await WindowsWindowAdapter.bringToFront();
       }
       return null;
@@ -1092,7 +1106,9 @@ class DefaultWindowService implements WindowService {
       });
     } catch (e) {
       debugPrint('[WindowService] 唤醒截图窗口异常: $e');
-      if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      if (hideMainWindow &&
+          !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.windows) {
         await WindowsWindowAdapter.bringToFront();
       }
       return null;
@@ -1101,7 +1117,9 @@ class DefaultWindowService implements WindowService {
     final resultBytes = await _screenCaptureCompleter!.future;
     _screenCaptureCompleter = null;
 
-    if (hideMainWindow && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+    if (hideMainWindow &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.windows) {
       await WindowsWindowAdapter.bringToFront();
     }
     return resultBytes;

@@ -75,6 +75,12 @@ class _DesktopSessionSplitViewState
   int? _activeOwnerId;
   String _searchKeyword = '';
   double _sessionPaneWidth = 290.0;
+  double _browserPaneWidth = 520.0;
+  bool _isDraggingBrowserDivider = false;
+  int? _lastSentViewX;
+  int? _lastSentViewY;
+  int? _lastSentWidth;
+  int? _lastSentHeight;
   Timer? _avatarHoverTimer;
   Timer? _avatarLeaveTimer;
   OverlayEntry? _contextMenuEntry;
@@ -102,8 +108,7 @@ class _DesktopSessionSplitViewState
     if (!dockState.shouldRenderPlaceholder) return;
 
     final renderBox =
-        _browserPlaceholderKey.currentContext?.findRenderObject()
-            as RenderBox?;
+        _browserPlaceholderKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize || !renderBox.attached) return;
 
     final localOffset = renderBox.localToGlobal(Offset.zero);
@@ -115,6 +120,17 @@ class _DesktopSessionSplitViewState
     final width = (size.width * pixelRatio).round();
     final height = (size.height * pixelRatio).round();
 
+    if (viewX == _lastSentViewX &&
+        viewY == _lastSentViewY &&
+        width == _lastSentWidth &&
+        height == _lastSentHeight) {
+      return;
+    }
+    _lastSentViewX = viewX;
+    _lastSentViewY = viewY;
+    _lastSentWidth = width;
+    _lastSentHeight = height;
+
     debugPrint(
       '[BrowserDock Layout] _sendPlaceholderBoundsToNative: status=${dockState.status}, '
       'localOffset=(${localOffset.dx.toStringAsFixed(1)}, ${localOffset.dy.toStringAsFixed(1)}), '
@@ -123,25 +139,25 @@ class _DesktopSessionSplitViewState
     );
 
     if (dockState.status == BrowserDockingStatus.docking) {
-      ref.read(desktopBrowserDockProvider.notifier).commitDock(
-        viewX: viewX,
-        viewY: viewY,
-        width: width,
-        height: height,
-      );
+      ref
+          .read(desktopBrowserDockProvider.notifier)
+          .commitDock(viewX: viewX, viewY: viewY, width: width, height: height);
     } else if (dockState.status == BrowserDockingStatus.docked) {
-      ref.read(desktopBrowserDockProvider.notifier).updateDockedBounds(
-        viewX: viewX,
-        viewY: viewY,
-        width: width,
-        height: height,
-      );
+      ref
+          .read(desktopBrowserDockProvider.notifier)
+          .updateDockedBounds(
+            viewX: viewX,
+            viewY: viewY,
+            width: width,
+            height: height,
+          );
     }
   }
 
   @override
   void initState() {
     super.initState();
+    _browserPaneWidth = ref.read(desktopBrowserDockProvider).width;
     _scrollController.addListener(_onScroll);
     _selectedSessionUnitId = ref.read(selectedDesktopSessionUnitIdProvider);
     if (_selectedSessionUnitId != null) {
@@ -244,10 +260,9 @@ class _DesktopSessionSplitViewState
         'statusText': destination['statusText'],
         'code': destination['code'],
       };
-      ref.read(windowServiceProvider).showProfileCardAt(
-        subjectData: subjectData,
-        localRect: rect,
-      );
+      ref
+          .read(windowServiceProvider)
+          .showProfileCardAt(subjectData: subjectData, localRect: rect);
     });
   }
 
@@ -271,24 +286,21 @@ class _DesktopSessionSplitViewState
       _selectedSessionUnitId = session.id;
       _selectedTitle = session.title;
     });
-    ref
-        .read(selectedDesktopSessionUnitIdProvider.notifier)
-        .select(session.id);
+    ref.read(selectedDesktopSessionUnitIdProvider.notifier).select(session.id);
   }
 
   void _openInStandaloneWindow(SessionSummary session) {
     final ownerId = widget.controller.currentOwner?.id;
-    ref.read(windowServiceProvider).openChat(
-      sessionUnitId: session.id,
-      ownerId: ownerId,
-      title: session.title,
-    );
+    ref
+        .read(windowServiceProvider)
+        .openChat(
+          sessionUnitId: session.id,
+          ownerId: ownerId,
+          title: session.title,
+        );
   }
 
-  void _showSessionContextMenu(
-    TapDownDetails details,
-    SessionSummary session,
-  ) {
+  void _showSessionContextMenu(TapDownDetails details, SessionSummary session) {
     _dismissContextMenu();
     final overlay = Overlay.of(context);
     final renderBox = overlay.context.findRenderObject() as RenderBox?;
@@ -305,7 +317,10 @@ class _DesktopSessionSplitViewState
       left = (screenSize.width - menuWidth - 8).clamp(8.0, screenSize.width);
     }
     if (top + menuEstimatedHeight > screenSize.height - 8) {
-      top = (screenSize.height - menuEstimatedHeight - 8).clamp(8.0, screenSize.height);
+      top = (screenSize.height - menuEstimatedHeight - 8).clamp(
+        8.0,
+        screenSize.height,
+      );
     }
 
     final theme = Theme.of(context);
@@ -324,14 +339,19 @@ class _DesktopSessionSplitViewState
                 onTapOutside: (_) => _dismissContextMenu(),
                 child: Material(
                   elevation: 8,
-                  shadowColor: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
+                  shadowColor: Colors.black.withValues(
+                    alpha: isDark ? 0.6 : 0.25,
+                  ),
                   color: colorScheme.surface,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                     side: BorderSide(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.12)
-                          : colorScheme.outlineVariant.withValues(alpha: 0.5),
+                      color:
+                          isDark
+                              ? Colors.white.withValues(alpha: 0.12)
+                              : colorScheme.outlineVariant.withValues(
+                                alpha: 0.5,
+                              ),
                       width: 0.8,
                     ),
                   ),
@@ -354,12 +374,15 @@ class _DesktopSessionSplitViewState
                         Divider(
                           height: 8,
                           thickness: 0.5,
-                          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                          color: colorScheme.outlineVariant.withValues(
+                            alpha: 0.35,
+                          ),
                         ),
                         _buildContextMenuItem(
-                          icon: session.isPinned
-                              ? Icons.push_pin_outlined
-                              : Icons.push_pin_rounded,
+                          icon:
+                              session.isPinned
+                                  ? Icons.push_pin_outlined
+                                  : Icons.push_pin_rounded,
                           label: session.isPinned ? '取消置顶' : '置顶聊天',
                           onTap: () async {
                             _dismissContextMenu();
@@ -367,9 +390,10 @@ class _DesktopSessionSplitViewState
                           },
                         ),
                         _buildContextMenuItem(
-                          icon: session.isImmersed
-                              ? Icons.notifications_active_outlined
-                              : Icons.notifications_off_outlined,
+                          icon:
+                              session.isImmersed
+                                  ? Icons.notifications_active_outlined
+                                  : Icons.notifications_off_outlined,
                           label: session.isImmersed ? '开启消息通知' : '消息免打扰',
                           onTap: () async {
                             _dismissContextMenu();
@@ -387,7 +411,9 @@ class _DesktopSessionSplitViewState
                         Divider(
                           height: 8,
                           thickness: 0.5,
-                          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                          color: colorScheme.outlineVariant.withValues(
+                            alpha: 0.35,
+                          ),
                         ),
                         _buildContextMenuItem(
                           icon: Icons.delete_sweep_outlined,
@@ -473,11 +499,7 @@ class _DesktopSessionSplitViewState
       await widget.controller.setImmersed(session, !session.isImmersed);
       if (mounted) {
         messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              session.isImmersed ? '已开启消息通知' : '已关闭消息通知',
-            ),
-          ),
+          SnackBar(content: Text(session.isImmersed ? '已开启消息通知' : '已关闭消息通知')),
         );
       }
     } catch (e) {
@@ -488,8 +510,7 @@ class _DesktopSessionSplitViewState
   }
 
   void _openChatSettings(SessionSummary session) {
-    final ownerId =
-        session.ownerId ?? widget.controller.currentOwner?.id ?? 0;
+    final ownerId = session.ownerId ?? widget.controller.currentOwner?.id ?? 0;
     if (mounted) {
       showDesktopModalDialog<void>(
         context: context,
@@ -618,6 +639,9 @@ class _DesktopSessionSplitViewState
         isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000);
 
     final dockState = ref.watch(desktopBrowserDockProvider);
+    if (!_isDraggingBrowserDivider && _browserPaneWidth != dockState.width) {
+      _browserPaneWidth = dockState.width;
+    }
     ref.listen<DesktopBrowserDockState>(desktopBrowserDockProvider, (
       prev,
       next,
@@ -678,13 +702,19 @@ class _DesktopSessionSplitViewState
                                   color:
                                       isDark
                                           ? Colors.white.withValues(alpha: 0.06)
-                                          : Colors.black.withValues(alpha: 0.05),
+                                          : Colors.black.withValues(
+                                            alpha: 0.05,
+                                          ),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
                                     color:
                                         isDark
-                                            ? Colors.white.withValues(alpha: 0.08)
-                                            : Colors.black.withValues(alpha: 0.06),
+                                            ? Colors.white.withValues(
+                                              alpha: 0.08,
+                                            )
+                                            : Colors.black.withValues(
+                                              alpha: 0.06,
+                                            ),
                                     width: 0.5,
                                   ),
                                 ),
@@ -756,9 +786,10 @@ class _DesktopSessionSplitViewState
                                 child: const AddFriendPage(isDialog: true),
                               );
                             } else if (val == 'scan') {
-                              final currentOwner = ref
-                                  .read(sessionListControllerProvider)
-                                  .currentOwner;
+                              final currentOwner =
+                                  ref
+                                      .read(sessionListControllerProvider)
+                                      .currentOwner;
                               MyQrCodeDialog.show(context, owner: currentOwner);
                             }
                           },
@@ -909,15 +940,15 @@ class _DesktopSessionSplitViewState
                               child: SizedBox(
                                 width: 24,
                                 height: 24,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                             )
                             : filteredSessions.isEmpty
                             ? Center(
                               child: Text(
-                                _searchKeyword.isNotEmpty
-                                    ? '未找到匹配会话'
-                                    : '暂无会话',
+                                _searchKeyword.isNotEmpty ? '未找到匹配会话' : '暂无会话',
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: colorScheme.onSurfaceVariant
                                       .withValues(alpha: 0.6),
@@ -956,9 +987,8 @@ class _DesktopSessionSplitViewState
                                           : null,
                                   onDoubleTap:
                                       session != null
-                                          ? () => _openInStandaloneWindow(
-                                            session,
-                                          )
+                                          ? () =>
+                                              _openInStandaloneWindow(session)
                                           : null,
                                   onSecondaryTapDown:
                                       session != null
@@ -1053,11 +1083,13 @@ class _DesktopSessionSplitViewState
                                   onPopOut: () {
                                     final ownerId =
                                         widget.controller.currentOwner?.id;
-                                    ref.read(windowServiceProvider).openChat(
-                                      sessionUnitId: chat.sessionUnitId,
-                                      ownerId: ownerId,
-                                      title: chat.title,
-                                    );
+                                    ref
+                                        .read(windowServiceProvider)
+                                        .openChat(
+                                          sessionUnitId: chat.sessionUnitId,
+                                          ownerId: ownerId,
+                                          title: chat.title,
+                                        );
                                     setState(() {
                                       _cachedChats.remove(chat.sessionUnitId);
                                       if (_selectedSessionUnitId ==
@@ -1084,15 +1116,31 @@ class _DesktopSessionSplitViewState
             if (dockState.shouldRenderPlaceholder) ...[
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onHorizontalDragStart: (_) {
+                  _isDraggingBrowserDivider = true;
+                  _browserPaneWidth =
+                      ref.read(desktopBrowserDockProvider).width;
+                },
                 onHorizontalDragUpdate: (details) {
-                  final newW = dockState.width - details.delta.dx;
                   final maxW = (totalWidth - effectivePaneWidth - 360.0).clamp(
                     360.0,
                     960.0,
                   );
+                  _browserPaneWidth =
+                      (_browserPaneWidth - details.delta.dx)
+                          .clamp(360.0, maxW)
+                          .toDouble();
                   ref
                       .read(desktopBrowserDockProvider.notifier)
-                      .setWidth(newW, min: 360.0, max: maxW);
+                      .setWidth(_browserPaneWidth, min: 360.0, max: maxW);
+                  _scheduleBrowserBoundsUpdate();
+                },
+                onHorizontalDragEnd: (_) {
+                  _isDraggingBrowserDivider = false;
+                  _scheduleBrowserBoundsUpdate();
+                },
+                onHorizontalDragCancel: () {
+                  _isDraggingBrowserDivider = false;
                   _scheduleBrowserBoundsUpdate();
                 },
                 child: MouseRegion(
@@ -1108,7 +1156,10 @@ class _DesktopSessionSplitViewState
               ),
               SizedBox(
                 key: _browserPlaceholderKey,
-                width: dockState.width,
+                width:
+                    _isDraggingBrowserDivider
+                        ? _browserPaneWidth
+                        : dockState.width,
                 child: Container(
                   color:
                       dockState.status == BrowserDockingStatus.docking
@@ -1187,8 +1238,7 @@ class _DesktopEmptyChatCanvas extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
-    final canvasBg =
-        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFFFFFFF);
+    final canvasBg = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFFFFFFF);
 
     return Container(
       color: canvasBg,

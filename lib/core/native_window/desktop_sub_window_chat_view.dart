@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/chat/data/models/chat_message.dart' as domain;
 import '../../features/chat/presentation/message_content/chat_message_content_renderer.dart';
+import '../browser/app_webview_page.dart';
 import '../services/file/attachment_transfer_service.dart';
-import '../services/window_service.dart';
 import '../media/media_preview.dart';
 import '../config/app_environment.dart';
 import '../utils/api_url_resolver.dart';
@@ -626,9 +626,7 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
         onAttachmentOpen: () => _messageAction(message, 'open'),
         onAttachmentSaveAs: () => _messageAction(message, 'saveAs'),
         onLinkTap:
-            () => ref
-                .read(windowServiceProvider)
-                .openWebBrowser(url: message.mediaUrl ?? ''),
+            () => AppWebViewPage.open(context, url: message.mediaUrl ?? ''),
         imageBytes: null,
         uploadProgress: null,
         apiBaseUrl: ref.read(appEnvironmentProvider).apiBaseUrl,

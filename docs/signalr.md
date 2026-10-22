@@ -63,6 +63,24 @@ gateway.events.forCommand(SignalRCommand.messageCreated).listen((event) async {
 登录页无限等待。该行为与 [Microsoft SignalR 客户端文档](https://learn.microsoft.com/en-us/aspnet/core/signalr/javascript-client?view=aspnetcore-10.0)
 描述的重连模型一致。
 
+## 鉴权与致命错误熔断机制（Circuit Breaker）
+
+SignalR 连接与长连接重连涉及敏感的 Access Token 校验，必须实行严格的断路保护，避免引发 401 重试风暴：
+
+1. **预判性续期（Proactive Token Refresh）**：
+   - 每次握手或重连时，`accessTokenFactory` 会先通过 `shouldRefreshJwt(token)` 检测当前 Token。
+   - 若有效时间已不足 5 分钟，在向服务端发起 WebSocket 请求前，先主动执行一次 `_refreshToken()`。
+   - 续期统一调用全局单例 `OpenIdConnectAuthRepository.refreshSession()`，避免与并发的业务 API 产生冲突。
+2. **致命凭据错误（Fatal Auth Errors）识别**：
+   - 严格区分“网络临时抖动/超时（Transient Network Errors）”与“凭据失效/被拒（Fatal Errors）”。
+   - 致命错误包括：`TokenRefreshRejectedException`（如 `invalid_grant: The specified refresh token has already been redeemed`、`missing_refresh_token`、`session_signed_out`）。
+3. **断路器熔断行为**：
+   - 一旦捕获到致命凭据错误，**必须立即终止自动重连与握手流程**，返回空 Token 并异步触发 `sessionInvalidator.invalidate(reason: ...)`。
+   - 严禁携带已知失效的 Token 重复建立连接，严禁无限循环重试。
+4. **架构解耦要求**：
+   - `SignalRNetcoreGateway` 严禁反向依赖 `AuthController`。
+   - 会话失效回调必须通过 `SessionInvalidator` 解耦注入，保证 Riverpod 状态图单向无环，防止抛出 `CircularDependencyError`。
+
 ## 平台说明
 
 当前项目锁定 `signalr_netcore` 1.3.6，以兼容已安装的 Dart 2.19 SDK。因此 IO

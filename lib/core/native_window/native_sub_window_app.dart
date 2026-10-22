@@ -425,7 +425,11 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           return false;
         case 'undock_from_parent':
           debugPrint('[BrowserDock SubWindow] received undock_from_parent');
-          final success = await WindowsWindowAdapter.undockFromParent();
+          final args = call.arguments as Map?;
+          final showWindow = args?['showWindow'] as bool? ?? true;
+          final success = await WindowsWindowAdapter.undockFromParent(
+            showWindow: showWindow,
+          );
           debugPrint(
             '[BrowserDock SubWindow] undockFromParent native result=$success',
           );
@@ -570,9 +574,10 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
     switch (_currentPayload.type) {
       case SubWindowType.profileCard:
         final rawMember = _currentPayload.extra?['profileSubject'];
-        final initialSubject = rawMember is Map
-            ? ProfileSubject.fromMap(Map<String, dynamic>.from(rawMember))
-            : null;
+        final initialSubject =
+            rawMember is Map
+                ? ProfileSubject.fromMap(Map<String, dynamic>.from(rawMember))
+                : null;
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.surface,
           body: DesktopProfileCardView(
