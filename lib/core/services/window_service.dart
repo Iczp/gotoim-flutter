@@ -255,7 +255,7 @@ class DefaultWindowService implements WindowService {
   final TrayGroupedUnreadState Function()? traySnapshotProvider;
   static const _mainChannel = WindowMethodChannel(
     'gotoim/ipc_to_main',
-    mode: ChannelMode.bidirectional,
+    mode: ChannelMode.unidirectional,
   );
   Future<void> _requestMain(Map<String, dynamic> arguments) async {
     await _mainChannel.invokeMethod('open_window', arguments);
@@ -299,7 +299,7 @@ class DefaultWindowService implements WindowService {
     try {
       const mainIpcChannel = WindowMethodChannel(
         'gotoim/ipc_to_main',
-        mode: ChannelMode.bidirectional,
+        mode: ChannelMode.unidirectional,
       );
       mainIpcChannel.setMethodCallHandler((call) async {
         switch (call.method) {
@@ -937,6 +937,7 @@ class DefaultWindowService implements WindowService {
 
   @override
   Future<Uint8List?> captureScreenInteractive({bool hideMainWindow = true}) async {
+    _ensureIpcInitialized();
     if (isSubWindow) {
       debugPrint('[WindowService] 子窗口不支持直接发起全局截屏');
       return null;

@@ -90,7 +90,7 @@ class _DesktopScreenCaptureViewState
   // IPC 通道
   static const _mainIpcChannel = WindowMethodChannel(
     'gotoim/ipc_to_main',
-    mode: ChannelMode.bidirectional,
+    mode: ChannelMode.unidirectional,
   );
 
   final FocusNode _focusNode = FocusNode();
@@ -683,12 +683,33 @@ class _DesktopScreenCaptureViewState
     if (_cropRect == null) return;
     try {
       final imageBytes = await _exportCroppedImage();
+      final clipboard = ref.read(clipboardServiceProvider);
+      await clipboard.copyImage(imageBytes);
       await _mainIpcChannel.invokeMethod('screen_capture_result', {
         'bytes': imageBytes.toList(),
       });
       await WindowsWindowAdapter.hide();
     } catch (e) {
       debugPrint('[DesktopScreenCaptureView] 确认导出失败: $e');
+    }
+  }
+
+  int _lastClickTime = 0;
+  Offset? _lastClickPos;
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (_cropRect != null && _cropRect!.contains(event.localPosition)) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (_lastClickPos != null &&
+          (event.localPosition - _lastClickPos!).distance < 12 &&
+          (now - _lastClickTime) < 350) {
+        _lastClickTime = 0;
+        _lastClickPos = null;
+        _confirmAndSend();
+        return;
+      }
+      _lastClickTime = now;
+      _lastClickPos = event.localPosition;
     }
   }
 
@@ -810,12 +831,14 @@ class _DesktopScreenCaptureViewState
       child: MouseRegion(
         cursor: _cursor,
         onHover: _onHover,
-        child: GestureDetector(
-          onPanStart: _onPanStart,
-          onPanUpdate: _onPanUpdate,
-          onPanEnd: _onPanEnd,
-          onDoubleTap: _confirmAndSend,
-          child: Stack(
+        child: Listener(
+          onPointerDown: _onPointerDown,
+          child: GestureDetector(
+            onPanStart: _onPanStart,
+            onPanUpdate: _onPanUpdate,
+            onPanEnd: _onPanEnd,
+            onDoubleTap: _confirmAndSend,
+            child: Stack(
             children: [
               // 1. 全屏底图与遮罩 CustomPaint
               Positioned.fill(
@@ -886,8 +909,9 @@ class _DesktopScreenCaptureViewState
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildFloatingToolbar() {
     final crop = _cropRect!;

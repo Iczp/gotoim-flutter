@@ -74,7 +74,7 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
 
     _mainIpcChannel = const WindowMethodChannel(
       'gotoim/ipc_to_main',
-      mode: ChannelMode.bidirectional,
+      mode: ChannelMode.unidirectional,
     );
 
     _subWindowChatController = SubWindowChatController(

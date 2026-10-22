@@ -17,8 +17,10 @@ import '../../core/widgets/app_badge.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../features/app_update/application/app_update_service.dart';
 import '../../features/home/presentation/home_sections.dart';
+import '../app_navigation.dart';
 import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/presentation/chat_owner_drawer.dart';
+import '../../features/session/presentation/desktop_session_split_view.dart';
 import '../../features/workbench/application/workbench_layout_notifier.dart';
 import '../layout/app_breakpoints.dart';
 import 'desktop_dock_rail.dart';
@@ -54,6 +56,8 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleAppWideKeyEvent);
+    WindowsWindowAdapter.onHotkey = _handleHotkeyAction;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WindowsWindowAdapter.setupCustomTitleBar();
     });
@@ -87,6 +91,93 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
           .read(appUpdateServiceProvider)
           .checkUpdate(silent: true, context: context);
     });
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleAppWideKeyEvent);
+    if (WindowsWindowAdapter.onHotkey == _handleHotkeyAction) {
+      WindowsWindowAdapter.onHotkey = null;
+    }
+    super.dispose();
+  }
+
+  void _handleHotkeyAction(String action) {
+    if (!mounted) return;
+    if (action == 'screenshot') {
+      _triggerScreenshot();
+    } else if (action == 'toggle_app') {
+      _handleGlobalAppToggle();
+    }
+  }
+
+  bool _handleAppWideKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final isAlt = HardwareKeyboard.instance.isAltPressed;
+    if (isAlt && event.logicalKey == LogicalKeyboardKey.keyA) {
+      _triggerScreenshot();
+      return true;
+    }
+    if (isAlt && event.logicalKey == LogicalKeyboardKey.keyW) {
+      _handleGlobalAppToggle();
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _triggerScreenshot() async {
+    try {
+      final windowService = ref.read(windowServiceProvider);
+      await windowService.captureScreenInteractive(hideMainWindow: true);
+    } catch (e) {
+      debugPrint('[ApplicationShell] 触发截屏失败: $e');
+    }
+  }
+
+  Future<void> _handleGlobalAppToggle() async {
+    final controller = ref.read(sessionListControllerProvider);
+    final totalUnread = controller.totalUnreadCount;
+    if (totalUnread > 0) {
+      // 1. 若当前主窗口最小化或处于后台，激活并置顶
+      await WindowsWindowAdapter.bringToFront();
+      // 2. 切换至消息 Tab
+      _select(HomeSection.messages);
+
+      // 3. 寻找未读会话并激活（若有多个未读，轮流循环切换）
+      final unreadSessions =
+          controller.sessions.where((s) => s.unreadCount > 0).toList();
+      if (unreadSessions.isNotEmpty) {
+        final currentSelectedId =
+            ref.read(selectedDesktopSessionUnitIdProvider);
+        final currentIndex =
+            unreadSessions.indexWhere((s) => s.id == currentSelectedId);
+        final nextIndex =
+            currentIndex >= 0 ? (currentIndex + 1) % unreadSessions.length : 0;
+        final targetSession = unreadSessions[nextIndex];
+
+        final isNativeDesktop =
+            !kIsWeb &&
+            (defaultTargetPlatform == TargetPlatform.windows ||
+                defaultTargetPlatform == TargetPlatform.macOS ||
+                defaultTargetPlatform == TargetPlatform.linux);
+
+        if (isNativeDesktop) {
+          ref
+              .read(selectedDesktopSessionUnitIdProvider.notifier)
+              .select(targetSession.id);
+        } else if (mounted) {
+          SafeChatNavigator.pushChat(
+            context,
+            '/chat/${Uri.encodeComponent(targetSession.id)}'
+            '?ownerId=${targetSession.ownerId ?? 0}'
+            '&title=${Uri.encodeQueryComponent(targetSession.title)}',
+          );
+        }
+      }
+    } else {
+      // 没有新消息时，切换 显示/隐藏 应用
+      await WindowsWindowAdapter.toggleVisibility();
+    }
   }
 
   void _select(HomeSection section) {
@@ -458,33 +549,41 @@ class _DesktopMainWindowTitleBarState
         ),
         child: Row(
           children: [
-            const Icon(
-              Icons.chat_bubble_rounded,
-              size: 15,
-              color: Color(0xFF07C160),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'Goto IM',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white70 : Colors.black87,
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.chat_bubble_rounded,
+                    size: 15,
+                    color: Color(0xFF07C160),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Goto IM',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             // 最小化按钮
-            IconButton(
+            _WindowButton(
               icon: const Icon(Icons.remove_rounded, size: 14),
               tooltip: '最小化',
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               onPressed: () => WindowsWindowAdapter.minimize(),
             ),
             const SizedBox(width: 2),
             // 最大化/还原按钮
-            IconButton(
+            _WindowButton(
               icon: Icon(
                 _isMaximized
                     ? Icons.filter_none_rounded
@@ -492,9 +591,6 @@ class _DesktopMainWindowTitleBarState
                 size: 13,
               ),
               tooltip: _isMaximized ? '还原' : '最大化',
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               onPressed: () {
                 WindowsWindowAdapter.toggleMaximize();
                 if (mounted) {
@@ -506,15 +602,57 @@ class _DesktopMainWindowTitleBarState
             ),
             const SizedBox(width: 2),
             // 关闭按钮
-            IconButton(
+            _WindowButton(
               icon: const Icon(Icons.close_rounded, size: 15),
               tooltip: '关闭',
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              isClose: true,
               onPressed: () => WindowsWindowAdapter.close(),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WindowButton extends StatelessWidget {
+  const _WindowButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.isClose = false,
+  });
+
+  final Widget icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final bool isClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(4),
+        hoverColor: isClose
+            ? const Color(0xFFE81123)
+            : (isDark ? Colors.white12 : Colors.black12),
+        child: SizedBox(
+          width: 28,
+          height: 24,
+          child: Center(
+            child: IconTheme(
+              data: IconThemeData(
+                size: 14,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              child: icon,
+            ),
+          ),
         ),
       ),
     );

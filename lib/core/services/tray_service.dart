@@ -312,7 +312,7 @@ class SubWindowTrayService implements TrayService {
   const SubWindowTrayService();
   static const _channel = WindowMethodChannel(
     'gotoim/ipc_to_main',
-    mode: ChannelMode.bidirectional,
+    mode: ChannelMode.unidirectional,
   );
   @override
   bool get isSupported =>

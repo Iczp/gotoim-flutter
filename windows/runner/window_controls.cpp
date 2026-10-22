@@ -287,6 +287,16 @@ class WindowControls : public flutter::Plugin {
             if (bottom) return HTBOTTOM;
             return HTCLIENT;
           }
+          if (hwnd == Window() && message == WM_HOTKEY) {
+            if (wparam == 9001) {
+              channel_->InvokeMethod("hotkey", std::make_unique<flutter::EncodableValue>("screenshot"));
+              return 0;
+            }
+            if (wparam == 9002) {
+              channel_->InvokeMethod("hotkey", std::make_unique<flutter::EncodableValue>("toggle_app"));
+              return 0;
+            }
+          }
           if (hwnd == Window() && message == kTrayCallback) {
             if (lparam == WM_LBUTTONUP) TrayEvent("left");
             if (lparam == WM_RBUTTONUP || lparam == WM_CONTEXTMENU) ShowTrayMenu();
@@ -407,6 +417,16 @@ class WindowControls : public flutter::Plugin {
       } else if (method == "restore") {
         ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
         SetForegroundWindow(hwnd);
+      } else if (method == "toggleVisibility") {
+        if (IsIconic(hwnd) || !IsWindowVisible(hwnd) || GetForegroundWindow() != hwnd) {
+          ShowWindow(hwnd, SW_RESTORE);
+          SetForegroundWindow(hwnd);
+          result->Success(flutter::EncodableValue(true));
+        } else {
+          ShowWindow(hwnd, SW_MINIMIZE);
+          result->Success(flutter::EncodableValue(false));
+        }
+        return;
       } else if (method == "hide") {
         if (is_modal_ && g_main_window && IsWindow(g_main_window)) {
           EnableWindow(g_main_window, TRUE);
@@ -686,6 +706,10 @@ class WindowControls : public flutter::Plugin {
     });
   }
   ~WindowControls() override {
+    if (Window() == g_main_window && g_main_window) {
+      UnregisterHotKey(g_main_window, 9001);
+      UnregisterHotKey(g_main_window, 9002);
+    }
     if (is_modal_ && g_main_window && IsWindow(g_main_window)) {
       EnableWindow(g_main_window, TRUE);
       SetForegroundWindow(g_main_window);
@@ -757,6 +781,8 @@ class WindowControls : public flutter::Plugin {
       if (rc.left <= 20 && rc.top <= 20) {
         CenterWindowOnMonitor(hwnd, nullptr);
       }
+      RegisterHotKey(hwnd, 9001, MOD_ALT | 0x4000, 'A');
+      RegisterHotKey(hwnd, 9002, MOD_ALT | 0x4000, 'W');
     }
   }
   flutter::PluginRegistrarWindows* registrar_;

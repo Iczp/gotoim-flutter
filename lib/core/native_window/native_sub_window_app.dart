@@ -278,7 +278,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
 
     _mainIpcChannel = const WindowMethodChannel(
       'gotoim/ipc_to_main',
-      mode: ChannelMode.bidirectional,
+      mode: ChannelMode.unidirectional,
     );
 
     widget.controller?.setWindowMethodHandler((call) async {

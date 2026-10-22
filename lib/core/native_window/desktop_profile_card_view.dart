@@ -47,7 +47,7 @@ class _DesktopProfileCardViewState
     _subject = widget.initialSubject;
     _mainIpcChannel = const WindowMethodChannel(
       'gotoim/ipc_to_main',
-      mode: ChannelMode.bidirectional,
+      mode: ChannelMode.unidirectional,
     );
 
     Future<dynamic> handleMethodCall(MethodCall call) async {

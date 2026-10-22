@@ -9,6 +9,7 @@ class WindowsWindowAdapter {
   static bool _maximized = false;
   static Future<void> Function()? onCloseRequested;
   static void Function(String event)? onTrayEvent;
+  static void Function(String action)? onHotkey;
   static bool get isWindows =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
@@ -32,6 +33,9 @@ class WindowsWindowAdapter {
       if (call.method == 'closeRequested') await onCloseRequested?.call();
       if (call.method == 'trayEvent' && call.arguments is String) {
         onTrayEvent?.call(call.arguments as String);
+      }
+      if (call.method == 'hotkey' && call.arguments is String) {
+        onHotkey?.call(call.arguments as String);
       }
     });
     await _invoke('configure');
@@ -79,6 +83,10 @@ class WindowsWindowAdapter {
 
   static Future<void> bringToFront() async {
     await _invoke('restore');
+  }
+
+  static Future<bool?> toggleVisibility() async {
+    return _invoke('toggleVisibility');
   }
 
   static Future<void> close() async {
