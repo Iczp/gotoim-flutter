@@ -14,6 +14,7 @@ import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/data/models/chat_owner.dart';
 import '../../features/session/data/session_change_bus.dart';
 import '../../features/settings/presentation/desktop_settings_window.dart';
+import '../browser/desktop_browser_dock_controller.dart';
 import '../browser/desktop_browser_window.dart';
 import '../media/media_preview.dart';
 import '../native_window/native_window_payload.dart';
@@ -466,6 +467,28 @@ class DefaultWindowService implements WindowService {
           case 'focus_main':
             await bringToFront('main');
             return true;
+          case 'request_dock_browser':
+            final dockArgs = call.arguments as Map?;
+            final dockUrl = dockArgs?['url'] as String?;
+            final dockTitle = dockArgs?['title'] as String?;
+            final container = rootProviderContainer;
+            if (container != null) {
+              await container.read(desktopBrowserDockProvider.notifier).requestDock(
+                url: dockUrl,
+                title: dockTitle,
+              );
+            }
+            return true;
+
+          case 'request_undock_browser':
+            final undockContainer = rootProviderContainer;
+            if (undockContainer != null) {
+              await undockContainer
+                  .read(desktopBrowserDockProvider.notifier)
+                  .requestUndock();
+            }
+            return true;
+
           case 'switch_owner':
             final args = call.arguments as Map?;
             final ownerId = (args?['ownerId'] as num?)?.toInt();
@@ -635,6 +658,64 @@ class DefaultWindowService implements WindowService {
       debugPrint(
         '[WindowService] bringToFront: $targetId (title=${record.title})',
       );
+    }
+  }
+
+  /// 向浏览器子窗口下发吸附挂载到主窗口的命令
+  Future<bool> sendBrowserDockCommand({
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+  }) async {
+    const targetId = 'tool:browser';
+    final controller = _nativeControllers[targetId];
+    if (controller == null) return false;
+    try {
+      final res = await controller.invokeMethod<bool>('dock_to_parent', {
+        'x': x,
+        'y': y,
+        'width': width,
+        'height': height,
+      });
+      return res ?? false;
+    } catch (e) {
+      debugPrint('[WindowService] sendBrowserDockCommand failed: $e');
+      return false;
+    }
+  }
+
+  /// 向浏览器子窗口下发更新已吸附矩形尺寸与坐标的命令
+  Future<void> sendBrowserUpdateBoundsCommand({
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+  }) async {
+    const targetId = 'tool:browser';
+    final controller = _nativeControllers[targetId];
+    if (controller == null) return;
+    try {
+      await controller.invokeMethod('update_docked_bounds', {
+        'x': x,
+        'y': y,
+        'width': width,
+        'height': height,
+      });
+    } catch (_) {}
+  }
+
+  /// 向浏览器子窗口下发从主窗口脱离挂载恢复为独立窗口的命令
+  Future<bool> sendBrowserUndockCommand() async {
+    const targetId = 'tool:browser';
+    final controller = _nativeControllers[targetId];
+    if (controller == null) return false;
+    try {
+      final res = await controller.invokeMethod<bool>('undock_from_parent');
+      return res ?? false;
+    } catch (e) {
+      debugPrint('[WindowService] sendBrowserUndockCommand failed: $e');
+      return false;
     }
   }
 

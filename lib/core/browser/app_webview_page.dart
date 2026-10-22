@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'desktop_browser_dock_controller.dart';
 import 'desktop_browser_window.dart';
 import '../floating_window/floating_window.dart';
 import '../media/media_preview.dart';
@@ -287,6 +288,13 @@ class AppWebViewPage extends ConsumerStatefulWidget {
     if (isDesktop) {
       try {
         final container = ProviderScope.containerOf(context, listen: false);
+        if (!kIsWeb && Platform.isWindows) {
+          container.read(desktopBrowserDockProvider.notifier).requestDock(
+            url: url,
+            title: title,
+          );
+          return Future<void>.value();
+        }
         final windowService = container.read(windowServiceProvider);
         return windowService.openWebBrowser(
           url: url,

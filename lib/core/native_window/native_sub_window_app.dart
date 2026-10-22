@@ -373,6 +373,57 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         case 'hide_screen_capture':
           await WindowsWindowAdapter.hide();
           return true;
+        case 'dock_to_parent':
+          final dockArgs = call.arguments as Map?;
+          if (dockArgs != null) {
+            final x = (dockArgs['x'] as num?)?.toInt() ?? 0;
+            final y = (dockArgs['y'] as num?)?.toInt() ?? 0;
+            final w = (dockArgs['width'] as num?)?.toInt() ?? 400;
+            final h = (dockArgs['height'] as num?)?.toInt() ?? 600;
+            final success = await WindowsWindowAdapter.dockToParent(
+              x: x,
+              y: y,
+              width: w,
+              height: h,
+            );
+            if (success) {
+              if (mounted) {
+                setState(() => _visible = true);
+              }
+              if (_childMethodHandler != null) {
+                await _childMethodHandler!(
+                  const MethodCall('set_dock_mode', true),
+                );
+              }
+            }
+            return success;
+          }
+          return false;
+        case 'update_docked_bounds':
+          final boundsArgs = call.arguments as Map?;
+          if (boundsArgs != null) {
+            final x = (boundsArgs['x'] as num?)?.toInt() ?? 0;
+            final y = (boundsArgs['y'] as num?)?.toInt() ?? 0;
+            final w = (boundsArgs['width'] as num?)?.toInt() ?? 400;
+            final h = (boundsArgs['height'] as num?)?.toInt() ?? 600;
+            return await WindowsWindowAdapter.updateDockedBounds(
+              x: x,
+              y: y,
+              width: w,
+              height: h,
+            );
+          }
+          return false;
+        case 'undock_from_parent':
+          final success = await WindowsWindowAdapter.undockFromParent();
+          if (success) {
+            if (_childMethodHandler != null) {
+              await _childMethodHandler!(
+                const MethodCall('set_dock_mode', false),
+              );
+            }
+          }
+          return success;
         case 'tray_flyout':
           await _refreshTraySnapshot();
           await WindowsWindowAdapter.showTrayFlyout();

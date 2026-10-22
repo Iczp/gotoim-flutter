@@ -8,6 +8,7 @@
 #include "resource.h"
 #include <string>
 #include <memory>
+#include <unordered_map>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -20,6 +21,16 @@
 #endif
 
 static HWND g_main_window = nullptr;
+
+struct WindowStateSnapshot {
+  LONG_PTR style = 0;
+  LONG_PTR ex_style = 0;
+  HWND original_parent = nullptr;
+  WINDOWPLACEMENT placement{ sizeof(WINDOWPLACEMENT) };
+  bool is_docked = false;
+};
+
+static std::unordered_map<HWND, WindowStateSnapshot> g_dock_snapshots;
 
 void SetMainWindowHandle(HWND hwnd) {
   g_main_window = hwnd;
@@ -697,6 +708,120 @@ class WindowControls : public flutter::Plugin {
         const UINT dpi = GetDpiForWindow(hwnd);
         result_map[flutter::EncodableValue("dpi")] = flutter::EncodableValue(static_cast<int32_t>(dpi));
         result->Success(flutter::EncodableValue(result_map));
+        return;
+      } else if (method == "dockToParent") {
+        if (!g_main_window || !IsWindow(g_main_window) || hwnd == g_main_window) {
+          result->Error("MAIN_WINDOW_UNAVAILABLE", "Cannot dock: main window not available");
+          return;
+        }
+        const auto* args = call.arguments()
+            ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+        if (!args) {
+          result->Error("INVALID_ARGS", "dockToParent requires bounds arguments");
+          return;
+        }
+        const auto read_num = [args](const char* key, int def) -> int {
+          auto it = args->find(flutter::EncodableValue(key));
+          if (it != args->end()) {
+            if (const auto* val_i = std::get_if<int32_t>(&it->second)) return *val_i;
+            if (const auto* val_l = std::get_if<int64_t>(&it->second)) return static_cast<int>(*val_l);
+            if (const auto* val_d = std::get_if<double>(&it->second)) return static_cast<int>(*val_d);
+          }
+          return def;
+        };
+        const int x = read_num("x", 0);
+        const int y = read_num("y", 0);
+        const int w = read_num("width", 400);
+        const int h = read_num("height", 600);
+
+        // 1. 保存快照（仅在未挂载时保存原始状态）
+        if (g_dock_snapshots.find(hwnd) == g_dock_snapshots.end()) {
+          WindowStateSnapshot snapshot;
+          snapshot.style = GetWindowLongPtr(hwnd, GWL_STYLE);
+          snapshot.ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+          snapshot.original_parent = GetParent(hwnd);
+          GetWindowPlacement(hwnd, &snapshot.placement);
+          snapshot.is_docked = true;
+          g_dock_snapshots[hwnd] = snapshot;
+        }
+
+        // 2. 剥离独立窗口样式，变更为 WS_CHILD
+        LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+        style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+        style |= (WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
+        SetWindowLongPtr(hwnd, GWL_STYLE, style);
+
+        LONG_PTR ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        ex_style &= ~WS_EX_APPWINDOW;
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex_style);
+
+        // 3. 执行 SetParent，校验错误
+        SetLastError(ERROR_SUCCESS);
+        HWND prev_parent = SetParent(hwnd, g_main_window);
+        if (prev_parent == nullptr && GetLastError() != ERROR_SUCCESS) {
+          // 挂载失败回滚
+          const auto& s = g_dock_snapshots[hwnd];
+          SetWindowLongPtr(hwnd, GWL_STYLE, s.style);
+          SetWindowLongPtr(hwnd, GWL_EXSTYLE, s.ex_style);
+          g_dock_snapshots.erase(hwnd);
+          result->Error("SET_PARENT_FAILED", "Win32 SetParent failed");
+          return;
+        }
+
+        // 4. 定位并显示
+        SetWindowPos(hwnd, HWND_TOP, x, y, w, h,
+                     SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        result->Success(flutter::EncodableValue(true));
+        return;
+      } else if (method == "updateDockedBounds") {
+        const auto* args = call.arguments()
+            ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+        if (args) {
+          const auto read_num = [args](const char* key, int def) -> int {
+            auto it = args->find(flutter::EncodableValue(key));
+            if (it != args->end()) {
+              if (const auto* val_i = std::get_if<int32_t>(&it->second)) return *val_i;
+              if (const auto* val_l = std::get_if<int64_t>(&it->second)) return static_cast<int>(*val_l);
+              if (const auto* val_d = std::get_if<double>(&it->second)) return static_cast<int>(*val_d);
+            }
+            return def;
+          };
+          const int x = read_num("x", 0);
+          const int y = read_num("y", 0);
+          const int w = read_num("width", 400);
+          const int h = read_num("height", 600);
+          SetWindowPos(hwnd, nullptr, x, y, w, h,
+                       SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        result->Success(flutter::EncodableValue(true));
+        return;
+      } else if (method == "undockFromParent") {
+        auto it = g_dock_snapshots.find(hwnd);
+        if (it != g_dock_snapshots.end() && it->second.is_docked) {
+          const auto& s = it->second;
+          // 1. 恢复父窗口
+          SetParent(hwnd, s.original_parent);
+
+          // 2. 严格恢复保存的原始 style 和 ex_style
+          SetWindowLongPtr(hwnd, GWL_STYLE, s.style);
+          SetWindowLongPtr(hwnd, GWL_EXSTYLE, s.ex_style);
+
+          // 3. 恢复原始位置与状态并置顶激活
+          SetWindowPlacement(hwnd, &s.placement);
+          SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                       SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+          SetForegroundWindow(hwnd);
+
+          g_dock_snapshots.erase(it);
+          result->Success(flutter::EncodableValue(true));
+          return;
+        }
+        result->Success(flutter::EncodableValue(false));
+        return;
+      } else if (method == "isDocked") {
+        auto it = g_dock_snapshots.find(hwnd);
+        bool docked = (it != g_dock_snapshots.end() && it->second.is_docked);
+        result->Success(flutter::EncodableValue(docked));
         return;
       } else {
         result->NotImplemented();

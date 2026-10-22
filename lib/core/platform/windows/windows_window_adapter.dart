@@ -164,4 +164,71 @@ class WindowsWindowAdapter {
       return null;
     }
   }
+
+  /// 将当前窗口作为 WS_CHILD 嵌入挂载到主窗口的指定客户区矩形中
+  static Future<bool> dockToParent({
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+  }) async {
+    if (!isWindows) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('dockToParent', {
+        'x': x,
+        'y': y,
+        'width': width,
+        'height': height,
+      });
+      return res ?? false;
+    } catch (e) {
+      debugPrint('[WindowsWindowAdapter] dockToParent failed: $e');
+      return false;
+    }
+  }
+
+  /// 更新已吸附子窗口在主窗口客户区内的相对位置与尺寸
+  static Future<bool> updateDockedBounds({
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+  }) async {
+    if (!isWindows) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('updateDockedBounds', {
+        'x': x,
+        'y': y,
+        'width': width,
+        'height': height,
+      });
+      return res ?? false;
+    } catch (e) {
+      debugPrint('[WindowsWindowAdapter] updateDockedBounds failed: $e');
+      return false;
+    }
+  }
+
+  /// 从主窗口脱离挂载，恢复为独立的 Windows 系统顶层窗口
+  static Future<bool> undockFromParent() async {
+    if (!isWindows) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('undockFromParent');
+      return res ?? false;
+    } catch (e) {
+      debugPrint('[WindowsWindowAdapter] undockFromParent failed: $e');
+      return false;
+    }
+  }
+
+  /// 查询当前窗口是否已被吸附/嵌入到主窗口中
+  static Future<bool> isDocked() async {
+    if (!isWindows) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('isDocked');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

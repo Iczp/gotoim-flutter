@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/browser/desktop_browser_dock_controller.dart';
 import '../../../core/media/media_preview.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../../../core/services/screen_capture_service.dart';
@@ -90,6 +91,61 @@ class _DesktopWindowsDiagnosticsPageState
       _lastResult = '参数已重置';
       _error = null;
     });
+  }
+
+  Future<void> _testDockBrowserToChat() async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中...';
+      _error = null;
+    });
+    try {
+      final dockNotifier = ref.read(desktopBrowserDockProvider.notifier);
+      await dockNotifier.requestDock(
+        url: _urlController.text.trim(),
+        title: _urlTitleController.text.trim(),
+      );
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult =
+            '已请求将浏览器吸附挂载到主窗口聊天右侧\nURL: ${_urlController.text}\n当前状态: ${ref.read(desktopBrowserDockProvider).status.name}';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
+  }
+
+  Future<void> _testUndockBrowserFromChat() async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中...';
+      _error = null;
+    });
+    try {
+      final dockNotifier = ref.read(desktopBrowserDockProvider.notifier);
+      await dockNotifier.requestUndock();
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult =
+            '已请求将浏览器从主窗口脱离挂载恢复为独立窗口\n当前状态: ${ref.read(desktopBrowserDockProvider).status.name}';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
   }
 
   Future<void> _testOpenBrowser() async {
@@ -1335,8 +1391,18 @@ class _DesktopWindowsDiagnosticsPageState
                       ),
                       FilledButton.tonalIcon(
                         icon: const Icon(Icons.open_in_browser_rounded, size: 16),
-                        label: const Text('打开当前输入 URL 浏览器窗口'),
+                        label: const Text('打开独立浏览器窗口'),
                         onPressed: _testOpenBrowser,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.vertical_align_bottom_rounded, size: 16),
+                        label: const Text('嵌入挂载到聊天右侧 (微信同款)'),
+                        onPressed: _testDockBrowserToChat,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                        label: const Text('从聊天右侧弹出为独立窗口'),
+                        onPressed: _testUndockBrowserFromChat,
                       ),
                     ],
                   ),

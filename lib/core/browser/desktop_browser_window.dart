@@ -87,6 +87,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   int _activeTabIndex = 0;
   bool _isPinned = false;
   bool _isMaximized = false;
+  bool _isDocked = false;
   final ScrollController _tabScrollController = ScrollController();
 
   BrowserTabItem get _currentTab =>
@@ -108,6 +109,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     if (widget.isSubWindow) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         WindowsWindowAdapter.setupCustomTitleBar();
+        WindowsWindowAdapter.isDocked().then((docked) {
+          if (mounted && docked != _isDocked) {
+            setState(() => _isDocked = docked);
+          }
+        });
         if (mounted) {
           setState(() {
             _isMaximized = WindowsWindowAdapter.isMaximized();
@@ -135,6 +141,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   Future<dynamic> _handleWindowMethodCall(MethodCall call) async {
+    if (call.method == 'set_dock_mode') {
+      final isDocked = call.arguments == true;
+      if (mounted && _isDocked != isDocked) {
+        setState(() => _isDocked = isDocked);
+      }
+      return true;
+    }
     if (call.method == 'browser_add_tab') {
       final args = call.arguments;
       if (args is Map && mounted) {
@@ -227,6 +240,15 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   void _closeWindow() {
+    if (_isDocked) {
+      const mainChannel = WindowMethodChannel(
+        'gotoim/ipc_to_main',
+        mode: ChannelMode.unidirectional,
+      );
+      mainChannel.invokeMethod('request_undock_browser');
+      WindowsWindowAdapter.close();
+      return;
+    }
     if (widget.onClose != null) {
       widget.onClose!();
     } else if (widget.isSubWindow) {
@@ -442,12 +464,12 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onPanStart: (_) {
-        if (widget.isSubWindow) {
+        if (widget.isSubWindow && !_isDocked) {
           WindowsWindowAdapter.startDragging();
         }
       },
       onDoubleTap: () {
-        if (widget.isSubWindow) {
+        if (widget.isSubWindow && !_isDocked) {
           WindowsWindowAdapter.toggleMaximize();
           if (mounted) {
             setState(() {
@@ -465,24 +487,25 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         ),
         child: Row(
           children: [
-            // 置顶图标
-            IconButton(
-              icon: Icon(
-                _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                size: 16,
-                color: _isPinned ? const Color(0xFF07C160) : Colors.grey,
+            // 置顶图标 (仅独立窗口模式显示)
+            if (!_isDocked)
+              IconButton(
+                icon: Icon(
+                  _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                  size: 16,
+                  color: _isPinned ? const Color(0xFF07C160) : Colors.grey,
+                ),
+                tooltip: _isPinned ? '取消置顶' : '固定置顶',
+                visualDensity: VisualDensity.compact,
+                onPressed: () {
+                  setState(() {
+                    _isPinned = !_isPinned;
+                  });
+                  if (widget.isSubWindow) {
+                    WindowsWindowAdapter.setAlwaysOnTop(_isPinned);
+                  }
+                },
               ),
-              tooltip: _isPinned ? '取消置顶' : '固定置顶',
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                setState(() {
-                  _isPinned = !_isPinned;
-                });
-                if (widget.isSubWindow) {
-                  WindowsWindowAdapter.setAlwaysOnTop(_isPinned);
-                }
-              },
-            ),
 
             const SizedBox(width: 4),
 
@@ -645,49 +668,86 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
             const SizedBox(width: 6),
 
-            // 窗口控制按钮：最小化、最大化、关闭
-            IconButton(
-              icon: const Icon(Icons.remove_rounded, size: 16),
-              tooltip: '最小化',
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                if (widget.isSubWindow) {
-                  WindowsWindowAdapter.minimize();
-                } else {
-                  Navigator.of(context).maybePop();
-                }
-              },
-            ),
-            IconButton(
-              icon: Icon(
-                _isMaximized
-                    ? Icons.filter_none_rounded
-                    : Icons.crop_square_rounded,
-                size: 15,
+            if (_isDocked) ...[
+              // 嵌入状态下的控制按钮：弹出为独立窗口、关闭
+              IconButton(
+                icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                tooltip: '弹出为独立窗口',
+                visualDensity: VisualDensity.compact,
+                onPressed: () async {
+                  const mainChannel = WindowMethodChannel(
+                    'gotoim/ipc_to_main',
+                    mode: ChannelMode.unidirectional,
+                  );
+                  await mainChannel.invokeMethod('request_undock_browser');
+                },
               ),
-              tooltip: _isMaximized ? '还原窗口' : '最大化窗口',
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                if (widget.isSubWindow) {
-                  WindowsWindowAdapter.toggleMaximize();
-                  if (mounted) {
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 17),
+                tooltip: '关闭',
+                visualDensity: VisualDensity.compact,
+                onPressed: _closeWindow,
+              ),
+            ] else ...[
+              // 独立窗口状态下的控制按钮：嵌入到聊天窗口、最小化、最大化、关闭
+              IconButton(
+                icon: const Icon(Icons.vertical_align_bottom_rounded, size: 16),
+                tooltip: '嵌入到聊天窗口',
+                visualDensity: VisualDensity.compact,
+                onPressed: () async {
+                  const mainChannel = WindowMethodChannel(
+                    'gotoim/ipc_to_main',
+                    mode: ChannelMode.unidirectional,
+                  );
+                  await mainChannel.invokeMethod('request_dock_browser', {
+                    'url': currentTab.url,
+                    'title': currentTab.title,
+                  });
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.remove_rounded, size: 16),
+                tooltip: '最小化',
+                visualDensity: VisualDensity.compact,
+                onPressed: () {
+                  if (widget.isSubWindow) {
+                    WindowsWindowAdapter.minimize();
+                  } else {
+                    Navigator.of(context).maybePop();
+                  }
+                },
+              ),
+              IconButton(
+                icon: Icon(
+                  _isMaximized
+                      ? Icons.filter_none_rounded
+                      : Icons.crop_square_rounded,
+                  size: 15,
+                ),
+                tooltip: _isMaximized ? '还原窗口' : '最大化窗口',
+                visualDensity: VisualDensity.compact,
+                onPressed: () {
+                  if (widget.isSubWindow) {
+                    WindowsWindowAdapter.toggleMaximize();
+                    if (mounted) {
+                      setState(() {
+                        _isMaximized = WindowsWindowAdapter.isMaximized();
+                      });
+                    }
+                  } else {
                     setState(() {
-                      _isMaximized = WindowsWindowAdapter.isMaximized();
+                      _isMaximized = !_isMaximized;
                     });
                   }
-                } else {
-                  setState(() {
-                    _isMaximized = !_isMaximized;
-                  });
-                }
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.close_rounded, size: 17),
-              tooltip: '关闭窗口',
-              visualDensity: VisualDensity.compact,
-              onPressed: _closeWindow,
-            ),
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 17),
+                tooltip: '关闭窗口',
+                visualDensity: VisualDensity.compact,
+                onPressed: _closeWindow,
+              ),
+            ],
           ],
         ),
       ),

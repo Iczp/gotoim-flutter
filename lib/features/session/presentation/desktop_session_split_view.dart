@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/browser/desktop_browser_dock_controller.dart';
 import '../../../core/services/window_service.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/desktop_dialog.dart';
@@ -81,6 +82,54 @@ class _DesktopSessionSplitViewState
   void _dismissContextMenu() {
     _contextMenuEntry?.remove();
     _contextMenuEntry = null;
+  }
+
+  final GlobalKey _browserPlaceholderKey = GlobalKey();
+  bool _boundsUpdateScheduled = false;
+
+  void _scheduleBrowserBoundsUpdate() {
+    if (_boundsUpdateScheduled || !mounted) return;
+    _boundsUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _boundsUpdateScheduled = false;
+      if (!mounted) return;
+      _sendPlaceholderBoundsToNative();
+    });
+  }
+
+  void _sendPlaceholderBoundsToNative() {
+    final dockState = ref.read(desktopBrowserDockProvider);
+    if (!dockState.shouldRenderPlaceholder) return;
+
+    final renderBox =
+        _browserPlaceholderKey.currentContext?.findRenderObject()
+            as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize || !renderBox.attached) return;
+
+    final localOffset = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+
+    final viewX = (localOffset.dx * pixelRatio).round();
+    final viewY = (localOffset.dy * pixelRatio).round();
+    final width = (size.width * pixelRatio).round();
+    final height = (size.height * pixelRatio).round();
+
+    if (dockState.status == BrowserDockingStatus.docking) {
+      ref.read(desktopBrowserDockProvider.notifier).commitDock(
+        viewX: viewX,
+        viewY: viewY,
+        width: width,
+        height: height,
+      );
+    } else if (dockState.status == BrowserDockingStatus.docked) {
+      ref.read(desktopBrowserDockProvider.notifier).updateDockedBounds(
+        viewX: viewX,
+        viewY: viewY,
+        width: width,
+        height: height,
+      );
+    }
   }
 
   @override
@@ -561,6 +610,16 @@ class _DesktopSessionSplitViewState
     final dividerColor =
         isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000);
 
+    final dockState = ref.watch(desktopBrowserDockProvider);
+    ref.listen<DesktopBrowserDockState>(desktopBrowserDockProvider, (
+      prev,
+      next,
+    ) {
+      if (prev?.status != next.status || prev?.width != next.width) {
+        _scheduleBrowserBoundsUpdate();
+      }
+    });
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final totalWidth = constraints.maxWidth;
@@ -570,6 +629,10 @@ class _DesktopSessionSplitViewState
           if (effectivePaneWidth > maxPane) {
             effectivePaneWidth = maxPane;
           }
+        }
+
+        if (dockState.shouldRenderPlaceholder) {
+          _scheduleBrowserBoundsUpdate();
         }
 
         return Row(
@@ -1009,6 +1072,51 @@ class _DesktopSessionSplitViewState
                         ],
                       ),
             ),
+
+            // ── 浏览器嵌入分栏 (右侧占位与拖拽手柄) ────────────────────
+            if (dockState.shouldRenderPlaceholder) ...[
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragUpdate: (details) {
+                  final newW = dockState.width - details.delta.dx;
+                  final maxW = (totalWidth - effectivePaneWidth - 360.0).clamp(
+                    360.0,
+                    960.0,
+                  );
+                  ref
+                      .read(desktopBrowserDockProvider.notifier)
+                      .setWidth(newW, min: 360.0, max: maxW);
+                  _scheduleBrowserBoundsUpdate();
+                },
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: Container(
+                    width: 5,
+                    color: Colors.transparent,
+                    child: Center(
+                      child: Container(width: 0.5, color: dividerColor),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                key: _browserPlaceholderKey,
+                width: dockState.width,
+                child: Container(
+                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                  child:
+                      dockState.status == BrowserDockingStatus.docking
+                          ? const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                          : const SizedBox.expand(),
+                ),
+              ),
+            ],
           ],
         );
       },
