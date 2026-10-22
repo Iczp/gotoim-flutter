@@ -471,6 +471,7 @@ class DefaultWindowService implements WindowService {
             final dockArgs = call.arguments as Map?;
             final dockUrl = dockArgs?['url'] as String?;
             final dockTitle = dockArgs?['title'] as String?;
+            await bringToFront('main');
             final container = rootProviderContainer;
             if (container != null) {
               await container.read(desktopBrowserDockProvider.notifier).requestDock(
@@ -670,14 +671,22 @@ class DefaultWindowService implements WindowService {
   }) async {
     const targetId = 'tool:browser';
     final controller = _nativeControllers[targetId];
-    if (controller == null) return false;
+    if (controller == null) {
+      debugPrint('[WindowService] sendBrowserDockCommand: controller is null');
+      return false;
+    }
     try {
+      debugPrint(
+        '[WindowService] invoking dock_to_parent on controller (windowId=${controller.windowId}): '
+        '(x=$x, y=$y, w=$width, h=$height)',
+      );
       final res = await controller.invokeMethod<bool>('dock_to_parent', {
         'x': x,
         'y': y,
         'width': width,
         'height': height,
       });
+      debugPrint('[WindowService] dock_to_parent invoke completed: $res');
       return res ?? false;
     } catch (e) {
       debugPrint('[WindowService] sendBrowserDockCommand failed: $e');
@@ -709,9 +718,16 @@ class DefaultWindowService implements WindowService {
   Future<bool> sendBrowserUndockCommand() async {
     const targetId = 'tool:browser';
     final controller = _nativeControllers[targetId];
-    if (controller == null) return false;
+    if (controller == null) {
+      debugPrint('[WindowService] sendBrowserUndockCommand: controller is null');
+      return false;
+    }
     try {
+      debugPrint(
+        '[WindowService] invoking undock_from_parent on controller (windowId=${controller.windowId})',
+      );
       final res = await controller.invokeMethod<bool>('undock_from_parent');
+      debugPrint('[WindowService] undock_from_parent invoke completed: $res');
       return res ?? false;
     } catch (e) {
       debugPrint('[WindowService] sendBrowserUndockCommand failed: $e');

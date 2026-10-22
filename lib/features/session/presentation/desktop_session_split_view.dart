@@ -115,6 +115,13 @@ class _DesktopSessionSplitViewState
     final width = (size.width * pixelRatio).round();
     final height = (size.height * pixelRatio).round();
 
+    debugPrint(
+      '[BrowserDock Layout] _sendPlaceholderBoundsToNative: status=${dockState.status}, '
+      'localOffset=(${localOffset.dx.toStringAsFixed(1)}, ${localOffset.dy.toStringAsFixed(1)}), '
+      'logicalSize=(${size.width.toStringAsFixed(1)}, ${size.height.toStringAsFixed(1)}), '
+      'dpr=$pixelRatio -> physical: (x=$viewX, y=$viewY, w=$width, h=$height)',
+    );
+
     if (dockState.status == BrowserDockingStatus.docking) {
       ref.read(desktopBrowserDockProvider.notifier).commitDock(
         viewX: viewX,
@@ -1103,7 +1110,10 @@ class _DesktopSessionSplitViewState
                 key: _browserPlaceholderKey,
                 width: dockState.width,
                 child: Container(
-                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                  color:
+                      dockState.status == BrowserDockingStatus.docking
+                          ? (isDark ? const Color(0xFF1E1E1E) : Colors.white)
+                          : Colors.transparent,
                   child:
                       dockState.status == BrowserDockingStatus.docking
                           ? const Center(

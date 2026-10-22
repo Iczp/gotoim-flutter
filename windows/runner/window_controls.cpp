@@ -9,6 +9,8 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <iostream>
+#include <cstdarg>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -21,6 +23,17 @@
 #endif
 
 static HWND g_main_window = nullptr;
+static HWND g_main_child_content = nullptr;
+
+static void DockLog(const char* format, ...) {
+  char buffer[512];
+  va_list args;
+  va_start(args, format);
+  vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+  OutputDebugStringA(buffer);
+  std::cout << buffer << std::endl;
+}
 
 struct WindowStateSnapshot {
   LONG_PTR style = 0;
@@ -34,10 +47,76 @@ static std::unordered_map<HWND, WindowStateSnapshot> g_dock_snapshots;
 
 void SetMainWindowHandle(HWND hwnd) {
   g_main_window = hwnd;
+  DockLog("[BrowserDock C++] SetMainWindowHandle: 0x%p", hwnd);
 }
 
 HWND GetMainWindowHandle() {
   return g_main_window;
+}
+
+void SetMainChildContentHandle(HWND hwnd) {
+  g_main_child_content = hwnd;
+  if (hwnd && IsWindow(hwnd)) {
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    if (!(style & WS_CLIPSIBLINGS)) {
+      SetWindowLongPtr(hwnd, GWL_STYLE, style | WS_CLIPSIBLINGS);
+    }
+    DockLog("[BrowserDock C++] SetMainChildContentHandle: 0x%p (WS_CLIPSIBLINGS applied)", hwnd);
+  }
+}
+
+HWND GetMainChildContentHandle() {
+  if (g_main_child_content && IsWindow(g_main_child_content)) {
+    return g_main_child_content;
+  }
+  if (g_main_window && IsWindow(g_main_window)) {
+    return GetWindow(g_main_window, GW_CHILD);
+  }
+  return nullptr;
+}
+
+static void UpdateMainViewClipHole(int x, int y, int w, int h) {
+  HWND child_view = GetMainChildContentHandle();
+  if (!child_view || !IsWindow(child_view)) {
+    DockLog("[BrowserDock C++] UpdateMainViewClipHole: child_view is invalid");
+    return;
+  }
+
+  RECT rc_view;
+  GetClientRect(child_view, &rc_view);
+  int view_w = rc_view.right - rc_view.left;
+  int view_h = rc_view.bottom - rc_view.top;
+
+  if (view_w <= 0 || view_h <= 0 || w <= 0 || h <= 0) {
+    DockLog("[BrowserDock C++] UpdateMainViewClipHole skipped (invalid dim: view=%dx%d, hole=%dx%d)",
+            view_w, view_h, w, h);
+    return;
+  }
+
+  HRGN full_rgn = CreateRectRgn(0, 0, view_w, view_h);
+  HRGN hole_rgn = CreateRectRgn(x, y, x + w, y + h);
+  HRGN final_rgn = CreateRectRgn(0, 0, 0, 0);
+
+  CombineRgn(final_rgn, full_rgn, hole_rgn, RGN_DIFF);
+  DeleteObject(full_rgn);
+  DeleteObject(hole_rgn);
+
+  if (SetWindowRgn(child_view, final_rgn, TRUE)) {
+    DockLog("[BrowserDock C++] UpdateMainViewClipHole applied: view=%dx%d, hole=(%d, %d, %d, %d)",
+            view_w, view_h, x, y, w, h);
+  } else {
+    DockLog("[BrowserDock C++] SetWindowRgn failed on child_view=0x%p, error=%lu",
+            child_view, GetLastError());
+    DeleteObject(final_rgn);
+  }
+}
+
+static void ResetMainViewClipHole() {
+  HWND child_view = GetMainChildContentHandle();
+  if (child_view && IsWindow(child_view)) {
+    SetWindowRgn(child_view, nullptr, TRUE);
+    DockLog("[BrowserDock C++] ResetMainViewClipHole restored full rendering region");
+  }
 }
 
 void CenterWindowOnMonitor(HWND hwnd, HWND ref_hwnd = nullptr, int desired_w = 0, int desired_h = 0) {
@@ -135,6 +214,24 @@ LRESULT CALLBACK SubWindowSubclassProc(
       return 0;
     }
     case WM_NCHITTEST: {
+      HWND root = GetAncestor(hwnd, GA_ROOT);
+      if (root && root != hwnd && IsWindow(root) && !IsZoomed(root)) {
+        // 吸附模式下：如果鼠标在顶层主窗口的外围 8px 边框区域，穿透给顶层主窗口处理尺寸调整
+        const LONG_PTR root_style = GetWindowLongPtr(root, GWL_STYLE);
+        if (root_style & WS_THICKFRAME) {
+          RECT rc;
+          if (GetWindowRect(root, &rc)) {
+            const int border = 8;
+            const int sx = static_cast<short>(LOWORD(lParam));
+            const int sy = static_cast<short>(HIWORD(lParam));
+            if (sx < rc.left + border || sx >= rc.right - border ||
+                sy < rc.top + border || sy >= rc.bottom - border) {
+              return HTTRANSPARENT;
+            }
+          }
+        }
+      }
+
       if (IsZoomed(hwnd)) return DefSubclassProc(hwnd, uMsg, wParam, lParam);
       const LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
       if (!(style & WS_THICKFRAME)) return DefSubclassProc(hwnd, uMsg, wParam, lParam);
@@ -734,6 +831,15 @@ class WindowControls : public flutter::Plugin {
         const int w = read_num("width", 400);
         const int h = read_num("height", 600);
 
+        DockLog("[BrowserDock C++] dockToParent called: hwnd=0x%p, main=0x%p, (x=%d, y=%d, w=%d, h=%d)",
+                hwnd, g_main_window, x, y, w, h);
+
+        if (!g_main_window || !IsWindow(g_main_window)) {
+          DockLog("[BrowserDock C++] dockToParent failed: g_main_window is null or invalid");
+          result->Error("NO_MAIN_WINDOW", "Main window handle unavailable");
+          return;
+        }
+
         // 1. 保存快照（仅在未挂载时保存原始状态）
         if (g_dock_snapshots.find(hwnd) == g_dock_snapshots.end()) {
           WindowStateSnapshot snapshot;
@@ -743,9 +849,17 @@ class WindowControls : public flutter::Plugin {
           GetWindowPlacement(hwnd, &snapshot.placement);
           snapshot.is_docked = true;
           g_dock_snapshots[hwnd] = snapshot;
+          DockLog("[BrowserDock C++] Snapshot saved: style=0x%llx, ex_style=0x%llx, parent=0x%p",
+                  snapshot.style, snapshot.ex_style, snapshot.original_parent);
         }
 
-        // 2. 剥离独立窗口样式，变更为 WS_CHILD
+        // 2. 确保主窗口具有 WS_CLIPCHILDREN
+        LONG_PTR main_style = GetWindowLongPtr(g_main_window, GWL_STYLE);
+        if (!(main_style & WS_CLIPCHILDREN)) {
+          SetWindowLongPtr(g_main_window, GWL_STYLE, main_style | WS_CLIPCHILDREN);
+        }
+
+        // 3. 剥离独立窗口样式，变更为 WS_CHILD 并补充 WS_CLIPCHILDREN | WS_CLIPSIBLINGS
         LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
         style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
         style |= (WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
@@ -755,11 +869,12 @@ class WindowControls : public flutter::Plugin {
         ex_style &= ~WS_EX_APPWINDOW;
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex_style);
 
-        // 3. 执行 SetParent，校验错误
+        // 4. 执行 SetParent，校验错误
         SetLastError(ERROR_SUCCESS);
         HWND prev_parent = SetParent(hwnd, g_main_window);
-        if (prev_parent == nullptr && GetLastError() != ERROR_SUCCESS) {
-          // 挂载失败回滚
+        DWORD err = GetLastError();
+        if (prev_parent == nullptr && err != ERROR_SUCCESS) {
+          DockLog("[BrowserDock C++] SetParent failed! error=%lu", err);
           const auto& s = g_dock_snapshots[hwnd];
           SetWindowLongPtr(hwnd, GWL_STYLE, s.style);
           SetWindowLongPtr(hwnd, GWL_EXSTYLE, s.ex_style);
@@ -767,10 +882,66 @@ class WindowControls : public flutter::Plugin {
           result->Error("SET_PARENT_FAILED", "Win32 SetParent failed");
           return;
         }
+        DockLog("[BrowserDock C++] SetParent succeeded: prev_parent=0x%p", prev_parent);
 
-        // 4. 定位并显示
-        SetWindowPos(hwnd, HWND_TOP, x, y, w, h,
+        // 5. 坐标映射（从主 Flutter View 客户区转换到 g_main_window 客户区）
+        POINT pt = {x, y};
+        HWND child_view = GetMainChildContentHandle();
+        if (child_view && IsWindow(child_view)) {
+          MapWindowPoints(child_view, g_main_window, &pt, 1);
+        }
+        const int client_x = pt.x;
+        const int client_y = pt.y;
+
+        // 6. 计算有效尺寸：如果主窗口未最大化，确保不覆盖主窗口右侧与底部的 8px 调整边框
+        int effective_w = w;
+        int effective_h = h;
+        if (g_main_window && IsWindow(g_main_window) && !IsZoomed(g_main_window)) {
+          RECT rc_client;
+          GetClientRect(g_main_window, &rc_client);
+          const int max_w = rc_client.right - rc_client.left;
+          const int max_h = rc_client.bottom - rc_client.top;
+          const int border = 8;
+
+          if (client_x + effective_w > max_w - border) {
+            effective_w = max_w - border - client_x;
+          }
+          if (client_y + effective_h > max_h - border) {
+            effective_h = max_h - border - client_y;
+          }
+          if (effective_w < 100) effective_w = 100;
+          if (effective_h < 100) effective_h = 100;
+        }
+
+        // 7. 对主 Flutter View 设置镂空区域，防止 DirectX/Flutter 覆盖子窗口产生闪烁白屏
+        UpdateMainViewClipHole(x, y, effective_w, effective_h);
+
+        // 8. 定位子窗口并置顶在 siblings 之上
+        SetWindowPos(hwnd, HWND_TOP, client_x, client_y, effective_w, effective_h,
                      SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+        // 9. 确保子窗口内部的 Flutter View 贴合并重绘
+        HWND sub_child = GetWindow(hwnd, GW_CHILD);
+        if (sub_child && IsWindow(sub_child)) {
+          MoveWindow(sub_child, 0, 0, effective_w, effective_h, TRUE);
+          InvalidateRect(sub_child, NULL, TRUE);
+          UpdateWindow(sub_child);
+        }
+        InvalidateRect(hwnd, NULL, TRUE);
+        UpdateWindow(hwnd);
+
+        // 10. 独立浏览器切换吸附到主窗口时，确保主窗口恢复显示并激活置顶
+        if (g_main_window && IsWindow(g_main_window)) {
+          if (IsIconic(g_main_window)) {
+            ShowWindow(g_main_window, SW_RESTORE);
+          } else if (!IsWindowVisible(g_main_window)) {
+            ShowWindow(g_main_window, SW_SHOW);
+          }
+          SetForegroundWindow(g_main_window);
+        }
+
+        DockLog("[BrowserDock C++] dockToParent complete: client=(%d, %d), size=(%d, %d)",
+                client_x, client_y, effective_w, effective_h);
         result->Success(flutter::EncodableValue(true));
         return;
       } else if (method == "updateDockedBounds") {
@@ -790,37 +961,93 @@ class WindowControls : public flutter::Plugin {
           const int y = read_num("y", 0);
           const int w = read_num("width", 400);
           const int h = read_num("height", 600);
-          SetWindowPos(hwnd, nullptr, x, y, w, h,
-                       SWP_NOZORDER | SWP_NOACTIVATE);
+
+          POINT pt = {x, y};
+          HWND child_view = GetMainChildContentHandle();
+          if (child_view && IsWindow(child_view) && g_main_window && IsWindow(g_main_window)) {
+            MapWindowPoints(child_view, g_main_window, &pt, 1);
+          }
+          const int client_x = pt.x;
+          const int client_y = pt.y;
+
+          int effective_w = w;
+          int effective_h = h;
+          if (g_main_window && IsWindow(g_main_window) && !IsZoomed(g_main_window)) {
+            RECT rc_client;
+            GetClientRect(g_main_window, &rc_client);
+            const int max_w = rc_client.right - rc_client.left;
+            const int max_h = rc_client.bottom - rc_client.top;
+            const int border = 8;
+
+            if (client_x + effective_w > max_w - border) {
+              effective_w = max_w - border - client_x;
+            }
+            if (client_y + effective_h > max_h - border) {
+              effective_h = max_h - border - client_y;
+            }
+            if (effective_w < 100) effective_w = 100;
+            if (effective_h < 100) effective_h = 100;
+          }
+
+          UpdateMainViewClipHole(x, y, effective_w, effective_h);
+
+          SetWindowPos(hwnd, HWND_TOP, client_x, client_y, effective_w, effective_h,
+                       SWP_NOACTIVATE);
+
+          HWND sub_child = GetWindow(hwnd, GW_CHILD);
+          if (sub_child && IsWindow(sub_child)) {
+            MoveWindow(sub_child, 0, 0, effective_w, effective_h, TRUE);
+            InvalidateRect(sub_child, NULL, TRUE);
+          }
+          InvalidateRect(hwnd, NULL, TRUE);
+          DockLog("[BrowserDock C++] updateDockedBounds: (x=%d, y=%d, w=%d, h=%d) -> client=(%d, %d), effective=(%d, %d)",
+                  x, y, w, h, client_x, client_y, effective_w, effective_h);
         }
         result->Success(flutter::EncodableValue(true));
         return;
       } else if (method == "undockFromParent") {
+        DockLog("[BrowserDock C++] undockFromParent called: hwnd=0x%p", hwnd);
         auto it = g_dock_snapshots.find(hwnd);
         if (it != g_dock_snapshots.end() && it->second.is_docked) {
           const auto& s = it->second;
-          // 1. 恢复父窗口
+
+          // 1. 恢复主窗口的完整渲染区域
+          ResetMainViewClipHole();
+
+          // 2. 恢复父窗口
           SetParent(hwnd, s.original_parent);
 
-          // 2. 严格恢复保存的原始 style 和 ex_style
+          // 3. 严格恢复保存的原始 style 和 ex_style
           SetWindowLongPtr(hwnd, GWL_STYLE, s.style);
           SetWindowLongPtr(hwnd, GWL_EXSTYLE, s.ex_style);
 
-          // 3. 恢复原始位置与状态并置顶激活
+          // 4. 恢复原始位置与状态并置顶激活
           SetWindowPlacement(hwnd, &s.placement);
           SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
                        SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
           SetForegroundWindow(hwnd);
 
+          HWND sub_child = GetWindow(hwnd, GW_CHILD);
+          if (sub_child && IsWindow(sub_child)) {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            MoveWindow(sub_child, 0, 0, rc.right - rc.left, rc.bottom - rc.top, TRUE);
+            InvalidateRect(sub_child, NULL, TRUE);
+          }
+          InvalidateRect(hwnd, NULL, TRUE);
+
           g_dock_snapshots.erase(it);
+          DockLog("[BrowserDock C++] undockFromParent complete");
           result->Success(flutter::EncodableValue(true));
           return;
         }
+        DockLog("[BrowserDock C++] undockFromParent: hwnd not in docked snapshots");
         result->Success(flutter::EncodableValue(false));
         return;
       } else if (method == "isDocked") {
         auto it = g_dock_snapshots.find(hwnd);
         bool docked = (it != g_dock_snapshots.end() && it->second.is_docked);
+        DockLog("[BrowserDock C++] isDocked query: hwnd=0x%p, docked=%s", hwnd, docked ? "true" : "false");
         result->Success(flutter::EncodableValue(docked));
         return;
       } else {

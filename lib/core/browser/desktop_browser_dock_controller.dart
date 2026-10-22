@@ -69,6 +69,9 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
 
   /// 请求以嵌入模式打开指定网址，或将已存在的独立浏览器吸附到右侧
   Future<void> requestDock({String? url, String? title}) async {
+    debugPrint(
+      '[BrowserDock Dart] requestDock called: url=$url, title=$title, currentStatus=${state.status}',
+    );
     if (state.isTransitioning) return;
     state = state.copyWith(
       status: BrowserDockingStatus.docking,
@@ -76,6 +79,12 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
       currentTitle: title ?? state.currentTitle ?? '网页浏览',
       clearError: true,
     );
+
+    // 确保主窗口恢复显示并处于前台
+    try {
+      final windowService = ref.read(windowServiceProvider);
+      await windowService.bringToFront('main');
+    } catch (_) {}
 
     // 确保原生独立浏览器窗口已启动/预热（若尚未打开，以 hidden 模式创建）
     try {
@@ -85,7 +94,7 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
         title: state.currentTitle,
       );
     } catch (e) {
-      debugPrint('[DesktopBrowserDock] openWebBrowser failed: $e');
+      debugPrint('[BrowserDock Dart] openWebBrowser failed: $e');
       state = state.copyWith(
         status: BrowserDockingStatus.unattached,
         lastError: e.toString(),
@@ -100,6 +109,9 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
     required int width,
     required int height,
   }) async {
+    debugPrint(
+      '[BrowserDock Dart] commitDock called: status=${state.status}, physical: (x=$viewX, y=$viewY, w=$width, h=$height)',
+    );
     if (state.status != BrowserDockingStatus.docking &&
         state.status != BrowserDockingStatus.docked) {
       return false;
@@ -115,6 +127,10 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
           height: height,
         );
 
+        debugPrint(
+          '[BrowserDock Dart] sendBrowserDockCommand result: $success',
+        );
+
         if (success) {
           state = state.copyWith(
             status: BrowserDockingStatus.docked,
@@ -124,7 +140,7 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
         }
       }
     } catch (e) {
-      debugPrint('[DesktopBrowserDock] commitDock failed: $e');
+      debugPrint('[BrowserDock Dart] commitDock failed: $e');
     }
 
     // 挂载失败，原子回滚为未吸附状态
@@ -154,22 +170,28 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
         );
       }
     } catch (e) {
-      debugPrint('[DesktopBrowserDock] updateDockedBounds error: $e');
+      debugPrint('[BrowserDock Dart] updateDockedBounds error: $e');
     }
   }
 
   /// 请求从聊天右侧脱离挂载，恢复为独立系统窗口 (Pop out)
   Future<void> requestUndock() async {
+    debugPrint(
+      '[BrowserDock Dart] requestUndock called: status=${state.status}, isTransitioning=${state.isTransitioning}',
+    );
     if (state.isTransitioning || !state.isDocked) return;
     state = state.copyWith(status: BrowserDockingStatus.undocking);
 
     try {
       final windowService = ref.read(windowServiceProvider);
       if (windowService is DefaultWindowService) {
-        await windowService.sendBrowserUndockCommand();
+        final res = await windowService.sendBrowserUndockCommand();
+        debugPrint(
+          '[BrowserDock Dart] sendBrowserUndockCommand result: $res',
+        );
       }
     } catch (e) {
-      debugPrint('[DesktopBrowserDock] requestUndock error: $e');
+      debugPrint('[BrowserDock Dart] requestUndock error: $e');
     }
 
     state = state.copyWith(
@@ -185,6 +207,7 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
 
   /// 关闭内嵌浏览器分栏
   Future<void> closeDocked() async {
+    debugPrint('[BrowserDock Dart] closeDocked called');
     if (state.isDocked) {
       // 先脱离挂载
       await requestUndock();

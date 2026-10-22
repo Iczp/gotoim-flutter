@@ -173,6 +173,9 @@ class WindowsWindowAdapter {
     required int height,
   }) async {
     if (!isWindows) return false;
+    debugPrint(
+      '[BrowserDock Adapter] dockToParent: x=$x, y=$y, w=$width, h=$height',
+    );
     try {
       final res = await _channel.invokeMethod<bool>('dockToParent', {
         'x': x,
@@ -180,9 +183,10 @@ class WindowsWindowAdapter {
         'width': width,
         'height': height,
       });
+      debugPrint('[BrowserDock Adapter] dockToParent native returned: $res');
       return res ?? false;
     } catch (e) {
-      debugPrint('[WindowsWindowAdapter] dockToParent failed: $e');
+      debugPrint('[BrowserDock Adapter] dockToParent failed: $e');
       return false;
     }
   }
@@ -204,7 +208,7 @@ class WindowsWindowAdapter {
       });
       return res ?? false;
     } catch (e) {
-      debugPrint('[WindowsWindowAdapter] updateDockedBounds failed: $e');
+      debugPrint('[BrowserDock Adapter] updateDockedBounds failed: $e');
       return false;
     }
   }
@@ -212,11 +216,15 @@ class WindowsWindowAdapter {
   /// 从主窗口脱离挂载，恢复为独立的 Windows 系统顶层窗口
   static Future<bool> undockFromParent() async {
     if (!isWindows) return false;
+    debugPrint('[BrowserDock Adapter] undockFromParent calling native');
     try {
       final res = await _channel.invokeMethod<bool>('undockFromParent');
+      debugPrint(
+        '[BrowserDock Adapter] undockFromParent native returned: $res',
+      );
       return res ?? false;
     } catch (e) {
-      debugPrint('[WindowsWindowAdapter] undockFromParent failed: $e');
+      debugPrint('[BrowserDock Adapter] undockFromParent failed: $e');
       return false;
     }
   }

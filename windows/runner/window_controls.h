@@ -6,6 +6,8 @@
 
 void SetMainWindowHandle(HWND hwnd);
 HWND GetMainWindowHandle();
+void SetMainChildContentHandle(HWND hwnd);
+HWND GetMainChildContentHandle();
 void ConfigureSubWindowNative(HWND sub_hwnd, HWND child_hwnd);
 void AttachChildViewResizeSubclass(HWND child_hwnd);
 void RegisterWindowControls(flutter::FlutterEngine* engine, HWND explicit_hwnd = nullptr);

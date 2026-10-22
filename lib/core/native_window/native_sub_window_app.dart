@@ -375,6 +375,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           return true;
         case 'dock_to_parent':
           final dockArgs = call.arguments as Map?;
+          debugPrint(
+            '[BrowserDock SubWindow] received dock_to_parent: args=$dockArgs',
+          );
           if (dockArgs != null) {
             final x = (dockArgs['x'] as num?)?.toInt() ?? 0;
             final y = (dockArgs['y'] as num?)?.toInt() ?? 0;
@@ -385,6 +388,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
               y: y,
               width: w,
               height: h,
+            );
+            debugPrint(
+              '[BrowserDock SubWindow] dockToParent native result=$success',
             );
             if (success) {
               if (mounted) {
@@ -406,6 +412,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             final y = (boundsArgs['y'] as num?)?.toInt() ?? 0;
             final w = (boundsArgs['width'] as num?)?.toInt() ?? 400;
             final h = (boundsArgs['height'] as num?)?.toInt() ?? 600;
+            debugPrint(
+              '[BrowserDock SubWindow] update_docked_bounds: ($x, $y, $w, $h)',
+            );
             return await WindowsWindowAdapter.updateDockedBounds(
               x: x,
               y: y,
@@ -415,7 +424,11 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           }
           return false;
         case 'undock_from_parent':
+          debugPrint('[BrowserDock SubWindow] received undock_from_parent');
           final success = await WindowsWindowAdapter.undockFromParent();
+          debugPrint(
+            '[BrowserDock SubWindow] undockFromParent native result=$success',
+          );
           if (success) {
             if (_childMethodHandler != null) {
               await _childMethodHandler!(

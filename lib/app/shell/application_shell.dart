@@ -289,6 +289,11 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
+            // 当窗口最小化或处于瞬态极小尺寸时保护，避免 RenderFlex 溢出
+            if (constraints.maxHeight < 40.0 || constraints.maxWidth < 60.0) {
+              return const SizedBox.shrink();
+            }
+
             final isNativeDesktop =
                 !kIsWeb &&
                 (defaultTargetPlatform == TargetPlatform.windows ||
