@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/window_service.dart';
+import '../widgets/app_toast.dart';
 
 /// 桌面端浏览器吸附挂载状态枚举
 enum BrowserDockingStatus {
@@ -88,6 +89,35 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
     }
   }
 
+  /// 标准化并校验 URL 格式（支持补全 https:// 协议、去除多余空白字符、拦截非法 scheme）
+  static String? validateAndNormalizeUrl(String? rawUrl) {
+    if (rawUrl == null) return null;
+    var url = rawUrl.trim();
+    if (url.isEmpty) return null;
+
+    if (url.startsWith('//')) {
+      url = 'https:$url';
+    } else if (!url.startsWith(RegExp(r'^[a-zA-Z][a-zA-Z0-9+\-.]*://'))) {
+      final domainRegex = RegExp(r'^([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}(/.*)?$');
+      final ipRegex =
+          RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?(/.*)?$');
+      final localhostRegex = RegExp(r'^localhost(:\d+)?(/.*)?$');
+      if (domainRegex.hasMatch(url) ||
+          ipRegex.hasMatch(url) ||
+          localhostRegex.hasMatch(url)) {
+        url = 'https://$url';
+      } else {
+        return null;
+      }
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+    if (uri.host.isEmpty) return null;
+    return uri.toString();
+  }
+
   /// 请求以嵌入模式打开指定网址，或将已存在的独立浏览器吸附到右侧
   Future<void> requestDock({String? url, String? title}) async {
     debugPrint(
@@ -95,7 +125,13 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
     );
     if (state.isTransitioning) return;
 
-    final targetUrl = url ?? state.currentUrl ?? 'https://www.bing.com';
+    final rawUrl = url ?? state.currentUrl ?? 'https://www.bing.com';
+    final targetUrl = validateAndNormalizeUrl(rawUrl);
+    if (targetUrl == null) {
+      debugPrint('[BrowserDock Dart] Invalid URL: $rawUrl');
+      showToast('无法打开该链接：网址格式不正确', type: ToastType.error);
+      return;
+    }
     final targetTitle = title ?? state.currentTitle ?? '网页浏览';
 
     // 如果当前已经是吸附嵌入状态，直接在已嵌入的浏览器中添加新标签页，不重新触发 docking 遮罩
@@ -129,11 +165,11 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
       await windowService.bringToFront('main');
     } catch (_) {}
 
-    // 设置安全超时：若网页加载超过 7 秒仍未通知完成，强制触发吸附挂载
-    _loadTimeoutTimer = Timer(const Duration(seconds: 7), () {
+    // 设置安全超时：若网页加载超过 3.5 秒仍未通知完成，强制触发吸附挂载
+    _loadTimeoutTimer = Timer(const Duration(milliseconds: 3500), () {
       if (state.status == BrowserDockingStatus.docking && !_isPageLoaded) {
         debugPrint(
-          '[BrowserDock Dart] Page load timeout, triggering dock commit',
+          '[BrowserDock Dart] Page load timeout (3.5s), triggering dock commit',
         );
         onBrowserLoadCompleted();
       }

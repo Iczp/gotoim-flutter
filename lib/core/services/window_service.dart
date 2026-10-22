@@ -930,8 +930,9 @@ class DefaultWindowService implements WindowService {
   Future<void> prewarmTrayFlyout() async {
     if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
     const targetId = 'tool:tray';
-    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId))
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       return;
+    }
     final snapshot =
         traySnapshotProvider?.call() ?? TrayGroupedUnreadState.empty;
     try {
@@ -954,8 +955,9 @@ class DefaultWindowService implements WindowService {
   Future<void> prewarmProfileCard() async {
     if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
     const targetId = 'tool:profile_card';
-    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId))
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       return;
+    }
     try {
       await _openNativeSubWindow(
         targetId: targetId,
@@ -1048,8 +1050,9 @@ class DefaultWindowService implements WindowService {
   Future<void> prewarmScreenCapture() async {
     if (isSubWindow || !platformFacade.supportsMultipleWindows) return;
     const targetId = 'tool:screen_capture';
-    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId))
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
       return;
+    }
     try {
       await _openNativeSubWindow(
         targetId: targetId,

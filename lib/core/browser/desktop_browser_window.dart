@@ -90,14 +90,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   bool _isMaximized = false;
   bool _isDocked = false;
   final ScrollController _tabScrollController = ScrollController();
-  bool _initialLoadReported = false;
-  Timer? _initialLoadTimeoutTimer;
+  bool _pendingNavigationReported = false;
+  Timer? _navigationTimeoutTimer;
 
-  void _reportInitialLoadComplete() {
-    if (_initialLoadReported) return;
-    _initialLoadReported = true;
-    _initialLoadTimeoutTimer?.cancel();
-    _initialLoadTimeoutTimer = null;
+  void _reportLoadComplete(String url, String? title) {
+    if (_pendingNavigationReported) return;
+    _pendingNavigationReported = true;
+    _navigationTimeoutTimer?.cancel();
+    _navigationTimeoutTimer = null;
     if (widget.isSubWindow) {
       try {
         const ipc = WindowMethodChannel(
@@ -105,8 +105,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
           mode: ChannelMode.unidirectional,
         );
         ipc.invokeMethod('browser_load_completed', {
-          'url': _tabs.isNotEmpty ? _tabs.first.url : widget.initialUrl,
-          'title': _tabs.isNotEmpty ? _tabs.first.title : widget.title,
+          'url': url,
+          'title': title,
         });
       } catch (e) {
         debugPrint(
@@ -114,6 +114,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         );
       }
     }
+  }
+
+  void _startWaitingForTabLoad(String url, String? title) {
+    _pendingNavigationReported = false;
+    _navigationTimeoutTimer?.cancel();
+    _navigationTimeoutTimer = Timer(const Duration(milliseconds: 3500), () {
+      _reportLoadComplete(url, title);
+    });
   }
 
   BrowserTabItem get _currentTab =>
@@ -133,9 +141,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     _tabs.add(firstTab);
 
     if (widget.isSubWindow) {
-      _initialLoadTimeoutTimer = Timer(const Duration(seconds: 6), () {
-        _reportInitialLoadComplete();
-      });
+      _startWaitingForTabLoad(widget.initialUrl, widget.title);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         WindowsWindowAdapter.setupCustomTitleBar();
         WindowsWindowAdapter.isDocked().then((docked) {
@@ -202,7 +208,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
   @override
   void dispose() {
-    _initialLoadTimeoutTimer?.cancel();
+    _navigationTimeoutTimer?.cancel();
     _tabScrollController.dispose();
     super.dispose();
   }
@@ -220,8 +226,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
           _activeTabIndex = existingIndex;
         });
       }
+      _reportLoadComplete(url, title ?? _tabs[existingIndex].title);
       return;
     }
+
+    _startWaitingForTabLoad(url, title);
 
     final newTab = BrowserTabItem(
       id: 'tab_${DateTime.now().millisecondsSinceEpoch}_${_tabs.length}',
@@ -610,7 +619,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 }
               });
               if (progress >= 100) {
-                _reportInitialLoadComplete();
+                _reportLoadComplete(tab.url, tab.title);
               }
             },
             onTitleChanged: (controller, title) {
@@ -638,7 +647,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 tab.canGoForward = canForward;
                 if (url != null) tab.url = url.toString();
               });
-              _reportInitialLoadComplete();
+              _reportLoadComplete(tab.url, tab.title);
             },
             onReceivedError: (controller, request, error) {
               if (!mounted ||
@@ -650,7 +659,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 tab.isLoading = false;
                 tab.errorMessage = error.description;
               });
-              _reportInitialLoadComplete();
+              _reportLoadComplete(tab.url, tab.title);
             },
           )
         else
@@ -1273,7 +1282,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     bool isDark,
   ) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _reportInitialLoadComplete();
+      _reportLoadComplete(tab.url, tab.title);
     });
     return Container(
       color: isDark ? const Color(0xFF181818) : const Color(0xFFFAFAFA),

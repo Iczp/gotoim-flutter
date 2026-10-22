@@ -498,9 +498,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
       });
 
   Future<void> _closeOnce() async {
-    if (mounted &&
-        (_currentPayload.type == SubWindowType.media ||
-            _currentPayload.type == SubWindowType.browser)) {
+    if (mounted && _currentPayload.type == SubWindowType.media) {
       setState(() => _visible = false);
     }
     if (_currentPayload.type == SubWindowType.settings) {
