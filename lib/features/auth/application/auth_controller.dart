@@ -323,6 +323,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 });
 
 final signalRGatewayProvider = Provider<SignalRGateway>((ref) {
+  final sessionInvalidator = ref.watch(sessionInvalidatorProvider);
   final gateway = createSignalRGateway(
     environment: ref.watch(appEnvironmentProvider),
     readAccessToken: ref.watch(tokenStorageProvider).readAccessToken,
@@ -336,7 +337,7 @@ final signalRGatewayProvider = Provider<SignalRGateway>((ref) {
       return null;
     },
     onSessionInvalidated: () async {
-      await ref.read(authControllerProvider.notifier).logout();
+      await sessionInvalidator.invalidate(reason: '登录已失效，请重新登录。');
     },
   );
   ref.onDispose(gateway.dispose);
@@ -366,25 +367,23 @@ void _runAccountChangedCallbacks(Ref ref) {
   }
 }
 
-final ChangeNotifierProvider<AuthController> authControllerProvider =
-    ChangeNotifierProvider<AuthController>((ref) {
-      final controller = AuthController(
-        clearLocalSession: () {
-          final repository = ref.read(authRepositoryProvider);
-          return repository is OpenIdConnectAuthRepository
-              ? repository.clearSession()
-              : ref.read(tokenStorageProvider).clear();
-        },
-        ref.watch(authRepositoryProvider),
-        ref.watch(signalRGatewayProvider),
-        abpConfigurationRepository: ref.watch(
-          abpConfigurationRepositoryProvider,
-        ),
-      );
-      final invalidator = ref.watch(sessionInvalidatorProvider);
-      invalidator.register(controller.sessionInvalidated);
-      ref.onDispose(() => invalidator.unregister(controller.sessionInvalidated));
-      // 账号切换时 invalidate 所有已注册的账号级 Provider，确保新账号获得干净状态。
-      controller._onAccountChanged = () => _runAccountChangedCallbacks(ref);
-      return controller;
-    });
+final ChangeNotifierProvider<AuthController>
+authControllerProvider = ChangeNotifierProvider<AuthController>((ref) {
+  final controller = AuthController(
+    clearLocalSession: () {
+      final repository = ref.read(authRepositoryProvider);
+      return repository is OpenIdConnectAuthRepository
+          ? repository.clearSession()
+          : ref.read(tokenStorageProvider).clear();
+    },
+    ref.watch(authRepositoryProvider),
+    ref.watch(signalRGatewayProvider),
+    abpConfigurationRepository: ref.watch(abpConfigurationRepositoryProvider),
+  );
+  final invalidator = ref.watch(sessionInvalidatorProvider);
+  invalidator.register(controller.sessionInvalidated);
+  ref.onDispose(() => invalidator.unregister(controller.sessionInvalidated));
+  // 账号切换时 invalidate 所有已注册的账号级 Provider，确保新账号获得干净状态。
+  controller._onAccountChanged = () => _runAccountChangedCallbacks(ref);
+  return controller;
+});

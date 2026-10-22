@@ -1,12 +1,19 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' hide isNull;
+import 'package:drift/native.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gotoim_flutter/app/application_providers.dart';
 import 'package:gotoim_flutter/core/config/app_environment.dart';
+import 'package:gotoim_flutter/core/database/unified_database.dart';
 import 'package:gotoim_flutter/core/device/client_device_context.dart';
 import 'package:gotoim_flutter/core/network/client_credentials_token_storage.dart';
+import 'package:gotoim_flutter/core/network/session_invalidator.dart';
 import 'package:gotoim_flutter/core/network/token_storage.dart';
 import 'package:gotoim_flutter/core/network/token_refresher.dart';
+import 'package:gotoim_flutter/features/auth/application/auth_controller.dart';
 import 'package:gotoim_flutter/features/auth/data/openid_connect_auth_repository.dart';
 
 void main() {
@@ -141,6 +148,35 @@ void main() {
     expect(storage.accessToken, 'expired-token');
     expect(storage.refreshToken, 'refresh-token');
   });
+
+  test(
+    'session invalidation via sessionInvalidator does not trigger circular dependency',
+    () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      dotenv.loadFromString(envString: 'AUTH_BASE_URL=https://example.test');
+      final memoryDb = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(memoryDb.close);
+      final container = ProviderContainer(
+        overrides: [
+          tokenStorageProvider.overrideWithValue(
+            _MemoryTokenStorage(accessToken: 'token', refreshToken: 'ref'),
+          ),
+          unifiedDatabaseProvider.overrideWithValue(memoryDb),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final authController = container.read(authControllerProvider.notifier);
+      final sessionInvalidator = container.read(sessionInvalidatorProvider);
+
+      // Calling sessionInvalidator.invalidate() must execute without throwing CircularDependencyError.
+      await sessionInvalidator.invalidate(reason: '登录已失效，请重新登录。');
+      expect(authController.status, AuthStatus.unauthenticated);
+      expect(authController.errorMessage, '登录已失效，请重新登录。');
+    },
+  );
 }
 
 const _deviceContext = ClientDeviceContext(
