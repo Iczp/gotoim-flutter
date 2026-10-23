@@ -9,6 +9,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/media/media_preview.dart';
+import '../../../../core/native_window/desktop_window_loading.dart';
 import '../../../../core/platform/windows/windows_window_adapter.dart';
 import '../../../../core/services/clipboard_service.dart';
 import '../../../../core/services/window_service.dart';
@@ -16,13 +17,7 @@ import '../../../../core/widgets/app_toast.dart';
 import 'screenshot_annotation_dialog.dart';
 
 /// 截图选区交互阶段
-enum _CropPhase {
-  none,
-  draggingNew,
-  selected,
-  resizingHandle,
-  movingBox,
-}
+enum _CropPhase { none, draggingNew, selected, resizingHandle, movingBox }
 
 /// 8个控制锚点定义
 enum _ResizeHandle {
@@ -62,8 +57,8 @@ class DesktopScreenCaptureView extends ConsumerStatefulWidget {
 class _DesktopScreenCaptureViewState
     extends ConsumerState<DesktopScreenCaptureView> {
   ui.Image? _baseImage;
-  int _screenWidth = 1920;
-  int _screenHeight = 1080;
+  Size _canvasSize = Size.zero;
+  int _loadGeneration = 0;
   bool _isLoading = false;
 
   Rect? _cropRect;
@@ -106,6 +101,8 @@ class _DesktopScreenCaptureViewState
 
   @override
   void dispose() {
+    _loadGeneration++;
+    _baseImage?.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -147,13 +144,21 @@ class _DesktopScreenCaptureViewState
     required int y,
     required int dpi,
   }) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
-      _screenWidth = width;
-      _screenHeight = height;
       _cropRect = null;
       _phase = _CropPhase.none;
       _activeHandle = null;
+      _activePointer = null;
+      _pointerDownPosition = null;
+      _pointerMoved = false;
+      _dragStart = null;
+      _moveOffsetStart = null;
+      _lastClickPos = null;
+      _lastClickTime = 0;
+      _cursor = SystemMouseCursors.basic;
+      _resetToolDrag();
       _annotations.clear();
       _redoStack.clear();
       _currentTool = AnnotationTool.none;
@@ -161,29 +166,42 @@ class _DesktopScreenCaptureViewState
     });
 
     try {
-      final file = File(path);
-      if (await file.exists()) {
-        final bytes = await file.readAsBytes();
-        final codec = await ui.instantiateImageCodec(bytes);
-        final frame = await codec.getNextFrame();
-        if (mounted) {
-          setState(() {
-            _baseImage = frame.image;
-            _isLoading = false;
-          });
-        }
+      final bytes = await File(path).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final ui.FrameInfo frame;
+      try {
+        frame = await codec.getNextFrame();
+      } finally {
+        codec.dispose();
       }
+      if (!mounted || generation != _loadGeneration) {
+        frame.image.dispose();
+        return;
+      }
+      final oldImage = _baseImage;
+      setState(() {
+        _baseImage = frame.image;
+        _isLoading = false;
+      });
+      oldImage?.dispose();
     } catch (e) {
       debugPrint('[DesktopScreenCaptureView] 加载截图底图失败: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => _isLoading = false);
+      await _handleCancel();
+      return;
     }
 
+    if (!mounted || generation != _loadGeneration) return;
+    await prepareDesktopWindowFrame();
+    if (!mounted || generation != _loadGeneration) return;
     await WindowsWindowAdapter.showScreenCapture(
       x: x,
       y: y,
       width: width,
       height: height,
     );
+    if (!mounted || generation != _loadGeneration) return;
     _focusNode.requestFocus();
   }
 
@@ -259,8 +277,13 @@ class _DesktopScreenCaptureViewState
     }
   }
 
+  Offset _clampToCanvas(Offset point) => Offset(
+    point.dx.clamp(0.0, _canvasSize.width),
+    point.dy.clamp(0.0, _canvasSize.height),
+  );
+
   void _onPanStart(DragStartDetails details) {
-    final pos = details.localPosition;
+    final pos = _clampToCanvas(details.localPosition);
     if (_phase == _CropPhase.selected && _cropRect != null) {
       // 1. 检查是否点中了 8 锚点
       final handle = _hitTestHandle(pos, _cropRect!);
@@ -308,9 +331,9 @@ class _DesktopScreenCaptureViewState
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
-    final pos = details.localPosition;
-    final maxW = _screenWidth.toDouble();
-    final maxH = _screenHeight.toDouble();
+    final pos = _clampToCanvas(details.localPosition);
+    final maxW = _canvasSize.width;
+    final maxH = _canvasSize.height;
 
     if (_phase == _CropPhase.draggingNew && _dragStart != null) {
       setState(() {
@@ -326,32 +349,32 @@ class _DesktopScreenCaptureViewState
 
       switch (_activeHandle!) {
         case _ResizeHandle.topLeft:
-          left = pos.dx.clamp(0.0, right - 24.0);
-          top = pos.dy.clamp(0.0, bottom - 24.0);
+          left = pos.dx.clamp(0.0, math.max(0.0, right - 16.0));
+          top = pos.dy.clamp(0.0, math.max(0.0, bottom - 16.0));
           break;
         case _ResizeHandle.topCenter:
-          top = pos.dy.clamp(0.0, bottom - 24.0);
+          top = pos.dy.clamp(0.0, math.max(0.0, bottom - 16.0));
           break;
         case _ResizeHandle.topRight:
-          right = pos.dx.clamp(left + 24.0, maxW);
-          top = pos.dy.clamp(0.0, bottom - 24.0);
+          right = pos.dx.clamp(math.min(maxW, left + 16.0), maxW);
+          top = pos.dy.clamp(0.0, math.max(0.0, bottom - 16.0));
           break;
         case _ResizeHandle.middleRight:
-          right = pos.dx.clamp(left + 24.0, maxW);
+          right = pos.dx.clamp(math.min(maxW, left + 16.0), maxW);
           break;
         case _ResizeHandle.bottomRight:
-          right = pos.dx.clamp(left + 24.0, maxW);
-          bottom = pos.dy.clamp(top + 24.0, maxH);
+          right = pos.dx.clamp(math.min(maxW, left + 16.0), maxW);
+          bottom = pos.dy.clamp(math.min(maxH, top + 16.0), maxH);
           break;
         case _ResizeHandle.bottomCenter:
-          bottom = pos.dy.clamp(top + 24.0, maxH);
+          bottom = pos.dy.clamp(math.min(maxH, top + 16.0), maxH);
           break;
         case _ResizeHandle.bottomLeft:
-          left = pos.dx.clamp(0.0, right - 24.0);
-          bottom = pos.dy.clamp(top + 24.0, maxH);
+          left = pos.dx.clamp(0.0, math.max(0.0, right - 16.0));
+          bottom = pos.dy.clamp(math.min(maxH, top + 16.0), maxH);
           break;
         case _ResizeHandle.middleLeft:
-          left = pos.dx.clamp(0.0, right - 24.0);
+          left = pos.dx.clamp(0.0, math.max(0.0, right - 16.0));
           break;
       }
 
@@ -641,18 +664,22 @@ class _DesktopScreenCaptureViewState
     }
 
     final crop = _cropRect!;
-    final cropW = crop.width.round().clamp(1, _baseImage!.width);
-    final cropH = crop.height.round().clamp(1, _baseImage!.height);
+    final cropW = (crop.width * _baseImage!.width / _canvasSize.width)
+        .round()
+        .clamp(1, _baseImage!.width);
+    final cropH = (crop.height * _baseImage!.height / _canvasSize.height)
+        .round()
+        .clamp(1, _baseImage!.height);
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
     // 1. 将原图裁切区域绘制至画布
     final srcRect = Rect.fromLTWH(
-      crop.left * (_baseImage!.width / _screenWidth),
-      crop.top * (_baseImage!.height / _screenHeight),
-      crop.width * (_baseImage!.width / _screenWidth),
-      crop.height * (_baseImage!.height / _screenHeight),
+      crop.left * (_baseImage!.width / _canvasSize.width),
+      crop.top * (_baseImage!.height / _canvasSize.height),
+      crop.width * (_baseImage!.width / _canvasSize.width),
+      crop.height * (_baseImage!.height / _canvasSize.height),
     );
     final dstRect = Rect.fromLTWH(0, 0, cropW.toDouble(), cropH.toDouble());
     canvas.drawImageRect(_baseImage!, srcRect, dstRect, Paint());
@@ -671,8 +698,13 @@ class _DesktopScreenCaptureViewState
 
     final picture = recorder.endRecording();
     final img = await picture.toImage(cropW, cropH);
-    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-    return byteData!.buffer.asUint8List();
+    try {
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      return byteData!.buffer.asUint8List();
+    } finally {
+      img.dispose();
+      picture.dispose();
+    }
   }
 
   // -------------------------------------------------------------
@@ -697,20 +729,59 @@ class _DesktopScreenCaptureViewState
   int _lastClickTime = 0;
   Offset? _lastClickPos;
 
+  int? _activePointer;
+  Offset? _pointerDownPosition;
+  bool _pointerMoved = false;
+
   void _onPointerDown(PointerDownEvent event) {
-    if (_cropRect != null && _cropRect!.contains(event.localPosition)) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (_lastClickPos != null &&
-          (event.localPosition - _lastClickPos!).distance < 12 &&
-          (now - _lastClickTime) < 350) {
-        _lastClickTime = 0;
-        _lastClickPos = null;
-        _confirmAndSend();
-        return;
-      }
+    if (_activePointer != null || event.buttons != 1) return;
+    _activePointer = event.pointer;
+    _pointerDownPosition = event.localPosition;
+    _pointerMoved = false;
+    _onPanStart(DragStartDetails(localPosition: event.localPosition));
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (_activePointer != event.pointer) return;
+    if ((event.localPosition - _pointerDownPosition!).distance > 3) {
+      _pointerMoved = true;
+    }
+    _onPanUpdate(
+      DragUpdateDetails(
+        localPosition: event.localPosition,
+        globalPosition: event.position,
+        delta: event.delta,
+      ),
+    );
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    if (_activePointer != event.pointer) return;
+    _activePointer = null;
+    _onPanEnd(DragEndDetails());
+    if (_pointerMoved ||
+        _cropRect?.contains(event.localPosition) != true ||
+        _currentTool != AnnotationTool.none) {
+      _lastClickPos = null;
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_lastClickPos != null &&
+        (event.localPosition - _lastClickPos!).distance < 12 &&
+        now - _lastClickTime < 350) {
+      _lastClickPos = null;
+      _confirmAndSend();
+    } else {
       _lastClickTime = now;
       _lastClickPos = event.localPosition;
     }
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    if (_activePointer != event.pointer) return;
+    _activePointer = null;
+    _resetToolDrag();
+    _onPanEnd(DragEndDetails());
   }
 
   Future<void> _handleCopy() async {
@@ -799,12 +870,7 @@ class _DesktopScreenCaptureViewState
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Material(
-        color: Colors.black,
-        child: Center(
-          child: CircularProgressIndicator(color: Color(0xFF07C160)),
-        ),
-      );
+      return const DesktopWindowLoading(message: '正在准备截图…');
     }
 
     return KeyboardListener(
@@ -831,87 +897,102 @@ class _DesktopScreenCaptureViewState
       child: MouseRegion(
         cursor: _cursor,
         onHover: _onHover,
-        child: Listener(
-          onPointerDown: _onPointerDown,
-          child: GestureDetector(
-            onPanStart: _onPanStart,
-            onPanUpdate: _onPanUpdate,
-            onPanEnd: _onPanEnd,
-            onDoubleTap: _confirmAndSend,
-            child: Stack(
-            children: [
-              // 1. 全屏底图与遮罩 CustomPaint
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _ScreenCaptureCanvasPainter(
-                    baseImage: _baseImage,
-                    cropRect: _cropRect,
-                    phase: _phase,
-                    annotations: _annotations,
-                    currentTool: _currentTool,
-                    toolDragStart: _toolDragStart,
-                    toolDragCurrent: _toolDragCurrent,
-                    brushPoints: _currentBrushPoints,
-                    selectedColor: _selectedColor,
-                    strokeWidth: _selectedStrokeWidth,
-                    mosaicStyle: _selectedMosaicStyle,
-                    stepNumber: _currentStepNumber,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            _canvasSize = constraints.biggest;
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: RepaintBoundary(
+                    child: RawImage(
+                      image: _baseImage,
+                      fit: BoxFit.fill,
+                      filterQuality: FilterQuality.none,
+                    ),
                   ),
                 ),
-              ),
-
-              // 2. 提示气泡 (在未框选时显示引导提示)
-              if (_cropRect == null)
-                Positioned(
-                  top: 40,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.72),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black45, blurRadius: 8),
-                        ],
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.crop_rounded,
-                            color: Color(0xFF07C160),
-                            size: 16,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            '按住鼠标左键拖拽框选截图区域 · Esc 退出截图',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                Positioned.fill(
+                  child: Listener(
+                    key: const ValueKey('screen-capture-canvas'),
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: _onPointerDown,
+                    onPointerMove: _onPointerMove,
+                    onPointerUp: _onPointerUp,
+                    onPointerCancel: _onPointerCancel,
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: _ScreenCaptureCanvasPainter(
+                          baseImage: _baseImage,
+                          canvasSize: _canvasSize,
+                          cropRect: _cropRect,
+                          phase: _phase,
+                          annotations: _annotations,
+                          currentTool: _currentTool,
+                          toolDragStart: _toolDragStart,
+                          toolDragCurrent: _toolDragCurrent,
+                          brushPoints: _currentBrushPoints,
+                          selectedColor: _selectedColor,
+                          strokeWidth: _selectedStrokeWidth,
+                          mosaicStyle: _selectedMosaicStyle,
+                          stepNumber: _currentStepNumber,
+                        ),
                       ),
                     ),
                   ),
                 ),
 
-              // 3. 悬浮在选区下方的微信全功能工具条
-              if (_cropRect != null && _phase == _CropPhase.selected)
-                _buildFloatingToolbar(),
-            ],
-          ),
+                // 2. 提示气泡 (在未框选时显示引导提示)
+                if (_cropRect == null)
+                  Positioned(
+                    top: 40,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.72),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black45, blurRadius: 8),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.crop_rounded,
+                              color: Color(0xFF07C160),
+                              size: 16,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              '按住鼠标左键拖拽框选截图区域 · Esc 退出截图',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // 3. 悬浮在选区下方的微信全功能工具条
+                if (_cropRect != null && _phase == _CropPhase.selected)
+                  _buildFloatingToolbar(),
+              ],
+            );
+          },
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildFloatingToolbar() {
     final crop = _cropRect!;
@@ -920,15 +1001,15 @@ class _DesktopScreenCaptureViewState
 
     // 默认附着在选区正下方 8px，若贴底则附着在选区上方
     double top = crop.bottom + 8.0;
-    if (top + toolbarHeight > _screenHeight - 12.0) {
+    if (top + toolbarHeight > _canvasSize.height - 12.0) {
       top = crop.top - toolbarHeight - 8.0;
       if (top < 8.0) top = 8.0;
     }
 
     double left = crop.right - toolbarWidth;
     if (left < 10.0) left = 10.0;
-    if (left + toolbarWidth > _screenWidth - 10.0) {
-      left = _screenWidth - toolbarWidth - 10.0;
+    if (left + toolbarWidth > _canvasSize.width - 10.0) {
+      left = _canvasSize.width - toolbarWidth - 10.0;
     }
 
     return Positioned(
@@ -1190,6 +1271,7 @@ class _DesktopScreenCaptureViewState
 class _ScreenCaptureCanvasPainter extends CustomPainter {
   _ScreenCaptureCanvasPainter({
     required this.baseImage,
+    required this.canvasSize,
     required this.cropRect,
     required this.phase,
     required this.annotations,
@@ -1204,6 +1286,7 @@ class _ScreenCaptureCanvasPainter extends CustomPainter {
   });
 
   final ui.Image? baseImage;
+  final Size canvasSize;
   final Rect? cropRect;
   final _CropPhase phase;
   final List<AnnotationItem> annotations;
@@ -1218,34 +1301,20 @@ class _ScreenCaptureCanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. 绘制底层屏幕原图
-    if (baseImage != null) {
-      final src = Rect.fromLTWH(
-        0,
-        0,
-        baseImage!.width.toDouble(),
-        baseImage!.height.toDouble(),
-      );
-      final dst = Offset.zero & size;
-      canvas.drawImageRect(baseImage!, src, dst, Paint());
-    }
-
-    // 2. 绘制半透明黑色遮罩 (使用 saveLayer + BlendMode.clear 挖空选区)
-    final layerPaint = Paint();
-    canvas.saveLayer(Offset.zero & size, layerPaint);
-
-    final maskPaint =
-        Paint()
-          ..color = Colors.black.withValues(
-            alpha: cropRect != null ? 0.40 : 0.28,
-          );
-    canvas.drawRect(Offset.zero & size, maskPaint);
-
-    if (cropRect != null) {
-      final clearPaint = Paint()..blendMode = BlendMode.clear;
-      canvas.drawRect(cropRect!, clearPaint);
-    }
-    canvas.restore();
+    // Draw the dimmed area directly. An even-odd path leaves the selection
+    // clear without allocating a full-desktop saveLayer on every pointer move.
+    final mask =
+        Path()
+          ..fillType = PathFillType.evenOdd
+          ..addRect(Offset.zero & size);
+    if (cropRect != null) mask.addRect(cropRect!);
+    canvas.drawPath(
+      mask,
+      Paint()
+        ..color = Colors.black.withValues(
+          alpha: cropRect != null ? 0.40 : 0.28,
+        ),
+    );
 
     // 3. 选区外框与 8 个锚点
     if (cropRect != null) {
@@ -1258,7 +1327,7 @@ class _ScreenCaptureCanvasPainter extends CustomPainter {
 
       // 绘制尺寸提示标签 (位于选区左上方)
       final sizeText =
-          '${cropRect!.width.round()} × ${cropRect!.height.round()}';
+          '${(cropRect!.width * (baseImage?.width ?? canvasSize.width) / canvasSize.width).round()} × ${(cropRect!.height * (baseImage?.height ?? canvasSize.height) / canvasSize.height).round()}';
       final textPainter = TextPainter(
         text: TextSpan(
           text: sizeText,

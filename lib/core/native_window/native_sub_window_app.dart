@@ -1,3 +1,4 @@
+import 'desktop_window_dock_button.dart';
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -38,6 +39,7 @@ import '../../features/media/presentation/desktop_media_viewer_window.dart';
 import '../../features/settings/presentation/desktop_settings_window.dart';
 import '../../features/user/data/models/profile_subject.dart';
 import 'desktop_profile_card_view.dart';
+import 'desktop_window_loading.dart';
 import 'desktop_sub_window_chat_view.dart';
 import 'desktop_window_title_bar.dart';
 import 'native_window_payload.dart';
@@ -329,6 +331,30 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
 
     Future<dynamic> handleMethod(MethodCall call) async {
       switch (call.method) {
+        case 'window_prepare_show':
+          await prepareDesktopWindowFrame();
+          return true;
+        case 'window_ping':
+          return mounted && _childMethodHandler != null;
+        case 'window_release_content':
+          nativeWindowDocked.value = false;
+          if (mounted) {
+            setState(() {
+              _isDockedSubWindow = false;
+              if (_currentPayload.type == SubWindowType.media) {
+                _visible = false;
+                _childMethodHandler = null;
+              }
+            });
+          }
+          return true;
+        case 'window_content_diagnostics':
+          return _childMethodHandler == null
+              ? {'type': _currentPayload.type.name}
+              : await _childMethodHandler!(call);
+        case 'window_native_diagnostics':
+        case 'browser_native_diagnostics':
+          return WindowsWindowAdapter.browserDockDiagnostics();
         case 'theme_changed':
           final args = call.arguments as Map?;
           final modeStr = args?['themeMode'] as String?;
@@ -377,6 +403,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           return true;
         case 'bringToFront':
           if (mounted) setState(() => _visible = true);
+          await prepareDesktopWindowFrame();
           await widget.controller?.show();
           if (_currentPayload.type == SubWindowType.tray) {
             await _refreshTraySnapshot();
@@ -389,6 +416,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           }
           return true;
         case 'position_flyout':
+          await prepareDesktopWindowFrame();
           if (call.arguments is Map) {
             final map = call.arguments as Map;
             final x = (map['x'] as num?)?.toInt() ?? 0;
@@ -402,6 +430,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
               width: w,
               height: h,
               noActivate: noActivate,
+              hoverAnchor: (map['hoverAnchor'] as Map?)?.cast<String, int>(),
             );
           }
           return true;
@@ -422,13 +451,15 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         case 'hide_screen_capture':
           await WindowsWindowAdapter.hide();
           return true;
+        case 'window_dock':
         case 'dock_to_parent':
+          await prepareDesktopWindowFrame();
           final dockArgs = call.arguments as Map?;
           debugPrint(
             '[BrowserDock SubWindow] received dock_to_parent: args=$dockArgs',
           );
           if (dockArgs != null) {
-            _isDockedSubWindow = true;
+            final wasDocked = _isDockedSubWindow;
             final x = (dockArgs['x'] as num?)?.toInt() ?? 0;
             final y = (dockArgs['y'] as num?)?.toInt() ?? 0;
             final w = (dockArgs['width'] as num?)?.toInt() ?? 400;
@@ -438,13 +469,18 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
               y: y,
               width: w,
               height: h,
+              slotId: dockArgs['slotId'] as String? ?? 'chat:right',
             );
             debugPrint(
               '[BrowserDock SubWindow] dockToParent native result=$success',
             );
             if (success) {
+              _isDockedSubWindow = true;
+              nativeWindowDocked.value = true;
               if (mounted) {
-                setState(() => _visible = true);
+                setState(() {
+                  _visible = true;
+                });
               }
               if (_childMethodHandler != null) {
                 await _childMethodHandler!(
@@ -452,11 +488,12 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
                 );
               }
             } else {
-              _isDockedSubWindow = false;
+              _isDockedSubWindow = wasDocked;
             }
             return success;
           }
           return false;
+        case 'window_dock_bounds':
         case 'update_docked_bounds':
           final boundsArgs = call.arguments as Map?;
           if (boundsArgs != null) {
@@ -475,6 +512,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             );
           }
           return false;
+        case 'window_undock':
         case 'undock_from_parent':
           debugPrint('[BrowserDock SubWindow] received undock_from_parent');
           final args = call.arguments as Map?;
@@ -487,9 +525,8 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           );
           if (success) {
             _isDockedSubWindow = false;
-            if (showWindow && _currentPayload.type == SubWindowType.browser) {
-              await WindowsWindowAdapter.center(width: 1024, height: 720);
-            }
+            nativeWindowDocked.value = false;
+            if (mounted) setState(() {});
             if (_childMethodHandler != null) {
               await _childMethodHandler!(
                 const MethodCall('set_dock_mode', false),
@@ -498,6 +535,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           }
           return success;
         case 'tray_flyout':
+          await prepareDesktopWindowFrame();
           await _refreshTraySnapshot();
           await WindowsWindowAdapter.showTrayFlyout();
           return true;
@@ -735,6 +773,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           initialIndex: _currentPayload.initialIndex,
           isSubWindow: true,
           onClose: _handleClose,
+          onRegisterMethodHandler: (handler) => _childMethodHandler = handler,
         );
 
       case SubWindowType.chat:

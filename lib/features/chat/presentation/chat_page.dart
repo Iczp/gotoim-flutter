@@ -253,7 +253,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _quoteHighlightTimer?.cancel();
     input.dispose();
     _avatarHoverTimer?.cancel();
-    _avatarLeaveTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -1516,14 +1515,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Timer? _avatarHoverTimer;
-  Timer? _avatarLeaveTimer;
 
   void _onAvatarHover(ChatMessage message, Rect rect) {
     if (kIsWeb ||
         (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
       return;
     }
-    _avatarLeaveTimer?.cancel();
     _avatarHoverTimer?.cancel();
     _avatarHoverTimer = Timer(const Duration(milliseconds: 250), () {
       final sender = <String, dynamic>{...message.senderSessionUnit};
@@ -1553,10 +1550,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       return;
     }
     _avatarHoverTimer?.cancel();
-    _avatarLeaveTimer?.cancel();
-    _avatarLeaveTimer = Timer(const Duration(milliseconds: 200), () {
-      ref.read(windowServiceProvider).hideProfileCard();
-    });
+    // Native flyout tracking owns hover dismissal across both windows.
   }
 
   Future<void> _showSenderProfile(ChatMessage message) {

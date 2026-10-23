@@ -124,7 +124,7 @@ class _AppealDialogState extends ConsumerState<AppealDialog> {
       if (!mounted) return;
       if (success) {
         Navigator.of(context).pop(true);
-        showToast('申诉已提交，安全合规团队将在 1 个工作日内核实复核', type: ToastType.success);
+        showToast('申诉已提交', type: ToastType.success);
       } else {
         showToast('提交失败，请检查网络或稍后重试', type: ToastType.error);
       }

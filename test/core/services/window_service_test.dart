@@ -28,30 +28,40 @@ void main() {
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('mixin.one/desktop_multi_window/channels'),
-      (call) async => null,
-    );
+          const MethodChannel('mixin.one/desktop_multi_window/channels'),
+          (call) async {
+            if (call.method == 'invokeMethod' &&
+                const [
+                  'browser_ping',
+                  'window_ping',
+                  'window_prepare_show',
+                ].contains((call.arguments as Map)['method'])) {
+              return true;
+            }
+            return null;
+          },
+        );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('mixin.one/desktop_multi_window'),
-      (call) async {
-        switch (call.method) {
-          case 'createWindow':
-            return '101';
-          case 'show':
-          case 'hide':
-          case 'close':
-          case 'focus':
-          case 'setFrame':
-          case 'center':
-            return null;
-          case 'getAllSubWindowIds':
-            return <int>[];
-          default:
-            return null;
-        }
-      },
-    );
+          const MethodChannel('mixin.one/desktop_multi_window'),
+          (call) async {
+            switch (call.method) {
+              case 'createWindow':
+                return '101';
+              case 'show':
+              case 'hide':
+              case 'close':
+              case 'focus':
+              case 'setFrame':
+              case 'center':
+                return null;
+              case 'getAllSubWindowIds':
+                return <int>[];
+              default:
+                return null;
+            }
+          },
+        );
   });
 
   group('DefaultWindowService Tests', () {
@@ -151,46 +161,49 @@ void main() {
       },
     );
 
-    test('Creation failure rolls back atomic opening placeholder and leaves no fake records', () async {
-      // Temporarily make createWindow throw
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-        const MethodChannel('mixin.one/desktop_multi_window'),
-        (call) async {
-          if (call.method == 'createWindow') {
-            throw Exception('OS Window creation failed');
-          }
-          return null;
-        },
-      );
+    test(
+      'Creation failure rolls back atomic opening placeholder and leaves no fake records',
+      () async {
+        // Temporarily make createWindow throw
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              const MethodChannel('mixin.one/desktop_multi_window'),
+              (call) async {
+                if (call.method == 'createWindow') {
+                  throw Exception('OS Window creation failed');
+                }
+                return null;
+              },
+            );
 
-      await windowService.openChat(
-        sessionUnitId: 'fail_session',
-        ownerId: 999,
-        title: '失败测试会话',
-      );
+        await windowService.openChat(
+          sessionUnitId: 'fail_session',
+          ownerId: 999,
+          title: '失败测试会话',
+        );
 
-      // Should NOT leave any record in openWindows
-      expect(windowService.isWindowOpen('chat:999:fail_session'), isFalse);
-      expect(windowService.isWindowOpen('chat:fail_session'), isFalse);
+        // Should NOT leave any record in openWindows
+        expect(windowService.isWindowOpen('chat:999:fail_session'), isFalse);
+        expect(windowService.isWindowOpen('chat:fail_session'), isFalse);
 
-      // Restore mock handler
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-        const MethodChannel('mixin.one/desktop_multi_window'),
-        (call) async {
-          if (call.method == 'createWindow') return '102';
-          return null;
-        },
-      );
+        // Restore mock handler
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              const MethodChannel('mixin.one/desktop_multi_window'),
+              (call) async {
+                if (call.method == 'createWindow') return '102';
+                return null;
+              },
+            );
 
-      // Subsequent attempt succeeds without blocked opening placeholder
-      await windowService.openChat(
-        sessionUnitId: 'fail_session',
-        ownerId: 999,
-        title: '失败测试会话重试',
-      );
-      expect(windowService.isWindowOpen('chat:999:fail_session'), isTrue);
-    });
+        // Subsequent attempt succeeds without blocked opening placeholder
+        await windowService.openChat(
+          sessionUnitId: 'fail_session',
+          ownerId: 999,
+          title: '失败测试会话重试',
+        );
+        expect(windowService.isWindowOpen('chat:999:fail_session'), isTrue);
+      },
+    );
   });
 }

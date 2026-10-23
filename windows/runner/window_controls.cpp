@@ -2,13 +2,18 @@
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
+#include <flutter_windows.h>
 #include <shellapi.h>
 #include <dwmapi.h>
 #include <commctrl.h>
 #include "resource.h"
+#include "profile_flyout_policy.h"
 #include <string>
 #include <memory>
+#include <algorithm>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 #include <iostream>
 #include <cstdarg>
 
@@ -38,140 +43,182 @@ static void DockLog(const char* format, ...) {
   std::cout << buffer << std::endl;
 }
 
+// Docked browsers remain owned TOP-LEVEL windows. Never nest two Flutter
+// views or cut a hole in the main Flutter surface.
 struct WindowStateSnapshot {
   LONG_PTR style = 0;
   LONG_PTR ex_style = 0;
-  HWND original_parent = nullptr;
-  WINDOWPLACEMENT placement{ sizeof(WINDOWPLACEMENT) };
-  bool is_docked = false;
+  HWND owner = nullptr;
+  WINDOWPLACEMENT placement{sizeof(WINDOWPLACEMENT)};
+  RECT bounds{}; // physical main-client coordinates
+  SIZE client_size{};
+  UINT dpi = 96;
+  std::string slot_id = "chat:right";
 };
-
 static std::unordered_map<HWND, WindowStateSnapshot> g_dock_snapshots;
+static std::unordered_map<std::string, bool> g_dock_slot_visible;
+static bool g_dock_route_visible = true;
 
 static bool IsWindowDocked(HWND hwnd) {
-  if (!hwnd) return false;
+  return g_dock_snapshots.find(hwnd) != g_dock_snapshots.end();
+}
+void SetMainWindowHandle(HWND hwnd) { g_main_window = hwnd; }
+HWND GetMainWindowHandle() { return g_main_window; }
+void SetMainChildContentHandle(HWND hwnd) { g_main_child_content = hwnd; }
+HWND GetMainChildContentHandle() { return g_main_child_content; }
+
+static bool WriteWindowLong(HWND hwnd, int index, LONG_PTR value) {
+  SetLastError(ERROR_SUCCESS);
+  return SetWindowLongPtr(hwnd, index, value) != 0 || GetLastError() == ERROR_SUCCESS;
+}
+
+static bool PositionDockedWindow(HWND hwnd, const WindowStateSnapshot& snapshot) {
+  RECT client{};
+  if (!g_main_window || !GetClientRect(g_main_window, &client)) return false;
+  const auto slot_visibility = g_dock_slot_visible.find(snapshot.slot_id);
+  const bool slot_visible = slot_visibility == g_dock_slot_visible.end() || slot_visibility->second;
+  const bool visible = slot_visible && g_dock_route_visible &&
+      IsWindowVisible(g_main_window) && !IsIconic(g_main_window) && IsWindowEnabled(g_main_window);
+  if (!visible) { ShowWindow(hwnd, SW_HIDE); return true; }
+  const UINT dpi = GetDpiForWindow(g_main_window);
+  const auto scale = [&snapshot, dpi](int value) { return MulDiv(value, dpi, snapshot.dpi); };
+  const int width = scale(snapshot.bounds.right - snapshot.bounds.left);
+  const int right_gap = scale(snapshot.client_size.cx - snapshot.bounds.right);
+  const int bottom_gap = scale(snapshot.client_size.cy - snapshot.bounds.bottom);
+  const int y = scale(snapshot.bounds.top);
+  const int x = client.right - right_gap - width;
+  const int height = client.bottom - bottom_gap - y;
+  if (x < 0 || y < 0 || width <= 0 || height <= 0) {
+    ShowWindow(hwnd, SW_HIDE);
+    return true; // Flutter will either supply new bounds or undock for narrow layouts.
+  }
+  // Owned windows receive mouse input before their owner. Reserve ALL four
+  // resize edges/corners so the main HWND can receive native hit tests.
+  const int border_x = IsZoomed(g_main_window) ? 0 : (std::max)(MulDiv(8, dpi, 96), GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi));
+  const int border_y = IsZoomed(g_main_window) ? 0 : (std::max)(MulDiv(8, dpi, 96), GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi));
+  const int safe_x = (std::max)(x, border_x);
+  const int safe_y = (std::max)(y, border_y);
+  const int effective_width = (std::min)(x + width, static_cast<int>(client.right) - border_x) - safe_x;
+  const int effective_height = (std::min)(y + height, static_cast<int>(client.bottom) - border_y) - safe_y;
+  POINT origin{safe_x, safe_y};
+  if (!ClientToScreen(g_main_window, &origin)) return false;
+  if (effective_width <= 0 || effective_height <= 0) {
+    ShowWindow(hwnd, SW_HIDE);
+    return true;
+  }
+  return SetWindowPos(hwnd, nullptr, origin.x, origin.y, effective_width, effective_height,
+      SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW) != FALSE;
+}
+
+// SetWindowPos/ShowWindow below synchronously dispatch messages that can
+// re-enter the main window delegate (WM_WINDOWPOSCHANGED/WM_ENABLE) and call
+// back here. Guard against recursion (stack overflow) and iterate a copy so
+// that any erase during dispatch cannot invalidate the iterator.
+static bool g_syncing_docked_windows = false;
+static void SyncDockedWindows() {
+  if (g_syncing_docked_windows || g_dock_snapshots.empty()) return;
+  g_syncing_docked_windows = true;
+  const std::vector<std::pair<HWND, WindowStateSnapshot>> items(
+      g_dock_snapshots.begin(), g_dock_snapshots.end());
+  for (const auto& [hwnd, snapshot] : items) {
+    if (IsWindow(hwnd) && IsWindowDocked(hwnd)) PositionDockedWindow(hwnd, snapshot);
+  }
+  g_syncing_docked_windows = false;
+}
+
+static bool SaveDockBounds(HWND hwnd, int x, int y, int width, int height) {
   auto it = g_dock_snapshots.find(hwnd);
-  return it != g_dock_snapshots.end() && it->second.is_docked;
+  if (it == g_dock_snapshots.end() || width <= 0 || height <= 0) return false;
+  POINT origin{x, y};
+  if (!g_main_child_content || !IsWindow(g_main_child_content)) return false;
+  MapWindowPoints(g_main_child_content, g_main_window, &origin, 1);
+  RECT client{};
+  if (!GetClientRect(g_main_window, &client)) return false;
+  auto& snapshot = it->second;
+  snapshot.bounds = {origin.x, origin.y, origin.x + width, origin.y + height};
+  snapshot.client_size = {client.right, client.bottom};
+  snapshot.dpi = GetDpiForWindow(g_main_window);
+  return PositionDockedWindow(hwnd, snapshot);
 }
 
-void SetMainWindowHandle(HWND hwnd) {
-  g_main_window = hwnd;
-  DockLog("[BrowserDock C++] SetMainWindowHandle: 0x%p", hwnd);
+static bool RestoreDockedWindow(HWND hwnd, bool show) {
+  const auto it = g_dock_snapshots.find(hwnd);
+  if (it == g_dock_snapshots.end()) return true; // idempotent close/rollback
+  const auto snapshot = it->second;
+  const LONG_PTR docked_style = GetWindowLongPtr(hwnd, GWL_STYLE);
+  const LONG_PTR docked_ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+  const auto rollback = [&]() {
+    WriteWindowLong(hwnd, GWL_STYLE, docked_style);
+    WriteWindowLong(hwnd, GWL_EXSTYLE, docked_ex_style);
+    WriteWindowLong(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window));
+    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    PositionDockedWindow(hwnd, snapshot);
+    return false;
+  };
+  ShowWindow(hwnd, SW_HIDE);
+  if (!WriteWindowLong(hwnd, GWL_STYLE, snapshot.style & ~WS_VISIBLE) ||
+      !WriteWindowLong(hwnd, GWL_EXSTYLE, snapshot.ex_style) ||
+      !WriteWindowLong(hwnd, GWLP_HWNDPARENT,
+          reinterpret_cast<LONG_PTR>(IsWindow(snapshot.owner) ? snapshot.owner : nullptr))) return rollback();
+  WINDOWPLACEMENT placement = snapshot.placement;
+  placement.showCmd = SW_HIDE;
+  if (!SetWindowPlacement(hwnd, &placement)) return rollback();
+  const MARGINS margins{0, 0, 0, 1};
+  DwmExtendFrameIntoClientArea(hwnd, &margins);
+  const int corners = DWMWCP_ROUND;
+  DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
+  if (!SetWindowPos(hwnd, (snapshot.ex_style & WS_EX_TOPMOST) ? HWND_TOPMOST : HWND_NOTOPMOST,
+      0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED)) return rollback();
+  g_dock_snapshots.erase(it);
+  if (show) {
+    ShowWindow(hwnd, snapshot.placement.showCmd == SW_SHOWMAXIMIZED ? SW_MAXIMIZE : SW_SHOWNORMAL);
+    SetForegroundWindow(hwnd);
+  }
+  return true;
 }
 
-HWND GetMainWindowHandle() {
-  return g_main_window;
-}
-
-void SetMainChildContentHandle(HWND hwnd) {
-  g_main_child_content = hwnd;
-  if (hwnd && IsWindow(hwnd)) {
-    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
-    if (!(style & WS_CLIPSIBLINGS)) {
-      SetWindowLongPtr(hwnd, GWL_STYLE, style | WS_CLIPSIBLINGS);
-    }
-    DockLog("[BrowserDock C++] SetMainChildContentHandle: 0x%p (WS_CLIPSIBLINGS applied)", hwnd);
+static bool AttachDockedWindow(HWND hwnd, const std::string& slot_id, int x, int y, int width, int height) {
+  if (!IsWindow(hwnd) || !IsWindow(g_main_window) || hwnd == g_main_window || width <= 0 || height <= 0) return false;
+  // UIThreadPolicy concerns the Dart isolate, not HWND ownership. Check actual
+  // platform threads before manipulating native window presentation.
+  const DWORD browser_thread = GetWindowThreadProcessId(hwnd, nullptr);
+  const DWORD main_thread = GetWindowThreadProcessId(g_main_window, nullptr);
+  if (browser_thread != main_thread || GetCurrentThreadId() != browser_thread) return false;
+  if (IsWindowDocked(hwnd)) {
+    if (g_dock_snapshots.at(hwnd).slot_id != slot_id) return false;
+    return SaveDockBounds(hwnd, x, y, width, height);
   }
-}
-
-HWND GetMainChildContentHandle() {
-  if (g_main_child_content && IsWindow(g_main_child_content)) {
-    return g_main_child_content;
+  WindowStateSnapshot snapshot;
+  snapshot.slot_id = slot_id;
+  snapshot.style = GetWindowLongPtr(hwnd, GWL_STYLE);
+  snapshot.ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+  snapshot.owner = GetWindow(hwnd, GW_OWNER);
+  if ((snapshot.style & WS_CHILD) || !GetWindowPlacement(hwnd, &snapshot.placement)) return false;
+  g_dock_snapshots.emplace(hwnd, snapshot);
+  ShowWindow(hwnd, SW_HIDE);
+  const LONG_PTR style = (snapshot.style & ~(WS_CHILD | WS_VISIBLE | WS_CAPTION |
+      WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_MAXIMIZE | WS_MINIMIZE)) | WS_POPUP;
+  const LONG_PTR ex_style = (snapshot.ex_style & ~(WS_EX_APPWINDOW | WS_EX_TOPMOST)) | WS_EX_TOOLWINDOW;
+  if (!WriteWindowLong(hwnd, GWL_STYLE, style) || !WriteWindowLong(hwnd, GWL_EXSTYLE, ex_style) ||
+      !WriteWindowLong(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window)) ||
+      !SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED) ||
+      !SaveDockBounds(hwnd, x, y, width, height)) {
+    RestoreDockedWindow(hwnd, (snapshot.style & WS_VISIBLE) != 0);
+    return false;
   }
-  if (g_main_window && IsWindow(g_main_window)) {
-    return GetWindow(g_main_window, GW_CHILD);
+  const MARGINS margins{};
+  DwmExtendFrameIntoClientArea(hwnd, &margins);
+  const int corners = DWMWCP_DONOTROUND;
+  DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
+  // An owned window stays above its owner without becoming globally topmost.
+  if (!SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER)) {
+    RestoreDockedWindow(hwnd, (snapshot.style & WS_VISIBLE) != 0);
+    return false;
   }
-  return nullptr;
-}
-
-static int s_last_hole_x = -1, s_last_hole_y = -1, s_last_hole_w = -1, s_last_hole_h = -1;
-static HWND s_active_docked_hwnd = nullptr;
-static int s_active_docked_w = 0;
-static int s_active_docked_y = 0;
-
-static void UpdateMainViewClipHole(int x, int y, int w, int h) {
-  if (s_last_hole_x == x && s_last_hole_y == y && s_last_hole_w == w && s_last_hole_h == h) {
-    return;
-  }
-  s_last_hole_x = x;
-  s_last_hole_y = y;
-  s_last_hole_w = w;
-  s_last_hole_h = h;
-
-  HWND child_view = GetMainChildContentHandle();
-  if (!child_view || !IsWindow(child_view)) {
-    DockLog("[BrowserDock C++] UpdateMainViewClipHole: child_view is invalid");
-    return;
-  }
-
-  if (w <= 0 || h <= 0) {
-    DockLog("[BrowserDock C++] UpdateMainViewClipHole skipped (invalid hole=%dx%d)", w, h);
-    return;
-  }
-
-  // 使用超大外边界区域减去镂空矩形，防止主窗口最大化/缩放瞬间因旧 view_w/view_h 裁剪导致外围黑边
-  HRGN full_rgn = CreateRectRgn(0, 0, 32767, 32767);
-  HRGN hole_rgn = CreateRectRgn(x, y, x + w, y + h);
-  HRGN final_rgn = CreateRectRgn(0, 0, 0, 0);
-
-  CombineRgn(final_rgn, full_rgn, hole_rgn, RGN_DIFF);
-  DeleteObject(full_rgn);
-  DeleteObject(hole_rgn);
-
-  if (SetWindowRgn(child_view, final_rgn, FALSE)) {
-    DockLog("[BrowserDock C++] UpdateMainViewClipHole applied: hole=(%d, %d, %d, %d)",
-            x, y, w, h);
-  } else {
-    DockLog("[BrowserDock C++] SetWindowRgn failed on child_view=0x%p, error=%lu",
-            child_view, GetLastError());
-    DeleteObject(final_rgn);
-  }
-}
-
-static void ResetMainViewClipHole() {
-  HWND child_view = GetMainChildContentHandle();
-  s_last_hole_x = s_last_hole_y = s_last_hole_w = s_last_hole_h = -1;
-  s_active_docked_hwnd = nullptr;
-  s_active_docked_w = 0;
-  s_active_docked_y = 0;
-  if (child_view && IsWindow(child_view)) {
-    SetWindowRgn(child_view, nullptr, TRUE);
-    DockLog("[BrowserDock C++] ResetMainViewClipHole restored full rendering region");
-  }
-}
-
-static void SyncDockedWindowWithMainResize(int main_client_w, int main_client_h) {
-  if (!s_active_docked_hwnd || !IsWindow(s_active_docked_hwnd) ||
-      !IsWindowDocked(s_active_docked_hwnd) || !g_main_window ||
-      !IsWindow(g_main_window)) {
-    return;
-  }
-  if (main_client_w <= 0 || main_client_h <= 0 || s_active_docked_w <= 0) {
-    return;
-  }
-
-  const int new_x = (main_client_w > s_active_docked_w)
-                        ? (main_client_w - s_active_docked_w)
-                        : 0;
-  const int new_y = s_active_docked_y;
-  int effective_w = s_active_docked_w;
-  int effective_h = main_client_h - new_y;
-
-  if (!IsZoomed(g_main_window)) {
-    const int border = 8;
-    if (new_x + effective_w > main_client_w - border) {
-      effective_w = main_client_w - border - new_x;
-    }
-    if (new_y + effective_h > main_client_h - border) {
-      effective_h = main_client_h - border - new_y;
-    }
-  }
-  if (effective_w < 100) effective_w = 100;
-  if (effective_h < 100) effective_h = 100;
-
-  UpdateMainViewClipHole(new_x, new_y, effective_w, effective_h);
-  SetWindowPos(s_active_docked_hwnd, HWND_TOP, new_x, new_y, effective_w,
-               effective_h, SWP_NOACTIVATE | SWP_NOCOPYBITS);
+  return true;
 }
 
 void CenterWindowOnMonitor(HWND hwnd, HWND ref_hwnd = nullptr, int desired_w = 0, int desired_h = 0) {
@@ -319,7 +366,10 @@ LRESULT CALLBACK SubWindowSubclassProc(
       return DefSubclassProc(hwnd, uMsg, wParam, lParam);
     }
     case WM_SHOWWINDOW: {
-      if (wParam == FALSE) {
+      // Docked browsers are hidden/shown by SyncDockedWindows (e.g. while a
+      // modal disables the main window). Never re-enable/activate main here,
+      // otherwise WM_ENABLE -> SyncDockedWindows recursion breaks modals.
+      if (wParam == FALSE && !IsWindowDocked(hwnd)) {
         HWND main = GetMainWindowHandle();
         if (main && IsWindow(main) && !IsWindowEnabled(main)) {
           EnableWindow(main, TRUE);
@@ -329,6 +379,8 @@ LRESULT CALLBACK SubWindowSubclassProc(
       break;
     }
     case WM_DESTROY: {
+      // Drop stale snapshot so a recycled HWND is never repositioned.
+      g_dock_snapshots.erase(hwnd);
       HWND main = GetMainWindowHandle();
       if (main && IsWindow(main)) {
         EnableWindow(main, TRUE);
@@ -388,9 +440,11 @@ std::wstring Wide(const std::string& value) {
 }
 class WindowControls : public flutter::Plugin {
  public:
-  explicit WindowControls(flutter::PluginRegistrarWindows* registrar, HWND explicit_hwnd = nullptr)
+  explicit WindowControls(flutter::PluginRegistrarWindows* registrar, HWND explicit_hwnd = nullptr,
+                          flutter::FlutterViewController* controller = nullptr)
       : registrar_(registrar),
         explicit_hwnd_(explicit_hwnd),
+        view_controller_(controller),
         channel_(std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
             registrar->messenger(), "gotoim/window",
             &flutter::StandardMethodCodec::GetInstance())) {
@@ -398,13 +452,38 @@ class WindowControls : public flutter::Plugin {
     delegate_ = registrar_->RegisterTopLevelWindowProcDelegate(
         [this](HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
             -> std::optional<LRESULT> {
-          if (hwnd == Window() && hwnd == g_main_window && message == WM_SIZE) {
-            if (wparam != SIZE_MINIMIZED) {
-              SyncDockedWindowWithMainResize(
-                  static_cast<int>(LOWORD(lparam)),
-                  static_cast<int>(HIWORD(lparam)));
+          if (hwnd == Window() && hwnd == g_main_window &&
+              (message == WM_WINDOWPOSCHANGED || message == WM_SIZE ||
+               message == WM_SHOWWINDOW || message == WM_ENABLE || message == WM_DPICHANGED)) {
+            if (message == WM_SHOWWINDOW && !wparam) {
+              for (const auto& entry : g_dock_snapshots) {
+                ShowWindow(entry.first, SW_HIDE);
+              }
+            } else {
+              SyncDockedWindows();
             }
-            return std::nullopt;
+          }
+          if (hwnd == Window() && message == WM_NCDESTROY) {
+            g_dock_snapshots.erase(hwnd);
+          }
+          if (hwnd == Window() && message == WM_SHOWWINDOW && !wparam) {
+            KillTimer(hwnd, kProfileHoverTimer);
+            profile_hover_ = false;
+          }
+          if (hwnd == Window() && message == WM_TIMER &&
+              wparam == kProfileHoverTimer && profile_hover_) {
+            POINT cursor{};
+            RECT card{};
+            if (!GetCursorPos(&cursor) || !GetWindowRect(hwnd, &card)) return 0;
+            const bool inside = PtInRect(&card, cursor) ||
+                                PtInRect(&profile_anchor_, cursor);
+            const HWND foreground = GetForegroundWindow();
+            const bool interacting = IsFlyoutInteraction(hwnd, foreground);
+            if (profile_hover_state_.ShouldHide(GetTickCount64(), inside, interacting)) {
+              ShowWindow(hwnd, SW_HIDE);
+              channel_->InvokeMethod("closeRequested", nullptr);
+            }
+            return 0;
           }
           if (hwnd == Window() && message == WM_NCCALCSIZE) {
             if (wparam == TRUE) {
@@ -473,8 +552,12 @@ class WindowControls : public flutter::Plugin {
           }
           if (hwnd == Window() && auto_hide_ && message == WM_ACTIVATE &&
               LOWORD(wparam) == WA_INACTIVE && IsWindowVisible(hwnd)) {
-            ShowWindow(hwnd, SW_HIDE);
-            channel_->InvokeMethod("closeRequested", nullptr);
+            const HWND next = reinterpret_cast<HWND>(lparam);
+            if (!profile_hover_ ||
+                !IsFlyoutInteraction(hwnd, next)) {
+              ShowWindow(hwnd, SW_HIDE);
+              channel_->InvokeMethod("closeRequested", nullptr);
+            }
           }
           if (hwnd == Window() && message == WM_CLOSE && !allow_destroy_) {
             if (is_modal_ && g_main_window && IsWindow(g_main_window)) {
@@ -682,6 +765,22 @@ class WindowControls : public flutter::Plugin {
             SetForegroundWindow(g_main_window);
           }
         }
+      } else if (method == "prepareFrame") {
+        if (!view_controller_) {
+          result->Error("SURFACE_UNAVAILABLE", "Window renderer is unavailable");
+          return;
+        }
+        frame_state_->waiters.push_back(std::move(result));
+        if (frame_state_->waiters.size() == 1) {
+          view_controller_->engine()->SetNextFrameCallback([state = frame_state_]() {
+            auto waiters = std::move(state->waiters);
+            state->waiters.clear();
+            ++state->prepared_frames;
+            for (auto& waiter : waiters) waiter->Success(flutter::EncodableValue(true));
+          });
+          view_controller_->ForceRedraw();
+        }
+        return;
       } else if (method == "setToolWindow") {
         const bool* enable = call.arguments()
             ? std::get_if<bool>(call.arguments()) : nullptr;
@@ -742,10 +841,41 @@ class WindowControls : public flutter::Plugin {
             }
             return def;
           };
-          const int x = read_num("x", 0);
-          const int y = read_num("y", 0);
-          const int w = read_num("width", 380);
-          const int h = read_num("height", 420);
+          int x = read_num("x", 0);
+          int y = read_num("y", 0);
+          int w = read_num("width", 380);
+          int h = read_num("height", 420);
+          profile_hover_ = false;
+          KillTimer(hwnd, kProfileHoverTimer);
+          auto anchor_it = args->find(flutter::EncodableValue("hoverAnchor"));
+          if (anchor_it != args->end()) {
+            if (const auto* anchor = std::get_if<flutter::EncodableMap>(&anchor_it->second)) {
+              const auto coordinate = [anchor](const char* key) -> LONG {
+                auto it = anchor->find(flutter::EncodableValue(key));
+                if (it == anchor->end()) return 0;
+                if (const auto* value = std::get_if<int32_t>(&it->second)) return *value;
+                if (const auto* value = std::get_if<int64_t>(&it->second)) return static_cast<LONG>(*value);
+                return 0;
+              };
+              profile_anchor_ = {coordinate("left"), coordinate("top"),
+                                 coordinate("right"), coordinate("bottom")};
+              MONITORINFO monitor{sizeof(MONITORINFO)};
+              const HMONITOR target_monitor = MonitorFromRect(&profile_anchor_, MONITOR_DEFAULTTONEAREST);
+              if (GetMonitorInfo(target_monitor, &monitor)) {
+                const UINT dpi = FlutterDesktopGetDpiForMonitor(target_monitor);
+                w = MulDiv(380, dpi ? dpi : 96, 96);
+                h = MulDiv(420, dpi ? dpi : 96, 96);
+                const int gap = MulDiv(8, dpi ? dpi : 96, 96);
+                const RECT bounds = ProfileFlyoutBounds(profile_anchor_, monitor.rcWork, w, h, gap);
+                x = bounds.left;
+                y = bounds.top;
+                w = bounds.right - bounds.left;
+                h = bounds.bottom - bounds.top;
+                profile_hover_ = true;
+                profile_hover_state_.Reset(GetTickCount64());
+              }
+            }
+          }
           bool no_activate = true;
           auto no_act_it = args->find(flutter::EncodableValue("noActivate"));
           if (no_act_it != args->end()) {
@@ -753,6 +883,7 @@ class WindowControls : public flutter::Plugin {
           }
           SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h,
                        SWP_SHOWWINDOW | (no_activate ? SWP_NOACTIVATE : 0));
+          if (profile_hover_) SetTimer(hwnd, kProfileHoverTimer, 50, nullptr);
           if (!no_activate) {
             SetForegroundWindow(hwnd);
           }
@@ -878,292 +1009,110 @@ class WindowControls : public flutter::Plugin {
         result_map[flutter::EncodableValue("dpi")] = flutter::EncodableValue(static_cast<int32_t>(dpi));
         result->Success(flutter::EncodableValue(result_map));
         return;
-      } else if (method == "dockToParent") {
-        if (!g_main_window || !IsWindow(g_main_window) || hwnd == g_main_window) {
-          result->Error("MAIN_WINDOW_UNAVAILABLE", "Cannot dock: main window not available");
-          return;
-        }
-        const auto* args = call.arguments()
-            ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
-        if (!args) {
-          result->Error("INVALID_ARGS", "dockToParent requires bounds arguments");
-          return;
-        }
-        const auto read_num = [args](const char* key, int def) -> int {
+      } else if (method == "dockToParent" || method == "updateDockedBounds") {
+        const auto* args = call.arguments() ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+        if (!args) { result->Error("INVALID_ARGS", "Browser bounds required"); return; }
+        const auto number = [args](const char* key) -> int {
           auto it = args->find(flutter::EncodableValue(key));
-          if (it != args->end()) {
-            if (const auto* val_i = std::get_if<int32_t>(&it->second)) return *val_i;
-            if (const auto* val_l = std::get_if<int64_t>(&it->second)) return static_cast<int>(*val_l);
-            if (const auto* val_d = std::get_if<double>(&it->second)) return static_cast<int>(*val_d);
-          }
-          return def;
+          if (it == args->end()) return 0;
+          if (auto v = std::get_if<int32_t>(&it->second)) return *v;
+          if (auto v = std::get_if<int64_t>(&it->second)) return static_cast<int>(*v);
+          return 0;
         };
-        const int x = read_num("x", 0);
-        const int y = read_num("y", 0);
-        const int w = read_num("width", 400);
-        const int h = read_num("height", 600);
-
-        DockLog("[BrowserDock C++] dockToParent called: hwnd=0x%p, main=0x%p, (x=%d, y=%d, w=%d, h=%d)",
-                hwnd, g_main_window, x, y, w, h);
-
-        if (!g_main_window || !IsWindow(g_main_window)) {
-          DockLog("[BrowserDock C++] dockToParent failed: g_main_window is null or invalid");
-          result->Error("NO_MAIN_WINDOW", "Main window handle unavailable");
-          return;
-        }
-
-        // 1. 保存快照（仅在未挂载时保存原始状态）
-        if (g_dock_snapshots.find(hwnd) == g_dock_snapshots.end()) {
-          WindowStateSnapshot snapshot;
-          snapshot.style = GetWindowLongPtr(hwnd, GWL_STYLE);
-          snapshot.ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-          snapshot.original_parent = GetParent(hwnd);
-          GetWindowPlacement(hwnd, &snapshot.placement);
-          snapshot.is_docked = true;
-          g_dock_snapshots[hwnd] = snapshot;
-          DockLog("[BrowserDock C++] Snapshot saved: style=0x%llx, ex_style=0x%llx, parent=0x%p",
-                  snapshot.style, snapshot.ex_style, snapshot.original_parent);
-        }
-
-        // 2. 确保主窗口具有 WS_CLIPCHILDREN
-        LONG_PTR main_style = GetWindowLongPtr(g_main_window, GWL_STYLE);
-        if (!(main_style & WS_CLIPCHILDREN)) {
-          SetWindowLongPtr(g_main_window, GWL_STYLE, main_style | WS_CLIPCHILDREN);
-        }
-
-        // 3. 剥离独立窗口样式，变更为 WS_CHILD 并补充 WS_CLIPCHILDREN | WS_CLIPSIBLINGS
-        LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
-        style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
-        style |= (WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
-        SetWindowLongPtr(hwnd, GWL_STYLE, style);
-
-        LONG_PTR ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-        ex_style &= ~WS_EX_APPWINDOW;
-        SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex_style);
-
-        const MARGINS zero_margins = {0, 0, 0, 0};
-        DwmExtendFrameIntoClientArea(hwnd, &zero_margins);
-        const int no_round = DWMWCP_DONOTROUND;
-        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &no_round, sizeof(no_round));
-
-        // 4. 执行 SetParent，校验错误
-        SetLastError(ERROR_SUCCESS);
-        HWND prev_parent = SetParent(hwnd, g_main_window);
-        DWORD err = GetLastError();
-        if (prev_parent == nullptr && err != ERROR_SUCCESS) {
-          DockLog("[BrowserDock C++] SetParent failed! error=%lu", err);
-          const auto& s = g_dock_snapshots[hwnd];
-          SetWindowLongPtr(hwnd, GWL_STYLE, s.style);
-          SetWindowLongPtr(hwnd, GWL_EXSTYLE, s.ex_style);
-          g_dock_snapshots.erase(hwnd);
-          result->Error("SET_PARENT_FAILED", "Win32 SetParent failed");
-          return;
-        }
-        DockLog("[BrowserDock C++] SetParent succeeded: prev_parent=0x%p", prev_parent);
-
-        // 5. 坐标映射（从主 Flutter View 客户区转换到 g_main_window 客户区）
-        POINT pt = {x, y};
-        HWND child_view = GetMainChildContentHandle();
-        if (child_view && IsWindow(child_view)) {
-          MapWindowPoints(child_view, g_main_window, &pt, 1);
-        }
-        const int client_x = pt.x;
-        const int client_y = pt.y;
-
-        s_active_docked_hwnd = hwnd;
-        s_active_docked_w = w;
-        s_active_docked_y = client_y;
-
-        // 6. 计算有效尺寸：如果主窗口未最大化，确保不覆盖主窗口右侧与底部的 8px 调整边框
-        int effective_w = w;
-        int effective_h = h;
-        if (g_main_window && IsWindow(g_main_window) && !IsZoomed(g_main_window)) {
-          RECT rc_client;
-          GetClientRect(g_main_window, &rc_client);
-          const int max_w = rc_client.right - rc_client.left;
-          const int max_h = rc_client.bottom - rc_client.top;
-          const int border = 8;
-
-          if (client_x + effective_w > max_w - border) {
-            effective_w = max_w - border - client_x;
-          }
-          if (client_y + effective_h > max_h - border) {
-            effective_h = max_h - border - client_y;
-          }
-          if (effective_w < 100) effective_w = 100;
-          if (effective_h < 100) effective_h = 100;
-        }
-
-        // 7. 对主 Flutter View 设置镂空区域，防止 DirectX/Flutter 覆盖子窗口产生闪烁白屏
-        UpdateMainViewClipHole(x, y, effective_w, effective_h);
-
-        // 8. 确保窗口及子视图脱离 SW_HIDE 状态
-        ShowWindow(hwnd, SW_SHOW);
-        HWND sub_child = GetWindow(hwnd, GW_CHILD);
-        if (sub_child && IsWindow(sub_child)) {
-          ShowWindow(sub_child, SW_SHOW);
-        }
-
-        // 9. 定位子窗口并置顶在 siblings 之上（由 Win32Window 内部 QueueChildContentResize 异步调整子视图，避免跨线程死锁）
-        SetWindowPos(hwnd, HWND_TOP, client_x, client_y, effective_w, effective_h,
-                     SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-        InvalidateRect(hwnd, NULL, FALSE);
-
-        // 10. 独立浏览器切换吸附到主窗口时，确保主窗口恢复显示并激活置顶
-        if (g_main_window && IsWindow(g_main_window)) {
-          if (IsIconic(g_main_window)) {
-            ShowWindow(g_main_window, SW_RESTORE);
-          } else if (!IsWindowVisible(g_main_window)) {
-            ShowWindow(g_main_window, SW_SHOW);
-          }
-          SetForegroundWindow(g_main_window);
-        }
-
-        DockLog("[BrowserDock C++] dockToParent complete: client=(%d, %d), size=(%d, %d)",
-                client_x, client_y, effective_w, effective_h);
-        result->Success(flutter::EncodableValue(true));
-        return;
-      } else if (method == "updateDockedBounds") {
-        const auto* args = call.arguments()
-            ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
-        if (args) {
-          const auto read_num = [args](const char* key, int def) -> int {
-            auto it = args->find(flutter::EncodableValue(key));
-            if (it != args->end()) {
-              if (const auto* val_i = std::get_if<int32_t>(&it->second)) return *val_i;
-              if (const auto* val_l = std::get_if<int64_t>(&it->second)) return static_cast<int>(*val_l);
-              if (const auto* val_d = std::get_if<double>(&it->second)) return static_cast<int>(*val_d);
-            }
-            return def;
-          };
-          const int x = read_num("x", 0);
-          const int y = read_num("y", 0);
-          const int w = read_num("width", 400);
-          const int h = read_num("height", 600);
-
-          POINT pt = {x, y};
-          HWND child_view = GetMainChildContentHandle();
-          if (child_view && IsWindow(child_view) && g_main_window && IsWindow(g_main_window)) {
-            MapWindowPoints(child_view, g_main_window, &pt, 1);
-          }
-          const int client_x = pt.x;
-          const int client_y = pt.y;
-
-          s_active_docked_hwnd = hwnd;
-          s_active_docked_w = w;
-          s_active_docked_y = client_y;
-
-          int effective_w = w;
-          int effective_h = h;
-          if (g_main_window && IsWindow(g_main_window) && !IsZoomed(g_main_window)) {
-            RECT rc_client;
-            GetClientRect(g_main_window, &rc_client);
-            const int max_w = rc_client.right - rc_client.left;
-            const int max_h = rc_client.bottom - rc_client.top;
-            const int border = 8;
-
-            if (client_x + effective_w > max_w - border) {
-              effective_w = max_w - border - client_x;
-            }
-            if (client_y + effective_h > max_h - border) {
-              effective_h = max_h - border - client_y;
-            }
-            if (effective_w < 100) effective_w = 100;
-            if (effective_h < 100) effective_h = 100;
-          }
-
-          UpdateMainViewClipHole(x, y, effective_w, effective_h);
-
-          SetWindowPos(hwnd, HWND_TOP, client_x, client_y, effective_w, effective_h,
-                       SWP_NOACTIVATE | SWP_NOCOPYBITS);
-
-          DockLog("[BrowserDock C++] updateDockedBounds: (x=%d, y=%d, w=%d, h=%d) -> client=(%d, %d), effective=(%d, %d)",
-                  x, y, w, h, client_x, client_y, effective_w, effective_h);
-        }
-        result->Success(flutter::EncodableValue(true));
+        const auto slot_it = args->find(flutter::EncodableValue("slotId"));
+        const std::string slot_id = slot_it != args->end() && std::get_if<std::string>(&slot_it->second)
+            ? std::get<std::string>(slot_it->second) : "chat:right";
+        const bool success = method == "dockToParent"
+            ? AttachDockedWindow(hwnd, slot_id, number("x"), number("y"), number("width"), number("height"))
+            : SaveDockBounds(hwnd, number("x"), number("y"), number("width"), number("height"));
+        result->Success(flutter::EncodableValue(success));
         return;
       } else if (method == "undockFromParent") {
-        bool show_window = true;
-        const auto* args = call.arguments()
-            ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+        bool show = true;
+        const auto* args = call.arguments() ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
         if (args) {
           auto it = args->find(flutter::EncodableValue("showWindow"));
-          if (it != args->end()) {
-            if (const auto* val_b = std::get_if<bool>(&it->second)) {
-              show_window = *val_b;
-            }
-          }
+          if (it != args->end()) if (auto v = std::get_if<bool>(&it->second)) show = *v;
         }
-        DockLog("[BrowserDock C++] undockFromParent called: hwnd=0x%p, showWindow=%s",
-                hwnd, show_window ? "true" : "false");
-        auto it = g_dock_snapshots.find(hwnd);
-        if (it != g_dock_snapshots.end() && it->second.is_docked) {
-          const auto& s = it->second;
-
-          // 0. 若是静默关闭（show_window == false），必须在解除 SetParent 和样式恢复前先行隐藏子窗口，
-          // 否则解除 WS_CHILD 的瞬间会在桌面闪现一次独立窗口！
-          if (!show_window) {
-            ShowWindow(hwnd, SW_HIDE);
-          }
-
-          // 1. 恢复主窗口的完整渲染区域（清除镂空剪裁）
-          ResetMainViewClipHole();
-
-          // 2. 关键第一步：先剥离 WS_CHILD，并恢复原始顶层独立窗口样式
-          // 在 Win32 中，如果窗口仍带有 WS_CHILD，调用 SetParent(hwnd, nullptr) 会被系统拒绝并维持子窗口状态！
-          LONG_PTR target_style = s.style & ~WS_CHILD;
-          if (!show_window) {
-            target_style &= ~WS_VISIBLE;
-          }
-          SetWindowLongPtr(hwnd, GWL_STYLE, target_style);
-          SetWindowLongPtr(hwnd, GWL_EXSTYLE, s.ex_style);
-
-          // 3. 将父窗口解除，恢复为真正的顶层独立窗口（Parent = nullptr）
-          SetLastError(ERROR_SUCCESS);
-          HWND old_parent = SetParent(hwnd, nullptr);
-          DWORD err = GetLastError();
-          DockLog("[BrowserDock C++] undock SetParent(nullptr): old_parent=0x%p, error=%lu", old_parent, err);
-
-          // 4. 清除 Owner 关系，确保子窗口不附属于主窗口（无 Owner-Owned 约束）
-          SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, 0);
-
-          const MARGINS margins = {0, 0, 0, 1};
-          DwmExtendFrameIntoClientArea(hwnd, &margins);
-          const int corner_pref = DWMWCP_ROUND;
-          DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_pref, sizeof(corner_pref));
-
-          // 5. 恢复原始位置与状态（注意：若 !show_window，必须将 placement.showCmd 设为 SW_HIDE，否则 SetWindowPlacement 会重新激活显示窗口）
-          WINDOWPLACEMENT wp = s.placement;
-          if (!show_window) {
-            wp.showCmd = SW_HIDE;
-          }
-          SetWindowPlacement(hwnd, &wp);
-          if (show_window) {
-            SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
-            BringWindowToTop(hwnd);
-            SetForegroundWindow(hwnd);
-            SetActiveWindow(hwnd);
-            InvalidateRect(hwnd, NULL, FALSE);
-          } else {
-            ShowWindow(hwnd, SW_HIDE);
-            SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW);
-          }
-
-          g_dock_snapshots.erase(it);
-          DockLog("[BrowserDock C++] undockFromParent complete");
-          result->Success(flutter::EncodableValue(true));
-          return;
-        }
-        DockLog("[BrowserDock C++] undockFromParent: hwnd not in docked snapshots");
-        result->Success(flutter::EncodableValue(false));
+        result->Success(flutter::EncodableValue(RestoreDockedWindow(hwnd, show)));
         return;
       } else if (method == "isDocked") {
-        auto it = g_dock_snapshots.find(hwnd);
-        bool docked = (it != g_dock_snapshots.end() && it->second.is_docked);
-        DockLog("[BrowserDock C++] isDocked query: hwnd=0x%p, docked=%s", hwnd, docked ? "true" : "false");
-        result->Success(flutter::EncodableValue(docked));
+        result->Success(flutter::EncodableValue(IsWindowDocked(hwnd)));
+        return;
+      } else if (method == "setBrowserDockVisible") {
+        const auto* args = call.arguments() ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+        if (hwnd == g_main_window && args) {
+          auto visible = args->find(flutter::EncodableValue("visible"));
+          auto route = args->find(flutter::EncodableValue("route"));
+          const bool is_route = route != args->end() && std::get_if<bool>(&route->second) && std::get<bool>(route->second);
+          if (visible != args->end()) if (auto value = std::get_if<bool>(&visible->second)) {
+            const auto slot_it = args->find(flutter::EncodableValue("slotId"));
+            const std::string slot_id = slot_it != args->end() && std::get_if<std::string>(&slot_it->second)
+                ? std::get<std::string>(slot_it->second) : "chat:right";
+            if (is_route) g_dock_route_visible = *value;
+            else g_dock_slot_visible[slot_id] = *value;
+            SyncDockedWindows();
+          }
+        }
+        result->Success(flutter::EncodableValue(true));
+        return;
+      } else if (method == "browserDockDiagnostics") {
+        flutter::EncodableMap data;
+        const auto encode_rect = [](RECT rect) {
+          return flutter::EncodableValue(flutter::EncodableMap{
+            {flutter::EncodableValue("left"), flutter::EncodableValue(static_cast<int32_t>(rect.left))},
+            {flutter::EncodableValue("top"), flutter::EncodableValue(static_cast<int32_t>(rect.top))},
+            {flutter::EncodableValue("right"), flutter::EncodableValue(static_cast<int32_t>(rect.right))},
+            {flutter::EncodableValue("bottom"), flutter::EncodableValue(static_cast<int32_t>(rect.bottom))}});
+        };
+        RECT window_rect{}, main_client{};
+        GetWindowRect(hwnd, &window_rect);
+        GetClientRect(g_main_window, &main_client);
+        MapWindowPoints(g_main_window, nullptr, reinterpret_cast<POINT*>(&main_client), 2);
+        data[flutter::EncodableValue("windowRect")] = encode_rect(window_rect);
+        data[flutter::EncodableValue("preparedFrameCount")] = flutter::EncodableValue(frame_state_->prepared_frames);
+        data[flutter::EncodableValue("profileHoverTracking")] = flutter::EncodableValue(profile_hover_);
+        data[flutter::EncodableValue("profileAnchor")] = encode_rect(profile_anchor_);
+        MONITORINFO flyout_monitor{sizeof(MONITORINFO)};
+        if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &flyout_monitor)) {
+          data[flutter::EncodableValue("monitorWorkArea")] = encode_rect(flyout_monitor.rcWork);
+        }
+        data[flutter::EncodableValue("mainClientRect")] = encode_rect(main_client);
+        data[flutter::EncodableValue("mainMaximized")] = flutter::EncodableValue(IsZoomed(g_main_window) != FALSE);
+        RECT main_rect{};
+        GetWindowRect(g_main_window, &main_rect);
+        flutter::EncodableList edge_tests;
+        const POINT edge_points[] = {
+          {main_rect.left + 1, (main_rect.top + main_rect.bottom) / 2},
+          {main_rect.right - 1, (main_rect.top + main_rect.bottom) / 2},
+          {(main_rect.left + main_rect.right) / 2, main_rect.top + 1},
+          {(main_rect.left + main_rect.right) / 2, main_rect.bottom - 1}};
+        for (const auto& point : edge_points) {
+          edge_tests.push_back(flutter::EncodableValue(static_cast<int32_t>(SendMessage(g_main_window, WM_NCHITTEST, 0, MAKELPARAM(point.x, point.y)))));
+        }
+        data[flutter::EncodableValue("mainResizeHitTests")] = flutter::EncodableValue(edge_tests);
+        data[flutter::EncodableValue("windowHwnd")] = flutter::EncodableValue(reinterpret_cast<int64_t>(hwnd));
+        data[flutter::EncodableValue("windowThread")] = flutter::EncodableValue(static_cast<int64_t>(GetWindowThreadProcessId(hwnd, nullptr)));
+        data[flutter::EncodableValue("isDocked")] = flutter::EncodableValue(IsWindowDocked(hwnd));
+        data[flutter::EncodableValue("supported")] = flutter::EncodableValue(true);
+        data[flutter::EncodableValue("mainHwnd")] = flutter::EncodableValue(reinterpret_cast<int64_t>(g_main_window));
+        data[flutter::EncodableValue("mainThread")] = flutter::EncodableValue(static_cast<int64_t>(GetWindowThreadProcessId(g_main_window, nullptr)));
+        flutter::EncodableList docked_windows;
+        for (const auto& [browser, snapshot] : g_dock_snapshots) {
+          docked_windows.push_back(flutter::EncodableValue(flutter::EncodableMap{
+            {flutter::EncodableValue("hwnd"), flutter::EncodableValue(reinterpret_cast<int64_t>(browser))},
+            {flutter::EncodableValue("slotId"), flutter::EncodableValue(snapshot.slot_id)},
+            {flutter::EncodableValue("visible"), flutter::EncodableValue(IsWindowVisible(browser) != FALSE)}}));
+          if (browser != hwnd && hwnd != g_main_window) continue;
+          data[flutter::EncodableValue("slotId")] = flutter::EncodableValue(snapshot.slot_id);
+          data[flutter::EncodableValue("browserHwnd")] = flutter::EncodableValue(reinterpret_cast<int64_t>(browser));
+          data[flutter::EncodableValue("browserThread")] = flutter::EncodableValue(static_cast<int64_t>(GetWindowThreadProcessId(browser, nullptr)));
+          data[flutter::EncodableValue("dpi")] = flutter::EncodableValue(static_cast<int32_t>(snapshot.dpi));
+          data[flutter::EncodableValue("docked")] = flutter::EncodableValue(true);
+          data[flutter::EncodableValue("visible")] = flutter::EncodableValue(IsWindowVisible(browser) != FALSE);
+        }
+        data[flutter::EncodableValue("windows")] = flutter::EncodableValue(docked_windows);
+        result->Success(flutter::EncodableValue(data));
         return;
       } else {
         result->NotImplemented();
@@ -1173,6 +1122,11 @@ class WindowControls : public flutter::Plugin {
     });
   }
   ~WindowControls() override {
+    for (auto& waiter : frame_state_->waiters) {
+      waiter->Error("WINDOW_CLOSED", "Window closed before its frame was ready");
+    }
+    frame_state_->waiters.clear();
+    if (Window()) KillTimer(Window(), kProfileHoverTimer);
     if (Window() == g_main_window && g_main_window) {
       UnregisterHotKey(g_main_window, 9001);
       UnregisterHotKey(g_main_window, 9002);
@@ -1185,6 +1139,16 @@ class WindowControls : public flutter::Plugin {
     registrar_->UnregisterTopLevelWindowProcDelegate(delegate_);
   }
  private:
+  static bool IsFlyoutInteraction(HWND flyout, HWND candidate) {
+    // GA_ROOTOWNER alone would return the main app window for this owned
+    // flyout. Walk owners so a dialog owned by the card counts, the main
+    // window (and its unrelated dialogs) does not.
+    for (HWND window = candidate ? GetAncestor(candidate, GA_ROOT) : nullptr;
+         window; window = GetWindow(window, GW_OWNER)) {
+      if (window == flyout) return true;
+    }
+    return false;
+  }
   void TrayEvent(const std::string& event) {
     channel_->InvokeMethod("trayEvent", std::make_unique<flutter::EncodableValue>(event));
   }
@@ -1254,12 +1218,22 @@ class WindowControls : public flutter::Plugin {
   }
   flutter::PluginRegistrarWindows* registrar_;
   HWND explicit_hwnd_ = nullptr;
+  flutter::FlutterViewController* view_controller_ = nullptr;
+  struct FrameState {
+    std::vector<std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>> waiters;
+    int prepared_frames = 0;
+  };
+  std::shared_ptr<FrameState> frame_state_ = std::make_shared<FrameState>();
   bool is_modal_ = false;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   int delegate_ = -1;
   HWND configured_window_ = nullptr;
   bool allow_destroy_ = false;
   bool auto_hide_ = false;
+  static constexpr UINT_PTR kProfileHoverTimer = 0x47494D50;
+  bool profile_hover_ = false;
+  RECT profile_anchor_{};
+  ProfileFlyoutHover profile_hover_state_;
   NOTIFYICONDATA tray_{};
   bool tray_active_ = false;
   bool tray_icon_owned_ = false;
@@ -1267,9 +1241,10 @@ class WindowControls : public flutter::Plugin {
   std::wstring tray_owner_;
 };
 }
-void RegisterWindowControls(flutter::FlutterEngine* engine, HWND explicit_hwnd) {
+void RegisterWindowControls(flutter::FlutterEngine* engine, HWND explicit_hwnd,
+                            flutter::FlutterViewController* controller) {
   auto* registrar = flutter::PluginRegistrarManager::GetInstance()
       ->GetRegistrar<flutter::PluginRegistrarWindows>(
           engine->GetRegistrarForPlugin("GotoIMWindowControls"));
-  registrar->AddPlugin(std::make_unique<WindowControls>(registrar, explicit_hwnd));
+  registrar->AddPlugin(std::make_unique<WindowControls>(registrar, explicit_hwnd, controller));
 }

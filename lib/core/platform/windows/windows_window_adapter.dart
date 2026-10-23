@@ -17,7 +17,15 @@ class WindowsWindowAdapter {
     if (!isWindows) return null;
     try {
       final result = await _channel.invokeMethod<bool>(method, arguments);
-      if (result != null) _maximized = result;
+      if (result != null &&
+          const [
+            'configure',
+            'toggleMaximize',
+            'restore',
+            'minimize',
+          ].contains(method)) {
+        _maximized = result;
+      }
       return result;
     } on MissingPluginException {
       return null;
@@ -105,6 +113,13 @@ class WindowsWindowAdapter {
     await _invoke('setToolWindow', enable);
   }
 
+  static Future<void> prepareFrame() async {
+    if (!isWindows) return;
+    await _channel
+        .invokeMethod<bool>('prepareFrame')
+        .timeout(const Duration(seconds: 5));
+  }
+
   static Future<void> showTrayFlyout() async {
     await _invoke('trayFlyout');
   }
@@ -115,6 +130,7 @@ class WindowsWindowAdapter {
     required int width,
     required int height,
     bool noActivate = true,
+    Map<String, int>? hoverAnchor,
   }) async {
     await _invoke('positionFlyout', {
       'x': x,
@@ -122,6 +138,7 @@ class WindowsWindowAdapter {
       'width': width,
       'height': height,
       'noActivate': noActivate,
+      if (hoverAnchor != null) 'hoverAnchor': hoverAnchor,
     });
   }
 
@@ -165,8 +182,10 @@ class WindowsWindowAdapter {
     }
   }
 
-  /// 将当前窗口作为 WS_CHILD 嵌入挂载到主窗口的指定客户区矩形中
+  /// Attach the existing top-level browser as an owned, borderless window.
+  /// It keeps its original Flutter view; it is never reparented with WS_CHILD.
   static Future<bool> dockToParent({
+    String slotId = 'chat:right',
     required int x,
     required int y,
     required int width,
@@ -178,6 +197,7 @@ class WindowsWindowAdapter {
     );
     try {
       final res = await _channel.invokeMethod<bool>('dockToParent', {
+        'slotId': slotId,
         'x': x,
         'y': y,
         'width': width,
@@ -242,5 +262,32 @@ class WindowsWindowAdapter {
     } catch (_) {
       return false;
     }
+  }
+
+  static Future<void> setDockSlotVisible(String slotId, bool visible) async {
+    await _invoke('setBrowserDockVisible', {
+      'slotId': slotId,
+      'visible': visible,
+      'route': false,
+    });
+  }
+
+  static Future<void> setBrowserDockVisible(
+    bool visible, {
+    bool route = false,
+  }) async {
+    await _invoke('setBrowserDockVisible', {
+      'visible': visible,
+      'route': route,
+      'slotId': 'chat:right',
+    });
+  }
+
+  static Future<Map<String, dynamic>> browserDockDiagnostics() async {
+    if (!isWindows) return {'supported': false};
+    final result = await _channel.invokeMapMethod<String, dynamic>(
+      'browserDockDiagnostics',
+    );
+    return result ?? {'supported': false};
   }
 }

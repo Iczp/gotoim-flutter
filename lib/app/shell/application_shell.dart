@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/compliance/privacy_consent_dialog.dart';
+import '../../core/browser/desktop_browser_dock_controller.dart';
 import '../../core/compliance/privacy_service.dart';
 import '../../core/native/native.dart';
 import '../../core/platform/windows/windows_window_adapter.dart';
@@ -46,6 +47,7 @@ class ApplicationShell extends ConsumerStatefulWidget {
 }
 
 class _ApplicationShellState extends ConsumerState<ApplicationShell> {
+  DefaultWindowService? _browserWindowService;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   HomeSection _section = HomeSection.messages;
   // Tabs are created on first visit only, then kept alive so switching does
@@ -56,6 +58,12 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   @override
   void initState() {
     super.initState();
+    final windowService = ref.read(windowServiceProvider);
+    ref.read(desktopBrowserDockProvider);
+    if (windowService is DefaultWindowService) {
+      _browserWindowService = windowService;
+      windowService.onWindowDockLayoutRequested = _prepareBrowserDock;
+    }
     HardwareKeyboard.instance.addHandler(_handleAppWideKeyEvent);
     WindowsWindowAdapter.onHotkey = _handleHotkeyAction;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -95,6 +103,11 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
 
   @override
   void dispose() {
+    final windowService = _browserWindowService;
+    if (windowService != null &&
+        windowService.onWindowDockLayoutRequested == _prepareBrowserDock) {
+      windowService.onWindowDockLayoutRequested = null;
+    }
     HardwareKeyboard.instance.removeHandler(_handleAppWideKeyEvent);
     if (WindowsWindowAdapter.onHotkey == _handleHotkeyAction) {
       WindowsWindowAdapter.onHotkey = null;
@@ -147,10 +160,12 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       final unreadSessions =
           controller.sessions.where((s) => s.unreadCount > 0).toList();
       if (unreadSessions.isNotEmpty) {
-        final currentSelectedId =
-            ref.read(selectedDesktopSessionUnitIdProvider);
-        final currentIndex =
-            unreadSessions.indexWhere((s) => s.id == currentSelectedId);
+        final currentSelectedId = ref.read(
+          selectedDesktopSessionUnitIdProvider,
+        );
+        final currentIndex = unreadSessions.indexWhere(
+          (s) => s.id == currentSelectedId,
+        );
         final nextIndex =
             currentIndex >= 0 ? (currentIndex + 1) % unreadSessions.length : 0;
         final targetSession = unreadSessions[nextIndex];
@@ -181,6 +196,11 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   }
 
   void _select(HomeSection section) {
+    unawaited(
+      WindowsWindowAdapter.setBrowserDockVisible(
+        section == HomeSection.messages,
+      ),
+    );
     final now = DateTime.now();
     if (section == HomeSection.messages && _section == HomeSection.messages) {
       final previous = _lastMessagesTabTap;
@@ -198,6 +218,14 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       _visitedSections.add(section);
     });
     ref.read(currentHomeSectionProvider.notifier).setSection(section);
+  }
+
+  Future<void> _prepareBrowserDock(String slotId) async {
+    if (slotId != 'chat:right') throw UnsupportedError('未注册的吸附区域：$slotId');
+    if (!mounted) throw StateError('聊天主窗口不可用');
+    rootNavigatorKey.currentState?.popUntil((route) => route.isFirst);
+    _select(HomeSection.messages);
+    await WidgetsBinding.instance.endOfFrame;
   }
 
   void _openOwnerDrawer() => _scaffoldKey.currentState?.openDrawer();
@@ -266,16 +294,18 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         ref.read(trayServiceProvider).updateContextMenu(currentOwnerName: next);
       },
     );
-    ref.listen<SessionListController>(
-      sessionListControllerProvider,
-      (prev, next) {
-        ref.read(trayGroupedUnreadProvider.notifier).syncFromRealSessions(
-          currentOwner: next.currentOwner,
-          allOwners: next.owners,
-          sessions: next.sessions,
-        );
-      },
-    );
+    ref.listen<SessionListController>(sessionListControllerProvider, (
+      prev,
+      next,
+    ) {
+      ref
+          .read(trayGroupedUnreadProvider.notifier)
+          .syncFromRealSessions(
+            currentOwner: next.currentOwner,
+            allOwners: next.owners,
+            sessions: next.sessions,
+          );
+    });
 
     return PopScope(
       canPop: false,
@@ -326,22 +356,22 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
                   isCompact
                       ? content
                       : Column(
-                          children: [
-                            if (isNativeDesktop)
-                              const _DesktopMainWindowTitleBar(),
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  DesktopDockRail(
-                                    selected: _section,
-                                    onSelected: _select,
-                                  ),
-                                  Expanded(child: content),
-                                ],
-                              ),
+                        children: [
+                          if (isNativeDesktop)
+                            const _DesktopMainWindowTitleBar(),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                DesktopDockRail(
+                                  selected: _section,
+                                  onSelected: _select,
+                                ),
+                                Expanded(child: content),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
+                      ),
               bottomNavigationBar:
                   isCompact
                       ? _HomeNavigationBar(
@@ -643,9 +673,10 @@ class _WindowButton extends StatelessWidget {
       child: InkWell(
         onTap: onPressed,
         borderRadius: BorderRadius.circular(4),
-        hoverColor: isClose
-            ? const Color(0xFFE81123)
-            : (isDark ? Colors.white12 : Colors.black12),
+        hoverColor:
+            isClose
+                ? const Color(0xFFE81123)
+                : (isDark ? Colors.white12 : Colors.black12),
         child: SizedBox(
           width: 28,
           height: 24,

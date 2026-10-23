@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,6 +57,7 @@ class _DesktopWindowsDiagnosticsPageState
   final TextEditingController _profileStatusController = TextEditingController(
     text: '正在写代码...',
   );
+  String _dockTargetId = 'tool:browser';
   bool _isBlinking = true;
 
   String _status = '未执行';
@@ -77,6 +80,7 @@ class _DesktopWindowsDiagnosticsPageState
 
   void _resetDefaults() {
     setState(() {
+      _dockTargetId = 'tool:browser';
       _urlController.text = 'https://news.qq.com';
       _urlTitleController.text = '腾讯新闻';
       _imageUrlController.text = 'https://picsum.photos/1200/800';
@@ -100,12 +104,25 @@ class _DesktopWindowsDiagnosticsPageState
       _error = null;
     });
     try {
-      final dockNotifier = ref.read(desktopBrowserDockProvider.notifier);
-      await dockNotifier.requestDock(
-        url: _urlController.text.trim(),
-        title: _urlTitleController.text.trim(),
-      );
+      final service = ref.read(windowServiceProvider);
+      if (service.isSubWindow) {
+        const channel = WindowMethodChannel(
+          'gotoim/ipc_to_main',
+          mode: ChannelMode.unidirectional,
+        );
+        await channel.invokeMethod('request_dock_browser', {
+          'url': _urlController.text.trim(),
+          'title': _urlTitleController.text.trim(),
+        });
+      } else {
+        final dockNotifier = ref.read(desktopBrowserDockProvider.notifier);
+        await dockNotifier.requestDock(
+          url: _urlController.text.trim(),
+          title: _urlTitleController.text.trim(),
+        );
+      }
       sw.stop();
+      if (!mounted) return;
       setState(() {
         _status = '成功';
         _elapsedMs = sw.elapsedMilliseconds;
@@ -114,6 +131,7 @@ class _DesktopWindowsDiagnosticsPageState
       });
     } catch (e, st) {
       sw.stop();
+      if (!mounted) return;
       setState(() {
         _status = '失败';
         _elapsedMs = sw.elapsedMilliseconds;
@@ -129,9 +147,19 @@ class _DesktopWindowsDiagnosticsPageState
       _error = null;
     });
     try {
-      final dockNotifier = ref.read(desktopBrowserDockProvider.notifier);
-      await dockNotifier.requestUndock();
+      final service = ref.read(windowServiceProvider);
+      if (service.isSubWindow) {
+        const channel = WindowMethodChannel(
+          'gotoim/ipc_to_main',
+          mode: ChannelMode.unidirectional,
+        );
+        await channel.invokeMethod('request_undock_browser');
+      } else {
+        final dockNotifier = ref.read(desktopBrowserDockProvider.notifier);
+        await dockNotifier.requestUndock();
+      }
       sw.stop();
+      if (!mounted) return;
       setState(() {
         _status = '成功';
         _elapsedMs = sw.elapsedMilliseconds;
@@ -140,10 +168,70 @@ class _DesktopWindowsDiagnosticsPageState
       });
     } catch (e, st) {
       sw.stop();
+      if (!mounted) return;
       setState(() {
         _status = '失败';
         _elapsedMs = sw.elapsedMilliseconds;
         _error = '$e\n$st';
+      });
+    }
+  }
+
+  Future<void> _testGenericDock(String action) async {
+    final watch = Stopwatch()..start();
+    setState(() {
+      _status = '执行中';
+      _error = null;
+    });
+    try {
+      final service = ref.read(windowServiceProvider);
+      if (action == 'dock') await service.dock(targetId: _dockTargetId);
+      if (action == 'undock') await service.undock(targetId: _dockTargetId);
+      if (service is! DefaultWindowService) {
+        throw UnsupportedError('当前服务不支持窗口诊断');
+      }
+      final result = await service.inspectWindowDock(_dockTargetId);
+      if (!mounted) return;
+      setState(() {
+        _status = '成功';
+        _elapsedMs = watch.elapsedMilliseconds;
+        _lastResult = const JsonEncoder.withIndent('  ').convert(result);
+      });
+    } catch (error, stack) {
+      if (mounted) {
+        setState(() {
+          _status = '失败';
+          _elapsedMs = watch.elapsedMilliseconds;
+          _error = '$error\n$stack';
+        });
+      }
+    }
+  }
+
+  Future<void> _inspectBrowserSession() async {
+    final watch = Stopwatch()..start();
+    setState(() {
+      _status = '执行中';
+      _error = null;
+    });
+    try {
+      final service = ref.read(windowServiceProvider);
+      if (service is! DefaultWindowService) {
+        throw UnsupportedError('当前窗口服务不支持诊断');
+      }
+      final result = await service.inspectBrowserSession();
+      if (!mounted) return;
+      setState(() {
+        _status = '成功';
+        _elapsedMs = watch.elapsedMilliseconds;
+        _lastResult = const JsonEncoder.withIndent('  ').convert(result);
+      });
+    } catch (error, stack) {
+      if (!mounted) return;
+      setState(() {
+        _status = '失败';
+        _elapsedMs = watch.elapsedMilliseconds;
+        _error = '$error\n$stack';
       });
     }
   }
@@ -387,7 +475,7 @@ class _DesktopWindowsDiagnosticsPageState
         _status = '成功';
         _elapsedMs = sw.elapsedMilliseconds;
         _lastResult =
-            '已呼出悬浮无边框资料卡窗口\n姓名: ${_profileNameController.text}\n部门: ${_profileDeptController.text}\n状态: ${_profileStatusController.text}\n坐标: (260, 240)\n特性：无边框、阴影、移出自动隐藏、常驻后台不销毁';
+            '已呼出悬浮无边框资料卡窗口\n姓名: ${_profileNameController.text}\n部门: ${_profileDeptController.text}\n状态: ${_profileStatusController.text}\n头像坐标: (260, 240)\n特性：按显示器可用区域定位；移入卡片保留，点击后保持交互；移出头像与卡片后延时隐藏；常驻后台不销毁';
       });
     } catch (e, st) {
       sw.stop();
@@ -1116,8 +1204,9 @@ class _DesktopWindowsDiagnosticsPageState
                   Consumer(
                     builder: (context, ref, _) {
                       final ws = ref.watch(windowServiceProvider);
-                      final isProfileCardReady =
-                          ws.isWindowOpen('tool:profile_card');
+                      final isProfileCardReady = ws.isWindowOpen(
+                        'tool:profile_card',
+                      );
                       final isTrayReady = ws.isWindowOpen('tool:tray');
                       final isBrowserOpen = ws.isWindowOpen('tool:browser');
                       final isSettingsOpen = ws.isWindowOpen('tool:settings');
@@ -1310,7 +1399,10 @@ class _DesktopWindowsDiagnosticsPageState
                         onPressed: _testShowProfileCard,
                       ),
                       FilledButton.tonalIcon(
-                        icon: const Icon(Icons.visibility_off_outlined, size: 16),
+                        icon: const Icon(
+                          Icons.visibility_off_outlined,
+                          size: 16,
+                        ),
                         label: const Text('隐藏悬浮资料卡 (常驻后台)'),
                         onPressed: _testHideProfileCard,
                       ),
@@ -1334,12 +1426,18 @@ class _DesktopWindowsDiagnosticsPageState
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF07C160),
                         ),
-                        icon: const Icon(Icons.mark_chat_unread_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.mark_chat_unread_rounded,
+                          size: 16,
+                        ),
                         label: const Text('调起原生托盘常驻浮窗 (右下角滑出)'),
                         onPressed: _testNativeTrayFlyout,
                       ),
                       FilledButton.tonalIcon(
-                        icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.open_in_browser_rounded,
+                          size: 16,
+                        ),
                         label: const Text('应用内托盘浮窗 (模态预览)'),
                         onPressed: _testOpenTrayFlyout,
                       ),
@@ -1349,19 +1447,27 @@ class _DesktopWindowsDiagnosticsPageState
                         onPressed: _testSimulateMessage,
                       ),
                       FilledButton.tonalIcon(
-                        icon: const Icon(Icons.playlist_add_check_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.playlist_add_check_rounded,
+                          size: 16,
+                        ),
                         label: const Text('注入测试未读数据 (Mock)'),
                         onPressed: _testLoadSampleData,
                       ),
                       FilledButton.tonalIcon(
-                        icon: const Icon(Icons.notifications_active_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.notifications_active_rounded,
+                          size: 16,
+                        ),
                         label: const Text('更新托盘角标数字'),
                         onPressed: _testUpdateTrayBadge,
                       ),
                       FilledButton.tonalIcon(
                         icon: const Icon(Icons.menu_open, size: 16),
                         label: const Text('显示系统托盘菜单'),
-                        onPressed: () => ref.read(trayServiceProvider).showContextMenu(),
+                        onPressed:
+                            () =>
+                                ref.read(trayServiceProvider).showContextMenu(),
                       ),
                       FilledButton.tonalIcon(
                         icon: const Icon(Icons.done_all_rounded, size: 16),
@@ -1390,12 +1496,18 @@ class _DesktopWindowsDiagnosticsPageState
                         onPressed: _testMultiTabBrowserSequence,
                       ),
                       FilledButton.tonalIcon(
-                        icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.open_in_browser_rounded,
+                          size: 16,
+                        ),
                         label: const Text('打开独立浏览器窗口'),
                         onPressed: _testOpenBrowser,
                       ),
                       FilledButton.tonalIcon(
-                        icon: const Icon(Icons.vertical_align_bottom_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.vertical_align_bottom_rounded,
+                          size: 16,
+                        ),
                         label: const Text('嵌入挂载到聊天右侧 (微信同款)'),
                         onPressed: _testDockBrowserToChat,
                       ),
@@ -1403,6 +1515,41 @@ class _DesktopWindowsDiagnosticsPageState
                         icon: const Icon(Icons.open_in_new_rounded, size: 16),
                         label: const Text('从聊天右侧弹出为独立窗口'),
                         onPressed: _testUndockBrowserFromChat,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.fact_check_outlined, size: 16),
+                        label: const Text('读取保活标记、实例次数和窗口线程'),
+                        onPressed: _inspectBrowserSession,
+                      ),
+                      DropdownButton<String>(
+                        value: _dockTargetId,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'tool:browser',
+                            child: Text('目标：浏览器'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'tool:media',
+                            child: Text('目标：媒体查看器'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _dockTargetId = value);
+                          }
+                        },
+                      ),
+                      FilledButton.tonal(
+                        onPressed: () => _testGenericDock('dock'),
+                        child: const Text('吸附已打开的目标窗口'),
+                      ),
+                      FilledButton.tonal(
+                        onPressed: () => _testGenericDock('undock'),
+                        child: const Text('弹出目标窗口'),
+                      ),
+                      FilledButton.tonal(
+                        onPressed: () => _testGenericDock('inspect'),
+                        child: const Text('读取目标实例与主窗口边缘'),
                       ),
                     ],
                   ),
@@ -1462,7 +1609,10 @@ class _DesktopWindowsDiagnosticsPageState
                     runSpacing: 8,
                     children: [
                       FilledButton.icon(
-                        icon: const Icon(Icons.photo_library_outlined, size: 16),
+                        icon: const Icon(
+                          Icons.photo_library_outlined,
+                          size: 16,
+                        ),
                         label: const Text('独立图片/视频窗口'),
                         onPressed: _testOpenMediaViewer,
                       ),
@@ -1472,7 +1622,10 @@ class _DesktopWindowsDiagnosticsPageState
                         onPressed: _testOpenVideoViewer,
                       ),
                       FilledButton.tonalIcon(
-                        icon: const Icon(Icons.download_for_offline_outlined, size: 16),
+                        icon: const Icon(
+                          Icons.download_for_offline_outlined,
+                          size: 16,
+                        ),
                         label: const Text('下载后验证本地视频'),
                         onPressed: () => _testOpenVideoViewer(cacheFirst: true),
                       ),
@@ -1486,7 +1639,10 @@ class _DesktopWindowsDiagnosticsPageState
                           backgroundColor: const Color(0xFF07C160),
                           foregroundColor: Colors.white,
                         ),
-                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          size: 16,
+                        ),
                         label: const Text('独立聊天窗口 (HWND)'),
                         onPressed: _testOpenStandaloneChat,
                       ),
@@ -1518,7 +1674,10 @@ class _DesktopWindowsDiagnosticsPageState
                         onPressed: _testMockImageConfirmDialog,
                       ),
                       FilledButton.tonalIcon(
-                        icon: const Icon(Icons.drive_folder_upload_outlined, size: 16),
+                        icon: const Icon(
+                          Icons.drive_folder_upload_outlined,
+                          size: 16,
+                        ),
                         label: const Text('模拟弹窗: 多文件确认发送'),
                         onPressed: _testMockFilesConfirmDialog,
                       ),
@@ -1660,14 +1819,16 @@ class _DesktopWindowsDiagnosticsPageState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: active
-            ? const Color(0xFF07C160).withValues(alpha: 0.12)
-            : Colors.grey.withValues(alpha: 0.08),
+        color:
+            active
+                ? const Color(0xFF07C160).withValues(alpha: 0.12)
+                : Colors.grey.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: active
-              ? const Color(0xFF07C160).withValues(alpha: 0.35)
-              : Colors.grey.withValues(alpha: 0.2),
+          color:
+              active
+                  ? const Color(0xFF07C160).withValues(alpha: 0.35)
+                  : Colors.grey.withValues(alpha: 0.2),
           width: 0.5,
         ),
       ),

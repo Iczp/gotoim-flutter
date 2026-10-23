@@ -1,3 +1,4 @@
+import 'browser_thumbnail.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
@@ -311,10 +312,12 @@ class AppWebViewPage extends ConsumerStatefulWidget {
               fallbackContent: fallbackContent,
             );
           }
-          container
+          return container
               .read(desktopBrowserDockProvider.notifier)
-              .requestDock(url: url, title: title);
-          return Future<void>.value();
+              .requestDock(url: url, title: title)
+              .catchError((Object error) {
+                showToast('链接暂时无法打开，请重试', type: ToastType.error);
+              });
         }
 
         return windowService.openWebBrowser(
@@ -356,6 +359,7 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
   bool _isLoading = true;
   String? _errorMessage;
   bool _showPureText = false;
+  bool _minimizingToFloat = false;
   Color? _htmlThemeColor;
 
   void _applyThemeColor(String? colorStr) {
@@ -433,38 +437,53 @@ class _AppWebViewPageState extends ConsumerState<AppWebViewPage> {
       toggleModeLabel: _showPureText ? '切换网页版' : '查看纯文本',
       toggleModeIcon:
           _showPureText ? Icons.language_rounded : Icons.article_outlined,
-      onMinimizeToFloat: () {
-        final nav = Navigator.of(context);
-        final manager = ref.read(floatingWindowManagerProvider);
-        final targetUrl = _currentUrl;
-        final targetTitle = _pageTitle.isNotEmpty ? _pageTitle : widget.title;
-        final targetFallback = widget.fallbackContent;
-        final floatId = 'web_${targetUrl.hashCode}';
+      onMinimizeToFloat: () async {
+        if (_minimizingToFloat) return;
+        _minimizingToFloat = true;
+        try {
+          final nav = Navigator.of(context);
+          final manager = ref.read(floatingWindowManagerProvider);
+          final targetUrl = _currentUrl;
+          final targetTitle = _pageTitle.isNotEmpty ? _pageTitle : widget.title;
+          final targetFallback = widget.fallbackContent;
+          final floatId = 'web_${targetUrl.hashCode}';
+          final thumbnail =
+              _controller == null || _showPureText
+                  ? null
+                  : await captureBrowserThumbnail(_controller!).timeout(
+                    const Duration(milliseconds: 800),
+                    onTimeout: () => null,
+                  );
+          if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
 
-        void restorePage() {
-          manager.close(floatId);
-          AppWebViewPage.open(
-            nav.context,
-            url: targetUrl,
-            title: targetTitle,
-            fallbackContent: targetFallback,
-          );
-        }
+          void restorePage() {
+            manager.close(floatId);
+            AppWebViewPage.open(
+              nav.context,
+              url: targetUrl,
+              title: targetTitle,
+              fallbackContent: targetFallback,
+            );
+          }
 
-        manager.show(
-          id: floatId,
-          type: FloatingWindowType.webView,
-          options: FloatingWindowOptions.webView(),
-          onRestore: restorePage,
-          child: FloatingWebBubble(
-            url: targetUrl,
-            title: targetTitle,
+          manager.show(
+            id: floatId,
+            type: FloatingWindowType.webView,
+            options: FloatingWindowOptions.webView(),
             onRestore: restorePage,
-            onClose: () => manager.close(floatId),
-          ),
-        );
-        nav.pop();
-        showToast('已缩为浮窗', type: ToastType.success);
+            child: FloatingWebBubble(
+              thumbnail: thumbnail,
+              url: targetUrl,
+              title: targetTitle,
+              onRestore: restorePage,
+              onClose: () => manager.close(floatId),
+            ),
+          );
+          nav.pop();
+          showToast('已缩为浮窗', type: ToastType.success);
+        } finally {
+          _minimizingToFloat = false;
+        }
       },
     );
   }

@@ -45,14 +45,12 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   Object? _dismissedError;
   bool _isManualRetrying = false;
   Timer? _avatarHoverTimer;
-  Timer? _avatarLeaveTimer;
 
   void _onAvatarHover(Rect rect, ContactEntry contact) {
     if (kIsWeb ||
         (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
       return;
     }
-    _avatarLeaveTimer?.cancel();
     _avatarHoverTimer?.cancel();
     _avatarHoverTimer = Timer(const Duration(milliseconds: 300), () {
       final dest =
@@ -83,10 +81,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       return;
     }
     _avatarHoverTimer?.cancel();
-    _avatarLeaveTimer?.cancel();
-    _avatarLeaveTimer = Timer(const Duration(milliseconds: 200), () {
-      ref.read(windowServiceProvider).hideProfileCard();
-    });
+    // Native flyout tracking owns hover dismissal across both windows.
   }
 
   Future<void> _handleRetrySync() async {
@@ -117,7 +112,6 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   @override
   void dispose() {
     _avatarHoverTimer?.cancel();
-    _avatarLeaveTimer?.cancel();
     _scrollController
       ..removeListener(_updateActiveIndex)
       ..dispose();

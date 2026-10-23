@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/config/app_environment.dart';
+import 'package:gotoim_flutter/core/network/api_client.dart';
 import 'package:gotoim_flutter/core/security/url_security_level.dart';
 import 'package:gotoim_flutter/core/security/url_security_repository.dart';
 import 'package:gotoim_flutter/core/security/url_security_service.dart';
@@ -19,7 +20,8 @@ void main() {
 
     setUp(() {
       dotenv.loadFromString(
-        envString: 'API_BASE_URL=https://api.gotoim.com\n'
+        envString:
+            'API_BASE_URL=https://api.gotoim.com\n'
             'AUTH_BASE_URL=https://auth.gotoim.com\n'
             'DEEP_LINK_ALLOWED_HOSTS=gotoim.com',
       );
@@ -48,8 +50,9 @@ void main() {
       expect(resScam.isBlocked, isTrue);
       expect(resScam.interceptReason, contains('涉嫌虚假投资与电信诈骗'));
 
-      final resPhishing =
-          await repository.checkUrl('https://phishing-test.com/login');
+      final resPhishing = await repository.checkUrl(
+        'https://phishing-test.com/login',
+      );
       expect(resPhishing.level, equals(UrlSecurityLevel.blocked));
       expect(resPhishing.isBlocked, isTrue);
     });
@@ -112,13 +115,44 @@ void main() {
       expect(jsRes.interceptReason, contains('仅允许标准 HTTP/HTTPS 协议'));
     });
 
-    test('6. Reporting malicious URL or message', () async {
+    test('offline reports are not falsely acknowledged', () async {
       final success = await repository.report(
         target: 'https://malicious-scam.com/steal',
         reason: '涉嫌网络欺诈',
         description: '诱导填写银行卡密码',
       );
-      expect(success, isTrue);
+      expect(success, isFalse);
+    });
+    test('report succeeds only after server acknowledgement', () async {
+      final api = _ReportApi();
+      final online = DefaultUrlSecurityRepository(
+        environment: testEnv,
+        apiClient: api,
+      );
+      expect(
+        await online.report(target: 'https://example.com', reason: 'test'),
+        isTrue,
+      );
+      api.fail = true;
+      expect(
+        await online.report(target: 'https://example.com', reason: 'test'),
+        isFalse,
+      );
+    });
+    test('dangerous download suffixes include encoded paths and fragments', () {
+      expect(
+        service.isDangerousDownload('https://example.com/a.scr#download'),
+        isTrue,
+      );
+      expect(
+        service.isDangerousDownload('https://example.com/a%2Eexe?x=1'),
+        isTrue,
+      );
+      expect(service.isDangerousDownload('https://example.com/a.cmd'), isTrue);
+      expect(
+        service.isDangerousDownload('https://example.com/a.png?name=a.exe'),
+        isFalse,
+      );
     });
   });
 
@@ -171,8 +205,9 @@ void main() {
       expect(reportItem.label, equals('投诉'));
     });
 
-    testWidgets('UrlRiskDialog renders domain and anti-fraud warning',
-        (tester) async {
+    testWidgets('UrlRiskDialog renders domain and anti-fraud warning', (
+      tester,
+    ) async {
       const checkResult = UrlSecurityCheckResult(
         url: 'https://flutter.dev/docs',
         domain: 'flutter.dev',
@@ -183,9 +218,7 @@ void main() {
 
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: UrlRiskDialog(checkResult: checkResult),
-          ),
+          home: Scaffold(body: UrlRiskDialog(checkResult: checkResult)),
         ),
       );
 
@@ -196,4 +229,22 @@ void main() {
       expect(find.text('投诉此链接'), findsOneWidget);
     });
   });
+}
+
+class _ReportApi implements ApiClient {
+  bool fail = false;
+  @override
+  Future<T> post<T>(
+    String path, {
+    Map<String, Object?>? query,
+    Object? data,
+    Map<String, String>? headers,
+    bool retryOnUnauthorized = true,
+  }) async {
+    if (fail) throw StateError('offline');
+    return <String, dynamic>{'accepted': true} as T;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

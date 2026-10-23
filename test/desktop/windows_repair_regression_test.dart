@@ -160,7 +160,12 @@ void main() {
       await tester.tap(find.byTooltip('关闭窗口'));
       await tester.pump(const Duration(milliseconds: 350));
       expect(closed, 1);
-      await tester.tap(find.byTooltip('关闭网页'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget.key?.toString().contains('close_browser_tab_') ?? false,
+        ),
+      );
       await tester.pump(const Duration(milliseconds: 350));
       expect(closed, 2);
       expect(commands.where((c) => c == 'close' || c == 'destroy'), isEmpty);

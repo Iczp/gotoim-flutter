@@ -102,6 +102,14 @@ class WindowRecord {
 /// 2. 移动端 / Web 端：自动降级为当前 App 内部页面导航（保持一致的调用语法）；
 /// 3. 幂等激活：同一 Session 或应用已打开时，激活已有窗口，不重复创建。
 abstract class WindowService {
+  bool get supportsWindowDocking => false;
+  Future<void> dock({
+    required String targetId,
+    String slotId = DesktopWindowDockNotifier.chatRight,
+  }) => Future.error(UnsupportedError('当前平台暂不支持窗口吸附'));
+  Future<void> undock({required String targetId, bool showWindow = true}) =>
+      Future.error(UnsupportedError('当前平台暂不支持窗口吸附'));
+
   /// 是否运行在独立原生子视窗引擎内
   bool get isSubWindow => false;
 
@@ -259,6 +267,16 @@ class DefaultWindowService implements WindowService {
   Future<void> Function(Map arguments)? trayCommand;
   void Function(Map? arguments)? onBrowserLoadCompleted;
   Future<void> Function(String url, String? title)? onBrowserDockRequested;
+  Future<void> Function()? onBrowserStandaloneRequested;
+  Future<void> Function()? onBrowserDockLayoutRequested;
+  Future<void> Function(String slotId)? onWindowDockLayoutRequested;
+  Future<void> Function({required String targetId, String slotId})?
+  onWindowDockRequested;
+  Future<void> Function({required String targetId, bool showWindow})?
+  onWindowUndockRequested;
+  void Function(String targetId)? onWindowClosed;
+  void Function()? onBrowserClosed;
+  Future<void> _browserRequests = Future<void>.value();
   final Future<void> Function(int ownerId)? switchOwnerHandler;
   @override
   final bool isSubWindow;
@@ -480,6 +498,26 @@ class DefaultWindowService implements WindowService {
             final args = call.arguments as Map?;
             onBrowserLoadCompleted?.call(args);
             return true;
+          case 'request_window_dock':
+            final args = call.arguments as Map;
+            await dock(
+              targetId: args['targetId'] as String,
+              slotId:
+                  args['slotId'] as String? ??
+                  DesktopWindowDockNotifier.chatRight,
+            );
+            return true;
+          case 'request_window_undock':
+            final args = call.arguments as Map;
+            await undock(
+              targetId: args['targetId'] as String,
+              showWindow: args['showWindow'] != false,
+            );
+            return true;
+          case 'window_dock_diagnostics':
+            return inspectWindowDock(
+              (call.arguments as Map)['targetId'] as String,
+            );
           case 'request_dock_browser':
             final dockArgs = call.arguments as Map?;
             final dockUrl = dockArgs?['url'] as String?;
@@ -492,6 +530,9 @@ class DefaultWindowService implements WindowService {
                   .requestDock(url: dockUrl, title: dockTitle);
             }
             return true;
+
+          case 'browser_session_diagnostics':
+            return inspectBrowserSession();
 
           case 'request_undock_browser':
             final undockContainer = rootProviderContainer;
@@ -531,13 +572,11 @@ class DefaultWindowService implements WindowService {
             } else if (type == 'browser') {
               final url = args!['url'] as String;
               final title = args['title'] as String?;
-              if (onBrowserDockRequested != null) {
+              if (args['standalone'] != true &&
+                  onBrowserDockRequested != null) {
                 await onBrowserDockRequested!(url, title);
               } else {
-                await openWebBrowser(
-                  url: url,
-                  title: title,
-                );
+                await openWebBrowser(url: url, title: title);
               }
             } else if (type == 'media') {
               await openMediaViewer(
@@ -679,7 +718,6 @@ class DefaultWindowService implements WindowService {
     }
     if (controller != null) {
       try {
-        await controller.show();
         await controller.invokeMethod('bringToFront');
         debugPrint(
           '[WindowService] Activated native HWND for $targetId (windowId=${controller.windowId})',
@@ -702,92 +740,188 @@ class DefaultWindowService implements WindowService {
       _nativeControllers.containsKey('tool:browser') ||
       _reusableControllers.containsKey('tool:browser');
 
-  /// 向浏览器子窗口下发吸附挂载到主窗口的命令
-  Future<bool> sendBrowserDockCommand({
+  @override
+  bool get supportsWindowDocking =>
+      !platformFacade.isWeb && platformFacade.kind == PlatformKind.windows;
+
+  @override
+  Future<void> dock({
+    required String targetId,
+    String slotId = DesktopWindowDockNotifier.chatRight,
+  }) async {
+    if (!supportsWindowDocking) throw UnsupportedError('当前平台暂不支持窗口吸附');
+    if (isSubWindow) {
+      await _mainChannel.invokeMethod('request_window_dock', {
+        'targetId': targetId,
+        'slotId': slotId,
+      });
+      return;
+    }
+    if (onWindowDockRequested == null) {
+      rootProviderContainer?.read(desktopWindowDockProvider);
+    }
+    final handler = onWindowDockRequested;
+    if (handler == null) throw StateError('主窗口吸附区域未就绪');
+    await handler(targetId: targetId, slotId: slotId);
+  }
+
+  @override
+  Future<void> undock({
+    required String targetId,
+    bool showWindow = true,
+  }) async {
+    if (!supportsWindowDocking) throw UnsupportedError('当前平台暂不支持窗口吸附');
+    if (isSubWindow) {
+      await _mainChannel.invokeMethod('request_window_undock', {
+        'targetId': targetId,
+        'showWindow': showWindow,
+      });
+      return;
+    }
+    if (onWindowUndockRequested == null) {
+      rootProviderContainer?.read(desktopWindowDockProvider);
+    }
+    await onWindowUndockRequested?.call(
+      targetId: targetId,
+      showWindow: showWindow,
+    );
+  }
+
+  Future<void> ensureDockWindowReady(String targetId) async {
+    final controller = _nativeControllers[targetId];
+    final type = _registry[targetId]?.type;
+    if (type != WindowType.browser && type != WindowType.media) {
+      throw UnsupportedError('该窗口尚未接入吸附功能，当前支持浏览器和媒体查看器');
+    }
+    if (controller == null || !isWindowOpen(targetId)) {
+      throw StateError('请先打开目标窗口');
+    }
+    await _waitWindowReady(
+      controller,
+      'window_ping',
+    ).timeout(const Duration(seconds: 7));
+  }
+
+  Future<bool> sendWindowDockCommand({
+    required String targetId,
+    required String slotId,
     required int x,
     required int y,
     required int width,
     required int height,
   }) async {
-    const targetId = 'tool:browser';
-    final controller =
-        _nativeControllers[targetId] ?? _reusableControllers[targetId];
-    if (controller == null) {
-      debugPrint('[WindowService] sendBrowserDockCommand: controller is null');
-      return false;
-    }
-    debugPrint(
-      '[WindowService] invoking dock_to_parent on controller (windowId=${controller.windowId}): '
-      '(x=$x, y=$y, w=$width, h=$height)',
-    );
-    for (var attempt = 0; attempt < 25; attempt++) {
-      try {
-        final res = await controller.invokeMethod<bool>('dock_to_parent', {
+    final controller = _nativeControllers[targetId];
+    if (controller == null) return false;
+    return await controller.invokeMethod<bool>('window_dock', {
+          'slotId': slotId,
           'x': x,
           'y': y,
           'width': width,
           'height': height,
-        });
-        debugPrint('[WindowService] dock_to_parent invoke completed: $res');
-        return res ?? false;
-      } catch (e) {
-        final errStr = e.toString();
-        if (attempt < 24 && errStr.contains('CHANNEL_UNREGISTERED')) {
-          await Future<void>.delayed(const Duration(milliseconds: 80));
-          continue;
-        }
-        debugPrint('[WindowService] sendBrowserDockCommand failed: $e');
-        return false;
-      }
-    }
-    return false;
+        }) ??
+        false;
   }
 
-  /// 向浏览器子窗口下发更新已吸附矩形尺寸与坐标的命令
-  Future<void> sendBrowserUpdateBoundsCommand({
+  Future<void> sendWindowUpdateBoundsCommand({
+    required String targetId,
+    required String slotId,
     required int x,
     required int y,
     required int width,
     required int height,
   }) async {
-    const targetId = 'tool:browser';
-    final controller =
-        _nativeControllers[targetId] ?? _reusableControllers[targetId];
+    final controller = _nativeControllers[targetId];
     if (controller == null) return;
-    try {
-      await controller.invokeMethod('update_docked_bounds', {
-        'x': x,
-        'y': y,
-        'width': width,
-        'height': height,
-      });
-    } catch (_) {}
+    await controller.invokeMethod('window_dock_bounds', {
+      'slotId': slotId,
+      'x': x,
+      'y': y,
+      'width': width,
+      'height': height,
+    });
   }
 
-  /// 向浏览器子窗口下发从主窗口脱离挂载恢复为独立窗口的命令
-  Future<bool> sendBrowserUndockCommand({bool showWindow = true}) async {
-    const targetId = 'tool:browser';
-    final controller =
-        _nativeControllers[targetId] ?? _reusableControllers[targetId];
-    if (controller == null) {
-      debugPrint(
-        '[WindowService] sendBrowserUndockCommand: controller is null',
+  Future<bool> sendWindowUndockCommand(
+    String targetId, {
+    bool showWindow = true,
+  }) async {
+    final controller = _nativeControllers[targetId];
+    if (controller == null) return false;
+    return await controller.invokeMethod<bool>('window_undock', {
+          'showWindow': showWindow,
+        }) ??
+        false;
+  }
+
+  Future<Map<String, dynamic>> inspectWindowDock(String targetId) async {
+    if (isSubWindow) {
+      final result = await _mainChannel.invokeMethod<Map>(
+        'window_dock_diagnostics',
+        {'targetId': targetId},
       );
-      return false;
+      return Map<String, dynamic>.from(result ?? {});
     }
-    try {
-      debugPrint(
-        '[WindowService] invoking undock_from_parent on controller (windowId=${controller.windowId}, showWindow=$showWindow)',
+    final controller = _nativeControllers[targetId];
+    if (controller == null) return {'open': false};
+    return {
+      'open': true,
+      'targetId': targetId,
+      'windowId': controller.windowId,
+      'native': await controller.invokeMethod('window_native_diagnostics'),
+      'content': await controller.invokeMethod('window_content_diagnostics'),
+    };
+  }
+
+  Future<void> ensureBrowserHost({String? url, String? title}) async {
+    if (url == null && isWindowOpen('tool:browser')) return;
+    await openWebBrowser(
+      url: url ?? 'https://www.bing.com',
+      title: title,
+      showImmediately: false,
+    );
+    if (!isWindowOpen('tool:browser')) throw StateError('浏览器宿主未创建');
+  }
+
+  Future<Map<String, dynamic>> inspectBrowserSession() async {
+    if (isSubWindow) {
+      final result = await _mainChannel.invokeMethod<Map>(
+        'browser_session_diagnostics',
       );
-      final res = await controller.invokeMethod<bool>('undock_from_parent', {
-        'showWindow': showWindow,
-      });
-      debugPrint('[WindowService] undock_from_parent invoke completed: $res');
-      return res ?? false;
-    } catch (e) {
-      debugPrint('[WindowService] sendBrowserUndockCommand failed: $e');
-      return false;
+      return Map<String, dynamic>.from(result ?? {});
     }
+    final controller = _nativeControllers['tool:browser'];
+    if (controller == null) return {'open': false};
+    return {
+      'open': true,
+      'windowId': controller.windowId,
+      'native': await controller.invokeMethod('browser_native_diagnostics'),
+      'session': await controller.invokeMethod('browser_diagnostics'),
+    };
+  }
+
+  Future<void> _waitBrowserReady(WindowController controller) =>
+      _waitWindowReady(controller, 'browser_ping');
+
+  Future<void> _prepareNativeWindow(WindowController controller) =>
+      _waitWindowReady(
+        controller,
+        'window_prepare_show',
+      ).timeout(const Duration(seconds: 12));
+
+  Future<void> _waitWindowReady(
+    WindowController controller,
+    String method,
+  ) async {
+    final watch = Stopwatch()..start();
+    while (watch.elapsed < const Duration(seconds: 6)) {
+      try {
+        if (await controller.invokeMethod<bool>(method) == true) return;
+      } catch (error) {
+        if (!error.toString().contains('CHANNEL_UNREGISTERED')) rethrow;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+    }
+    throw TimeoutException('浏览器窗口未就绪');
   }
 
   @override
@@ -812,9 +946,24 @@ class DefaultWindowService implements WindowService {
       return;
     }
     final controller = _nativeControllers.remove(targetId);
+    onWindowClosed?.call(targetId);
+    {
+      if (targetId == 'tool:browser') onBrowserClosed?.call();
+      if (controller != null) {
+        // Restore presentation without closing the persistent widget tree.
+        try {
+          await controller.invokeMethod('window_undock', {'showWindow': false});
+        } catch (_) {
+          // A dead child channel must not prevent registry/visibility cleanup.
+        }
+      }
+    }
     if (controller != null) {
       try {
         await controller.hide();
+        try {
+          await controller.invokeMethod('window_release_content');
+        } catch (_) {}
         if (targetId == 'tool:browser') {
           try {
             await controller.invokeMethod('browser_clear_tabs');
@@ -1019,46 +1168,30 @@ class DefaultWindowService implements WindowService {
     final controller = _nativeControllers[targetId];
     if (controller == null) return;
 
+    await _waitWindowReady(
+      controller,
+      'window_ping',
+    ).timeout(const Duration(seconds: 7));
     final windowRect = await WindowsWindowAdapter.getWindowRect();
     final int dpi = windowRect?['dpi'] ?? 96;
     final double scale = dpi / 96.0;
     final int clientLeft =
         windowRect?['clientLeft'] ?? (windowRect?['left'] ?? 0);
     final int clientTop = windowRect?['clientTop'] ?? (windowRect?['top'] ?? 0);
-    final int clientWidth =
-        windowRect?['clientWidth'] ??
-        ((windowRect?['right'] ?? (clientLeft + 1280)) - clientLeft);
-    final int clientHeight =
-        windowRect?['clientHeight'] ??
-        ((windowRect?['bottom'] ?? (clientTop + 800)) - clientTop);
-    final int winRight = clientLeft + clientWidth;
-    final int winBottom = clientTop + clientHeight;
-
     final int cardPhysicalWidth = (380 * scale).round();
     final int cardPhysicalHeight = (420 * scale).round();
-
-    final int avatarPhysicalRight =
-        clientLeft + (localRect.right * scale).round();
-    final int avatarPhysicalLeft =
-        clientLeft + (localRect.left * scale).round();
-    final int avatarPhysicalTop = clientTop + (localRect.top * scale).round();
-
-    // Default: flyout appears to the right of the avatar with 8px margin
-    int targetX = avatarPhysicalRight + (8 * scale).round();
-    // If it exceeds the right edge, pop to the left of the avatar
-    if (targetX + cardPhysicalWidth > winRight) {
-      targetX = avatarPhysicalLeft - cardPhysicalWidth - (8 * scale).round();
-    }
-    int targetY = avatarPhysicalTop - (8 * scale).round();
-    if (targetY < clientTop) targetY = clientTop + (4 * scale).round();
-    if (targetY + cardPhysicalHeight > winBottom) {
-      targetY = winBottom - cardPhysicalHeight - (4 * scale).round();
-    }
+    final anchor = <String, int>{
+      'left': clientLeft + (localRect.left * scale).round(),
+      'top': clientTop + (localRect.top * scale).round(),
+      'right': clientLeft + (localRect.right * scale).round(),
+      'bottom': clientTop + (localRect.bottom * scale).round(),
+    };
 
     await controller.invokeMethod('update_profile', subjectData);
     await controller.invokeMethod('position_flyout', {
-      'x': targetX,
-      'y': targetY,
+      'x': anchor['right']!,
+      'y': anchor['top']!,
+      'hoverAnchor': anchor,
       'width': cardPhysicalWidth,
       'height': cardPhysicalHeight,
       'noActivate': true,
@@ -1285,7 +1418,7 @@ class DefaultWindowService implements WindowService {
               await cachedController.invokeMethod('center');
             } catch (_) {}
           }
-          await cachedController.show();
+          await _prepareNativeWindow(cachedController);
           await cachedController.invokeMethod('bringToFront');
         }
         completer.complete();
@@ -1298,7 +1431,11 @@ class DefaultWindowService implements WindowService {
           hiddenAtLaunch: true,
         ),
       );
+      // Register the hidden host before frame preparation: its first frame may
+      // already send callbacks to the main engine.
+      _nativeControllers[targetId] = controller;
       if (showImmediately) {
+        await _prepareNativeWindow(controller);
         if (type == WindowType.settings) {
           try {
             await controller.invokeMethod('setModal', true);
@@ -1308,7 +1445,6 @@ class DefaultWindowService implements WindowService {
       } else {
         await controller.hide();
       }
-      _nativeControllers[targetId] = controller;
       _registry[targetId] = WindowRecord(
         targetId: targetId,
         type: type,
@@ -1327,7 +1463,14 @@ class DefaultWindowService implements WindowService {
         '[WindowService] Failed to create native sub-window for $targetId: $e\n$stackTrace',
       );
       _registry.remove(targetId);
-      _nativeControllers.remove(targetId);
+      final failedController = _nativeControllers.remove(targetId);
+      if (failedController != null) {
+        try {
+          await failedController.hide();
+        } catch (_) {}
+        // A slow renderer can be retried without leaking a second engine.
+        _reusableControllers[targetId] = failedController;
+      }
       _notify();
       completer.completeError(e, stackTrace);
       rethrow;
@@ -1480,8 +1623,36 @@ class DefaultWindowService implements WindowService {
     int? initialHeight,
   }) async {
     if (isSubWindow) {
-      return _requestMain({'type': 'browser', 'url': url, 'title': title});
+      return _requestMain({
+        'type': 'browser',
+        'url': url,
+        'title': title,
+        'standalone': true,
+      });
     }
+    if (showImmediately) await onBrowserStandaloneRequested?.call();
+    final next = _browserRequests.then(
+      (_) => _openBrowserWindow(
+        url: url,
+        title: title,
+        fallbackContent: fallbackContent,
+        showImmediately: showImmediately,
+        initialWidth: initialWidth,
+        initialHeight: initialHeight,
+      ),
+    );
+    _browserRequests = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _openBrowserWindow({
+    required String url,
+    String? title,
+    String? fallbackContent,
+    required bool showImmediately,
+    int? initialWidth,
+    int? initialHeight,
+  }) async {
     const targetId = 'tool:browser';
     final payload = NativeWindowPayload(
       type: SubWindowType.browser,
@@ -1498,24 +1669,11 @@ class DefaultWindowService implements WindowService {
     if (isWindowOpen(targetId)) {
       final controller = _nativeControllers[targetId];
       if (controller != null) {
-        final currentTheme = themeModeProvider?.call() ?? 'system';
-        final effectivePayload = payload.copyWith(
-          extra: {
-            ...?payload.extra,
-            'themeMode': currentTheme,
-          },
-        );
-        try {
-          await controller.invokeMethod('browser_add_tab', {
-            'url': url,
-            'title': title,
-          });
-        } catch (_) {
-          await controller.invokeMethod(
-            'update_payload',
-            effectivePayload.toJson(),
-          );
-        }
+        await _waitBrowserReady(controller).timeout(const Duration(seconds: 7));
+        await controller.invokeMethod('browser_add_tab', {
+          'url': url,
+          'title': title,
+        });
         if (showImmediately) {
           await bringToFront(targetId);
         }
@@ -1532,9 +1690,14 @@ class DefaultWindowService implements WindowService {
           payload: payload,
           showImmediately: showImmediately,
         );
+        await _waitBrowserReady(
+          _nativeControllers[targetId]!,
+        ).timeout(const Duration(seconds: 7));
         return;
       } catch (e) {
         debugPrint('[WindowService] Native browser error: $e');
+        // Do not silently replace a live native browser with a second host.
+        rethrow;
       }
     }
 

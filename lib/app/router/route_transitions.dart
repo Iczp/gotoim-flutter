@@ -84,9 +84,11 @@ class AppRouteTransition {
     required BuildContext context,
     required GoRouterState state,
     required Widget child,
+    String? name,
     Duration duration = const Duration(milliseconds: 200),
   }) {
     return CustomTransitionPage<T>(
+      name: name,
       key: state.pageKey,
       child: child,
       transitionDuration: duration,

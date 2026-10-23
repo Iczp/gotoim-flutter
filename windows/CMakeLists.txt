@@ -110,6 +110,12 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# Dart build hooks emit runtime DLLs separately from plugin bundles. Keep the
+# executable self-contained instead of relying on the development machine PATH.
+install(DIRECTORY "${PROJECT_BUILD_DIR}/native_assets/windows/"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" COMPONENT Runtime OPTIONAL
+  FILES_MATCHING PATTERN "*.dll")
+
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.
 set(FLUTTER_ASSET_DIR_NAME "flutter_assets")

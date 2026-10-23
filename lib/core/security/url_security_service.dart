@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -19,7 +20,7 @@ import 'widgets/url_risk_dialog.dart';
 /// URL 安全调度服务（提供应用内统一的 URL 点击分发、安全合规阻断与中转提示）
 class UrlSecurityService {
   UrlSecurityService({required UrlSecurityRepository repository})
-      : _repository = repository;
+    : _repository = repository;
 
   final UrlSecurityRepository _repository;
   static UrlSecurityService? _fallbackInstance;
@@ -55,19 +56,29 @@ class UrlSecurityService {
   /// 检测是否是危险可执行安装包下载链接
   bool isDangerousDownload(String? rawUrl) {
     if (rawUrl == null) return false;
-    final lower = rawUrl.toLowerCase().split('?').first;
-    return lower.endsWith('.apk') ||
-        lower.endsWith('.exe') ||
-        lower.endsWith('.dmg') ||
-        lower.endsWith('.bat') ||
-        lower.endsWith('.sh') ||
-        lower.endsWith('.msi') ||
-        lower.endsWith('.ipa');
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null) return false;
+    final path = Uri.decodeComponent(uri.path).toLowerCase();
+    return const [
+      '.apk',
+      '.exe',
+      '.dmg',
+      '.bat',
+      '.cmd',
+      '.sh',
+      '.msi',
+      '.ipa',
+      '.scr',
+      '.com',
+      '.ps1',
+    ].any(path.endsWith);
   }
 
   /// 评估 URL 安全等级
   Future<UrlSecurityCheckResult> checkUrl(String url) {
-    return _repository.checkUrl(url);
+    // Fail visibly instead of leaving a tab waiting indefinitely. Timeout
+    // never grants access; the browser keeps its navigation gate closed.
+    return _repository.checkUrl(url).timeout(const Duration(seconds: 5));
   }
 
   /// 桌面端强力阻断拦截对话框
@@ -80,70 +91,87 @@ class UrlSecurityService {
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+      builder:
+          (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.gpp_bad_rounded,
+                    color: Colors.red,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  '已停止访问该网页',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '该网址已被安全风控系统强力拦截：',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: SelectableText(
+                    checkResult.url,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+                if ((checkResult.interceptReason != null &&
+                        checkResult.interceptReason!.isNotEmpty) ||
+                    checkResult.message.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    '拦截原因：${checkResult.interceptReason ?? checkResult.message}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: checkResult.url));
+                  showToast('链接已复制', type: ToastType.success);
+                },
+                child: const Text('复制链接'),
               ),
-              child: const Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              '已停止访问该网页',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '该网址已被安全风控系统强力拦截：',
-              style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black87),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: SelectableText(
-                checkResult.url,
-                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-              ),
-            ),
-            if ((checkResult.interceptReason != null && checkResult.interceptReason!.isNotEmpty) ||
-                checkResult.message.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                '拦截原因：${checkResult.interceptReason ?? checkResult.message}',
-                style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('我知道了'),
               ),
             ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: checkResult.url));
-              showToast('链接已复制', type: ToastType.success);
-            },
-            child: const Text('复制链接'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('我知道了'),
-          ),
-        ],
-      ),
     );
   }
 

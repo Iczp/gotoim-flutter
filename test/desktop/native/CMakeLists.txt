@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.14)
+project(profile_flyout_policy_test LANGUAGES CXX)
+add_executable(profile_flyout_policy_test profile_flyout_policy_test.cpp)
+target_compile_features(profile_flyout_policy_test PRIVATE cxx_std_17)
+target_compile_definitions(profile_flyout_policy_test PRIVATE NOMINMAX)

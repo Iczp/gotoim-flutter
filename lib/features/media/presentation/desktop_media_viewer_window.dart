@@ -12,6 +12,7 @@ import '../../../core/media/media_preview.dart';
 import '../../../core/media/image_viewer.dart';
 import '../../../core/media/image_provider_factory.dart';
 import '../../../core/platform/windows/windows_window_adapter.dart';
+import '../../../core/native_window/desktop_window_dock_button.dart';
 import '../../../core/services/media/media_gallery_saver.dart';
 import '../../../core/services/scan/image_qr_detector.dart';
 import '../../../core/services/scan/qr_action_resolver.dart';
@@ -45,6 +46,7 @@ class DesktopMediaViewerWindow extends ConsumerStatefulWidget {
     this.downloader,
     this.isSubWindow = false,
     this.onClose,
+    this.onRegisterMethodHandler,
     super.key,
   });
 
@@ -53,6 +55,8 @@ class DesktopMediaViewerWindow extends ConsumerStatefulWidget {
   final MediaDownloader? downloader;
   final bool isSubWindow;
   final VoidCallback? onClose;
+  final void Function(Future<dynamic> Function(MethodCall) handler)?
+  onRegisterMethodHandler;
 
   /// 唤起桌面端独立多媒体查看窗口
   static Future<void> open(
@@ -115,6 +119,26 @@ class _DesktopMediaViewerWindowState
     _currentIndex = widget.initialIndex;
     _transformController = TransformationController();
     _checkVideoController();
+    widget.onRegisterMethodHandler?.call((call) async {
+      if (call.method == 'media_play' &&
+          _videoController?.value.isInitialized == true) {
+        await _videoController!.play();
+        return true;
+      }
+      if (call.method != 'window_content_diagnostics') return null;
+      return {
+        'instanceId': identityHashCode(this),
+        'activeIndex': _currentIndex,
+        'transform': _transformController.value.storage.toList(),
+        'playerId':
+            _videoController == null
+                ? null
+                : identityHashCode(_videoController!),
+        'positionMs': _videoController?.value.position.inMilliseconds,
+        'initialized': _videoController?.value.isInitialized,
+        'playing': _videoController?.value.isPlaying,
+      };
+    });
   }
 
   @override
@@ -223,7 +247,8 @@ class _DesktopMediaViewerWindowState
       return cached;
     }
     // 检查源是否是本地文件
-    if (!item.source.startsWith('http://') && !item.source.startsWith('https://')) {
+    if (!item.source.startsWith('http://') &&
+        !item.source.startsWith('https://')) {
       if (await File(item.source).exists()) {
         return item.source;
       }
@@ -295,7 +320,9 @@ class _DesktopMediaViewerWindowState
         await Pasteboard.writeFiles([localPath]);
         showToast('视频文件已复制到剪贴板', type: ToastType.success);
       } else {
-        await Clipboard.setData(ClipboardData(text: _currentItem.playableSource));
+        await Clipboard.setData(
+          ClipboardData(text: _currentItem.playableSource),
+        );
         showToast('已复制视频地址', type: ToastType.success);
       }
     } catch (e) {
@@ -341,9 +368,10 @@ class _DesktopMediaViewerWindowState
         }
       }
 
-      final displayName = targetFile.uri.pathSegments.isNotEmpty
-          ? targetFile.uri.pathSegments.last
-          : defaultName;
+      final displayName =
+          targetFile.uri.pathSegments.isNotEmpty
+              ? targetFile.uri.pathSegments.last
+              : defaultName;
       showToast('已另存为: $displayName', type: ToastType.success);
     } catch (e) {
       showToast('另存为失败: $e', type: ToastType.error);
@@ -430,7 +458,8 @@ class _DesktopMediaViewerWindowState
       final localPath = await _ensureDownloadedLocalPath();
       final targetSource = localPath ?? item.playableSource;
 
-      if (targetSource.startsWith('http://') || targetSource.startsWith('https://')) {
+      if (targetSource.startsWith('http://') ||
+          targetSource.startsWith('https://')) {
         final uri = Uri.tryParse(targetSource);
         if (uri == null || (!uri.isScheme('http') && !uri.isScheme('https'))) {
           showToast('非法多媒体网络地址', type: ToastType.error);
@@ -596,9 +625,8 @@ class _DesktopMediaViewerWindowState
           borderRadius: BorderRadius.circular(8),
           side: const BorderSide(color: Color(0x2AFFFFFF), width: 0.5),
         ),
-        items: isVideo
-            ? _buildVideoMenuItems(isPlaying)
-            : _buildImageMenuItems(),
+        items:
+            isVideo ? _buildVideoMenuItems(isPlaying) : _buildImageMenuItems(),
       );
 
       if (selected == null || !mounted) return;
@@ -624,7 +652,9 @@ class _DesktopMediaViewerWindowState
         await _locateInFolder();
         break;
       case 'copy_link':
-        await Clipboard.setData(ClipboardData(text: _currentItem.playableSource));
+        await Clipboard.setData(
+          ClipboardData(text: _currentItem.playableSource),
+        );
         showToast('已复制媒体链接', type: ToastType.success);
         break;
       case 'qr':
@@ -655,9 +685,10 @@ class _DesktopMediaViewerWindowState
         await _toggleLooping();
         break;
       case 'speed':
-        final pos = position == Offset.zero
-            ? Offset(MediaQuery.of(context).size.width / 2, 80)
-            : position;
+        final pos =
+            position == Offset.zero
+                ? Offset(MediaQuery.of(context).size.width / 2, 80)
+                : position;
         final speed = await showMenu<double>(
           context: context,
           position: RelativeRect.fromLTRB(
@@ -672,31 +703,33 @@ class _DesktopMediaViewerWindowState
             borderRadius: BorderRadius.circular(8),
             side: const BorderSide(color: Color(0x2AFFFFFF), width: 0.5),
           ),
-          items: [0.5, 1.0, 1.25, 1.5, 2.0].map((s) {
-            final isCur = (_playbackSpeed - s).abs() < 0.01;
-            return PopupMenuItem<double>(
-              value: s,
-              height: 34,
-              child: Row(
-                children: [
-                  Icon(
-                    isCur ? Icons.check_rounded : null,
-                    size: 16,
-                    color: const Color(0xFF07C160),
+          items:
+              [0.5, 1.0, 1.25, 1.5, 2.0].map((s) {
+                final isCur = (_playbackSpeed - s).abs() < 0.01;
+                return PopupMenuItem<double>(
+                  value: s,
+                  height: 34,
+                  child: Row(
+                    children: [
+                      Icon(
+                        isCur ? Icons.check_rounded : null,
+                        size: 16,
+                        color: const Color(0xFF07C160),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        s == 1.0 ? '1.0x (正常)' : '${s}x',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isCur ? const Color(0xFF07C160) : Colors.white,
+                          fontWeight:
+                              isCur ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    s == 1.0 ? '1.0x (正常)' : '${s}x',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isCur ? const Color(0xFF07C160) : Colors.white,
-                      fontWeight: isCur ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
+                );
+              }).toList(),
         );
         if (speed != null) {
           await _changePlaybackSpeed(speed);
@@ -751,10 +784,7 @@ class _DesktopMediaViewerWindowState
             const SizedBox(width: 16),
             Text(
               shortcut,
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.white38,
-              ),
+              style: const TextStyle(fontSize: 11, color: Colors.white38),
             ),
           ],
         ],
@@ -1002,7 +1032,8 @@ class _DesktopMediaViewerWindowState
       autofocus: true,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
-          final isCtrlOrCmd = HardwareKeyboard.instance.isControlPressed ||
+          final isCtrlOrCmd =
+              HardwareKeyboard.instance.isControlPressed ||
               HardwareKeyboard.instance.isMetaPressed;
           if (event.logicalKey == LogicalKeyboardKey.escape) {
             if (widget.onClose != null) {
@@ -1011,14 +1042,16 @@ class _DesktopMediaViewerWindowState
               Navigator.of(context).pop();
             }
             return KeyEventResult.handled;
-          } else if (isCtrlOrCmd && event.logicalKey == LogicalKeyboardKey.keyC) {
+          } else if (isCtrlOrCmd &&
+              event.logicalKey == LogicalKeyboardKey.keyC) {
             if (_currentItem.type == MediaPreviewType.image) {
               _copyImage();
             } else {
               _copyVideoFile();
             }
             return KeyEventResult.handled;
-          } else if (isCtrlOrCmd && event.logicalKey == LogicalKeyboardKey.keyS) {
+          } else if (isCtrlOrCmd &&
+              event.logicalKey == LogicalKeyboardKey.keyS) {
             _saveMediaAs();
             return KeyEventResult.handled;
           } else if (event.logicalKey == LogicalKeyboardKey.space) {
@@ -1043,18 +1076,25 @@ class _DesktopMediaViewerWindowState
     );
   }
 
-  Widget _buildViewerTopBar(BuildContext context) {
+  Widget _buildViewerTopBar(BuildContext context) =>
+      ValueListenableBuilder<bool>(
+        valueListenable: nativeWindowDocked,
+        builder:
+            (context, docked, _) => _buildViewerTopBarContent(context, docked),
+      );
+
+  Widget _buildViewerTopBarContent(BuildContext context, bool docked) {
     final hasMultiple = widget.items.length > 1;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onPanStart: (_) {
-        if (widget.isSubWindow) {
+        if (widget.isSubWindow && !docked) {
           WindowsWindowAdapter.startDragging();
         }
       },
       onDoubleTap: () {
-        if (widget.isSubWindow) {
+        if (widget.isSubWindow && !docked) {
           WindowsWindowAdapter.toggleMaximize();
           if (mounted) {
             setState(() {
@@ -1099,14 +1139,19 @@ class _DesktopMediaViewerWindowState
                         ),
                         tooltip: _isPinned ? '取消置顶' : '固定置顶',
                         visualDensity: VisualDensity.compact,
-                        onPressed: () {
-                          setState(() {
-                            _isPinned = !_isPinned;
-                          });
-                          if (widget.isSubWindow) {
-                            WindowsWindowAdapter.setAlwaysOnTop(_isPinned);
-                          }
-                        },
+                        onPressed:
+                            docked
+                                ? null
+                                : () {
+                                  setState(() {
+                                    _isPinned = !_isPinned;
+                                  });
+                                  if (widget.isSubWindow && !docked) {
+                                    WindowsWindowAdapter.setAlwaysOnTop(
+                                      _isPinned,
+                                    );
+                                  }
+                                },
                       ),
 
                       // 上一张 / 下一张
@@ -1250,17 +1295,22 @@ class _DesktopMediaViewerWindowState
                         elevation: 10,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
-                          side: const BorderSide(color: Color(0x2AFFFFFF), width: 0.5),
+                          side: const BorderSide(
+                            color: Color(0x2AFFFFFF),
+                            width: 0.5,
+                          ),
                         ),
                         onSelected: (val) {
                           _handleContextMenuAction(val, Offset.zero);
                         },
                         itemBuilder:
-                            (_) => _currentItem.type == MediaPreviewType.video
-                                ? _buildVideoMenuItems(
-                                  _videoController?.value.isPlaying ?? false,
-                                )
-                                : _buildImageMenuItems(),
+                            (_) =>
+                                _currentItem.type == MediaPreviewType.video
+                                    ? _buildVideoMenuItems(
+                                      _videoController?.value.isPlaying ??
+                                          false,
+                                    )
+                                    : _buildImageMenuItems(),
                       ),
                     ],
                   ),
@@ -1270,6 +1320,8 @@ class _DesktopMediaViewerWindowState
 
             const SizedBox(width: 8),
 
+            if (widget.isSubWindow)
+              const DesktopWindowDockButton(targetId: 'tool:media'),
             // 窗口控制按钮：最小化、最大化、关闭
             IconButton(
               icon: const Icon(
@@ -1278,13 +1330,16 @@ class _DesktopMediaViewerWindowState
                 color: Colors.white70,
               ),
               tooltip: '最小化',
-              onPressed: () {
-                if (widget.isSubWindow) {
-                  WindowsWindowAdapter.minimize();
-                } else {
-                  Navigator.of(context).maybePop();
-                }
-              },
+              onPressed:
+                  docked
+                      ? null
+                      : () {
+                        if (widget.isSubWindow && !docked) {
+                          WindowsWindowAdapter.minimize();
+                        } else {
+                          Navigator.of(context).maybePop();
+                        }
+                      },
             ),
             IconButton(
               icon: Icon(
@@ -1296,20 +1351,23 @@ class _DesktopMediaViewerWindowState
               ),
               tooltip: _isMaximized ? '还原' : '最大化',
               visualDensity: VisualDensity.compact,
-              onPressed: () {
-                if (widget.isSubWindow) {
-                  WindowsWindowAdapter.toggleMaximize();
-                  if (mounted) {
-                    setState(() {
-                      _isMaximized = WindowsWindowAdapter.isMaximized();
-                    });
-                  }
-                } else {
-                  setState(() {
-                    _isMaximized = !_isMaximized;
-                  });
-                }
-              },
+              onPressed:
+                  docked
+                      ? null
+                      : () {
+                        if (widget.isSubWindow && !docked) {
+                          WindowsWindowAdapter.toggleMaximize();
+                          if (mounted) {
+                            setState(() {
+                              _isMaximized = WindowsWindowAdapter.isMaximized();
+                            });
+                          }
+                        } else {
+                          setState(() {
+                            _isMaximized = !_isMaximized;
+                          });
+                        }
+                      },
             ),
             IconButton(
               icon: const Icon(
@@ -1322,7 +1380,7 @@ class _DesktopMediaViewerWindowState
               onPressed: () {
                 if (widget.onClose != null) {
                   widget.onClose!();
-                } else if (widget.isSubWindow) {
+                } else if (widget.isSubWindow && !docked) {
                   WindowsWindowAdapter.close();
                 } else if (Navigator.of(context).canPop()) {
                   Navigator.of(context).pop();

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/browser/app_webview_page.dart';
+import '../../core/platform/windows/windows_window_adapter.dart';
 import '../../core/compliance/agreement_viewer_page.dart';
 import '../../core/compliance/privacy_service.dart';
 import '../../core/statistic/statistic_route_observer.dart';
@@ -95,6 +97,7 @@ GoRoute _buildAppRoute({
           context: context,
           state: state,
           child: child,
+          name: path == '/' ? '/' : null,
         );
       }
       return AppRouteTransition.slideRight(
@@ -106,12 +109,26 @@ GoRoute _buildAppRoute({
   );
 }
 
+/// Native browser overlays cannot be covered by Flutter popup routes. Hide the
+/// owned window while another route/menu/dialog covers the main chat surface.
+class _BrowserDockRouteObserver extends NavigatorObserver {
+  @override
+  void didChangeTop(Route<dynamic> topRoute, Route<dynamic>? previousTopRoute) {
+    unawaited(
+      WindowsWindowAdapter.setBrowserDockVisible(
+        topRoute.settings.name == '/',
+        route: true,
+      ),
+    );
+  }
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authNotifier = ref.watch(authControllerProvider.notifier);
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
-    observers: [StatisticRouteObserver()],
+    observers: [StatisticRouteObserver(), _BrowserDockRouteObserver()],
     refreshListenable: authNotifier,
     redirect: (context, state) {
       final location = state.uri.path;
@@ -462,8 +479,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ownerId:
                   int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
               sessionUnitId: state.pathParameters['sessionUnitId']!,
-              initialTotalCount:
-                  int.tryParse(state.uri.queryParameters['totalCount'] ?? ''),
+              initialTotalCount: int.tryParse(
+                state.uri.queryParameters['totalCount'] ?? '',
+              ),
             ),
       ),
       _buildAppRoute(

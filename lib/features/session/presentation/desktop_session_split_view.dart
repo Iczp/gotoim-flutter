@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/browser/desktop_browser_dock_controller.dart';
-import '../../../core/browser/desktop_browser_window.dart';
+import '../../../core/native_window/desktop_window_dock_controller.dart';
+import '../../../core/native_window/desktop_dock_slot.dart';
 import '../../../core/services/window_service.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/desktop_dialog.dart';
@@ -79,7 +79,6 @@ class _DesktopSessionSplitViewState
   double _browserPaneWidth = 520.0;
   bool _isDraggingBrowserDivider = false;
   Timer? _avatarHoverTimer;
-  Timer? _avatarLeaveTimer;
   OverlayEntry? _contextMenuEntry;
 
   void _dismissContextMenu() {
@@ -87,12 +86,29 @@ class _DesktopSessionSplitViewState
     _contextMenuEntry = null;
   }
 
-  final GlobalKey _browserPlaceholderKey = GlobalKey();
+  bool _boundsScheduled = false;
+  void _rejectDockLayout() {
+    if (_boundsScheduled) return;
+    _boundsScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _boundsScheduled = false;
+      if (mounted) {
+        ref
+            .read(desktopWindowDockProvider.notifier)
+            .rejectLayout(DesktopWindowDockNotifier.chatRight);
+      }
+    });
+  }
 
   @override
   void initState() {
     super.initState();
-    _browserPaneWidth = ref.read(desktopBrowserDockProvider).width;
+    _browserPaneWidth =
+        (ref
+                .read(desktopWindowDockProvider)[DesktopWindowDockNotifier
+                    .chatRight]
+                ?.width ??
+            520);
     _scrollController.addListener(_onScroll);
     _selectedSessionUnitId = ref.read(selectedDesktopSessionUnitIdProvider);
     if (_selectedSessionUnitId != null) {
@@ -165,7 +181,6 @@ class _DesktopSessionSplitViewState
   void dispose() {
     _dismissContextMenu();
     _avatarHoverTimer?.cancel();
-    _avatarLeaveTimer?.cancel();
     _cachedChats.clear();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -178,7 +193,6 @@ class _DesktopSessionSplitViewState
         (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
       return;
     }
-    _avatarLeaveTimer?.cancel();
     _avatarHoverTimer?.cancel();
     _avatarHoverTimer = Timer(const Duration(milliseconds: 300), () {
       final raw = session.raw;
@@ -207,10 +221,8 @@ class _DesktopSessionSplitViewState
       return;
     }
     _avatarHoverTimer?.cancel();
-    _avatarLeaveTimer?.cancel();
-    _avatarLeaveTimer = Timer(const Duration(milliseconds: 200), () {
-      ref.read(windowServiceProvider).hideProfileCard();
-    });
+    // The native flyout tracks avatar/card hover together. A main-window
+    // leave timer cannot tell whether the pointer has entered the card.
   }
 
   void _selectSession(SessionSummary session) {
@@ -573,7 +585,10 @@ class _DesktopSessionSplitViewState
     final dividerColor =
         isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000);
 
-    final dockState = ref.watch(desktopBrowserDockProvider);
+    final dockState =
+        ref.watch(desktopWindowDockProvider)[DesktopWindowDockNotifier
+            .chatRight] ??
+        const DesktopWindowDockState();
     if (!_isDraggingBrowserDivider && _browserPaneWidth != dockState.width) {
       _browserPaneWidth = dockState.width;
     }
@@ -587,6 +602,21 @@ class _DesktopSessionSplitViewState
           if (effectivePaneWidth > maxPane) {
             effectivePaneWidth = maxPane;
           }
+        }
+        if (dockState.shouldRenderPlaceholder && totalWidth.isFinite) {
+          final maxSessionWidth = (totalWidth - 690.0).clamp(180.0, 480.0);
+          effectivePaneWidth = effectivePaneWidth.clamp(0.0, maxSessionWidth);
+        }
+        final availableBrowserWidth = (totalWidth - effectivePaneWidth - 330.0)
+            .clamp(0.0, 960.0);
+        final showBrowser =
+            dockState.shouldRenderPlaceholder && availableBrowserWidth >= 360;
+        final browserWidth = dockState.width.clamp(
+          360.0,
+          availableBrowserWidth < 360 ? 360.0 : availableBrowserWidth,
+        );
+        if (dockState.shouldRenderPlaceholder && !showBrowser) {
+          _rejectDockLayout();
         }
 
         return Row(
@@ -1035,27 +1065,32 @@ class _DesktopSessionSplitViewState
                       ),
             ),
 
-            // ── 浏览器嵌入分栏 (右侧内联 WebView2 组件与拖拽手柄) ────────────────────
-            if (dockState.shouldRenderPlaceholder) ...[
+            // ── 浏览器吸附占位与拖拽手柄 ─────────────────────────────────────
+            if (showBrowser) ...[
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onHorizontalDragStart: (_) {
                   _isDraggingBrowserDivider = true;
                   _browserPaneWidth =
-                      ref.read(desktopBrowserDockProvider).width;
+                      (ref
+                              .read(
+                                desktopWindowDockProvider,
+                              )[DesktopWindowDockNotifier.chatRight]
+                              ?.width ??
+                          520);
                 },
                 onHorizontalDragUpdate: (details) {
-                  final maxW = (totalWidth - effectivePaneWidth - 360.0).clamp(
-                    360.0,
-                    960.0,
-                  );
+                  final maxW = availableBrowserWidth;
                   _browserPaneWidth =
                       (_browserPaneWidth - details.delta.dx)
                           .clamp(360.0, maxW)
                           .toDouble();
                   ref
-                      .read(desktopBrowserDockProvider.notifier)
-                      .setWidth(_browserPaneWidth, min: 360.0, max: maxW);
+                      .read(desktopWindowDockProvider.notifier)
+                      .setWidth(
+                        DesktopWindowDockNotifier.chatRight,
+                        _browserPaneWidth.clamp(360.0, maxW),
+                      );
                 },
                 onHorizontalDragEnd: (_) {
                   _isDraggingBrowserDivider = false;
@@ -1075,16 +1110,12 @@ class _DesktopSessionSplitViewState
                 ),
               ),
               SizedBox(
-                key: _browserPlaceholderKey,
                 width:
                     _isDraggingBrowserDivider
-                        ? _browserPaneWidth
-                        : dockState.width,
-                child: DesktopBrowserWindow(
-                  key: const ValueKey('inline_docked_browser_window'),
-                  initialUrl: dockState.currentUrl ?? 'https://www.bing.com',
-                  title: dockState.currentTitle,
-                  isInlineDocked: true,
+                        ? _browserPaneWidth.clamp(360.0, availableBrowserWidth)
+                        : browserWidth,
+                child: const DesktopDockSlot(
+                  slotId: DesktopWindowDockNotifier.chatRight,
                 ),
               ),
             ],

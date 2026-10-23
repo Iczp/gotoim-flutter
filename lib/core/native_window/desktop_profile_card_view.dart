@@ -17,7 +17,7 @@ import '../widgets/app_toast.dart';
 /// 2. 背景透明，卡片居中悬浮；
 /// 3. 支持 IPC 动态更新 `update_profile` 数据；
 /// 4. 点击「发消息」通过 IPC `open_chat` 通知主窗口激活会话并隐藏本窗口；
-/// 5. 按 ESC 键或鼠标离开时快速隐藏。
+/// 5. 原生统一管理跨窗口悬停；点击后保持交互，支持 ESC 关闭。
 class DesktopProfileCardView extends ConsumerStatefulWidget {
   const DesktopProfileCardView({
     this.initialSubject,
@@ -119,12 +119,8 @@ class _DesktopProfileCardViewState
         return KeyEventResult.ignored;
       },
       child: MouseRegion(
-        onExit: (_) {
-          // 鼠标移出卡片区域时，轻微延时自动隐藏
-          Future.delayed(const Duration(milliseconds: 200), () {
-            if (mounted) _handleHide();
-          });
-        },
+        // Native tracking covers the avatar, the gap, this window and its
+        // active popups. A Dart leave timer could close an already entered card.
         child: Material(
           color: colorScheme.surface,
           child: Container(

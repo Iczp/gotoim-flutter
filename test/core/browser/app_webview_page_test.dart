@@ -67,7 +67,7 @@ void main() {
 
       // Verify AppBar elements
       expect(find.text('文章详情'), findsOneWidget);
-      expect(find.byIcon(Icons.arrow_back_ios_new_rounded), findsOneWidget);
+      expect(find.byTooltip('关闭'), findsOneWidget);
       expect(find.byIcon(Icons.more_horiz_rounded), findsOneWidget);
     });
 
@@ -104,12 +104,11 @@ void main() {
       expect(find.text('在浏览器打开'), findsOneWidget);
       expect(find.text('复制链接'), findsOneWidget);
       expect(find.text('查看纯文本'), findsOneWidget);
-      expect(find.text('取消'), findsOneWidget);
-
-      // Dismiss
-      await tester.tap(find.text('取消'));
+      // Desktop uses a modal window; mobile uses a bottom sheet. Both share
+      // the same actions, and each can be dismissed through its Navigator.
+      Navigator.of(tester.element(find.text('复制链接'))).pop();
       await tester.pumpAndSettle();
-      expect(find.text('取消'), findsNothing);
+      expect(find.text('复制链接'), findsNothing);
     });
   });
 }

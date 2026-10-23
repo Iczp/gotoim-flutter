@@ -353,22 +353,8 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
     String? messageId,
     String targetType = 'url',
   }) async {
-    debugPrint(
-      '[UrlSecurityRepository] 收到违规举报 -> target: $target, type: $targetType, reason: $reason, desc: $description',
-    );
-
-    // 如果举报的是 URL 且原因为严重违规，可在本地暂时标记为阻断
-    if (targetType == 'url') {
-      try {
-        final uri = Uri.parse(target);
-        if (uri.host.isNotEmpty) {
-          // 暂不强行加全局阻断，避免恶意乱举报，但在本地记录处置日志
-          debugPrint('[UrlSecurityRepository] 已登记涉嫌违规域名: ${uri.host}');
-        }
-      } catch (_) {}
-    }
-
-    // 预留向后端上报
+    // Only an acknowledged server submission is success. Logging is not an
+    // offline queue and must not make the UI promise a review that cannot occur.
     if (_apiClient != null) {
       try {
         await _apiClient.post<dynamic>(
@@ -385,11 +371,11 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
         debugPrint('[UrlSecurityRepository] 举报成功同步至后端');
         return true;
       } catch (e) {
-        debugPrint('[UrlSecurityRepository] 举报同步后端失败 ($e)，已在本地记录');
+        debugPrint('[UrlSecurityRepository] 举报提交失败: ${e.runtimeType}');
       }
     }
 
-    return true;
+    return false;
   }
 
   bool _matchesDomain(String host, String pattern) {

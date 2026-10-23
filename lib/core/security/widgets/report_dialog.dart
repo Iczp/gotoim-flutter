@@ -188,7 +188,7 @@ class _ReportDialogState extends ConsumerState<ReportDialog> {
       if (!mounted) return;
       if (success) {
         Navigator.of(context).pop(true);
-        showToast('投诉已提交，平台安全团队将在24小时内核实处置', type: ToastType.success);
+        showToast('投诉已提交', type: ToastType.success);
       } else {
         showToast('提交失败，请稍后重试', type: ToastType.error);
       }

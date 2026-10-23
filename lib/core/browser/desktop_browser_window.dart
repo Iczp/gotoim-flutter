@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io' show Platform, Process;
-import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
@@ -10,13 +9,15 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../platform/windows/windows_window_adapter.dart';
+import '../services/window_service.dart';
+import 'browser_thumbnail.dart';
 import '../security/url_security_level.dart';
 import '../security/url_security_service.dart';
+import '../native_window/desktop_window_loading.dart';
 import '../security/widgets/appeal_dialog.dart';
 import '../security/widgets/report_dialog.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/app_toast.dart';
-import 'desktop_browser_dock_controller.dart';
 
 /// 浏览器标签页模型
 class BrowserTabItem {
@@ -52,6 +53,10 @@ class BrowserTabItem {
   UrlSecurityCheckResult? securityCheckResult;
   bool isUrlExpanded = false;
   InAppWebViewController? controller;
+  bool hasWebView = false;
+  int navigationRevision = 0;
+  int webViewCreationCount = 0;
+  int navigationCount = 0;
   double progress = 0.0;
   bool isLoading;
   bool canGoBack = false;
@@ -68,7 +73,7 @@ class BrowserTabItem {
 ///
 /// 核心特性：
 /// 1. 多标签页（Multi-Tab）架构：打开不同网址时不覆盖，而是增加一个标签页；
-/// 2. 内容区采用 `IndexedStack`：各个标签页保持独立独立的 WebView，切换不重新加载，输入表单与滚动位置不丢失；
+/// 2. 内容区采用带稳定 Key 的 `Stack` / `Offstage`：各个标签页保持独立独立的 WebView，切换不重新加载，输入表单与滚动位置不丢失；
 /// 3. 支持 IPC 动态添加标签页（`browser_add_tab`）；
 /// 4. 标签页支持：新建（`+`）、切换、关闭（`×`）、刷新、前进、后退；
 /// 5. 网页控制：置顶（Pin）、复制链接、在系统默认浏览器中打开。
@@ -78,7 +83,6 @@ class DesktopBrowserWindow extends ConsumerStatefulWidget {
     this.title,
     this.fallbackContent,
     this.isSubWindow = false,
-    this.isInlineDocked = false,
     this.onClose,
     this.onRegisterMethodHandler,
     super.key,
@@ -88,10 +92,9 @@ class DesktopBrowserWindow extends ConsumerStatefulWidget {
   final String? title;
   final String? fallbackContent;
   final bool isSubWindow;
-  final bool isInlineDocked;
   final VoidCallback? onClose;
   final void Function(Future<dynamic> Function(MethodCall call) handler)?
-      onRegisterMethodHandler;
+  onRegisterMethodHandler;
 
   /// 标准化并校验 URL 格式（支持补全 https:// 协议、去除多余空白字符、拦截非法 scheme 与不合法域名）
   static String? validateAndNormalizeUrl(String? rawUrl) {
@@ -169,17 +172,22 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   bool _isPinned = false;
   bool _isMaximized = false;
   bool _isDocked = false;
+  final GlobalKey _topBarKey = GlobalKey();
   final ScrollController _tabScrollController = ScrollController();
   bool _pendingNavigationReported = false;
   Timer? _navigationTimeoutTimer;
   final ValueNotifier<({BrowserTabItem? tab, double left})>
-      _hoverPreviewNotifier = ValueNotifier((tab: null, left: 8.0));
+  _hoverPreviewNotifier = ValueNotifier((tab: null, left: 8.0));
   Timer? _hoverPreviewTimer;
+  int _hoverRevision = 0;
+  int _tabSelectionRevision = 0;
+  bool _changingPresentation = false;
 
   /// 当前浏览器会话内用户已主动点击“继续访问”确认放行的第三方域名集合
   final Set<String> _sessionConfirmedDomains = {};
 
   void _hideHoverPreview() {
+    _hoverRevision++;
     _hoverPreviewTimer?.cancel();
     _hoverPreviewTimer = null;
     if (_hoverPreviewNotifier.value.tab != null) {
@@ -277,40 +285,26 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         tab.isWarningGateActive ||
         tab.isSecurityChecking ||
         tab.isInvalidUrl ||
-        !_tabs.contains(tab) ||
-        _currentTab != tab) {
+        !_tabs.contains(tab)) {
       return;
     }
-    try {
-      final rawBytes = await c.takeScreenshot(
-        screenshotConfiguration: ScreenshotConfiguration(
-          compressFormat: CompressFormat.JPEG,
-          quality: 60,
-        ),
-      );
-      if (rawBytes == null || rawBytes.isEmpty || !mounted || !_tabs.contains(tab)) {
-        return;
-      }
-      final codec = await ui.instantiateImageCodec(rawBytes, targetWidth: 240);
-      final frame = await codec.getNextFrame();
-      final byteData = await frame.image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      frame.image.dispose();
-      if (byteData == null || !mounted || !_tabs.contains(tab)) return;
-      setState(() {
-        tab.thumbnail = byteData.buffer.asUint8List();
-      });
-    } catch (_) {
-      // 平台或当前页面状态不支持截图时静默回退至 Favicon 展示，不抛出异常
+    final thumbnail = await captureBrowserThumbnail(
+      c,
+    ).timeout(const Duration(seconds: 2), onTimeout: () => null);
+    if (thumbnail != null && mounted && _tabs.contains(tab)) {
+      setState(() => tab.thumbnail = thumbnail);
     }
   }
 
   /// 切换到目标标签页前，先为当前正在展示的激活标签页抓取最新状态缩略图
   Future<void> _switchToTab(int newIndex) async {
-    if (newIndex < 0 || newIndex >= _tabs.length || newIndex == _activeTabIndex) {
+    if (newIndex < 0 ||
+        newIndex >= _tabs.length ||
+        newIndex == _activeTabIndex) {
       return;
     }
+    final selectedTab = _tabs[newIndex];
+    final selectionRevision = ++_tabSelectionRevision;
     final previousTab = _currentTab;
     if (_tabs.contains(previousTab) &&
         !previousTab.isBlocked &&
@@ -321,9 +315,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         previousTab,
       ).timeout(const Duration(milliseconds: 120), onTimeout: () {});
     }
-    if (!mounted || newIndex >= _tabs.length) return;
+    if (!mounted ||
+        selectionRevision != _tabSelectionRevision ||
+        !_tabs.contains(selectedTab)) {
+      return;
+    }
     setState(() {
-      _activeTabIndex = newIndex;
+      _activeTabIndex = _tabs.indexOf(selectedTab);
     });
   }
 
@@ -333,7 +331,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     String? fallbackContent,
   }) {
     final validUrl = DesktopBrowserWindow.validateAndNormalizeUrl(rawUrl);
-    final tabId = 'tab_${DateTime.now().millisecondsSinceEpoch}_${_tabs.length}';
+    final tabId =
+        'tab_${DateTime.now().millisecondsSinceEpoch}_${_tabs.length}';
     if (validUrl != null) {
       return BrowserTabItem(
         id: tabId,
@@ -357,19 +356,26 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     );
   }
 
-  Future<void> _verifyTabSecurity(
+  Future<bool> _verifyTabSecurity(
     BrowserTabItem tab,
     String targetUrl, {
     bool isInitialOpen = false,
   }) async {
+    final revision = ++tab.navigationRevision;
+    if (mounted && _tabs.contains(tab) && !tab.isSecurityChecking) {
+      setState(() => tab.isSecurityChecking = true);
+    }
     try {
       final securityService = ref.read(urlSecurityServiceProvider);
       final res = await securityService.checkUrl(targetUrl);
-      if (!mounted || !_tabs.contains(tab)) return;
+      if (!mounted ||
+          !_tabs.contains(tab) ||
+          revision != tab.navigationRevision) {
+        return false;
+      }
       if (res.isBlocked) {
-        await tab.controller?.stopLoading();
-        if (!mounted || !_tabs.contains(tab)) return;
         setState(() {
+          tab.url = targetUrl;
           tab.securityCheckResult = res;
           tab.isSecurityChecking = false;
           tab.isWarningGateActive = false;
@@ -380,7 +386,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
           tab.interceptReason = res.interceptReason;
         });
         _reportLoadComplete(tab.url, tab.title, force: true);
-        return;
+        return false;
       }
 
       final domainKey =
@@ -390,8 +396,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       final alreadyConfirmed =
           domainKey.isNotEmpty && _sessionConfirmedDomains.contains(domainKey);
 
-      if (res.isWarning && isInitialOpen && !alreadyConfirmed) {
+      if (res.isWarning && !alreadyConfirmed) {
         setState(() {
+          tab.url = targetUrl;
           tab.securityCheckResult = res;
           tab.isSecurityChecking = false;
           tab.isWarningGateActive = true;
@@ -399,26 +406,35 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
           tab.isLoading = false;
         });
         _reportLoadComplete(tab.url, tab.title, force: true);
-        return;
+        return false;
       }
 
-      if (tab.isSecurityChecking || tab.securityCheckResult == null) {
+      setState(() {
+        tab.securityCheckResult = res;
+        tab.isSecurityChecking = false;
+        tab.isWarningGateActive = false;
+        tab.isBlocked = false;
+        tab.hasWebView = true;
+      });
+      return true;
+    } catch (error) {
+      if (mounted &&
+          _tabs.contains(tab) &&
+          revision == tab.navigationRevision) {
         setState(() {
-          tab.securityCheckResult = res;
           tab.isSecurityChecking = false;
-          tab.isWarningGateActive = false;
+          tab.isLoading = false;
+          tab.errorMessage =
+              error is TimeoutException
+                  ? '安全核验超时，请点击“重新加载”重试'
+                  : '网址安全检查失败，请重新加载后重试';
         });
       }
-    } catch (_) {
-      if (mounted && _tabs.contains(tab) && tab.isSecurityChecking) {
-        setState(() {
-          tab.isSecurityChecking = false;
-        });
-      }
+      return false;
     }
   }
 
-  void _confirmWarningAndProceed(BrowserTabItem tab) {
+  Future<void> _confirmWarningAndProceed(BrowserTabItem tab) async {
     final domainKey =
         (tab.securityCheckResult?.domain.isNotEmpty == true
                 ? tab.securityCheckResult!.domain
@@ -428,18 +444,22 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     if (domainKey.isNotEmpty) {
       _sessionConfirmedDomains.add(domainKey);
     }
+    final controller = tab.controller;
     setState(() {
       tab.isWarningGateActive = false;
       tab.isSecurityChecking = false;
       tab.isLoading = true;
       tab.errorMessage = null;
+      tab.hasWebView = true;
     });
+    if (controller != null) {
+      await controller.loadUrl(urlRequest: URLRequest(url: WebUri(tab.url)));
+    }
   }
 
   @override
   void initState() {
     super.initState();
-    _isDocked = widget.isInlineDocked;
     final firstTab = _createValidatedTab(
       rawUrl: widget.initialUrl,
       title: widget.title,
@@ -483,18 +503,17 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     if (widget.onRegisterMethodHandler != null) {
       widget.onRegisterMethodHandler!(_handleWindowMethodCall);
     } else if (widget.isSubWindow) {
-      WindowController.fromCurrentEngine().then((controller) {
-        controller.setWindowMethodHandler(_handleWindowMethodCall);
-      }).catchError((_) {});
+      WindowController.fromCurrentEngine()
+          .then((controller) {
+            controller.setWindowMethodHandler(_handleWindowMethodCall);
+          })
+          .catchError((_) {});
     }
   }
 
   @override
   void didUpdateWidget(covariant DesktopBrowserWindow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isInlineDocked != oldWidget.isInlineDocked) {
-      _isDocked = widget.isInlineDocked;
-    }
     if (!widget.isSubWindow &&
         widget.initialUrl.isNotEmpty &&
         widget.initialUrl != oldWidget.initialUrl) {
@@ -503,6 +522,39 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   Future<dynamic> _handleWindowMethodCall(MethodCall call) async {
+    if (call.method == 'browser_ping') {
+      return mounted;
+    }
+    if (call.method == 'browser_diagnostics' ||
+        call.method == 'window_content_diagnostics') {
+      Object? probe;
+      final controller = _currentTab.controller;
+      if (controller != null) {
+        probe = await controller.evaluateJavascript(
+          source: '''
+          (() => {
+            window.__gotoimDockProbe ??= String(Date.now()) + Math.random();
+            return {marker: window.__gotoimDockProbe,
+              url: location.href, readyState: document.readyState,
+              videoTime: document.querySelector('video')?.currentTime ?? null};
+          })()
+        ''',
+        );
+      }
+      return {
+        'tabIds': _tabs.map((tab) => tab.id).toList(),
+        'activeTabId': _currentTab.id,
+        'urls': _tabs.map((tab) => tab.url).toList(),
+        'webViewCount': _tabs.where((tab) => tab.controller != null).length,
+        'creationCounts': _tabs.map((tab) => tab.webViewCreationCount).toList(),
+        'navigationCounts': _tabs.map((tab) => tab.navigationCount).toList(),
+        'loading': _tabs.map((tab) => tab.isLoading).toList(),
+        'securityChecking': _tabs.map((tab) => tab.isSecurityChecking).toList(),
+        'hoveredTabId': _hoverPreviewNotifier.value.tab?.id,
+        'thumbnailReady': _tabs.map((tab) => tab.thumbnail != null).toList(),
+        'pageProbe': probe,
+      };
+    }
     if (call.method == 'set_dock_mode') {
       final isDocked = call.arguments == true;
       if (mounted && _isDocked != isDocked) {
@@ -564,11 +616,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     return s;
   }
 
-  void addTab({
-    required String url,
-    String? title,
-    bool activate = true,
-  }) {
+  void addTab({required String url, String? title, bool activate = true}) {
+    if (activate) _tabSelectionRevision++;
     final normalizedUrl = DesktopBrowserWindow.validateAndNormalizeUrl(url);
     final targetKeyUrl = normalizedUrl ?? url.trim();
     final canonicalTarget = _canonicalUrlKey(targetKeyUrl);
@@ -627,19 +676,22 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   void _closeTab(int index) {
+    _tabSelectionRevision++;
     _hideHoverPreview();
     if (_tabs.length <= 1) {
       _closeWindow();
       return;
     }
 
+    final activeTab = _currentTab;
     final removed = _tabs[index];
     removed.clearThumbnail();
     setState(() {
       _tabs.removeAt(index);
-      if (_activeTabIndex >= _tabs.length) {
-        _activeTabIndex = _tabs.length - 1;
-      }
+      _activeTabIndex =
+          _tabs.contains(activeTab)
+              ? _tabs.indexOf(activeTab)
+              : index.clamp(0, _tabs.length - 1);
     });
   }
 
@@ -682,19 +734,6 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   void _closeWindow() {
-    if (widget.isInlineDocked) {
-      _clearAllTabs();
-      ref.read(desktopBrowserDockProvider.notifier).closeDocked();
-      return;
-    }
-    if (_isDocked) {
-      const mainChannel = WindowMethodChannel(
-        'gotoim/ipc_to_main',
-        mode: ChannelMode.unidirectional,
-      );
-      mainChannel.invokeMethod('request_close_docked_browser');
-      return;
-    }
     if (widget.onClose != null) {
       widget.onClose!();
     } else if (widget.isSubWindow) {
@@ -706,44 +745,31 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   Future<void> _handleUndockToStandaloneWindow() async {
-    final activeUrl = _currentTab.url;
-    final activeTitle = _currentTab.title;
-    if (widget.isInlineDocked) {
-      await ref
-          .read(desktopBrowserDockProvider.notifier)
-          .requestUndock(
-            showWindow: true,
-            activeUrl: activeUrl,
-            activeTitle: activeTitle,
-          );
-      return;
+    if (_changingPresentation) return;
+    _changingPresentation = true;
+    try {
+      await ref.read(windowServiceProvider).undock(targetId: 'tool:browser');
+    } catch (error) {
+      showToast('弹出失败：$error', type: ToastType.error);
+    } finally {
+      _changingPresentation = false;
     }
-    const mainChannel = WindowMethodChannel(
-      'gotoim/ipc_to_main',
-      mode: ChannelMode.unidirectional,
-    );
-    await mainChannel.invokeMethod('request_undock_browser');
   }
 
   Future<void> _handleDockToMainWindow() async {
-    final currentTab = _currentTab;
-    if (!widget.isSubWindow) {
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
+    if (_changingPresentation) return;
+    _changingPresentation = true;
+    try {
+      if (!widget.isSubWindow) {
+        showToast('当前浏览器宿主不支持无刷新吸附', type: ToastType.info);
+        return;
       }
-      await ref
-          .read(desktopBrowserDockProvider.notifier)
-          .requestDock(url: currentTab.url, title: currentTab.title);
-      return;
+      await ref.read(windowServiceProvider).dock(targetId: 'tool:browser');
+    } catch (error) {
+      showToast('吸附失败：$error', type: ToastType.error);
+    } finally {
+      _changingPresentation = false;
     }
-    const mainChannel = WindowMethodChannel(
-      'gotoim/ipc_to_main',
-      mode: ChannelMode.unidirectional,
-    );
-    await mainChannel.invokeMethod('request_dock_browser', {
-      'url': currentTab.url,
-      'title': currentTab.title,
-    });
   }
 
   Future<void> _refresh() async {
@@ -759,7 +785,16 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         tab.isSecurityChecking = true;
         tab.errorMessage = null;
       });
-      await _verifyTabSecurity(tab, tab.url, isInitialOpen: true);
+      final allowed = await _verifyTabSecurity(
+        tab,
+        tab.url,
+        isInitialOpen: true,
+      );
+      if (allowed && tab.controller != null) {
+        await tab.controller!.loadUrl(
+          urlRequest: URLRequest(url: WebUri(tab.url)),
+        );
+      }
       return;
     }
     setState(() {
@@ -929,35 +964,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         _closeRightTabs(index);
         break;
       case 'new_tab':
-        addTab(
-          url: 'https://www.bing.com',
-          title: '新标签页',
-          activate: true,
-        );
+        addTab(url: 'https://www.bing.com', title: '新标签页', activate: true);
         break;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isInlineDocked) {
-      ref.listen<DesktopBrowserDockState>(desktopBrowserDockProvider, (
-        prev,
-        next,
-      ) {
-        if (next.isDocked &&
-            next.currentUrl != null &&
-            next.currentUrl!.isNotEmpty &&
-            next.requestSeq != prev?.requestSeq) {
-          addTab(
-            url: next.currentUrl!,
-            title: next.currentTitle,
-            activate: true,
-          );
-        }
-      });
-    }
-
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -978,9 +991,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
     final currentTab = _currentTab;
     final windowLogicalWidth =
-        widget.isInlineDocked
-            ? ref.watch(desktopBrowserDockProvider.select((s) => s.width))
-            : (widget.isSubWindow ? screenSize.width : dialogWidth);
+        widget.isSubWindow ? screenSize.width : dialogWidth;
 
     final body = Stack(
       fit: StackFit.expand,
@@ -1002,20 +1013,33 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 ),
               ),
 
-            // 3. 网页主内容视图 (使用 IndexedStack 保持各个 Tab 的状态和页面实例)
+            // 3. 网页主内容视图 (使用 带稳定 Key 的 Offstage 保持各标签页实例)
             Expanded(
               child: Container(
                 color: isDark ? const Color(0xFF181818) : Colors.white,
                 child:
                     _tabs.isEmpty
                         ? const SizedBox.shrink()
-                        : IndexedStack(
-                          index: _activeTabIndex.clamp(0, _tabs.length - 1),
+                        : Stack(
+                          fit: StackFit.expand,
                           children:
                               _tabs
                                   .map(
-                                    (tab) =>
-                                        _buildTabWebView(context, tab, isDark),
+                                    (tab) => Offstage(
+                                      key: ValueKey(tab.id),
+                                      offstage: tab != _currentTab,
+                                      child: TickerMode(
+                                        enabled: tab == _currentTab,
+                                        child: ExcludeFocus(
+                                          excluding: tab != _currentTab,
+                                          child: _buildTabWebView(
+                                            context,
+                                            tab,
+                                            isDark,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   )
                                   .toList(),
                         ),
@@ -1050,7 +1074,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       ],
     );
 
-    if (widget.isInlineDocked || widget.isSubWindow) {
+    if (widget.isSubWindow) {
       return Material(color: windowBg, child: SizedBox.expand(child: body));
     }
 
@@ -1096,87 +1120,116 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (canMountNativeWebView && InAppWebViewPlatform.instance != null)
-          InAppWebView(
-            key: ValueKey('webview_${tab.id}'),
-            initialUrlRequest: URLRequest(url: WebUri(tab.url)),
-            initialSettings: InAppWebViewSettings(
-              useShouldOverrideUrlLoading: false,
-              mediaPlaybackRequiresUserGesture: false,
-              allowsInlineMediaPlayback: true,
-              javaScriptEnabled: true,
-              isInspectable: true,
-            ),
-            onWebViewCreated: (controller) {
-              tab.controller = controller;
-            },
-            onProgressChanged: (controller, progress) {
-              if (!mounted || tab.isBlocked || tab.isWarningGateActive) return;
-              setState(() {
-                tab.progress = progress / 100.0;
+        if (tab.hasWebView && InAppWebViewPlatform.instance != null)
+          Offstage(
+            offstage: !canMountNativeWebView,
+            child: InAppWebView(
+              key: ValueKey('webview_${tab.id}'),
+              initialUrlRequest: URLRequest(url: WebUri(tab.url)),
+              initialSettings: InAppWebViewSettings(
+                useShouldOverrideUrlLoading: true,
+                mediaPlaybackRequiresUserGesture: false,
+                allowsInlineMediaPlayback: true,
+                javaScriptEnabled: true,
+                isInspectable: true,
+              ),
+              onWebViewCreated: (controller) {
+                tab.controller = controller;
+                tab.webViewCreationCount++;
+              },
+              shouldOverrideUrlLoading: (controller, action) async {
+                if (action.isForMainFrame == false) {
+                  return NavigationActionPolicy.ALLOW;
+                }
+                final target = action.request.url?.toString();
+                if (target == null) {
+                  return NavigationActionPolicy.CANCEL;
+                }
+                final allowed = await _verifyTabSecurity(tab, target);
+                return allowed
+                    ? NavigationActionPolicy.ALLOW
+                    : NavigationActionPolicy.CANCEL;
+              },
+              onProgressChanged: (controller, progress) {
+                if (!mounted || tab.isBlocked || tab.isWarningGateActive) {
+                  return;
+                }
+                setState(() {
+                  tab.progress = progress / 100.0;
+                  if (progress >= 100) {
+                    tab.isLoading = false;
+                  }
+                });
                 if (progress >= 100) {
-                  tab.isLoading = false;
+                  _reportLoadComplete(tab.url, tab.title);
                 }
-              });
-              if (progress >= 100) {
-                _reportLoadComplete(tab.url, tab.title);
-              }
-            },
-            onTitleChanged: (controller, title) {
-              if (!mounted ||
-                  tab.isBlocked ||
-                  tab.isWarningGateActive ||
-                  title == null ||
-                  title.isEmpty) {
-                return;
-              }
-              setState(() {
-                tab.title = title;
-              });
-            },
-            onLoadStart: (controller, url) async {
-              if (!mounted) return;
-              final currentUrl = url?.toString();
-              setState(() {
-                if (currentUrl != null) {
-                  tab.url = currentUrl;
-                  tab.faviconUrl ??= _defaultFaviconUrl(currentUrl);
+              },
+              onTitleChanged: (controller, title) {
+                if (!mounted ||
+                    tab.isBlocked ||
+                    tab.isWarningGateActive ||
+                    title == null ||
+                    title.isEmpty) {
+                  return;
                 }
-                tab.errorMessage = null;
-                tab.isLoading = true;
-              });
-              if (currentUrl != null &&
-                  currentUrl.startsWith(RegExp(r'^https?://'))) {
-                await _verifyTabSecurity(tab, currentUrl);
-              }
-            },
-            onLoadStop: (controller, url) async {
-              if (tab.isBlocked || tab.isWarningGateActive) return;
-              final canBack = await controller.canGoBack();
-              final canForward = await controller.canGoForward();
-              if (!mounted || tab.isBlocked || tab.isWarningGateActive) return;
-              setState(() {
-                tab.errorMessage = null;
-                tab.isLoading = false;
-                tab.canGoBack = canBack;
-                tab.canGoForward = canForward;
-                if (url != null) {
-                  tab.url = url.toString();
-                  tab.faviconUrl ??= _defaultFaviconUrl(tab.url);
+                setState(() {
+                  tab.title = title;
+                });
+              },
+              onLoadStart: (controller, url) async {
+                if (!mounted || !_tabs.contains(tab)) return;
+                final currentUrl = url?.toString();
+                setState(() {
+                  tab.navigationCount++;
+                  if (currentUrl != null) {
+                    tab.url = currentUrl;
+                    tab.faviconUrl ??= _defaultFaviconUrl(currentUrl);
+                  }
+                  tab.errorMessage = null;
+                  tab.isLoading = true;
+                });
+              },
+              onLoadStop: (controller, url) async {
+                if (!mounted ||
+                    !_tabs.contains(tab) ||
+                    tab.isBlocked ||
+                    tab.isWarningGateActive) {
+                  return;
                 }
-              });
-              _reportLoadComplete(tab.url, tab.title);
-              Future<void>.delayed(const Duration(milliseconds: 500), () {
-                if (mounted &&
-                    !tab.isBlocked &&
-                    !tab.isWarningGateActive &&
-                    _tabs.contains(tab)) {
-                  _captureThumbnail(tab);
-                }
-              });
-              try {
-                final fav = await controller.evaluateJavascript(
-                  source: '''
+                final revision = tab.navigationRevision;
+                try {
+                  final canBack = await controller.canGoBack();
+                  final canForward = await controller.canGoForward();
+                  if (!mounted ||
+                      !_tabs.contains(tab) ||
+                      revision != tab.navigationRevision ||
+                      tab.isBlocked ||
+                      tab.isWarningGateActive) {
+                    return;
+                  }
+                  setState(() {
+                    tab.errorMessage = null;
+                    tab.isLoading = false;
+                    tab.canGoBack = canBack;
+                    tab.canGoForward = canForward;
+                    if (url != null) {
+                      tab.url = url.toString();
+                      tab.faviconUrl ??= _defaultFaviconUrl(tab.url);
+                    }
+                  });
+                  _reportLoadComplete(tab.url, tab.title);
+                  Future<void>.delayed(const Duration(milliseconds: 500), () {
+                    if (mounted &&
+                        revision == tab.navigationRevision &&
+                        !tab.isBlocked &&
+                        !tab.isWarningGateActive &&
+                        _tabs.contains(tab)) {
+                      _captureThumbnail(tab);
+                    }
+                  });
+                  try {
+                    final fav = await controller.evaluateJavascript(
+                      source: '''
                     (function() {
                       var links = document.querySelectorAll('link[rel*="icon"]');
                       for (var i = 0; i < links.length; i++) {
@@ -1185,53 +1238,69 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       return location.origin + '/favicon.ico';
                     })();
                   ''',
-                );
-                if (mounted &&
-                    !tab.isBlocked &&
-                    !tab.isWarningGateActive &&
-                    fav is String &&
-                    fav.startsWith(RegExp(r'^https?://')) &&
-                    fav != tab.faviconUrl) {
-                  setState(() {
-                    tab.faviconUrl = fav;
-                  });
+                    );
+                    if (mounted &&
+                        _tabs.contains(tab) &&
+                        revision == tab.navigationRevision &&
+                        !tab.isBlocked &&
+                        !tab.isWarningGateActive &&
+                        fav is String &&
+                        fav.startsWith(RegExp(r'^https?://')) &&
+                        fav != tab.faviconUrl) {
+                      setState(() {
+                        tab.faviconUrl = fav;
+                      });
+                    }
+                  } catch (_) {}
+                } catch (_) {
+                  // Native callbacks can finish after a tab has been closed.
                 }
-              } catch (_) {}
-            },
-            onDownloadStarting: (controller, downloadStartRequest) async {
-              final downloadUrl = downloadStartRequest.url.toString();
-              if (securityService.isDangerousDownload(downloadUrl)) {
-                if (!mounted) return DownloadStartResponse(handled: true);
-                final confirmed = await showConfirmModal(
-                  context: context,
-                  title: '风险文件下载警告',
-                  message:
-                      '该网页试图下载可执行程序或安装包：\n$downloadUrl\n\n此类文件可能包含木马或恶意代码，建议您在外部浏览器核实来源后谨慎处理。',
-                  confirmText: '前往外部浏览器处理',
-                  cancelText: '取消下载',
-                );
-                if (confirmed && mounted) {
+              },
+              onUpdateVisitedHistory: (controller, url, isReload) {
+                if (!mounted ||
+                    !_tabs.contains(tab) ||
+                    url == null ||
+                    tab.isBlocked ||
+                    tab.isWarningGateActive) {
+                  return;
+                }
+                setState(() => tab.url = url.toString());
+              },
+              onDownloadStarting: (controller, downloadStartRequest) async {
+                final downloadUrl = downloadStartRequest.url.toString();
+                if (securityService.isDangerousDownload(downloadUrl)) {
+                  if (!mounted) return DownloadStartResponse(handled: true);
+                  final confirmed = await showConfirmModal(
+                    context: context,
+                    title: '风险文件下载警告',
+                    message:
+                        '该网页试图下载可执行程序或安装包：\n$downloadUrl\n\n此类文件可能包含木马或恶意代码，建议您在外部浏览器核实来源后谨慎处理。',
+                    confirmText: '前往外部浏览器处理',
+                    cancelText: '取消下载',
+                  );
+                  if (confirmed && mounted) {
+                    await _openExternalUrl(downloadUrl);
+                  }
+                } else {
                   await _openExternalUrl(downloadUrl);
                 }
-              } else {
-                await _openExternalUrl(downloadUrl);
-              }
-              return DownloadStartResponse(handled: true);
-            },
-            onReceivedError: (controller, request, error) {
-              if (!mounted ||
-                  tab.isBlocked ||
-                  tab.isWarningGateActive ||
-                  request.isForMainFrame == false ||
-                  error.type == WebResourceErrorType.CANCELLED) {
-                return;
-              }
-              setState(() {
-                tab.isLoading = false;
-                tab.errorMessage = error.description;
-              });
-              _reportLoadComplete(tab.url, tab.title);
-            },
+                return DownloadStartResponse(handled: true);
+              },
+              onReceivedError: (controller, request, error) {
+                if (!mounted ||
+                    tab.isBlocked ||
+                    tab.isWarningGateActive ||
+                    request.isForMainFrame == false ||
+                    error.type == WebResourceErrorType.CANCELLED) {
+                  return;
+                }
+                setState(() {
+                  tab.isLoading = false;
+                  tab.errorMessage = error.description;
+                });
+                _reportLoadComplete(tab.url, tab.title);
+              },
+            ),
           )
         else if (canMountNativeWebView)
           _buildWebPreviewPlaceholder(context, tab, isDark),
@@ -1300,6 +1369,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     final thumbBytes = tab.thumbnail;
 
     return Container(
+      key: ValueKey('browser_tab_preview_${tab.id}'),
       width: 240,
       decoration: BoxDecoration(
         color: cardBg,
@@ -1322,7 +1392,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             Container(
               height: 136,
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
+                color:
+                    isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
                 border: Border(
                   bottom: BorderSide(color: borderColor, width: 0.5),
                 ),
@@ -1341,7 +1412,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               height: 76,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF7F8FA),
+                color:
+                    isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF7F8FA),
                 border: Border(
                   bottom: BorderSide(color: borderColor, width: 0.5),
                 ),
@@ -1411,6 +1483,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         final currentTab = _currentTab;
 
         return GestureDetector(
+          key: _topBarKey,
           behavior: HitTestBehavior.translucent,
           onPanStart: (_) {
             if (widget.isSubWindow && !_isDocked) {
@@ -1519,6 +1592,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                                     ),
                                     const SizedBox(width: 4),
                                     InkWell(
+                                      key: ValueKey(
+                                        'close_browser_tab_${tab.id}',
+                                      ),
                                       borderRadius: BorderRadius.circular(4),
                                       onTap: () => _closeTab(index),
                                       child: const Padding(
@@ -1568,6 +1644,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                               return Builder(
                                 builder: (tabItemContext) {
                                   return MouseRegion(
+                                    key: ValueKey(
+                                      'browser_tab_hover_${tab.id}',
+                                    ),
                                     onEnter: (_) {
                                       try {
                                         _hoverPreviewTimer?.cancel();
@@ -1580,36 +1659,54 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                                         final tabBox =
                                             tabItemContext.findRenderObject()
                                                 as RenderBox?;
+                                        final winRender =
+                                            _topBarKey.currentContext
+                                                ?.findRenderObject();
                                         final winBox =
-                                            context.findRenderObject()
-                                                as RenderBox?;
+                                            winRender is RenderBox
+                                                ? winRender
+                                                : null;
                                         if (tabBox != null &&
                                             winBox != null &&
                                             tabBox.attached &&
                                             winBox.attached &&
                                             tabBox.hasSize &&
                                             winBox.hasSize) {
-                                          final pos = tabBox.localToGlobal(
-                                            Offset.zero,
-                                            ancestor: winBox,
-                                          );
-                                          leftOffset = pos.dx;
+                                          leftOffset =
+                                              (tabBox.localToGlobal(
+                                                        Offset.zero,
+                                                      ) -
+                                                      winBox.localToGlobal(
+                                                        Offset.zero,
+                                                      ))
+                                                  .dx;
                                         }
+                                        final hoverRevision = ++_hoverRevision;
                                         _hoverPreviewTimer = Timer(
                                           const Duration(milliseconds: 350),
                                           () async {
                                             if (!mounted ||
+                                                hoverRevision !=
+                                                    _hoverRevision ||
                                                 !_tabs.contains(tab)) {
                                               return;
                                             }
-                                            if (tab == _currentTab &&
-                                                tab.thumbnail == null &&
+                                            // Show the cached preview immediately; replace its image
+                                            // when the asynchronous native capture finishes.
+                                            _hoverPreviewNotifier.value = (
+                                              tab: tab,
+                                              left: leftOffset,
+                                            );
+                                            if ((tab == _currentTab ||
+                                                    tab.thumbnail == null) &&
                                                 !tab.isLoading &&
                                                 !tab.isBlocked &&
                                                 !tab.isWarningGateActive) {
                                               await _captureThumbnail(tab);
                                             }
                                             if (!mounted ||
+                                                hoverRevision !=
+                                                    _hoverRevision ||
                                                 !_tabs.contains(tab)) {
                                               return;
                                             }
@@ -1619,9 +1716,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                                             );
                                           },
                                         );
-                                      } catch (_) {}
+                                      } catch (error) {
+                                        debugPrint(
+                                          '[Browser] thumbnail hover layout failed: $error',
+                                        );
+                                      }
                                     },
                                     onExit: (_) {
+                                      _hoverRevision++;
                                       try {
                                         if (_hoverPreviewNotifier.value.tab ==
                                             tab) {
@@ -1753,15 +1855,16 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       onPressed: _closeWindow,
                     ),
                   ] else ...[
-                    IconButton(
-                      icon: const Icon(
-                        Icons.vertical_align_bottom_rounded,
-                        size: 16,
+                    if (WindowsWindowAdapter.isWindows && widget.isSubWindow)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.vertical_align_bottom_rounded,
+                          size: 16,
+                        ),
+                        tooltip: '嵌入到聊天窗口',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _handleDockToMainWindow,
                       ),
-                      tooltip: '嵌入到聊天窗口',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _handleDockToMainWindow,
-                    ),
                     IconButton(
                       icon: const Icon(Icons.remove_rounded, size: 16),
                       tooltip: '最小化',
@@ -2026,11 +2129,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             }
             break;
           case 'new_tab':
-            addTab(
-              url: 'https://www.bing.com',
-              title: '新标签页',
-              activate: true,
-            );
+            addTab(url: 'https://www.bing.com', title: '新标签页', activate: true);
             break;
         }
       },
@@ -2149,17 +2248,18 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 ),
               )
             else ...[
-              const PopupMenuItem(
-                value: 'dock',
-                height: 36,
-                child: Row(
-                  children: [
-                    Icon(Icons.vertical_align_bottom_rounded, size: 16),
-                    SizedBox(width: 10),
-                    Text('嵌入到聊天窗口', style: TextStyle(fontSize: 13)),
-                  ],
+              if (WindowsWindowAdapter.isWindows && widget.isSubWindow)
+                const PopupMenuItem(
+                  value: 'dock',
+                  height: 36,
+                  child: Row(
+                    children: [
+                      Icon(Icons.vertical_align_bottom_rounded, size: 16),
+                      SizedBox(width: 10),
+                      Text('嵌入到聊天窗口', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
                 ),
-              ),
               PopupMenuItem(
                 value: 'pin',
                 height: 36,
@@ -2221,36 +2321,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     BrowserTabItem tab,
     bool isDark,
   ) {
-    return Container(
-      color: isDark ? const Color(0xFF191919) : const Color(0xFFF7F7F7),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF07C160)),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            '正在进行安全核验...',
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w500,
-              color: isDark ? Colors.white70 : Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            _extractHost(tab.url),
-            style: const TextStyle(fontSize: 11.5, color: Colors.grey),
-          ),
-        ],
-      ),
+    return DesktopWindowLoading(
+      message: '正在进行安全核验...',
+      detail: '${_extractHost(tab.url)}\n核验完成前不会加载网页',
     );
   }
 
@@ -2290,16 +2363,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     final cardColor = isDark ? const Color(0xFF242424) : Colors.white;
     final textColor =
         isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF191919);
-    final subTextColor =
-        isDark ? Colors.white60 : const Color(0xFF888888);
+    final subTextColor = isDark ? Colors.white60 : const Color(0xFF888888);
 
     final shieldIcon =
         isBlocked ? Icons.gpp_bad_rounded : Icons.gpp_maybe_rounded;
     final shieldColor =
         isBlocked ? const Color(0xFFFA5151) : const Color(0xFFFAAD14);
 
-    final headline =
-        isBlocked ? '已停止访问该网页' : '将要访问非官方外部网页';
+    final headline = isBlocked ? '已停止访问该网页' : '将要访问非官方外部网页';
     final description =
         (res != null && res.message.isNotEmpty ? res.message : null) ??
         tab.interceptReason ??
@@ -2561,10 +2632,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                           child: TextButton(
                             onPressed: () {
                               Clipboard.setData(ClipboardData(text: tab.url));
-                              showToast(
-                                '链接已复制，请谨慎在外部打开',
-                                type: ToastType.info,
-                              );
+                              showToast('链接已复制，请谨慎在外部打开', type: ToastType.info);
                             },
                             child: Text(
                               '复制链接',
@@ -2670,7 +2738,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               color: isDark ? const Color(0xFF282828) : Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000),
+                color:
+                    isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000),
               ),
             ),
             child: const Row(
@@ -2729,9 +2798,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 ),
               const SizedBox(height: 16),
               Text(
-                isBlocked
-                    ? '已停止访问该网页'
-                    : (isInvalid ? '网址格式无效' : '网页无法加载'),
+                isBlocked ? '已停止访问该网页' : (isInvalid ? '网址格式无效' : '网页无法加载'),
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
