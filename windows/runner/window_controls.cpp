@@ -964,13 +964,17 @@ class WindowControls : public flutter::Plugin {
         // 7. 对主 Flutter View 设置镂空区域，防止 DirectX/Flutter 覆盖子窗口产生闪烁白屏
         UpdateMainViewClipHole(x, y, effective_w, effective_h);
 
-        // 8. 定位子窗口并置顶在 siblings 之上
+        // 8. 确保窗口及子视图脱离 SW_HIDE 状态
+        ShowWindow(hwnd, SW_SHOW);
+
+        // 9. 定位子窗口并置顶在 siblings 之上
         SetWindowPos(hwnd, HWND_TOP, client_x, client_y, effective_w, effective_h,
                      SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-        // 9. 确保子窗口内部的 Flutter View 贴合并重绘
+        // 10. 确保子窗口内部的 Flutter View 贴合并重绘
         HWND sub_child = GetWindow(hwnd, GW_CHILD);
         if (sub_child && IsWindow(sub_child)) {
+          ShowWindow(sub_child, SW_SHOW);
           MoveWindow(sub_child, 0, 0, effective_w, effective_h, TRUE);
           InvalidateRect(sub_child, NULL, TRUE);
           UpdateWindow(sub_child);

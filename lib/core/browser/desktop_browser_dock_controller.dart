@@ -75,6 +75,7 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
 
   bool _isPageLoaded = false;
   ({int viewX, int viewY, int width, int height})? _pendingBounds;
+  ({int viewX, int viewY, int width, int height})? _lastDockedBounds;
   Timer? _loadTimeoutTimer;
 
   void _registerWindowServiceCallbacks() {
@@ -147,7 +148,8 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
     }
 
     _isPageLoaded = false;
-    _pendingBounds = null;
+    // 如果之前已有测量缓存，优先预热待挂载物理边界，确保秒开时无需等待首帧 PostFrameCallback
+    _pendingBounds = _lastDockedBounds;
     _loadTimeoutTimer?.cancel();
 
     state = state.copyWith(
@@ -208,6 +210,7 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
       width: width,
       height: height,
     );
+    _lastDockedBounds = _pendingBounds;
     debugPrint(
       '[BrowserDock Dart] updatePendingBounds: ($_pendingBounds), isPageLoaded=$_isPageLoaded, status=${state.status}',
     );
@@ -221,11 +224,15 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
   /// 后台浏览器页面加载完成回调通知
   void onBrowserLoadCompleted() {
     debugPrint(
-      '[BrowserDock Dart] onBrowserLoadCompleted: status=${state.status}, pendingBounds=$_pendingBounds',
+      '[BrowserDock Dart] onBrowserLoadCompleted: status=${state.status}, pendingBounds=$_pendingBounds, lastBounds=$_lastDockedBounds',
     );
     _loadTimeoutTimer?.cancel();
     _loadTimeoutTimer = null;
     _isPageLoaded = true;
+
+    if (_pendingBounds == null && _lastDockedBounds != null) {
+      _pendingBounds = _lastDockedBounds;
+    }
 
     // 如果占位区域物理尺寸已完成测量，立即执行 Win32 挂载
     if (state.status == BrowserDockingStatus.docking && _pendingBounds != null) {
@@ -235,6 +242,7 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
 
   Future<bool> _executeDockCommit() async {
     if (_pendingBounds == null) return false;
+    if (state.status != BrowserDockingStatus.docking) return false;
     final b = _pendingBounds!;
     return commitDock(
       viewX: b.viewX,
@@ -274,6 +282,12 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
         );
 
         if (success) {
+          _lastDockedBounds = (
+            viewX: viewX,
+            viewY: viewY,
+            width: width,
+            height: height,
+          );
           state = state.copyWith(
             status: BrowserDockingStatus.docked,
             clearError: true,
@@ -301,6 +315,12 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
     required int height,
   }) async {
     if (!state.isDocked) return;
+    _lastDockedBounds = (
+      viewX: viewX,
+      viewY: viewY,
+      width: width,
+      height: height,
+    );
     try {
       final windowService = ref.read(windowServiceProvider);
       if (windowService is DefaultWindowService) {

@@ -93,8 +93,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   bool _pendingNavigationReported = false;
   Timer? _navigationTimeoutTimer;
 
-  void _reportLoadComplete(String url, String? title) {
-    if (_pendingNavigationReported) return;
+  void _reportLoadComplete(String url, String? title, {bool force = false}) {
+    if (!force && _pendingNavigationReported) return;
     _pendingNavigationReported = true;
     _navigationTimeoutTimer?.cancel();
     _navigationTimeoutTimer = null;
@@ -193,6 +193,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       return true;
     }
     if (call.method == 'update_payload') {
+      _pendingNavigationReported = false;
       final args = call.arguments;
       if (args is Map && mounted) {
         final url = args['url'] as String?;
@@ -226,7 +227,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
           _activeTabIndex = existingIndex;
         });
       }
-      _reportLoadComplete(url, title ?? _tabs[existingIndex].title);
+      _reportLoadComplete(
+        url,
+        title ?? _tabs[existingIndex].title,
+        force: true,
+      );
       return;
     }
 

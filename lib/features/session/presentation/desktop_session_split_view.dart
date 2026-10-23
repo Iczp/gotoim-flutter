@@ -120,11 +120,15 @@ class _DesktopSessionSplitViewState
     final width = (size.width * pixelRatio).round();
     final height = (size.height * pixelRatio).round();
 
-    if (viewX == _lastSentViewX &&
-        viewY == _lastSentViewY &&
-        width == _lastSentWidth &&
-        height == _lastSentHeight) {
-      return;
+    // 仅在已成功嵌入 (docked) 状态下对相同物理边界进行去重，避免重复向 Win32 派发 SetWindowPos；
+    // 在挂载中 (docking) 状态下，必须无条件为 Controller 注入最新的待吸附物理坐标，严防遮罩卡死。
+    if (dockState.status == BrowserDockingStatus.docked) {
+      if (viewX == _lastSentViewX &&
+          viewY == _lastSentViewY &&
+          width == _lastSentWidth &&
+          height == _lastSentHeight) {
+        return;
+      }
     }
     _lastSentViewX = viewX;
     _lastSentViewY = viewY;
@@ -652,6 +656,13 @@ class _DesktopSessionSplitViewState
       next,
     ) {
       if (prev?.status != next.status || prev?.width != next.width) {
+        if (next.status == BrowserDockingStatus.docking ||
+            next.status == BrowserDockingStatus.unattached) {
+          _lastSentViewX = null;
+          _lastSentViewY = null;
+          _lastSentWidth = null;
+          _lastSentHeight = null;
+        }
         _scheduleBrowserBoundsUpdate();
       }
     });
