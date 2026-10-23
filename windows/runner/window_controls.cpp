@@ -1074,12 +1074,21 @@ class WindowControls : public flutter::Plugin {
         if (it != g_dock_snapshots.end() && it->second.is_docked) {
           const auto& s = it->second;
 
+          // 0. 若是静默关闭（show_window == false），必须在解除 SetParent 和样式恢复前先行隐藏子窗口，
+          // 否则解除 WS_CHILD 的瞬间会在桌面闪现一次独立窗口！
+          if (!show_window) {
+            ShowWindow(hwnd, SW_HIDE);
+          }
+
           // 1. 恢复主窗口的完整渲染区域（清除镂空剪裁）
           ResetMainViewClipHole();
 
           // 2. 关键第一步：先剥离 WS_CHILD，并恢复原始顶层独立窗口样式
           // 在 Win32 中，如果窗口仍带有 WS_CHILD，调用 SetParent(hwnd, nullptr) 会被系统拒绝并维持子窗口状态！
           LONG_PTR target_style = s.style & ~WS_CHILD;
+          if (!show_window) {
+            target_style &= ~WS_VISIBLE;
+          }
           SetWindowLongPtr(hwnd, GWL_STYLE, target_style);
           SetWindowLongPtr(hwnd, GWL_EXSTYLE, s.ex_style);
 
@@ -1092,8 +1101,12 @@ class WindowControls : public flutter::Plugin {
           // 4. 清除 Owner 关系，确保子窗口不附属于主窗口（无 Owner-Owned 约束）
           SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, 0);
 
-          // 5. 恢复原始位置与状态
-          SetWindowPlacement(hwnd, &s.placement);
+          // 5. 恢复原始位置与状态（注意：若 !show_window，必须将 placement.showCmd 设为 SW_HIDE，否则 SetWindowPlacement 会重新激活显示窗口）
+          WINDOWPLACEMENT wp = s.placement;
+          if (!show_window) {
+            wp.showCmd = SW_HIDE;
+          }
+          SetWindowPlacement(hwnd, &wp);
           if (show_window) {
             SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);

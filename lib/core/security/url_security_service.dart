@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_navigation.dart';
 import '../browser/app_webview_page.dart';
+import '../browser/desktop_browser_window.dart';
 import '../config/app_environment.dart';
 import '../native/native.dart';
 import '../widgets/app_modal.dart';
@@ -159,12 +160,8 @@ class UrlSecurityService {
     var trimmed = url.trim();
     if (trimmed.isEmpty) return;
 
-    if (trimmed.toLowerCase().startsWith('www.')) {
-      trimmed = 'https://$trimmed';
-    }
-
     // 1. 处理特定非网页 Scheme (tel:)
-    if (trimmed.startsWith('tel:')) {
+    if (trimmed.toLowerCase().startsWith('tel:')) {
       final phone = trimmed.substring(4);
       final confirmed = await showConfirmModal(
         context: context,
@@ -178,38 +175,35 @@ class UrlSecurityService {
       return;
     }
 
-    // 2. 检查是否为标准 HTTP/HTTPS 协议
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      // 非标准协议链接：复制并提示
+    final isDesktop =
+        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    final normalizedUrl = DesktopBrowserWindow.validateAndNormalizeUrl(trimmed);
+
+    // 桌面端统一由 DesktopBrowserWindow 接管格式校验、白名单/黑名单风控拦截与加载渲染
+    if (isDesktop) {
+      await AppWebViewPage.open(
+        context,
+        url: normalizedUrl ?? trimmed,
+        title: title,
+        fallbackContent: fallbackContent,
+      );
+      return;
+    }
+
+    // 2. 移动端：检查是否为标准 HTTP/HTTPS 协议
+    if (normalizedUrl == null) {
       await Clipboard.setData(ClipboardData(text: trimmed));
       if (context.mounted) {
         showToast('已复制外部协议链接：$trimmed', type: ToastType.info);
       }
       return;
     }
+    trimmed = normalizedUrl;
 
-    // 3. 执行 URL 安全与风控判定
+    // 3. 移动端：执行 URL 安全与风控判定
     final checkResult = await _repository.checkUrl(trimmed);
 
     if (!context.mounted) return;
-
-    final isDesktop =
-        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
-
-    if (isDesktop) {
-      if (checkResult.level == UrlSecurityLevel.blocked) {
-        await showDesktopBlockedDialog(context, checkResult: checkResult);
-        return;
-      }
-      // 桌面端遵循 PC IM（微信电脑版）体验：无论是安全白名单还是普通第三方网址，直接在桌面浏览器中打开
-      await AppWebViewPage.open(
-        context,
-        url: trimmed,
-        title: title,
-        fallbackContent: fallbackContent,
-      );
-      return;
-    }
 
     // 4. 根据安全等级分流处理
     switch (checkResult.level) {

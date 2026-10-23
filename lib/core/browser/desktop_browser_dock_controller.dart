@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/window_service.dart';
-import '../widgets/app_toast.dart';
+import 'desktop_browser_window.dart';
 
 /// 桌面端浏览器吸附挂载状态枚举
 enum BrowserDockingStatus {
@@ -90,34 +90,9 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
     }
   }
 
-  /// 标准化并校验 URL 格式（支持补全 https:// 协议、去除多余空白字符、拦截非法 scheme）
-  static String? validateAndNormalizeUrl(String? rawUrl) {
-    if (rawUrl == null) return null;
-    var url = rawUrl.trim();
-    if (url.isEmpty) return null;
-
-    if (url.startsWith('//')) {
-      url = 'https:$url';
-    } else if (!url.startsWith(RegExp(r'^[a-zA-Z][a-zA-Z0-9+\-.]*://'))) {
-      final domainRegex = RegExp(r'^([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}(/.*)?$');
-      final ipRegex =
-          RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?(/.*)?$');
-      final localhostRegex = RegExp(r'^localhost(:\d+)?(/.*)?$');
-      if (domainRegex.hasMatch(url) ||
-          ipRegex.hasMatch(url) ||
-          localhostRegex.hasMatch(url)) {
-        url = 'https://$url';
-      } else {
-        return null;
-      }
-    }
-
-    final uri = Uri.tryParse(url);
-    if (uri == null) return null;
-    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
-    if (uri.host.isEmpty) return null;
-    return uri.toString();
-  }
+  /// 标准化并校验 URL 格式（委托给浏览器核心组件 DesktopBrowserWindow 统一处理）
+  static String? validateAndNormalizeUrl(String? rawUrl) =>
+      DesktopBrowserWindow.validateAndNormalizeUrl(rawUrl);
 
   /// 请求以嵌入模式打开指定网址，或将已存在的独立浏览器吸附到右侧
   Future<void> requestDock({String? url, String? title}) async {
@@ -127,12 +102,10 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
     if (state.isTransitioning) return;
 
     final rawUrl = url ?? state.currentUrl ?? 'https://www.bing.com';
-    final targetUrl = validateAndNormalizeUrl(rawUrl);
-    if (targetUrl == null) {
-      debugPrint('[BrowserDock Dart] Invalid URL: $rawUrl');
-      showToast('无法打开该链接：网址格式不正确', type: ToastType.error);
-      return;
-    }
+    final cleanedRaw = rawUrl.trim();
+    final targetUrl =
+        DesktopBrowserWindow.validateAndNormalizeUrl(cleanedRaw) ??
+        (cleanedRaw.isEmpty ? 'https://www.bing.com' : cleanedRaw);
     final targetTitle = title ?? state.currentTitle ?? '网页浏览';
 
     // 如果当前已经是吸附嵌入状态，直接在已嵌入的浏览器中添加新标签页，不重新触发 docking 遮罩
@@ -146,6 +119,11 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
       }
       return;
     }
+
+    final windowService = ref.read(windowServiceProvider);
+    final isWarmBrowser =
+        windowService is DefaultWindowService &&
+        windowService.hasWarmBrowserWindow;
 
     _isPageLoaded = false;
     // 如果之前已有测量缓存，优先预热待挂载物理边界，确保秒开时无需等待首帧 PostFrameCallback
@@ -163,7 +141,6 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
 
     // 确保主窗口恢复显示并处于前台
     try {
-      final windowService = ref.read(windowServiceProvider);
       await windowService.bringToFront('main');
     } catch (_) {}
 
@@ -179,13 +156,16 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
 
     // 浏览器在后台静默打开（尺寸默认就是点位大小，showImmediately: false）
     try {
-      final windowService = ref.read(windowServiceProvider);
       await windowService.openWebBrowser(
         url: state.currentUrl!,
         title: state.currentTitle,
         showImmediately: false,
         initialWidth: state.width.round(),
       );
+      // 如果浏览器并非首次冷启动（已在后台隐藏热备），无需等待网络加载完成，直接秒级吸附展现
+      if (isWarmBrowser && !_isPageLoaded) {
+        onBrowserLoadCompleted();
+      }
     } catch (e) {
       debugPrint('[BrowserDock Dart] openWebBrowser failed: $e');
       _loadTimeoutTimer?.cancel();

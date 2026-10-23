@@ -9,6 +9,8 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../platform/windows/windows_window_adapter.dart';
+import '../security/url_security_service.dart';
+import '../widgets/app_modal.dart';
 import '../widgets/app_toast.dart';
 
 /// 浏览器标签页模型
@@ -17,19 +19,31 @@ class BrowserTabItem {
     required this.id,
     required this.url,
     required this.title,
+    String? initialUrl,
+    this.faviconUrl,
     this.fallbackContent,
-  });
+    this.isInvalidUrl = false,
+    this.isBlocked = false,
+    this.isLoading = true,
+    this.errorMessage,
+    this.interceptReason,
+  }) : initialUrl = initialUrl ?? url;
 
   final String id;
+  final String initialUrl;
   String url;
   String title;
+  String? faviconUrl;
   final String? fallbackContent;
+  bool isInvalidUrl;
+  bool isBlocked;
   InAppWebViewController? controller;
   double progress = 0.0;
-  bool isLoading = true;
+  bool isLoading;
   bool canGoBack = false;
   bool canGoForward = false;
   String? errorMessage;
+  String? interceptReason;
 }
 
 /// 桌面端微信同款多标签页独立网页浏览器窗口 (DesktopBrowserWindow)
@@ -58,6 +72,52 @@ class DesktopBrowserWindow extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
   final void Function(Future<dynamic> Function(MethodCall call) handler)?
       onRegisterMethodHandler;
+
+  /// 标准化并校验 URL 格式（支持补全 https:// 协议、去除多余空白字符、拦截非法 scheme 与不合法域名）
+  static String? validateAndNormalizeUrl(String? rawUrl) {
+    if (rawUrl == null) return null;
+    var url = rawUrl.trim();
+    if (url.isEmpty) return null;
+
+    if (url.startsWith('//')) {
+      url = 'https:$url';
+    } else if (!url.startsWith(RegExp(r'^[a-zA-Z][a-zA-Z0-9+\-.]*://'))) {
+      final domainRegex = RegExp(
+        r'^([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}(:\d+)?(/.*|\?.*|#.*)?$',
+      );
+      final ipRegex = RegExp(
+        r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?(/.*|\?.*|#.*)?$',
+      );
+      final localhostRegex = RegExp(
+        r'^localhost(:\d+)?(/.*|\?.*|#.*)?$',
+        caseSensitive: false,
+      );
+      if (domainRegex.hasMatch(url) ||
+          ipRegex.hasMatch(url) ||
+          localhostRegex.hasMatch(url)) {
+        url = 'https://$url';
+      } else {
+        return null;
+      }
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+    final host = uri.host.trim();
+    if (host.isEmpty) return null;
+
+    final isLocalhost = host.toLowerCase() == 'localhost';
+    final isIp =
+        RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$').hasMatch(host) ||
+        host.contains(':');
+    final isValidDomain = RegExp(
+      r'^([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}$',
+    ).hasMatch(host);
+    if (!isLocalhost && !isIp && !isValidDomain) return null;
+
+    return uri.toString();
+  }
 
   /// 唤起桌面端独立浏览器窗口
   static Future<void> open(
@@ -124,24 +184,117 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     });
   }
 
+  static final BrowserTabItem _emptyFallbackTab = BrowserTabItem(
+    id: 'empty',
+    url: '',
+    title: '网页浏览',
+    isLoading: false,
+  );
+
   BrowserTabItem get _currentTab =>
       _tabs.isNotEmpty && _activeTabIndex < _tabs.length
           ? _tabs[_activeTabIndex]
-          : _tabs.first;
+          : (_tabs.isNotEmpty ? _tabs.first : _emptyFallbackTab);
+
+  static String? _defaultFaviconUrl(String url) {
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri != null &&
+          (uri.scheme == 'http' || uri.scheme == 'https') &&
+          uri.host.isNotEmpty) {
+        return '${uri.scheme}://${uri.authority}/favicon.ico';
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  void _clearAllTabs() {
+    _navigationTimeoutTimer?.cancel();
+    _navigationTimeoutTimer = null;
+    _pendingNavigationReported = false;
+    if (mounted) {
+      setState(() {
+        _tabs.clear();
+        _activeTabIndex = 0;
+      });
+    } else {
+      _tabs.clear();
+      _activeTabIndex = 0;
+    }
+  }
+
+  BrowserTabItem _createValidatedTab({
+    required String rawUrl,
+    String? title,
+    String? fallbackContent,
+  }) {
+    final validUrl = DesktopBrowserWindow.validateAndNormalizeUrl(rawUrl);
+    final tabId = 'tab_${DateTime.now().millisecondsSinceEpoch}_${_tabs.length}';
+    if (validUrl != null) {
+      return BrowserTabItem(
+        id: tabId,
+        url: validUrl,
+        title: title ?? _extractHost(validUrl),
+        faviconUrl: _defaultFaviconUrl(validUrl),
+        fallbackContent: fallbackContent,
+      );
+    }
+    final cleanedUrl = rawUrl.trim();
+    return BrowserTabItem(
+      id: tabId,
+      url: cleanedUrl,
+      title: title ?? '无效链接',
+      fallbackContent: fallbackContent,
+      isInvalidUrl: true,
+      isLoading: false,
+      errorMessage: '网址格式不正确，无法打开该页面：\n$cleanedUrl',
+    );
+  }
+
+  Future<void> _verifyTabSecurity(BrowserTabItem tab, String targetUrl) async {
+    try {
+      final securityService = ref.read(urlSecurityServiceProvider);
+      final res = await securityService.checkUrl(targetUrl);
+      if (!mounted) return;
+      if (res.isBlocked) {
+        await tab.controller?.stopLoading();
+        if (!mounted) return;
+        setState(() {
+          tab.isBlocked = true;
+          tab.isLoading = false;
+          tab.title = '已停止访问该网页';
+          tab.errorMessage = res.message;
+          tab.interceptReason = res.interceptReason;
+        });
+        _reportLoadComplete(tab.url, tab.title, force: true);
+      }
+    } catch (_) {}
+  }
 
   @override
   void initState() {
     super.initState();
-    final firstTab = BrowserTabItem(
-      id: 'tab_${DateTime.now().millisecondsSinceEpoch}',
-      url: widget.initialUrl,
-      title: widget.title ?? _extractHost(widget.initialUrl),
+    final firstTab = _createValidatedTab(
+      rawUrl: widget.initialUrl,
+      title: widget.title,
       fallbackContent: widget.fallbackContent,
     );
     _tabs.add(firstTab);
 
+    if (!firstTab.isInvalidUrl) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _verifyTabSecurity(firstTab, firstTab.url);
+      });
+    }
+
     if (widget.isSubWindow) {
-      _startWaitingForTabLoad(widget.initialUrl, widget.title);
+      if (firstTab.isInvalidUrl) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _reportLoadComplete(firstTab.url, firstTab.title, force: true);
+        });
+      } else {
+        _startWaitingForTabLoad(firstTab.url, widget.title);
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         WindowsWindowAdapter.setupCustomTitleBar();
         WindowsWindowAdapter.isDocked().then((docked) {
@@ -183,6 +336,10 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       }
       return true;
     }
+    if (call.method == 'browser_clear_tabs') {
+      _clearAllTabs();
+      return true;
+    }
     if (call.method == 'browser_add_tab') {
       final args = call.arguments;
       if (args is Map && mounted) {
@@ -199,6 +356,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         final url = args['url'] as String?;
         if (url != null && url.isNotEmpty) {
           final title = args['title'] as String?;
+          // 从关闭/隐藏状态重新唤醒打开浏览器时，确保清空旧 Tab，只保留新打开的页面
+          _tabs.clear();
+          _activeTabIndex = 0;
           addTab(url: url, title: title, activate: true);
         }
       }
@@ -214,13 +374,29 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     super.dispose();
   }
 
+  static String _canonicalUrlKey(String u) {
+    var s = u.trim();
+    while (s.endsWith('/')) {
+      s = s.substring(0, s.length - 1);
+    }
+    return s;
+  }
+
   void addTab({
     required String url,
     String? title,
     bool activate = true,
   }) {
-    // 检查是否已有相同 URL
-    final existingIndex = _tabs.indexWhere((t) => t.url == url);
+    final normalizedUrl = DesktopBrowserWindow.validateAndNormalizeUrl(url);
+    final targetKeyUrl = normalizedUrl ?? url.trim();
+    final canonicalTarget = _canonicalUrlKey(targetKeyUrl);
+
+    // 检查是否已有相同 URL（同时比对当前 URL 与初始 URL，忽略末尾斜杠差异，防止重复新建 Tab 重新加载）
+    final existingIndex = _tabs.indexWhere(
+      (t) =>
+          _canonicalUrlKey(t.url) == canonicalTarget ||
+          _canonicalUrlKey(t.initialUrl) == canonicalTarget,
+    );
     if (existingIndex >= 0) {
       if (activate) {
         setState(() {
@@ -228,20 +404,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         });
       }
       _reportLoadComplete(
-        url,
+        targetKeyUrl,
         title ?? _tabs[existingIndex].title,
         force: true,
       );
       return;
     }
 
-    _startWaitingForTabLoad(url, title);
-
-    final newTab = BrowserTabItem(
-      id: 'tab_${DateTime.now().millisecondsSinceEpoch}_${_tabs.length}',
-      url: url,
-      title: title ?? _extractHost(url),
-    );
+    final newTab = _createValidatedTab(rawUrl: url, title: title);
 
     setState(() {
       _tabs.add(newTab);
@@ -249,6 +419,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         _activeTabIndex = _tabs.length - 1;
       }
     });
+
+    if (newTab.isInvalidUrl) {
+      _reportLoadComplete(newTab.url, newTab.title, force: true);
+    } else {
+      _startWaitingForTabLoad(newTab.url, newTab.title);
+      _verifyTabSecurity(newTab, newTab.url);
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_tabScrollController.hasClients) {
@@ -309,14 +486,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         'gotoim/ipc_to_main',
         mode: ChannelMode.unidirectional,
       );
-      mainChannel.invokeMethod('request_undock_browser');
-      WindowsWindowAdapter.close();
+      mainChannel.invokeMethod('request_close_docked_browser');
       return;
     }
     if (widget.onClose != null) {
       widget.onClose!();
     } else if (widget.isSubWindow) {
       WindowsWindowAdapter.close();
+      _clearAllTabs();
     } else {
       Navigator.of(context).maybePop();
     }
@@ -324,6 +501,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
   Future<void> _refresh() async {
     final tab = _currentTab;
+    if (tab.isInvalidUrl) {
+      showToast('网址格式无效，无法重新加载', type: ToastType.error);
+      return;
+    }
+    if (tab.isBlocked) {
+      showToast('该网页已被安全策略拦截，无法重新加载', type: ToastType.error);
+      return;
+    }
     setState(() {
       tab.isLoading = true;
       tab.errorMessage = null;
@@ -541,12 +726,16 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         Expanded(
           child: Container(
             color: isDark ? const Color(0xFF181818) : Colors.white,
-            child: IndexedStack(
-              index: _activeTabIndex,
-              children: _tabs
-                  .map((tab) => _buildTabWebView(context, tab, isDark))
-                  .toList(),
-            ),
+            child:
+                _tabs.isEmpty
+                    ? const SizedBox.shrink()
+                    : IndexedStack(
+                      index: _activeTabIndex.clamp(0, _tabs.length - 1),
+                      children:
+                          _tabs
+                              .map((tab) => _buildTabWebView(context, tab, isDark))
+                              .toList(),
+                    ),
           ),
         ),
       ],
@@ -598,10 +787,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     BrowserTabItem tab,
     bool isDark,
   ) {
+    final securityService = ref.watch(urlSecurityServiceProvider);
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (InAppWebViewPlatform.instance != null)
+        if (!tab.isInvalidUrl &&
+            !tab.isBlocked &&
+            InAppWebViewPlatform.instance != null)
           InAppWebView(
             key: ValueKey('webview_${tab.id}'),
             initialUrlRequest: URLRequest(url: WebUri(tab.url)),
@@ -616,7 +808,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               tab.controller = controller;
             },
             onProgressChanged: (controller, progress) {
-              if (!mounted) return;
+              if (!mounted || tab.isBlocked) return;
               setState(() {
                 tab.progress = progress / 100.0;
                 if (progress >= 100) {
@@ -628,34 +820,91 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               }
             },
             onTitleChanged: (controller, title) {
-              if (!mounted || title == null || title.isEmpty) return;
+              if (!mounted || tab.isBlocked || title == null || title.isEmpty) {
+                return;
+              }
               setState(() {
                 tab.title = title;
               });
             },
-            onLoadStart: (controller, url) {
+            onLoadStart: (controller, url) async {
               if (!mounted) return;
+              final currentUrl = url?.toString();
               setState(() {
-                if (url != null) tab.url = url.toString();
+                if (currentUrl != null) {
+                  tab.url = currentUrl;
+                  tab.faviconUrl ??= _defaultFaviconUrl(currentUrl);
+                }
                 tab.errorMessage = null;
                 tab.isLoading = true;
               });
+              if (currentUrl != null &&
+                  currentUrl.startsWith(RegExp(r'^https?://'))) {
+                await _verifyTabSecurity(tab, currentUrl);
+              }
             },
             onLoadStop: (controller, url) async {
+              if (tab.isBlocked) return;
               final canBack = await controller.canGoBack();
               final canForward = await controller.canGoForward();
-              if (!mounted) return;
+              if (!mounted || tab.isBlocked) return;
               setState(() {
                 tab.errorMessage = null;
                 tab.isLoading = false;
                 tab.canGoBack = canBack;
                 tab.canGoForward = canForward;
-                if (url != null) tab.url = url.toString();
+                if (url != null) {
+                  tab.url = url.toString();
+                  tab.faviconUrl ??= _defaultFaviconUrl(tab.url);
+                }
               });
               _reportLoadComplete(tab.url, tab.title);
+              try {
+                final fav = await controller.evaluateJavascript(
+                  source: '''
+                    (function() {
+                      var links = document.querySelectorAll('link[rel*="icon"]');
+                      for (var i = 0; i < links.length; i++) {
+                        if (links[i].href) return links[i].href;
+                      }
+                      return location.origin + '/favicon.ico';
+                    })();
+                  ''',
+                );
+                if (mounted &&
+                    !tab.isBlocked &&
+                    fav is String &&
+                    fav.startsWith(RegExp(r'^https?://')) &&
+                    fav != tab.faviconUrl) {
+                  setState(() {
+                    tab.faviconUrl = fav;
+                  });
+                }
+              } catch (_) {}
+            },
+            onDownloadStarting: (controller, downloadStartRequest) async {
+              final downloadUrl = downloadStartRequest.url.toString();
+              if (securityService.isDangerousDownload(downloadUrl)) {
+                if (!mounted) return DownloadStartResponse(handled: true);
+                final confirmed = await showConfirmModal(
+                  context: context,
+                  title: '风险文件下载警告',
+                  message:
+                      '该网页试图下载可执行程序或安装包：\n$downloadUrl\n\n此类文件可能包含木马或恶意代码，建议您在外部浏览器核实来源后谨慎处理。',
+                  confirmText: '前往外部浏览器处理',
+                  cancelText: '取消下载',
+                );
+                if (confirmed && mounted) {
+                  await _openExternalUrl(downloadUrl);
+                }
+              } else {
+                await _openExternalUrl(downloadUrl);
+              }
+              return DownloadStartResponse(handled: true);
             },
             onReceivedError: (controller, request, error) {
               if (!mounted ||
+                  tab.isBlocked ||
                   request.isForMainFrame == false ||
                   error.type == WebResourceErrorType.CANCELLED) {
                 return;
@@ -667,13 +916,49 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               _reportLoadComplete(tab.url, tab.title);
             },
           )
-        else
+        else if (!tab.isInvalidUrl && !tab.isBlocked)
           _buildWebPreviewPlaceholder(context, tab, isDark),
 
-        if (tab.errorMessage != null)
+        if (tab.errorMessage != null || tab.isBlocked || tab.isInvalidUrl)
           _buildErrorFallback(context, tab, isDark),
       ],
     );
+  }
+
+  Widget _buildTabFavicon(
+    BrowserTabItem tab, {
+    required bool isActive,
+    required double size,
+  }) {
+    if (tab.isBlocked) {
+      return Icon(Icons.gpp_bad_rounded, size: size, color: Colors.redAccent);
+    }
+    if (tab.isInvalidUrl) {
+      return Icon(
+        Icons.link_off_rounded,
+        size: size,
+        color: Colors.orangeAccent,
+      );
+    }
+    final favUrl = tab.faviconUrl ?? _defaultFaviconUrl(tab.url);
+    final fallbackIcon = Icon(
+      Icons.public_rounded,
+      size: size,
+      color: isActive ? const Color(0xFF07C160) : Colors.grey,
+    );
+    if (favUrl != null && favUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: Image.network(
+          favUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => fallbackIcon,
+        ),
+      );
+    }
+    return fallbackIcon;
   }
 
   Widget _buildBrowserTopBar(
@@ -768,13 +1053,10 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                                 tabContent = Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.public_rounded,
+                                    _buildTabFavicon(
+                                      tab,
+                                      isActive: isActive,
                                       size: 14,
-                                      color:
-                                          isActive
-                                              ? const Color(0xFF07C160)
-                                              : Colors.grey,
                                     ),
                                     const SizedBox(width: 6),
                                     Expanded(
@@ -814,10 +1096,10 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                                 );
                               } else {
                                 tabContent = Center(
-                                  child: Icon(
-                                    Icons.public_rounded,
+                                  child: _buildTabFavicon(
+                                    tab,
+                                    isActive: isActive,
                                     size: 15,
-                                    color: Colors.grey,
                                   ),
                                 );
                               }
@@ -1351,66 +1633,154 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     BrowserTabItem tab,
     bool isDark,
   ) {
+    final isBlocked = tab.isBlocked;
+    final isInvalid = tab.isInvalidUrl;
     return Container(
       color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       padding: const EdgeInsets.all(32),
       child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.wifi_off_rounded,
-              size: 48,
-              color: isDark ? Colors.grey[600] : Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '网页无法加载',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              tab.errorMessage ?? '请检查网络连接或稍后重试',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            if (tab.fallbackContent != null &&
-                tab.fallbackContent!.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 180),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color:
-                      isDark
-                          ? const Color(0xFF282828)
-                          : const Color(0xFFF7F7F7),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SingleChildScrollView(
-                  child: Text(
-                    tab.fallbackContent!,
-                    style: const TextStyle(fontSize: 12, height: 1.5),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isBlocked)
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
                   ),
+                  child: const Icon(
+                    Icons.gpp_bad_rounded,
+                    size: 38,
+                    color: Colors.red,
+                  ),
+                )
+              else
+                Icon(
+                  isInvalid ? Icons.link_off_rounded : Icons.wifi_off_rounded,
+                  size: 48,
+                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                ),
+              const SizedBox(height: 16),
+              Text(
+                isBlocked
+                    ? '已停止访问该网页'
+                    : (isInvalid ? '网址格式无效' : '网页无法加载'),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ],
-            const SizedBox(height: 20),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                OutlinedButton(
-                  onPressed: _refresh,
-                  child: const Text('重新加载', style: TextStyle(fontSize: 12)),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.tonal(
-                  onPressed: _openInExternalBrowser,
-                  child: const Text('在外部浏览器打开', style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 8),
+              Text(
+                tab.errorMessage ??
+                    (isBlocked
+                        ? '该网页可能包含违法违规、欺诈钓鱼或恶意软件风险，为保护您的账号与财产安全，系统已阻止访问。'
+                        : (isInvalid
+                            ? '该链接不是合法的 http/https 网址'
+                            : '请检查网络连接或稍后重试')),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              if (isBlocked || isInvalid) ...[
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SelectableText(
+                        tab.url,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                      if (isBlocked &&
+                          tab.interceptReason != null &&
+                          tab.interceptReason!.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          '拦截原因：${tab.interceptReason}',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ],
-            ),
-          ],
+              if (!isBlocked &&
+                  tab.fallbackContent != null &&
+                  tab.fallbackContent!.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color:
+                        isDark
+                            ? const Color(0xFF282828)
+                            : const Color(0xFFF7F7F7),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      tab.fallbackContent!,
+                      style: const TextStyle(fontSize: 12, height: 1.5),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isBlocked || isInvalid) ...[
+                    OutlinedButton(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: tab.url));
+                        showToast('链接已复制到剪贴板', type: ToastType.success);
+                      },
+                      child: const Text('复制链接', style: TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.tonal(
+                      onPressed: () => _closeTab(_activeTabIndex),
+                      child: const Text(
+                        '关闭标签页',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ] else ...[
+                    OutlinedButton(
+                      onPressed: _refresh,
+                      child: const Text('重新加载', style: TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.tonal(
+                      onPressed: _openInExternalBrowser,
+                      child: const Text(
+                        '在外部浏览器打开',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

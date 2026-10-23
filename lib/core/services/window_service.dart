@@ -502,6 +502,15 @@ class DefaultWindowService implements WindowService {
             }
             return true;
 
+          case 'request_close_docked_browser':
+            final closeContainer = rootProviderContainer;
+            if (closeContainer != null) {
+              await closeContainer
+                  .read(desktopBrowserDockProvider.notifier)
+                  .closeDocked();
+            }
+            return true;
+
           case 'switch_owner':
             final args = call.arguments as Map?;
             final ownerId = (args?['ownerId'] as num?)?.toInt();
@@ -688,6 +697,11 @@ class DefaultWindowService implements WindowService {
     }
   }
 
+  /// 检查浏览器子窗口是否已创建并在后台热备（非首次冷启动）
+  bool get hasWarmBrowserWindow =>
+      _nativeControllers.containsKey('tool:browser') ||
+      _reusableControllers.containsKey('tool:browser');
+
   /// 向浏览器子窗口下发吸附挂载到主窗口的命令
   Future<bool> sendBrowserDockCommand({
     required int x,
@@ -696,7 +710,8 @@ class DefaultWindowService implements WindowService {
     required int height,
   }) async {
     const targetId = 'tool:browser';
-    final controller = _nativeControllers[targetId];
+    final controller =
+        _nativeControllers[targetId] ?? _reusableControllers[targetId];
     if (controller == null) {
       debugPrint('[WindowService] sendBrowserDockCommand: controller is null');
       return false;
@@ -728,7 +743,8 @@ class DefaultWindowService implements WindowService {
     required int height,
   }) async {
     const targetId = 'tool:browser';
-    final controller = _nativeControllers[targetId];
+    final controller =
+        _nativeControllers[targetId] ?? _reusableControllers[targetId];
     if (controller == null) return;
     try {
       await controller.invokeMethod('update_docked_bounds', {
@@ -743,7 +759,8 @@ class DefaultWindowService implements WindowService {
   /// 向浏览器子窗口下发从主窗口脱离挂载恢复为独立窗口的命令
   Future<bool> sendBrowserUndockCommand({bool showWindow = true}) async {
     const targetId = 'tool:browser';
-    final controller = _nativeControllers[targetId];
+    final controller =
+        _nativeControllers[targetId] ?? _reusableControllers[targetId];
     if (controller == null) {
       debugPrint(
         '[WindowService] sendBrowserUndockCommand: controller is null',
@@ -790,6 +807,11 @@ class DefaultWindowService implements WindowService {
     if (controller != null) {
       try {
         await controller.hide();
+        if (targetId == 'tool:browser') {
+          try {
+            await controller.invokeMethod('browser_clear_tabs');
+          } catch (_) {}
+        }
         _reusableControllers[targetId] = controller;
         if (_reusableControllers.length > _maxReusableControllers) {
           final oldestKey = _reusableControllers.keys.first;
@@ -1222,12 +1244,26 @@ class DefaultWindowService implements WindowService {
 
       final cachedController = _reusableControllers.remove(targetId);
       if (cachedController != null) {
+        // 必须第一时间放回 _nativeControllers，避免 update_payload 内部同步触发
+        // browser_load_completed IPC 回调时，因找不到活跃 controller 导致首次挂载失败。
+        _nativeControllers[targetId] = cachedController;
+        _registry[targetId] = WindowRecord(
+          targetId: targetId,
+          type: type,
+          title: title,
+          openedAt: DateTime.now(),
+          nativeWindowId: cachedController.windowId,
+          extra: effectivePayload.toJson(),
+        );
+        _notify();
         try {
           await cachedController.invokeMethod(
             'update_payload',
             effectivePayload.toJson(),
           );
-          await cachedController.invokeMethod('chat_refresh');
+          if (type == WindowType.chat) {
+            await cachedController.invokeMethod('chat_refresh');
+          }
         } catch (_) {}
         if (showImmediately) {
           if (type == WindowType.settings) {
@@ -1243,19 +1279,7 @@ class DefaultWindowService implements WindowService {
           }
           await cachedController.show();
           await cachedController.invokeMethod('bringToFront');
-        } else {
-          await cachedController.hide();
         }
-        _nativeControllers[targetId] = cachedController;
-        _registry[targetId] = WindowRecord(
-          targetId: targetId,
-          type: type,
-          title: title,
-          openedAt: DateTime.now(),
-          nativeWindowId: cachedController.windowId,
-          extra: effectivePayload.toJson(),
-        );
-        _notify();
         completer.complete();
         return;
       }
