@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:io' show Platform, Process;
+import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -21,6 +22,7 @@ class BrowserTabItem {
     required this.title,
     String? initialUrl,
     this.faviconUrl,
+    this.thumbnail,
     this.fallbackContent,
     this.isInvalidUrl = false,
     this.isBlocked = false,
@@ -34,6 +36,7 @@ class BrowserTabItem {
   String url;
   String title;
   String? faviconUrl;
+  Uint8List? thumbnail;
   final String? fallbackContent;
   bool isInvalidUrl;
   bool isBlocked;
@@ -44,6 +47,10 @@ class BrowserTabItem {
   bool canGoForward = false;
   String? errorMessage;
   String? interceptReason;
+
+  void clearThumbnail() {
+    thumbnail = null;
+  }
 }
 
 /// 桌面端微信同款多标签页独立网页浏览器窗口 (DesktopBrowserWindow)
@@ -152,6 +159,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   final ScrollController _tabScrollController = ScrollController();
   bool _pendingNavigationReported = false;
   Timer? _navigationTimeoutTimer;
+  BrowserTabItem? _hoveredTab;
+  double _hoveredTabLeft = 8.0;
+  Timer? _hoverPreviewTimer;
 
   void _reportLoadComplete(String url, String? title, {bool force = false}) {
     if (!force && _pendingNavigationReported) return;
@@ -211,7 +221,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   void _clearAllTabs() {
     _navigationTimeoutTimer?.cancel();
     _navigationTimeoutTimer = null;
+    _hoverPreviewTimer?.cancel();
+    _hoverPreviewTimer = null;
+    _hoveredTab = null;
     _pendingNavigationReported = false;
+    for (final t in _tabs) {
+      t.clearThumbnail();
+    }
     if (mounted) {
       setState(() {
         _tabs.clear();
@@ -221,6 +237,62 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       _tabs.clear();
       _activeTabIndex = 0;
     }
+  }
+
+  /// 截取当前激活标签页内容并压缩为 240px 宽的轻量级缩略图缓存至内存
+  Future<void> _captureThumbnail(BrowserTabItem tab) async {
+    final c = tab.controller;
+    if (!mounted ||
+        c == null ||
+        tab.isBlocked ||
+        tab.isInvalidUrl ||
+        !_tabs.contains(tab) ||
+        _currentTab != tab) {
+      return;
+    }
+    try {
+      final rawBytes = await c.takeScreenshot(
+        screenshotConfiguration: ScreenshotConfiguration(
+          compressFormat: CompressFormat.JPEG,
+          quality: 60,
+        ),
+      );
+      if (rawBytes == null || rawBytes.isEmpty || !mounted || !_tabs.contains(tab)) {
+        return;
+      }
+      final codec = await ui.instantiateImageCodec(rawBytes, targetWidth: 240);
+      final frame = await codec.getNextFrame();
+      final byteData = await frame.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      frame.image.dispose();
+      if (byteData == null || !mounted || !_tabs.contains(tab)) return;
+      setState(() {
+        tab.thumbnail = byteData.buffer.asUint8List();
+      });
+    } catch (_) {
+      // 平台或当前页面状态不支持截图时静默回退至 Favicon 展示，不抛出异常
+    }
+  }
+
+  /// 切换到目标标签页前，先为当前正在展示的激活标签页抓取最新状态缩略图
+  Future<void> _switchToTab(int newIndex) async {
+    if (newIndex < 0 || newIndex >= _tabs.length || newIndex == _activeTabIndex) {
+      return;
+    }
+    final previousTab = _currentTab;
+    if (_tabs.contains(previousTab) &&
+        !previousTab.isBlocked &&
+        !previousTab.isInvalidUrl &&
+        previousTab.controller != null) {
+      await _captureThumbnail(
+        previousTab,
+      ).timeout(const Duration(milliseconds: 120), onTimeout: () {});
+    }
+    if (!mounted || newIndex >= _tabs.length) return;
+    setState(() {
+      _activeTabIndex = newIndex;
+    });
   }
 
   BrowserTabItem _createValidatedTab({
@@ -370,6 +442,10 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   @override
   void dispose() {
     _navigationTimeoutTimer?.cancel();
+    _hoverPreviewTimer?.cancel();
+    for (final t in _tabs) {
+      t.clearThumbnail();
+    }
     _tabScrollController.dispose();
     super.dispose();
   }
@@ -398,10 +474,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
           _canonicalUrlKey(t.initialUrl) == canonicalTarget,
     );
     if (existingIndex >= 0) {
-      if (activate) {
-        setState(() {
-          _activeTabIndex = existingIndex;
-        });
+      if (activate && existingIndex != _activeTabIndex) {
+        unawaited(_switchToTab(existingIndex));
       }
       _reportLoadComplete(
         targetKeyUrl,
@@ -411,9 +485,17 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       return;
     }
 
+    if (activate && _tabs.isNotEmpty) {
+      final prevTab = _currentTab;
+      if (_tabs.contains(prevTab)) {
+        unawaited(_captureThumbnail(prevTab));
+      }
+    }
+
     final newTab = _createValidatedTab(rawUrl: url, title: title);
 
     setState(() {
+      _hoveredTab = null;
       _tabs.add(newTab);
       if (activate) {
         _activeTabIndex = _tabs.length - 1;
@@ -439,12 +521,18 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   void _closeTab(int index) {
+    _hoverPreviewTimer?.cancel();
     if (_tabs.length <= 1) {
       _closeWindow();
       return;
     }
 
+    final removed = _tabs[index];
+    removed.clearThumbnail();
     setState(() {
+      if (_hoveredTab == removed) {
+        _hoveredTab = null;
+      }
       _tabs.removeAt(index);
       if (_activeTabIndex >= _tabs.length) {
         _activeTabIndex = _tabs.length - 1;
@@ -455,7 +543,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   void _closeOtherTabs(int targetIndex) {
     if (_tabs.length <= 1) return;
     final keptTab = _tabs[targetIndex];
+    for (var i = 0; i < _tabs.length; i++) {
+      if (i != targetIndex) {
+        _tabs[i].clearThumbnail();
+      }
+    }
     setState(() {
+      _hoveredTab = null;
       _tabs.clear();
       _tabs.add(keptTab);
       _activeTabIndex = 0;
@@ -464,7 +558,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
   void _closeRightTabs(int targetIndex) {
     if (targetIndex >= _tabs.length - 1) return;
+    for (var i = targetIndex + 1; i < _tabs.length; i++) {
+      _tabs[i].clearThumbnail();
+    }
     setState(() {
+      _hoveredTab = null;
       _tabs.removeRange(targetIndex + 1, _tabs.length);
       if (_activeTabIndex >= _tabs.length) {
         _activeTabIndex = _tabs.length - 1;
@@ -706,38 +804,66 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             : (screenSize.height - 40).clamp(0.0, 760.0);
 
     final currentTab = _currentTab;
+    final windowLogicalWidth =
+        widget.isSubWindow ? screenSize.width : dialogWidth;
 
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final body = Stack(
+      fit: StackFit.expand,
       children: [
-        // 1. 顶部浏览器工具栏 (含置顶、多标签栏、导航与控制按钮)
-        _buildBrowserTopBar(context, isDark, topBarBg, borderColor),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. 顶部浏览器工具栏 (含置顶、多标签栏、导航与控制按钮)
+            _buildBrowserTopBar(context, isDark, topBarBg, borderColor),
 
-        // 2. 加载进度条
-        if (currentTab.isLoading && currentTab.progress < 1.0)
-          LinearProgressIndicator(
-            value: currentTab.progress,
-            minHeight: 2,
-            backgroundColor: Colors.transparent,
-            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF07C160)),
-          ),
+            // 2. 加载进度条
+            if (currentTab.isLoading && currentTab.progress < 1.0)
+              LinearProgressIndicator(
+                value: currentTab.progress,
+                minHeight: 2,
+                backgroundColor: Colors.transparent,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF07C160),
+                ),
+              ),
 
-        // 3. 网页主内容视图 (使用 IndexedStack 保持各个 Tab 的状态和页面实例)
-        Expanded(
-          child: Container(
-            color: isDark ? const Color(0xFF181818) : Colors.white,
-            child:
-                _tabs.isEmpty
-                    ? const SizedBox.shrink()
-                    : IndexedStack(
-                      index: _activeTabIndex.clamp(0, _tabs.length - 1),
-                      children:
-                          _tabs
-                              .map((tab) => _buildTabWebView(context, tab, isDark))
-                              .toList(),
-                    ),
-          ),
+            // 3. 网页主内容视图 (使用 IndexedStack 保持各个 Tab 的状态和页面实例)
+            Expanded(
+              child: Container(
+                color: isDark ? const Color(0xFF181818) : Colors.white,
+                child:
+                    _tabs.isEmpty
+                        ? const SizedBox.shrink()
+                        : IndexedStack(
+                          index: _activeTabIndex.clamp(0, _tabs.length - 1),
+                          children:
+                              _tabs
+                                  .map(
+                                    (tab) =>
+                                        _buildTabWebView(context, tab, isDark),
+                                  )
+                                  .toList(),
+                        ),
+              ),
+            ),
+          ],
         ),
+        if (_hoveredTab != null && _tabs.contains(_hoveredTab))
+          Positioned(
+            top: 46,
+            left: _hoveredTabLeft.clamp(
+              8.0,
+              (windowLogicalWidth - 252.0).clamp(8.0, double.infinity),
+            ),
+            child: IgnorePointer(
+              child: _buildTabHoverPreviewCard(
+                context,
+                _hoveredTab!,
+                isDark,
+                borderColor,
+              ),
+            ),
+          ),
       ],
     );
 
@@ -859,6 +985,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 }
               });
               _reportLoadComplete(tab.url, tab.title);
+              Future<void>.delayed(const Duration(milliseconds: 500), () {
+                if (mounted && !tab.isBlocked && _tabs.contains(tab)) {
+                  _captureThumbnail(tab);
+                }
+              });
               try {
                 final fav = await controller.evaluateJavascript(
                   source: '''
@@ -959,6 +1090,116 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       );
     }
     return fallbackIcon;
+  }
+
+  Widget _buildTabHoverPreviewCard(
+    BuildContext context,
+    BrowserTabItem tab,
+    bool isDark,
+    Color borderColor,
+  ) {
+    final cardBg = isDark ? const Color(0xFF282828) : Colors.white;
+    final subTextColor = isDark ? Colors.white54 : Colors.black54;
+    final thumbBytes = tab.thumbnail;
+
+    return Container(
+      width: 240,
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor, width: 0.8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.18),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (thumbBytes != null && thumbBytes.isNotEmpty)
+            Container(
+              height: 136,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
+                border: Border(
+                  bottom: BorderSide(color: borderColor, width: 0.5),
+                ),
+              ),
+              child: Image.memory(
+                thumbBytes,
+                width: 240,
+                height: 136,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                gaplessPlayback: true,
+              ),
+            )
+          else
+            Container(
+              height: 76,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF7F8FA),
+                border: Border(
+                  bottom: BorderSide(color: borderColor, width: 0.5),
+                ),
+              ),
+              child:
+                  tab.isLoading
+                      ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF07C160),
+                          ),
+                        ),
+                      )
+                      : _buildTabFavicon(tab, isActive: true, size: 28),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    _buildTabFavicon(tab, isActive: true, size: 14),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        tab.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _extractHost(tab.url),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: subTextColor),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBrowserTopBar(
@@ -1104,7 +1345,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                                 );
                               }
 
-                              Widget tabWidget = Container(
+                              final Widget tabWidget = Container(
                                 constraints: BoxConstraints(
                                   minWidth: showFullTab ? 72 : 32,
                                   maxWidth:
@@ -1127,30 +1368,80 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                                 child: tabContent,
                               );
 
-                              if (!showFullTab) {
-                                tabWidget = Tooltip(
-                                  message: tab.title,
-                                  waitDuration: const Duration(
-                                    milliseconds: 300,
-                                  ),
-                                  child: tabWidget,
-                                );
-                              }
-
-                              return GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _activeTabIndex = index;
-                                  });
-                                },
-                                onSecondaryTapUp: (details) {
-                                  _showTabContextMenu(
-                                    context,
-                                    details.globalPosition,
-                                    index,
+                              return Builder(
+                                builder: (tabItemContext) {
+                                  return MouseRegion(
+                                    onEnter: (_) {
+                                      _hoverPreviewTimer?.cancel();
+                                      double leftOffset = 8.0;
+                                      final tabBox =
+                                          tabItemContext.findRenderObject()
+                                              as RenderBox?;
+                                      final winBox =
+                                          context.findRenderObject()
+                                              as RenderBox?;
+                                      if (tabBox != null &&
+                                          winBox != null &&
+                                          tabBox.hasSize &&
+                                          winBox.hasSize) {
+                                        final pos = tabBox.localToGlobal(
+                                          Offset.zero,
+                                          ancestor: winBox,
+                                        );
+                                        leftOffset = pos.dx;
+                                      }
+                                      _hoverPreviewTimer = Timer(
+                                        const Duration(milliseconds: 350),
+                                        () async {
+                                          if (!mounted || !_tabs.contains(tab)) {
+                                            return;
+                                          }
+                                          if (tab == _currentTab &&
+                                              tab.thumbnail == null &&
+                                              !tab.isLoading) {
+                                            await _captureThumbnail(tab);
+                                          }
+                                          if (!mounted || !_tabs.contains(tab)) {
+                                            return;
+                                          }
+                                          setState(() {
+                                            _hoveredTab = tab;
+                                            _hoveredTabLeft = leftOffset;
+                                          });
+                                        },
+                                      );
+                                    },
+                                    onExit: (_) {
+                                      _hoverPreviewTimer?.cancel();
+                                      if (_hoveredTab == tab && mounted) {
+                                        setState(() {
+                                          _hoveredTab = null;
+                                        });
+                                      }
+                                    },
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        _hoverPreviewTimer?.cancel();
+                                        if (_hoveredTab != null) {
+                                          setState(() => _hoveredTab = null);
+                                        }
+                                        _switchToTab(index);
+                                      },
+                                      onSecondaryTapUp: (details) {
+                                        _hoverPreviewTimer?.cancel();
+                                        if (_hoveredTab != null) {
+                                          setState(() => _hoveredTab = null);
+                                        }
+                                        _showTabContextMenu(
+                                          context,
+                                          details.globalPosition,
+                                          index,
+                                        );
+                                      },
+                                      child: tabWidget,
+                                    ),
                                   );
                                 },
-                                child: tabWidget,
                               );
                             },
                           ),
