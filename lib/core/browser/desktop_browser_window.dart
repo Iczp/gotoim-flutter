@@ -444,15 +444,19 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     _tabs.add(firstTab);
 
     if (!firstTab.isInvalidUrl) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _verifyTabSecurity(firstTab, firstTab.url, isInitialOpen: true);
+      Future.microtask(() {
+        if (mounted) {
+          _verifyTabSecurity(firstTab, firstTab.url, isInitialOpen: true);
+        }
       });
     }
 
     if (widget.isSubWindow) {
       if (firstTab.isInvalidUrl) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _reportLoadComplete(firstTab.url, firstTab.title, force: true);
+        Future.microtask(() {
+          if (mounted) {
+            _reportLoadComplete(firstTab.url, firstTab.title, force: true);
+          }
         });
       } else {
         _startWaitingForTabLoad(firstTab.url, widget.title);

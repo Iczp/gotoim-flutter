@@ -47,6 +47,25 @@ import '../services/tray_message_models.dart';
 import '../services/tray_service.dart';
 import '../widgets/desktop_tray_message_box.dart';
 
+Future<WindowController?> _obtainCurrentWindowController(
+  List<String> args,
+) async {
+  // Windows C++ 端在创建 FlutterViewController (RunOnSeparateThread) 后会先执行
+  // _g_window_created_callback 注册其他插件，随后才调用 InternalMultiWindowPluginRegisterWithRegistrar。
+  // 因此子线程刚启动的前几毫秒可能尚未完成 DesktopMultiWindowPlugin 注册，需短暂重试等待。
+  for (var attempt = 0; attempt < 50; attempt++) {
+    try {
+      return await WindowController.fromCurrentEngine();
+    } catch (_) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+  }
+  if (args.length > 1 && args[1].isNotEmpty) {
+    return WindowController.fromWindowId(args[1]);
+  }
+  return null;
+}
+
 /// 桌面端原生子窗口独立轻量入口
 ///
 /// 严格遵循多引擎架构准则：
@@ -54,23 +73,27 @@ import '../widgets/desktop_tray_message_box.dart';
 /// 2. 仅初始化渲染所需的最小绑定、基础主题与当前独立视窗；
 /// 3. 通过 WindowMethodChannel 与主引擎进行双向 IPC 通信。
 Future<void> runNativeSubWindowApp(List<String> args) async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
 
   final handlerCompleter =
       Completer<Future<dynamic> Function(MethodCall call)>();
 
-  WindowController? controller;
-  try {
-    controller = await WindowController.fromCurrentEngine();
-  } catch (_) {}
+  final controller = await _obtainCurrentWindowController(args);
 
   // 第一时间注册子窗口 MethodHandler，将主窗口在子引擎初始化期间发来的 IPC 调用排队等待，
   // 彻底消除冷启动时的 WindowChannelException(CHANNEL_UNREGISTERED) 异常。
   if (controller != null) {
-    await controller.setWindowMethodHandler((call) async {
-      final handler = await handlerCompleter.future;
-      return handler(call);
-    });
+    for (var attempt = 0; attempt < 25; attempt++) {
+      try {
+        await controller.setWindowMethodHandler((call) async {
+          final handler = await handlerCompleter.future;
+          return handler(call);
+        });
+        break;
+      } catch (_) {
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+    }
   }
 
   final payloadRaw = args.length > 2 ? args[2] : (controller?.arguments ?? '');
@@ -123,6 +146,10 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
       ),
     ),
   );
+
+  // Windows 下 hiddenAtLaunch: true (SW_HIDE) 的窗口不会收到系统 vsync 信号，
+  // 主动触发一次 warm-up frame 以确保 NativeSubWindowApp 与子视图的 initState 立即执行。
+  binding.scheduleWarmUpFrame();
 }
 
 class NativeSubWindowApp extends ConsumerStatefulWidget {

@@ -65,6 +65,9 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
   /// 内存校验缓存 key: normalizedUrl
   final Map<String, UrlSecurityCheckResult> _cache = {};
 
+  /// 当后端风控接口超时或不可达时进入短暂冷却期，避免每次点击链接都阻塞等待网络超时
+  DateTime? _backendCooldownUntil;
+
   /// 动态白名单集合（全小写 host）
   final Set<String> _dynamicTrustedHosts = {};
 
@@ -161,6 +164,7 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
   @override
   void clearCache() {
     _cache.clear();
+    _backendCooldownUntil = null;
   }
 
   @override
@@ -283,15 +287,19 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
       }
     }
 
-    // 3. 预留后端风控校验（若配置了 ApiClient 则尝试异步向服务端发起安全评级请求）
-    if (_apiClient != null) {
+    // 3. 预留后端风控校验（若配置了 ApiClient 且未处于超时冷却期则尝试异步向服务端发起安全评级请求）
+    final now = DateTime.now();
+    final isBackendCoolingDown =
+        _backendCooldownUntil != null && now.isBefore(_backendCooldownUntil!);
+    if (_apiClient != null && !isBackendCoolingDown) {
       try {
         final res = await _apiClient
             .post<Map<String, dynamic>>(
               '/api/chat/security/check-url',
               data: {'url': trimmed, 'domain': domain},
             )
-            .timeout(const Duration(milliseconds: 1200));
+            .timeout(const Duration(milliseconds: 600));
+        _backendCooldownUntil = null;
         final rawLevel = res['level'];
         final levelStr = rawLevel?.toString().toLowerCase();
         final level = (levelStr == 'safe' || levelStr == '0')
@@ -316,7 +324,8 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
         _cache[trimmed] = result;
         return result;
       } catch (e) {
-        // 后端接口未就绪或网络超时，平滑降级为本地预警策略
+        // 后端接口未就绪或网络超时，进入 60s 冷却期并平滑降级为本地预警策略
+        _backendCooldownUntil = DateTime.now().add(const Duration(seconds: 60));
         debugPrint('[UrlSecurityRepository] 后端风控接口未连接或异常 ($e)，降级使用本地风控引擎');
       }
     }
