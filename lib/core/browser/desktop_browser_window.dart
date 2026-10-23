@@ -10,7 +10,10 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../platform/windows/windows_window_adapter.dart';
+import '../security/url_security_level.dart';
 import '../security/url_security_service.dart';
+import '../security/widgets/appeal_dialog.dart';
+import '../security/widgets/report_dialog.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/app_toast.dart';
 
@@ -25,10 +28,13 @@ class BrowserTabItem {
     this.thumbnail,
     this.fallbackContent,
     this.isInvalidUrl = false,
+    this.isSecurityChecking = false,
+    this.isWarningGateActive = false,
     this.isBlocked = false,
     this.isLoading = true,
     this.errorMessage,
     this.interceptReason,
+    this.securityCheckResult,
   }) : initialUrl = initialUrl ?? url;
 
   final String id;
@@ -39,7 +45,11 @@ class BrowserTabItem {
   Uint8List? thumbnail;
   final String? fallbackContent;
   bool isInvalidUrl;
+  bool isSecurityChecking;
+  bool isWarningGateActive;
   bool isBlocked;
+  UrlSecurityCheckResult? securityCheckResult;
+  bool isUrlExpanded = false;
   InAppWebViewController? controller;
   double progress = 0.0;
   bool isLoading;
@@ -159,9 +169,24 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   final ScrollController _tabScrollController = ScrollController();
   bool _pendingNavigationReported = false;
   Timer? _navigationTimeoutTimer;
-  BrowserTabItem? _hoveredTab;
-  double _hoveredTabLeft = 8.0;
+  final ValueNotifier<({BrowserTabItem? tab, double left})>
+      _hoverPreviewNotifier = ValueNotifier((tab: null, left: 8.0));
   Timer? _hoverPreviewTimer;
+
+  /// 当前浏览器会话内用户已主动点击“继续访问”确认放行的第三方域名集合
+  final Set<String> _sessionConfirmedDomains = {};
+
+  void _hideHoverPreview() {
+    _hoverPreviewTimer?.cancel();
+    _hoverPreviewTimer = null;
+    if (_hoverPreviewNotifier.value.tab != null) {
+      Future<void>.microtask(() {
+        if (mounted && _hoverPreviewNotifier.value.tab != null) {
+          _hoverPreviewNotifier.value = (tab: null, left: 8.0);
+        }
+      });
+    }
+  }
 
   void _reportLoadComplete(String url, String? title, {bool force = false}) {
     if (!force && _pendingNavigationReported) return;
@@ -223,8 +248,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     _navigationTimeoutTimer = null;
     _hoverPreviewTimer?.cancel();
     _hoverPreviewTimer = null;
-    _hoveredTab = null;
+    _hoverPreviewNotifier.value = (tab: null, left: 8.0);
     _pendingNavigationReported = false;
+    _sessionConfirmedDomains.clear();
     for (final t in _tabs) {
       t.clearThumbnail();
     }
@@ -245,6 +271,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     if (!mounted ||
         c == null ||
         tab.isBlocked ||
+        tab.isWarningGateActive ||
+        tab.isSecurityChecking ||
         tab.isInvalidUrl ||
         !_tabs.contains(tab) ||
         _currentTab != tab) {
@@ -283,6 +311,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     final previousTab = _currentTab;
     if (_tabs.contains(previousTab) &&
         !previousTab.isBlocked &&
+        !previousTab.isWarningGateActive &&
         !previousTab.isInvalidUrl &&
         previousTab.controller != null) {
       await _captureThumbnail(
@@ -309,6 +338,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         title: title ?? _extractHost(validUrl),
         faviconUrl: _defaultFaviconUrl(validUrl),
         fallbackContent: fallbackContent,
+        isSecurityChecking: true,
       );
     }
     final cleanedUrl = rawUrl.trim();
@@ -318,20 +348,28 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       title: title ?? '无效链接',
       fallbackContent: fallbackContent,
       isInvalidUrl: true,
+      isSecurityChecking: false,
       isLoading: false,
       errorMessage: '网址格式不正确，无法打开该页面：\n$cleanedUrl',
     );
   }
 
-  Future<void> _verifyTabSecurity(BrowserTabItem tab, String targetUrl) async {
+  Future<void> _verifyTabSecurity(
+    BrowserTabItem tab,
+    String targetUrl, {
+    bool isInitialOpen = false,
+  }) async {
     try {
       final securityService = ref.read(urlSecurityServiceProvider);
       final res = await securityService.checkUrl(targetUrl);
-      if (!mounted) return;
+      if (!mounted || !_tabs.contains(tab)) return;
       if (res.isBlocked) {
         await tab.controller?.stopLoading();
-        if (!mounted) return;
+        if (!mounted || !_tabs.contains(tab)) return;
         setState(() {
+          tab.securityCheckResult = res;
+          tab.isSecurityChecking = false;
+          tab.isWarningGateActive = false;
           tab.isBlocked = true;
           tab.isLoading = false;
           tab.title = '已停止访问该网页';
@@ -339,8 +377,60 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
           tab.interceptReason = res.interceptReason;
         });
         _reportLoadComplete(tab.url, tab.title, force: true);
+        return;
       }
-    } catch (_) {}
+
+      final domainKey =
+          (res.domain.isNotEmpty ? res.domain : _extractHost(targetUrl))
+              .trim()
+              .toLowerCase();
+      final alreadyConfirmed =
+          domainKey.isNotEmpty && _sessionConfirmedDomains.contains(domainKey);
+
+      if (res.isWarning && isInitialOpen && !alreadyConfirmed) {
+        setState(() {
+          tab.securityCheckResult = res;
+          tab.isSecurityChecking = false;
+          tab.isWarningGateActive = true;
+          tab.isBlocked = false;
+          tab.isLoading = false;
+        });
+        _reportLoadComplete(tab.url, tab.title, force: true);
+        return;
+      }
+
+      if (tab.isSecurityChecking || tab.securityCheckResult == null) {
+        setState(() {
+          tab.securityCheckResult = res;
+          tab.isSecurityChecking = false;
+          tab.isWarningGateActive = false;
+        });
+      }
+    } catch (_) {
+      if (mounted && _tabs.contains(tab) && tab.isSecurityChecking) {
+        setState(() {
+          tab.isSecurityChecking = false;
+        });
+      }
+    }
+  }
+
+  void _confirmWarningAndProceed(BrowserTabItem tab) {
+    final domainKey =
+        (tab.securityCheckResult?.domain.isNotEmpty == true
+                ? tab.securityCheckResult!.domain
+                : _extractHost(tab.url))
+            .trim()
+            .toLowerCase();
+    if (domainKey.isNotEmpty) {
+      _sessionConfirmedDomains.add(domainKey);
+    }
+    setState(() {
+      tab.isWarningGateActive = false;
+      tab.isSecurityChecking = false;
+      tab.isLoading = true;
+      tab.errorMessage = null;
+    });
   }
 
   @override
@@ -355,7 +445,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
     if (!firstTab.isInvalidUrl) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _verifyTabSecurity(firstTab, firstTab.url);
+        _verifyTabSecurity(firstTab, firstTab.url, isInitialOpen: true);
       });
     }
 
@@ -394,7 +484,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   @override
   void didUpdateWidget(covariant DesktopBrowserWindow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialUrl.isNotEmpty &&
+    if (!widget.isSubWindow &&
+        widget.initialUrl.isNotEmpty &&
         widget.initialUrl != oldWidget.initialUrl) {
       addTab(url: widget.initialUrl, title: widget.title, activate: true);
     }
@@ -429,6 +520,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         if (url != null && url.isNotEmpty) {
           final title = args['title'] as String?;
           // 从关闭/隐藏状态重新唤醒打开浏览器时，确保清空旧 Tab，只保留新打开的页面
+          for (final t in _tabs) {
+            t.clearThumbnail();
+          }
           _tabs.clear();
           _activeTabIndex = 0;
           addTab(url: url, title: title, activate: true);
@@ -443,6 +537,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   void dispose() {
     _navigationTimeoutTimer?.cancel();
     _hoverPreviewTimer?.cancel();
+    _hoverPreviewNotifier.dispose();
     for (final t in _tabs) {
       t.clearThumbnail();
     }
@@ -494,8 +589,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
     final newTab = _createValidatedTab(rawUrl: url, title: title);
 
+    _hideHoverPreview();
     setState(() {
-      _hoveredTab = null;
       _tabs.add(newTab);
       if (activate) {
         _activeTabIndex = _tabs.length - 1;
@@ -506,7 +601,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       _reportLoadComplete(newTab.url, newTab.title, force: true);
     } else {
       _startWaitingForTabLoad(newTab.url, newTab.title);
-      _verifyTabSecurity(newTab, newTab.url);
+      _verifyTabSecurity(newTab, newTab.url, isInitialOpen: true);
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -521,7 +616,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   void _closeTab(int index) {
-    _hoverPreviewTimer?.cancel();
+    _hideHoverPreview();
     if (_tabs.length <= 1) {
       _closeWindow();
       return;
@@ -530,9 +625,6 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     final removed = _tabs[index];
     removed.clearThumbnail();
     setState(() {
-      if (_hoveredTab == removed) {
-        _hoveredTab = null;
-      }
       _tabs.removeAt(index);
       if (_activeTabIndex >= _tabs.length) {
         _activeTabIndex = _tabs.length - 1;
@@ -548,8 +640,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         _tabs[i].clearThumbnail();
       }
     }
+    _hideHoverPreview();
     setState(() {
-      _hoveredTab = null;
       _tabs.clear();
       _tabs.add(keptTab);
       _activeTabIndex = 0;
@@ -561,8 +653,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     for (var i = targetIndex + 1; i < _tabs.length; i++) {
       _tabs[i].clearThumbnail();
     }
+    _hideHoverPreview();
     setState(() {
-      _hoveredTab = null;
       _tabs.removeRange(targetIndex + 1, _tabs.length);
       if (_activeTabIndex >= _tabs.length) {
         _activeTabIndex = _tabs.length - 1;
@@ -603,8 +695,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       showToast('网址格式无效，无法重新加载', type: ToastType.error);
       return;
     }
-    if (tab.isBlocked) {
-      showToast('该网页已被安全策略拦截，无法重新加载', type: ToastType.error);
+    if (tab.isBlocked || tab.isWarningGateActive || tab.controller == null) {
+      setState(() {
+        tab.isBlocked = false;
+        tab.isWarningGateActive = false;
+        tab.isSecurityChecking = true;
+        tab.errorMessage = null;
+      });
+      await _verifyTabSecurity(tab, tab.url, isInitialOpen: true);
       return;
     }
     setState(() {
@@ -848,22 +946,30 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             ),
           ],
         ),
-        if (_hoveredTab != null && _tabs.contains(_hoveredTab))
-          Positioned(
-            top: 46,
-            left: _hoveredTabLeft.clamp(
-              8.0,
-              (windowLogicalWidth - 252.0).clamp(8.0, double.infinity),
-            ),
-            child: IgnorePointer(
-              child: _buildTabHoverPreviewCard(
-                context,
-                _hoveredTab!,
-                isDark,
-                borderColor,
+        ValueListenableBuilder<({BrowserTabItem? tab, double left})>(
+          valueListenable: _hoverPreviewNotifier,
+          builder: (context, hoverState, _) {
+            final hoveredTab = hoverState.tab;
+            if (hoveredTab == null || !_tabs.contains(hoveredTab)) {
+              return const SizedBox.shrink();
+            }
+            return Positioned(
+              top: 46,
+              left: hoverState.left.clamp(
+                8.0,
+                (windowLogicalWidth - 252.0).clamp(8.0, double.infinity),
               ),
-            ),
-          ),
+              child: IgnorePointer(
+                child: _buildTabHoverPreviewCard(
+                  context,
+                  hoveredTab,
+                  isDark,
+                  borderColor,
+                ),
+              ),
+            );
+          },
+        ),
       ],
     );
 
@@ -914,12 +1020,16 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     bool isDark,
   ) {
     final securityService = ref.watch(urlSecurityServiceProvider);
+    final canMountNativeWebView =
+        !tab.isInvalidUrl &&
+        !tab.isSecurityChecking &&
+        !tab.isWarningGateActive &&
+        !tab.isBlocked;
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (!tab.isInvalidUrl &&
-            !tab.isBlocked &&
-            InAppWebViewPlatform.instance != null)
+        if (canMountNativeWebView && InAppWebViewPlatform.instance != null)
           InAppWebView(
             key: ValueKey('webview_${tab.id}'),
             initialUrlRequest: URLRequest(url: WebUri(tab.url)),
@@ -934,7 +1044,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               tab.controller = controller;
             },
             onProgressChanged: (controller, progress) {
-              if (!mounted || tab.isBlocked) return;
+              if (!mounted || tab.isBlocked || tab.isWarningGateActive) return;
               setState(() {
                 tab.progress = progress / 100.0;
                 if (progress >= 100) {
@@ -946,7 +1056,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               }
             },
             onTitleChanged: (controller, title) {
-              if (!mounted || tab.isBlocked || title == null || title.isEmpty) {
+              if (!mounted ||
+                  tab.isBlocked ||
+                  tab.isWarningGateActive ||
+                  title == null ||
+                  title.isEmpty) {
                 return;
               }
               setState(() {
@@ -970,10 +1084,10 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               }
             },
             onLoadStop: (controller, url) async {
-              if (tab.isBlocked) return;
+              if (tab.isBlocked || tab.isWarningGateActive) return;
               final canBack = await controller.canGoBack();
               final canForward = await controller.canGoForward();
-              if (!mounted || tab.isBlocked) return;
+              if (!mounted || tab.isBlocked || tab.isWarningGateActive) return;
               setState(() {
                 tab.errorMessage = null;
                 tab.isLoading = false;
@@ -986,7 +1100,10 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               });
               _reportLoadComplete(tab.url, tab.title);
               Future<void>.delayed(const Duration(milliseconds: 500), () {
-                if (mounted && !tab.isBlocked && _tabs.contains(tab)) {
+                if (mounted &&
+                    !tab.isBlocked &&
+                    !tab.isWarningGateActive &&
+                    _tabs.contains(tab)) {
                   _captureThumbnail(tab);
                 }
               });
@@ -1004,6 +1121,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 );
                 if (mounted &&
                     !tab.isBlocked &&
+                    !tab.isWarningGateActive &&
                     fav is String &&
                     fav.startsWith(RegExp(r'^https?://')) &&
                     fav != tab.faviconUrl) {
@@ -1036,6 +1154,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             onReceivedError: (controller, request, error) {
               if (!mounted ||
                   tab.isBlocked ||
+                  tab.isWarningGateActive ||
                   request.isForMainFrame == false ||
                   error.type == WebResourceErrorType.CANCELLED) {
                 return;
@@ -1047,10 +1166,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               _reportLoadComplete(tab.url, tab.title);
             },
           )
-        else if (!tab.isInvalidUrl && !tab.isBlocked)
+        else if (canMountNativeWebView)
           _buildWebPreviewPlaceholder(context, tab, isDark),
 
-        if (tab.errorMessage != null || tab.isBlocked || tab.isInvalidUrl)
+        if (tab.isSecurityChecking)
+          _buildSecurityCheckingView(context, tab, isDark)
+        else if (tab.isWarningGateActive || tab.isBlocked)
+          _buildSecurityInterstitialView(context, tab, isDark)
+        else if (tab.errorMessage != null || tab.isInvalidUrl)
           _buildErrorFallback(context, tab, isDark),
       ],
     );
@@ -1063,6 +1186,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }) {
     if (tab.isBlocked) {
       return Icon(Icons.gpp_bad_rounded, size: size, color: Colors.redAccent);
+    }
+    if (tab.isWarningGateActive) {
+      return Icon(
+        Icons.gpp_maybe_rounded,
+        size: size,
+        color: const Color(0xFFFAAD14),
+      );
     }
     if (tab.isInvalidUrl) {
       return Icon(
@@ -1398,40 +1528,36 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                                           }
                                           if (tab == _currentTab &&
                                               tab.thumbnail == null &&
-                                              !tab.isLoading) {
+                                              !tab.isLoading &&
+                                              !tab.isBlocked &&
+                                              !tab.isWarningGateActive) {
                                             await _captureThumbnail(tab);
                                           }
                                           if (!mounted || !_tabs.contains(tab)) {
                                             return;
                                           }
-                                          setState(() {
-                                            _hoveredTab = tab;
-                                            _hoveredTabLeft = leftOffset;
-                                          });
+                                          _hoverPreviewNotifier.value = (
+                                            tab: tab,
+                                            left: leftOffset,
+                                          );
                                         },
                                       );
                                     },
                                     onExit: (_) {
-                                      _hoverPreviewTimer?.cancel();
-                                      if (_hoveredTab == tab && mounted) {
-                                        setState(() {
-                                          _hoveredTab = null;
-                                        });
+                                      if (_hoverPreviewNotifier.value.tab ==
+                                          tab) {
+                                        _hideHoverPreview();
+                                      } else {
+                                        _hoverPreviewTimer?.cancel();
                                       }
                                     },
                                     child: GestureDetector(
                                       onTap: () {
-                                        _hoverPreviewTimer?.cancel();
-                                        if (_hoveredTab != null) {
-                                          setState(() => _hoveredTab = null);
-                                        }
+                                        _hideHoverPreview();
                                         _switchToTab(index);
                                       },
                                       onSecondaryTapUp: (details) {
-                                        _hoverPreviewTimer?.cancel();
-                                        if (_hoveredTab != null) {
-                                          setState(() => _hoveredTab = null);
-                                        }
+                                        _hideHoverPreview();
                                         _showTabContextMenu(
                                           context,
                                           details.globalPosition,
@@ -1467,8 +1593,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
                 const SizedBox(width: 6),
 
-                // ── 右侧操作区：在空间小的时候，仅显示三个点和关闭 ──────────────
+                // ── 右侧操作区：在空间小的时候，仅显示安全盾牌、三个点和关闭 ──────────────
                 if (isCompact) ...[
+                  _buildSecurityShieldButton(context, isDark, currentTab),
                   _buildMoreActionsMenu(context, isDark, currentTab),
                   IconButton(
                     icon: const Icon(Icons.close_rounded, size: 17),
@@ -1478,6 +1605,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                   ),
                 ] else ...[
                   // 宽屏模式：展开所有常用工具与控制按钮
+                  _buildSecurityShieldButton(context, isDark, currentTab),
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios_rounded, size: 13),
                     tooltip: '后退',
@@ -1522,7 +1650,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       showToast('网页链接已复制到剪贴板', type: ToastType.success);
                     },
                   ),
-                  const SizedBox(width: 6),
+                  _buildMoreActionsMenu(context, isDark, currentTab),
+                  const SizedBox(width: 4),
                   if (_isDocked) ...[
                     IconButton(
                       icon: const Icon(Icons.open_in_new_rounded, size: 16),
@@ -1613,6 +1742,133 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     );
   }
 
+  /// 顶栏网址安全盾牌状态指示器（点击可查看风控状态、发起误报申诉或违规投诉）
+  Widget _buildSecurityShieldButton(
+    BuildContext context,
+    bool isDark,
+    BrowserTabItem tab,
+  ) {
+    final res = tab.securityCheckResult;
+    IconData shieldIcon;
+    Color shieldColor;
+    String statusText;
+
+    if (tab.isBlocked || (res != null && res.isBlocked)) {
+      shieldIcon = Icons.gpp_bad_rounded;
+      shieldColor = const Color(0xFFFA5151);
+      statusText = '高危拦截 · 已阻止访问';
+    } else if (tab.isWarningGateActive || (res != null && res.isWarning)) {
+      shieldIcon = Icons.gpp_maybe_rounded;
+      shieldColor = const Color(0xFFFAAD14);
+      statusText = '外部链接 · 风险提示';
+    } else if (tab.isInvalidUrl) {
+      shieldIcon = Icons.link_off_rounded;
+      shieldColor = Colors.orangeAccent;
+      statusText = '无效网址格式';
+    } else {
+      shieldIcon = Icons.verified_user_rounded;
+      shieldColor = const Color(0xFF07C160);
+      statusText = '官方认证 / 白名单安全链接';
+    }
+
+    return PopupMenuButton<String>(
+      icon: Icon(shieldIcon, size: 16, color: shieldColor),
+      tooltip: '网页安全风控：$statusText',
+      offset: const Offset(0, 36),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isDark ? const Color(0x2AFFFFFF) : const Color(0x1F000000),
+          width: 0.5,
+        ),
+      ),
+      onSelected: (value) {
+        if (value == 'appeal') {
+          AppealDialog.show(context, url: tab.url, title: tab.title);
+        } else if (value == 'report') {
+          ReportDialog.showForUrl(context, url: tab.url, title: tab.title);
+        } else if (value == 'recheck') {
+          _refresh();
+        }
+      },
+      itemBuilder:
+          (context) => [
+            PopupMenuItem<String>(
+              enabled: false,
+              height: 46,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(shieldIcon, size: 15, color: shieldColor),
+                      const SizedBox(width: 6),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: shieldColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _extractHost(tab.url),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(height: 8),
+            const PopupMenuItem(
+              value: 'recheck',
+              height: 34,
+              child: Row(
+                children: [
+                  Icon(Icons.shield_outlined, size: 15),
+                  SizedBox(width: 8),
+                  Text('重新进行安全核验', style: TextStyle(fontSize: 12.5)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'appeal',
+              height: 34,
+              child: Row(
+                children: [
+                  Icon(Icons.assignment_late_outlined, size: 15),
+                  SizedBox(width: 8),
+                  Text('申请恢复访问 (误报申诉)', style: TextStyle(fontSize: 12.5)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'report',
+              height: 34,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.report_gmailerrorred_rounded,
+                    size: 15,
+                    color: Colors.redAccent,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    '投诉此网页',
+                    style: TextStyle(fontSize: 12.5, color: Colors.redAccent),
+                  ),
+                ],
+              ),
+            ),
+          ],
+    );
+  }
+
   /// 空间小时的“三个点”下拉更多菜单
   Widget _buildMoreActionsMenu(
     BuildContext context,
@@ -1651,6 +1907,20 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             break;
           case 'open_external':
             _openInExternalBrowser();
+            break;
+          case 'appeal_url':
+            AppealDialog.show(
+              context,
+              url: currentTab.url,
+              title: currentTab.title,
+            );
+            break;
+          case 'report_url':
+            ReportDialog.showForUrl(
+              context,
+              url: currentTab.url,
+              title: currentTab.title,
+            );
             break;
           case 'undock':
             const mainChannel = WindowMethodChannel(
@@ -1775,6 +2045,36 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               ),
             ),
             const PopupMenuDivider(height: 8),
+            const PopupMenuItem(
+              value: 'appeal_url',
+              height: 36,
+              child: Row(
+                children: [
+                  Icon(Icons.fact_check_outlined, size: 16),
+                  SizedBox(width: 10),
+                  Text('申请恢复访问 (误报申诉)', style: TextStyle(fontSize: 13)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'report_url',
+              height: 36,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.report_gmailerrorred_rounded,
+                    size: 16,
+                    color: Colors.redAccent,
+                  ),
+                  SizedBox(width: 10),
+                  Text(
+                    '投诉此网页',
+                    style: TextStyle(fontSize: 13, color: Colors.redAccent),
+                  ),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(height: 8),
             if (_isDocked)
               const PopupMenuItem(
                 value: 'undock',
@@ -1851,6 +2151,417 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               ),
             ],
           ],
+    );
+  }
+
+  /// 安全核验进行中的过渡视图（此时暂不挂载原生 WebView2 HWND，防止遮挡风控页或提前请求危险链接）
+  Widget _buildSecurityCheckingView(
+    BuildContext context,
+    BrowserTabItem tab,
+    bool isDark,
+  ) {
+    return Container(
+      color: isDark ? const Color(0xFF191919) : const Color(0xFFF7F7F7),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF07C160)),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '正在进行安全核验...',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _extractHost(tab.url),
+            style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String? _riskCategoryLabel(UrlRiskCategory? category) {
+    if (category == null) return null;
+    switch (category) {
+      case UrlRiskCategory.none:
+      case UrlRiskCategory.officialOrWhitelisted:
+        return null;
+      case UrlRiskCategory.unknownThirdParty:
+        return '外部第三方链接';
+      case UrlRiskCategory.fraud:
+        return '涉嫌电信欺诈 / 刷单返利';
+      case UrlRiskCategory.phishing:
+        return '仿冒钓鱼网站';
+      case UrlRiskCategory.porn:
+        return '色情低俗违规';
+      case UrlRiskCategory.illegalGambling:
+        return '非法博彩网站';
+      case UrlRiskCategory.malware:
+        return '病毒木马 / 恶意软件';
+      case UrlRiskCategory.other:
+        return '安全风险链接';
+    }
+  }
+
+  /// 桌面端内嵌微信风控中间页（支持黄盾外部链接提示 & 红盾黑名单高危拦截）
+  Widget _buildSecurityInterstitialView(
+    BuildContext context,
+    BrowserTabItem tab,
+    bool isDark,
+  ) {
+    final isBlocked = tab.isBlocked;
+    final res = tab.securityCheckResult;
+    final categoryLabel = _riskCategoryLabel(res?.category);
+    final bgColor = isDark ? const Color(0xFF191919) : const Color(0xFFF7F7F7);
+    final cardColor = isDark ? const Color(0xFF242424) : Colors.white;
+    final textColor =
+        isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF191919);
+    final subTextColor =
+        isDark ? Colors.white60 : const Color(0xFF888888);
+
+    final shieldIcon =
+        isBlocked ? Icons.gpp_bad_rounded : Icons.gpp_maybe_rounded;
+    final shieldColor =
+        isBlocked ? const Color(0xFFFA5151) : const Color(0xFFFAAD14);
+
+    final headline =
+        isBlocked ? '已停止访问该网页' : '将要访问非官方外部网页';
+    final description =
+        (res != null && res.message.isNotEmpty ? res.message : null) ??
+        tab.interceptReason ??
+        (isBlocked
+            ? '网页包含违规、诱导或欺诈内容，被多人投诉，为维护绿色上网环境，已停止访问。'
+            : '你即将离开 GotoIM，访问外部第三方网站。请注意核实对方身份，切勿轻易输入密码、验证码或进行转账操作，谨防网络诈骗。');
+
+    return Container(
+      color: bgColor,
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Column(
+                    children: [
+                      // 1. 盾牌大图标
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: shieldColor.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(shieldIcon, size: 42, color: shieldColor),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // 2. 主标题
+                      Text(
+                        headline,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // 3. 风险分类胶囊标签
+                      if (categoryLabel != null)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: shieldColor.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '风险类型：$categoryLabel',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: shieldColor,
+                            ),
+                          ),
+                        ),
+
+                      // 4. 风险说明正文
+                      Text(
+                        description,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: subTextColor,
+                          height: 1.55,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 5. 目标网址展示卡片（支持展开完整 URL）
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color:
+                                isDark
+                                    ? Colors.white10
+                                    : Colors.black.withValues(alpha: 0.06),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.link_rounded,
+                                  size: 15,
+                                  color: subTextColor,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '目标网址',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: subTextColor,
+                                  ),
+                                ),
+                                const Spacer(),
+                                if (tab.url.length > 60)
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        tab.isUrlExpanded = !tab.isUrlExpanded;
+                                      });
+                                    },
+                                    child: Text(
+                                      tab.isUrlExpanded ? '收起' : '展开全部',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF576B95),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            SelectableText(
+                              tab.url,
+                              maxLines: tab.isUrlExpanded ? 12 : 2,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontFamily: 'monospace',
+                                color: textColor,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 6. 操作按钮组
+                      if (!isBlocked) ...[
+                        // 黄盾（Warning）：主按钮“继续访问”
+                        SizedBox(
+                          width: double.infinity,
+                          height: 42,
+                          child: FilledButton(
+                            onPressed: () => _confirmWarningAndProceed(tab),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF07C160),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            child: const Text('继续访问'),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SizedBox(
+                                height: 38,
+                                child: OutlinedButton.icon(
+                                  onPressed: _openInExternalBrowser,
+                                  icon: const Icon(
+                                    Icons.open_in_browser_rounded,
+                                    size: 16,
+                                  ),
+                                  label: const Text('外部浏览器打开'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: textColor,
+                                    side: BorderSide(
+                                      color:
+                                          isDark
+                                              ? Colors.white24
+                                              : Colors.black12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    textStyle: const TextStyle(fontSize: 12.5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: SizedBox(
+                                height: 38,
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    Clipboard.setData(
+                                      ClipboardData(text: tab.url),
+                                    );
+                                    showToast(
+                                      '网址已复制到剪贴板',
+                                      type: ToastType.success,
+                                    );
+                                  },
+                                  icon: const Icon(
+                                    Icons.copy_rounded,
+                                    size: 15,
+                                  ),
+                                  label: const Text('复制链接'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: textColor,
+                                    side: BorderSide(
+                                      color:
+                                          isDark
+                                              ? Colors.white24
+                                              : Colors.black12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    textStyle: const TextStyle(fontSize: 12.5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        // 红盾（Blocked）：不提供直接继续访问按钮，仅支持关闭标签页或复制链接
+                        SizedBox(
+                          width: double.infinity,
+                          height: 42,
+                          child: FilledButton(
+                            onPressed: () => _closeTab(_activeTabIndex),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF07C160),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            child: const Text('关闭页面'),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 38,
+                          child: TextButton(
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: tab.url));
+                              showToast(
+                                '链接已复制，请谨慎在外部打开',
+                                type: ToastType.info,
+                              );
+                            },
+                            child: Text(
+                              '复制链接',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: subTextColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 7. 底部固定申诉与投诉栏
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16, top: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed:
+                      () => AppealDialog.show(
+                        context,
+                        url: tab.url,
+                        title: tab.title,
+                      ),
+                  child: const Text(
+                    '申请恢复访问',
+                    style: TextStyle(fontSize: 12.5, color: Color(0xFF576B95)),
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 12,
+                  color: isDark ? Colors.white24 : Colors.black26,
+                ),
+                TextButton(
+                  onPressed:
+                      () => ReportDialog.showForUrl(
+                        context,
+                        url: tab.url,
+                        title: tab.title,
+                      ),
+                  child: const Text(
+                    '投诉此链接',
+                    style: TextStyle(fontSize: 12.5, color: Color(0xFF576B95)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

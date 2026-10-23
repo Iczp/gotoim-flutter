@@ -10,7 +10,6 @@ import '../../browser/app_webview_page.dart';
 import '../../widgets/app_toast.dart';
 import '../../widgets/desktop_dialog.dart';
 import '../url_security_level.dart';
-import '../url_security_service.dart';
 import '../widgets/appeal_dialog.dart';
 import '../widgets/report_dialog.dart';
 
@@ -40,22 +39,6 @@ class UrlInterstitialPage extends StatefulWidget {
     String? title,
     String? fallbackContent,
   }) {
-    final isDesktop =
-        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
-    if (isDesktop) {
-      if (checkResult.isBlocked) {
-        return UrlSecurityService.showDesktopBlockedDialog(
-          context,
-          checkResult: checkResult,
-        );
-      }
-      return AppWebViewPage.open(
-        context,
-        url: checkResult.url,
-        title: title,
-        fallbackContent: fallbackContent,
-      );
-    }
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => UrlInterstitialPage(

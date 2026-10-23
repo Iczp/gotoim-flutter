@@ -286,10 +286,12 @@ class DefaultUrlSecurityRepository implements UrlSecurityRepository {
     // 3. 预留后端风控校验（若配置了 ApiClient 则尝试异步向服务端发起安全评级请求）
     if (_apiClient != null) {
       try {
-        final res = await _apiClient.post<Map<String, dynamic>>(
-          '/api/chat/security/check-url',
-          data: {'url': trimmed, 'domain': domain},
-        );
+        final res = await _apiClient
+            .post<Map<String, dynamic>>(
+              '/api/chat/security/check-url',
+              data: {'url': trimmed, 'domain': domain},
+            )
+            .timeout(const Duration(milliseconds: 1200));
         final rawLevel = res['level'];
         final levelStr = rawLevel?.toString().toLowerCase();
         final level = (levelStr == 'safe' || levelStr == '0')

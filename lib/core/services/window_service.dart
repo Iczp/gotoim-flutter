@@ -716,23 +716,31 @@ class DefaultWindowService implements WindowService {
       debugPrint('[WindowService] sendBrowserDockCommand: controller is null');
       return false;
     }
-    try {
-      debugPrint(
-        '[WindowService] invoking dock_to_parent on controller (windowId=${controller.windowId}): '
-        '(x=$x, y=$y, w=$width, h=$height)',
-      );
-      final res = await controller.invokeMethod<bool>('dock_to_parent', {
-        'x': x,
-        'y': y,
-        'width': width,
-        'height': height,
-      });
-      debugPrint('[WindowService] dock_to_parent invoke completed: $res');
-      return res ?? false;
-    } catch (e) {
-      debugPrint('[WindowService] sendBrowserDockCommand failed: $e');
-      return false;
+    debugPrint(
+      '[WindowService] invoking dock_to_parent on controller (windowId=${controller.windowId}): '
+      '(x=$x, y=$y, w=$width, h=$height)',
+    );
+    for (var attempt = 0; attempt < 25; attempt++) {
+      try {
+        final res = await controller.invokeMethod<bool>('dock_to_parent', {
+          'x': x,
+          'y': y,
+          'width': width,
+          'height': height,
+        });
+        debugPrint('[WindowService] dock_to_parent invoke completed: $res');
+        return res ?? false;
+      } catch (e) {
+        final errStr = e.toString();
+        if (attempt < 24 && errStr.contains('CHANNEL_UNREGISTERED')) {
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+          continue;
+        }
+        debugPrint('[WindowService] sendBrowserDockCommand failed: $e');
+        return false;
+      }
     }
+    return false;
   }
 
   /// 向浏览器子窗口下发更新已吸附矩形尺寸与坐标的命令

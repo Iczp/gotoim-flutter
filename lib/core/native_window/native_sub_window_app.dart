@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +31,7 @@ import '../../features/diagnostics/presentation/remote_devtools_diagnostics_page
 import '../../features/diagnostics/presentation/search_and_group_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/session_list_diagnostics_page.dart';
 import '../../features/diagnostics/presentation/signalr_diagnostics_page.dart';
+import '../../features/diagnostics/presentation/url_security_diagnostics_page.dart';
 import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/local_file_server/pages/shared_file_manager_page.dart';
 import '../../features/media/presentation/desktop_media_viewer_window.dart';
@@ -43,7 +46,6 @@ import '../services/tray_grouped_unread_provider.dart';
 import '../services/tray_message_models.dart';
 import '../services/tray_service.dart';
 import '../widgets/desktop_tray_message_box.dart';
-import '../widgets/desktop_startup_scene.dart';
 
 /// 桌面端原生子窗口独立轻量入口
 ///
@@ -52,16 +54,24 @@ import '../widgets/desktop_startup_scene.dart';
 /// 2. 仅初始化渲染所需的最小绑定、基础主题与当前独立视窗；
 /// 3. 通过 WindowMethodChannel 与主引擎进行双向 IPC 通信。
 Future<void> runNativeSubWindowApp(List<String> args) async {
-  final binding = WidgetsFlutterBinding.ensureInitialized();
-  if (WindowsWindowAdapter.isWindows) {
-    runApp(const DesktopStartupScene());
-    await binding.endOfFrame;
-  }
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final handlerCompleter =
+      Completer<Future<dynamic> Function(MethodCall call)>();
 
   WindowController? controller;
   try {
     controller = await WindowController.fromCurrentEngine();
   } catch (_) {}
+
+  // 第一时间注册子窗口 MethodHandler，将主窗口在子引擎初始化期间发来的 IPC 调用排队等待，
+  // 彻底消除冷启动时的 WindowChannelException(CHANNEL_UNREGISTERED) 异常。
+  if (controller != null) {
+    await controller.setWindowMethodHandler((call) async {
+      final handler = await handlerCompleter.future;
+      return handler(call);
+    });
+  }
 
   final payloadRaw = args.length > 2 ? args[2] : (controller?.arguments ?? '');
   final payload =
@@ -71,22 +81,6 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
         title: 'GotoIM',
         targetId: 'sub_window_fallback',
       );
-
-  // 监听来自主窗口的 Method 调用
-  if (controller != null) {
-    controller.setWindowMethodHandler((call) async {
-      switch (call.method) {
-        case 'bringToFront':
-          await controller?.show();
-          return true;
-        case 'close':
-          await controller?.hide();
-          return true;
-        default:
-          return null;
-      }
-    });
-  }
 
   // 加载轻量环境与主题，提供最小 ProviderScope 覆盖
   const flavorName = String.fromEnvironment(
@@ -122,16 +116,26 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: NativeSubWindowApp(controller: controller, payload: payload),
+      child: NativeSubWindowApp(
+        controller: controller,
+        payload: payload,
+        handlerCompleter: handlerCompleter,
+      ),
     ),
   );
 }
 
 class NativeSubWindowApp extends ConsumerStatefulWidget {
-  const NativeSubWindowApp({required this.payload, this.controller, super.key});
+  const NativeSubWindowApp({
+    required this.payload,
+    this.controller,
+    this.handlerCompleter,
+    super.key,
+  });
 
   final NativeWindowPayload payload;
   final WindowController? controller;
+  final Completer<Future<dynamic> Function(MethodCall call)>? handlerCompleter;
 
   @override
   ConsumerState<NativeSubWindowApp> createState() => _NativeSubWindowAppState();
@@ -216,6 +220,8 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         return const LocalNotificationDiagnosticsPage();
       case 'search-and-group':
         return const SearchAndGroupDiagnosticsPage();
+      case 'url-security':
+        return const UrlSecurityDiagnosticsPage();
       default:
         return Scaffold(
           appBar: AppBar(title: Text('诊断模块: $section')),
@@ -287,7 +293,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
       mode: ChannelMode.unidirectional,
     );
 
-    widget.controller?.setWindowMethodHandler((call) async {
+    Future<dynamic> handleMethod(MethodCall call) async {
       switch (call.method) {
         case 'theme_changed':
           final args = call.arguments as Map?;
@@ -318,6 +324,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
                 );
               }
             });
+          }
+          if (_childMethodHandler != null) {
+            await _childMethodHandler!(call);
           }
           return true;
         case 'tray_update':
@@ -470,7 +479,13 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           }
           return null;
       }
-    });
+    }
+
+    if (widget.handlerCompleter != null &&
+        !widget.handlerCompleter!.isCompleted) {
+      widget.handlerCompleter!.complete(handleMethod);
+    }
+    widget.controller?.setWindowMethodHandler(handleMethod);
   }
 
   Future<void> _refreshTraySnapshot() async {
