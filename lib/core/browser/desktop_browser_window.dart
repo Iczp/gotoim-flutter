@@ -16,6 +16,7 @@ import '../security/widgets/appeal_dialog.dart';
 import '../security/widgets/report_dialog.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/app_toast.dart';
+import 'desktop_browser_dock_controller.dart';
 
 /// 浏览器标签页模型
 class BrowserTabItem {
@@ -77,6 +78,7 @@ class DesktopBrowserWindow extends ConsumerStatefulWidget {
     this.title,
     this.fallbackContent,
     this.isSubWindow = false,
+    this.isInlineDocked = false,
     this.onClose,
     this.onRegisterMethodHandler,
     super.key,
@@ -86,6 +88,7 @@ class DesktopBrowserWindow extends ConsumerStatefulWidget {
   final String? title;
   final String? fallbackContent;
   final bool isSubWindow;
+  final bool isInlineDocked;
   final VoidCallback? onClose;
   final void Function(Future<dynamic> Function(MethodCall call) handler)?
       onRegisterMethodHandler;
@@ -436,6 +439,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   @override
   void initState() {
     super.initState();
+    _isDocked = widget.isInlineDocked;
     final firstTab = _createValidatedTab(
       rawUrl: widget.initialUrl,
       title: widget.title,
@@ -488,6 +492,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   @override
   void didUpdateWidget(covariant DesktopBrowserWindow oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.isInlineDocked != oldWidget.isInlineDocked) {
+      _isDocked = widget.isInlineDocked;
+    }
     if (!widget.isSubWindow &&
         widget.initialUrl.isNotEmpty &&
         widget.initialUrl != oldWidget.initialUrl) {
@@ -675,6 +682,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   void _closeWindow() {
+    if (widget.isInlineDocked) {
+      _clearAllTabs();
+      ref.read(desktopBrowserDockProvider.notifier).closeDocked();
+      return;
+    }
     if (_isDocked) {
       const mainChannel = WindowMethodChannel(
         'gotoim/ipc_to_main',
@@ -691,6 +703,47 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     } else {
       Navigator.of(context).maybePop();
     }
+  }
+
+  Future<void> _handleUndockToStandaloneWindow() async {
+    final activeUrl = _currentTab.url;
+    final activeTitle = _currentTab.title;
+    if (widget.isInlineDocked) {
+      await ref
+          .read(desktopBrowserDockProvider.notifier)
+          .requestUndock(
+            showWindow: true,
+            activeUrl: activeUrl,
+            activeTitle: activeTitle,
+          );
+      return;
+    }
+    const mainChannel = WindowMethodChannel(
+      'gotoim/ipc_to_main',
+      mode: ChannelMode.unidirectional,
+    );
+    await mainChannel.invokeMethod('request_undock_browser');
+  }
+
+  Future<void> _handleDockToMainWindow() async {
+    final currentTab = _currentTab;
+    if (!widget.isSubWindow) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      await ref
+          .read(desktopBrowserDockProvider.notifier)
+          .requestDock(url: currentTab.url, title: currentTab.title);
+      return;
+    }
+    const mainChannel = WindowMethodChannel(
+      'gotoim/ipc_to_main',
+      mode: ChannelMode.unidirectional,
+    );
+    await mainChannel.invokeMethod('request_dock_browser', {
+      'url': currentTab.url,
+      'title': currentTab.title,
+    });
   }
 
   Future<void> _refresh() async {
@@ -887,6 +940,24 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isInlineDocked) {
+      ref.listen<DesktopBrowserDockState>(desktopBrowserDockProvider, (
+        prev,
+        next,
+      ) {
+        if (next.isDocked &&
+            next.currentUrl != null &&
+            next.currentUrl!.isNotEmpty &&
+            next.requestSeq != prev?.requestSeq) {
+          addTab(
+            url: next.currentUrl!,
+            title: next.currentTitle,
+            activate: true,
+          );
+        }
+      });
+    }
+
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -907,7 +978,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
     final currentTab = _currentTab;
     final windowLogicalWidth =
-        widget.isSubWindow ? screenSize.width : dialogWidth;
+        widget.isInlineDocked
+            ? ref.watch(desktopBrowserDockProvider.select((s) => s.width))
+            : (widget.isSubWindow ? screenSize.width : dialogWidth);
 
     final body = Stack(
       fit: StackFit.expand,
@@ -977,18 +1050,8 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       ],
     );
 
-    if (widget.isSubWindow) {
-      Widget content = Material(color: windowBg, child: SizedBox.expand(child: body));
-      if (!_isDocked) {
-        content = Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: (_) {
-            WindowsWindowAdapter.bringToFront();
-          },
-          child: content,
-        );
-      }
-      return content;
+    if (widget.isInlineDocked || widget.isSubWindow) {
+      return Material(color: windowBg, child: SizedBox.expand(child: body));
     }
 
     return Center(
@@ -1506,54 +1569,67 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                                 builder: (tabItemContext) {
                                   return MouseRegion(
                                     onEnter: (_) {
-                                      _hoverPreviewTimer?.cancel();
-                                      double leftOffset = 8.0;
-                                      final tabBox =
-                                          tabItemContext.findRenderObject()
-                                              as RenderBox?;
-                                      final winBox =
-                                          context.findRenderObject()
-                                              as RenderBox?;
-                                      if (tabBox != null &&
-                                          winBox != null &&
-                                          tabBox.hasSize &&
-                                          winBox.hasSize) {
-                                        final pos = tabBox.localToGlobal(
-                                          Offset.zero,
-                                          ancestor: winBox,
-                                        );
-                                        leftOffset = pos.dx;
-                                      }
-                                      _hoverPreviewTimer = Timer(
-                                        const Duration(milliseconds: 350),
-                                        () async {
-                                          if (!mounted || !_tabs.contains(tab)) {
-                                            return;
-                                          }
-                                          if (tab == _currentTab &&
-                                              tab.thumbnail == null &&
-                                              !tab.isLoading &&
-                                              !tab.isBlocked &&
-                                              !tab.isWarningGateActive) {
-                                            await _captureThumbnail(tab);
-                                          }
-                                          if (!mounted || !_tabs.contains(tab)) {
-                                            return;
-                                          }
-                                          _hoverPreviewNotifier.value = (
-                                            tab: tab,
-                                            left: leftOffset,
+                                      try {
+                                        _hoverPreviewTimer?.cancel();
+                                        if (!mounted ||
+                                            !tabItemContext.mounted ||
+                                            !context.mounted) {
+                                          return;
+                                        }
+                                        double leftOffset = 8.0;
+                                        final tabBox =
+                                            tabItemContext.findRenderObject()
+                                                as RenderBox?;
+                                        final winBox =
+                                            context.findRenderObject()
+                                                as RenderBox?;
+                                        if (tabBox != null &&
+                                            winBox != null &&
+                                            tabBox.attached &&
+                                            winBox.attached &&
+                                            tabBox.hasSize &&
+                                            winBox.hasSize) {
+                                          final pos = tabBox.localToGlobal(
+                                            Offset.zero,
+                                            ancestor: winBox,
                                           );
-                                        },
-                                      );
+                                          leftOffset = pos.dx;
+                                        }
+                                        _hoverPreviewTimer = Timer(
+                                          const Duration(milliseconds: 350),
+                                          () async {
+                                            if (!mounted ||
+                                                !_tabs.contains(tab)) {
+                                              return;
+                                            }
+                                            if (tab == _currentTab &&
+                                                tab.thumbnail == null &&
+                                                !tab.isLoading &&
+                                                !tab.isBlocked &&
+                                                !tab.isWarningGateActive) {
+                                              await _captureThumbnail(tab);
+                                            }
+                                            if (!mounted ||
+                                                !_tabs.contains(tab)) {
+                                              return;
+                                            }
+                                            _hoverPreviewNotifier.value = (
+                                              tab: tab,
+                                              left: leftOffset,
+                                            );
+                                          },
+                                        );
+                                      } catch (_) {}
                                     },
                                     onExit: (_) {
-                                      if (_hoverPreviewNotifier.value.tab ==
-                                          tab) {
-                                        _hideHoverPreview();
-                                      } else {
-                                        _hoverPreviewTimer?.cancel();
-                                      }
+                                      try {
+                                        if (_hoverPreviewNotifier.value.tab ==
+                                            tab) {
+                                          _hideHoverPreview();
+                                        } else {
+                                          _hoverPreviewTimer?.cancel();
+                                        }
+                                      } catch (_) {}
                                     },
                                     child: GestureDetector(
                                       onTap: () {
@@ -1597,9 +1673,16 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
                 const SizedBox(width: 6),
 
-                // ── 右侧操作区：在空间小的时候，仅显示安全盾牌、三个点和关闭 ──────────────
+                // ── 右侧操作区：在空间小的时候，显示安全盾牌、弹出按钮、三个点和关闭 ──────────────
                 if (isCompact) ...[
                   _buildSecurityShieldButton(context, isDark, currentTab),
+                  if (_isDocked)
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                      tooltip: '弹出为独立窗口',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _handleUndockToStandaloneWindow,
+                    ),
                   _buildMoreActionsMenu(context, isDark, currentTab),
                   IconButton(
                     icon: const Icon(Icons.close_rounded, size: 17),
@@ -1661,13 +1744,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       icon: const Icon(Icons.open_in_new_rounded, size: 16),
                       tooltip: '弹出为独立窗口',
                       visualDensity: VisualDensity.compact,
-                      onPressed: () async {
-                        const mainChannel = WindowMethodChannel(
-                          'gotoim/ipc_to_main',
-                          mode: ChannelMode.unidirectional,
-                        );
-                        await mainChannel.invokeMethod('request_undock_browser');
-                      },
+                      onPressed: _handleUndockToStandaloneWindow,
                     ),
                     IconButton(
                       icon: const Icon(Icons.close_rounded, size: 17),
@@ -1683,16 +1760,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       ),
                       tooltip: '嵌入到聊天窗口',
                       visualDensity: VisualDensity.compact,
-                      onPressed: () async {
-                        const mainChannel = WindowMethodChannel(
-                          'gotoim/ipc_to_main',
-                          mode: ChannelMode.unidirectional,
-                        );
-                        await mainChannel.invokeMethod('request_dock_browser', {
-                          'url': currentTab.url,
-                          'title': currentTab.title,
-                        });
-                      },
+                      onPressed: _handleDockToMainWindow,
                     ),
                     IconButton(
                       icon: const Icon(Icons.remove_rounded, size: 16),
@@ -1927,21 +1995,10 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             );
             break;
           case 'undock':
-            const mainChannel = WindowMethodChannel(
-              'gotoim/ipc_to_main',
-              mode: ChannelMode.unidirectional,
-            );
-            await mainChannel.invokeMethod('request_undock_browser');
+            await _handleUndockToStandaloneWindow();
             break;
           case 'dock':
-            const mainChannel = WindowMethodChannel(
-              'gotoim/ipc_to_main',
-              mode: ChannelMode.unidirectional,
-            );
-            await mainChannel.invokeMethod('request_dock_browser', {
-              'url': currentTab.url,
-              'title': currentTab.title,
-            });
+            await _handleDockToMainWindow();
             break;
           case 'pin':
             setState(() {

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/browser/desktop_browser_dock_controller.dart';
+import '../../../core/browser/desktop_browser_window.dart';
 import '../../../core/services/window_service.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/desktop_dialog.dart';
@@ -77,10 +78,6 @@ class _DesktopSessionSplitViewState
   double _sessionPaneWidth = 290.0;
   double _browserPaneWidth = 520.0;
   bool _isDraggingBrowserDivider = false;
-  int? _lastSentViewX;
-  int? _lastSentViewY;
-  int? _lastSentWidth;
-  int? _lastSentHeight;
   Timer? _avatarHoverTimer;
   Timer? _avatarLeaveTimer;
   OverlayEntry? _contextMenuEntry;
@@ -91,77 +88,6 @@ class _DesktopSessionSplitViewState
   }
 
   final GlobalKey _browserPlaceholderKey = GlobalKey();
-  bool _boundsUpdateScheduled = false;
-
-  void _scheduleBrowserBoundsUpdate() {
-    if (_boundsUpdateScheduled || !mounted) return;
-    _boundsUpdateScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _boundsUpdateScheduled = false;
-      if (!mounted) return;
-      _sendPlaceholderBoundsToNative();
-    });
-  }
-
-  void _sendPlaceholderBoundsToNative() {
-    final dockState = ref.read(desktopBrowserDockProvider);
-    if (!dockState.shouldRenderPlaceholder) return;
-
-    final renderBox =
-        _browserPlaceholderKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.hasSize || !renderBox.attached) return;
-
-    final localOffset = renderBox.localToGlobal(Offset.zero);
-    final size = renderBox.size;
-    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
-
-    final viewX = (localOffset.dx * pixelRatio).round();
-    final viewY = (localOffset.dy * pixelRatio).round();
-    final width = (size.width * pixelRatio).round();
-    final height = (size.height * pixelRatio).round();
-
-    // 仅在已成功嵌入 (docked) 状态下对相同物理边界进行去重，避免重复向 Win32 派发 SetWindowPos；
-    // 在挂载中 (docking) 状态下，必须无条件为 Controller 注入最新的待吸附物理坐标，严防遮罩卡死。
-    if (dockState.status == BrowserDockingStatus.docked) {
-      if (viewX == _lastSentViewX &&
-          viewY == _lastSentViewY &&
-          width == _lastSentWidth &&
-          height == _lastSentHeight) {
-        return;
-      }
-    }
-    _lastSentViewX = viewX;
-    _lastSentViewY = viewY;
-    _lastSentWidth = width;
-    _lastSentHeight = height;
-
-    debugPrint(
-      '[BrowserDock Layout] _sendPlaceholderBoundsToNative: status=${dockState.status}, '
-      'localOffset=(${localOffset.dx.toStringAsFixed(1)}, ${localOffset.dy.toStringAsFixed(1)}), '
-      'logicalSize=(${size.width.toStringAsFixed(1)}, ${size.height.toStringAsFixed(1)}), '
-      'dpr=$pixelRatio -> physical: (x=$viewX, y=$viewY, w=$width, h=$height)',
-    );
-
-    if (dockState.status == BrowserDockingStatus.docking) {
-      ref
-          .read(desktopBrowserDockProvider.notifier)
-          .updatePendingBounds(
-            viewX: viewX,
-            viewY: viewY,
-            width: width,
-            height: height,
-          );
-    } else if (dockState.status == BrowserDockingStatus.docked) {
-      ref
-          .read(desktopBrowserDockProvider.notifier)
-          .updateDockedBounds(
-            viewX: viewX,
-            viewY: viewY,
-            width: width,
-            height: height,
-          );
-    }
-  }
 
   @override
   void initState() {
@@ -651,21 +577,6 @@ class _DesktopSessionSplitViewState
     if (!_isDraggingBrowserDivider && _browserPaneWidth != dockState.width) {
       _browserPaneWidth = dockState.width;
     }
-    ref.listen<DesktopBrowserDockState>(desktopBrowserDockProvider, (
-      prev,
-      next,
-    ) {
-      if (prev?.status != next.status || prev?.width != next.width) {
-        if (next.status == BrowserDockingStatus.docking ||
-            next.status == BrowserDockingStatus.unattached) {
-          _lastSentViewX = null;
-          _lastSentViewY = null;
-          _lastSentWidth = null;
-          _lastSentHeight = null;
-        }
-        _scheduleBrowserBoundsUpdate();
-      }
-    });
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -676,10 +587,6 @@ class _DesktopSessionSplitViewState
           if (effectivePaneWidth > maxPane) {
             effectivePaneWidth = maxPane;
           }
-        }
-
-        if (dockState.shouldRenderPlaceholder) {
-          _scheduleBrowserBoundsUpdate();
         }
 
         return Row(
@@ -1128,7 +1035,7 @@ class _DesktopSessionSplitViewState
                       ),
             ),
 
-            // ── 浏览器嵌入分栏 (右侧占位与拖拽手柄) ────────────────────
+            // ── 浏览器嵌入分栏 (右侧内联 WebView2 组件与拖拽手柄) ────────────────────
             if (dockState.shouldRenderPlaceholder) ...[
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -1149,15 +1056,12 @@ class _DesktopSessionSplitViewState
                   ref
                       .read(desktopBrowserDockProvider.notifier)
                       .setWidth(_browserPaneWidth, min: 360.0, max: maxW);
-                  _scheduleBrowserBoundsUpdate();
                 },
                 onHorizontalDragEnd: (_) {
                   _isDraggingBrowserDivider = false;
-                  _scheduleBrowserBoundsUpdate();
                 },
                 onHorizontalDragCancel: () {
                   _isDraggingBrowserDivider = false;
-                  _scheduleBrowserBoundsUpdate();
                 },
                 child: MouseRegion(
                   cursor: SystemMouseCursors.resizeColumn,
@@ -1176,18 +1080,12 @@ class _DesktopSessionSplitViewState
                     _isDraggingBrowserDivider
                         ? _browserPaneWidth
                         : dockState.width,
-                child: dockState.status == BrowserDockingStatus.docking
-                    ? _BrowserDockLoadingPlaceholder(
-                        url: dockState.currentUrl,
-                        title: dockState.currentTitle,
-                        isDark: isDark,
-                        onCancel: () {
-                          ref
-                              .read(desktopBrowserDockProvider.notifier)
-                              .closeDocked();
-                        },
-                      )
-                    : const SizedBox.expand(),
+                child: DesktopBrowserWindow(
+                  key: const ValueKey('inline_docked_browser_window'),
+                  initialUrl: dockState.currentUrl ?? 'https://www.bing.com',
+                  title: dockState.currentTitle,
+                  isInlineDocked: true,
+                ),
               ),
             ],
           ],
@@ -1285,171 +1183,6 @@ class _DesktopEmptyChatCanvas extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-
-class _BrowserDockLoadingPlaceholder extends StatelessWidget {
-  const _BrowserDockLoadingPlaceholder({
-    required this.url,
-    required this.title,
-    required this.isDark,
-    required this.onCancel,
-  });
-
-  final String? url;
-  final String? title;
-  final bool isDark;
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final bgColor = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF7F8FA);
-    final borderColor =
-        isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E6EB);
-    final titleColor =
-        isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1D2129);
-    final subtitleColor = isDark ? Colors.white54 : const Color(0xFF86909C);
-    final cardBg = isDark ? const Color(0xFF262626) : Colors.white;
-    final targetUrl = url;
-
-    return Container(
-      color: bgColor,
-      child: Column(
-        children: [
-          Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: borderColor, width: 0.5),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.language_rounded,
-                  size: 16,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '正在打开浏览器',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: titleColor,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 16),
-                  splashRadius: 16,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
-                  ),
-                  tooltip: '取消',
-                  color: subtitleColor,
-                  hoverColor: Colors.red.withValues(alpha: 0.1),
-                  onPressed: onCancel,
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.8,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          theme.colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      '正在打开浏览器',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: titleColor,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (targetUrl != null && targetUrl.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: cardBg,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: borderColor, width: 0.8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: isDark ? 0.2 : 0.04,
-                              ),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.link_rounded,
-                              size: 14,
-                              color: subtitleColor,
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                targetUrl,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.primary,
-                                  fontFamily: 'monospace',
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    const SizedBox(height: 14),
-                    Text(
-                      '正在后台预加载网页内容，加载完成后将自动吸附...',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: subtitleColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -29,6 +29,7 @@ class DesktopBrowserDockState {
     this.currentUrl,
     this.currentTitle,
     this.lastError,
+    this.requestSeq = 0,
   });
 
   final BrowserDockingStatus status;
@@ -36,6 +37,7 @@ class DesktopBrowserDockState {
   final String? currentUrl;
   final String? currentTitle;
   final String? lastError;
+  final int requestSeq;
 
   bool get isDocked => status == BrowserDockingStatus.docked;
   bool get isTransitioning =>
@@ -51,6 +53,7 @@ class DesktopBrowserDockState {
     String? currentUrl,
     String? currentTitle,
     String? lastError,
+    int? requestSeq,
     bool clearError = false,
   }) {
     return DesktopBrowserDockState(
@@ -59,11 +62,17 @@ class DesktopBrowserDockState {
       currentUrl: currentUrl ?? this.currentUrl,
       currentTitle: currentTitle ?? this.currentTitle,
       lastError: clearError ? null : (lastError ?? this.lastError),
+      requestSeq: requestSeq ?? this.requestSeq,
     );
   }
 }
 
 /// 桌面端浏览器吸附挂载状态管理器 (Notifier)
+///
+/// 采用主窗口内联 Widget 渲染架构（Inline Flutter Texture WebView2）：
+/// - 吸附模式直接在主窗口右侧分栏内嵌渲染 [DesktopBrowserWindow]，彻底杜绝跨进程/跨引擎
+///   Win32 SetParent + SetWindowRgn 裁剪洞引发的鼠标事件断言崩溃、点击无响应、最大化浮窗残留及死锁问题；
+/// - 弹出独立窗口时通过 [WindowService.openWebBrowser] 唤起独立子窗口。
 class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
   @override
   DesktopBrowserDockState build() {
@@ -72,11 +81,6 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
   }
 
   static const String browserTargetId = 'tool:browser';
-
-  bool _isPageLoaded = false;
-  ({int viewX, int viewY, int width, int height})? _pendingBounds;
-  ({int viewX, int viewY, int width, int height})? _lastDockedBounds;
-  Timer? _loadTimeoutTimer;
 
   void _registerWindowServiceCallbacks() {
     final windowService = ref.read(windowServiceProvider);
@@ -94,12 +98,11 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
   static String? validateAndNormalizeUrl(String? rawUrl) =>
       DesktopBrowserWindow.validateAndNormalizeUrl(rawUrl);
 
-  /// 请求以嵌入模式打开指定网址，或将已存在的独立浏览器吸附到右侧
+  /// 请求以嵌入模式打开指定网址，或将已存在的独立浏览器吸附到主窗口聊天右侧
   Future<void> requestDock({String? url, String? title}) async {
     debugPrint(
       '[BrowserDock Dart] requestDock called: url=$url, title=$title, currentStatus=${state.status}',
     );
-    if (state.isTransitioning) return;
 
     final rawUrl = url ?? state.currentUrl ?? 'https://www.bing.com';
     final cleanedRaw = rawUrl.trim();
@@ -108,242 +111,103 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
         (cleanedRaw.isEmpty ? 'https://www.bing.com' : cleanedRaw);
     final targetTitle = title ?? state.currentTitle ?? '网页浏览';
 
-    // 如果当前已经是吸附嵌入状态，直接在已嵌入的浏览器中添加新标签页，不重新触发 docking 遮罩
-    if (state.isDocked) {
-      state = state.copyWith(currentUrl: targetUrl, currentTitle: targetTitle);
-      try {
-        final windowService = ref.read(windowServiceProvider);
-        await windowService.openWebBrowser(url: targetUrl, title: targetTitle);
-      } catch (e) {
-        debugPrint('[BrowserDock Dart] add tab to docked browser failed: $e');
-      }
-      return;
-    }
+    _registerWindowServiceCallbacks();
 
     final windowService = ref.read(windowServiceProvider);
-    final isWarmBrowser =
-        windowService is DefaultWindowService &&
-        windowService.hasWarmBrowserWindow;
-
-    _isPageLoaded = false;
-    // 如果之前已有测量缓存，优先预热待挂载物理边界，确保秒开时无需等待首帧 PostFrameCallback
-    _pendingBounds = _lastDockedBounds;
-    _loadTimeoutTimer?.cancel();
-
-    state = state.copyWith(
-      status: BrowserDockingStatus.docking,
-      currentUrl: targetUrl,
-      currentTitle: targetTitle,
-      clearError: true,
-    );
-
-    _registerWindowServiceCallbacks();
+    // 若当前存在已打开的独立浏览器子窗口，先将其隐藏关闭，防止独立窗口与内嵌分栏并存
+    if (windowService.isWindowOpen(browserTargetId)) {
+      try {
+        await windowService.closeWindow(browserTargetId);
+      } catch (_) {}
+    }
 
     // 确保主窗口恢复显示并处于前台
     try {
       await windowService.bringToFront('main');
     } catch (_) {}
 
-    // 设置安全超时：若网页加载超过 3.5 秒仍未通知完成，强制触发吸附挂载
-    _loadTimeoutTimer = Timer(const Duration(milliseconds: 3500), () {
-      if (state.status == BrowserDockingStatus.docking && !_isPageLoaded) {
-        debugPrint(
-          '[BrowserDock Dart] Page load timeout (3.5s), triggering dock commit',
-        );
-        onBrowserLoadCompleted();
-      }
-    });
-
-    // 浏览器在后台静默打开（尺寸默认就是点位大小，showImmediately: false）
-    try {
-      await windowService.openWebBrowser(
-        url: state.currentUrl!,
-        title: state.currentTitle,
-        showImmediately: false,
-        initialWidth: state.width.round(),
-      );
-      // 如果浏览器并非首次冷启动（已在后台隐藏热备），无需等待网络加载完成，直接秒级吸附展现
-      if (isWarmBrowser && !_isPageLoaded) {
-        onBrowserLoadCompleted();
-      }
-    } catch (e) {
-      debugPrint('[BrowserDock Dart] openWebBrowser failed: $e');
-      _loadTimeoutTimer?.cancel();
-      _loadTimeoutTimer = null;
-      state = state.copyWith(
-        status: BrowserDockingStatus.unattached,
-        lastError: e.toString(),
-      );
-    }
+    state = state.copyWith(
+      status: BrowserDockingStatus.docked,
+      currentUrl: targetUrl,
+      currentTitle: targetTitle,
+      requestSeq: state.requestSeq + 1,
+      clearError: true,
+    );
   }
 
-  /// 占位区域完成 PostFrameCallback 物理像素计算后，记录待吸附边界
+  /// 兼容保留：内联 Widget 渲染模式下由 Flutter 布局树直接接管尺寸
   void updatePendingBounds({
     required int viewX,
     required int viewY,
     required int width,
     required int height,
-  }) {
-    _pendingBounds = (
-      viewX: viewX,
-      viewY: viewY,
-      width: width,
-      height: height,
-    );
-    _lastDockedBounds = _pendingBounds;
-    debugPrint(
-      '[BrowserDock Dart] updatePendingBounds: ($_pendingBounds), isPageLoaded=$_isPageLoaded, status=${state.status}',
-    );
+  }) {}
 
-    // 如果网页已在后台完全加载完毕，立即执行 Win32 挂载
-    if (_isPageLoaded && state.status == BrowserDockingStatus.docking) {
-      _executeDockCommit();
-    }
-  }
-
-  /// 后台浏览器页面加载完成回调通知
+  /// 页面加载完成回调通知
   void onBrowserLoadCompleted() {
-    debugPrint(
-      '[BrowserDock Dart] onBrowserLoadCompleted: status=${state.status}, pendingBounds=$_pendingBounds, lastBounds=$_lastDockedBounds',
-    );
-    _loadTimeoutTimer?.cancel();
-    _loadTimeoutTimer = null;
-    _isPageLoaded = true;
-
-    if (_pendingBounds == null && _lastDockedBounds != null) {
-      _pendingBounds = _lastDockedBounds;
-    }
-
-    // 如果占位区域物理尺寸已完成测量，立即执行 Win32 挂载
-    if (state.status == BrowserDockingStatus.docking && _pendingBounds != null) {
-      _executeDockCommit();
+    if (state.status == BrowserDockingStatus.docking) {
+      state = state.copyWith(
+        status: BrowserDockingStatus.docked,
+        clearError: true,
+      );
     }
   }
 
-  Future<bool> _executeDockCommit() async {
-    if (_pendingBounds == null) return false;
-    if (state.status != BrowserDockingStatus.docking) return false;
-    final b = _pendingBounds!;
-    return commitDock(
-      viewX: b.viewX,
-      viewY: b.viewY,
-      width: b.width,
-      height: b.height,
-    );
-  }
-
-  /// 占位区域完成 PostFrameCallback 物理像素计算后，执行挂载
+  /// 兼容保留：内联模式下无需 Win32 SetParent
   Future<bool> commitDock({
     required int viewX,
     required int viewY,
     required int width,
     required int height,
   }) async {
-    debugPrint(
-      '[BrowserDock Dart] commitDock called: status=${state.status}, physical: (x=$viewX, y=$viewY, w=$width, h=$height)',
-    );
-    if (state.status != BrowserDockingStatus.docking &&
-        state.status != BrowserDockingStatus.docked) {
-      return false;
-    }
-
-    try {
-      final windowService = ref.read(windowServiceProvider);
-      if (windowService is DefaultWindowService) {
-        final success = await windowService.sendBrowserDockCommand(
-          x: viewX,
-          y: viewY,
-          width: width,
-          height: height,
-        );
-
-        debugPrint(
-          '[BrowserDock Dart] sendBrowserDockCommand result: $success',
-        );
-
-        if (success) {
-          _lastDockedBounds = (
-            viewX: viewX,
-            viewY: viewY,
-            width: width,
-            height: height,
-          );
-          state = state.copyWith(
-            status: BrowserDockingStatus.docked,
-            clearError: true,
-          );
-          return true;
-        }
-      }
-    } catch (e) {
-      debugPrint('[BrowserDock Dart] commitDock failed: $e');
-    }
-
-    // 挂载失败，原子回滚为未吸附状态
     state = state.copyWith(
-      status: BrowserDockingStatus.unattached,
-      lastError: 'Win32 原生挂载失败，已回退为独立窗口',
+      status: BrowserDockingStatus.docked,
+      clearError: true,
     );
-    return false;
+    return true;
   }
 
-  /// 占位区域发生位移/尺寸变化时同步更新子窗口
+  /// 兼容保留：内联模式下由 Flutter Row/SizedBox 自动响应尺寸变化
   Future<void> updateDockedBounds({
     required int viewX,
     required int viewY,
     required int width,
     required int height,
+  }) async {}
+
+  /// 请求从聊天右侧脱离挂载，弹出恢复为独立系统窗口 (Pop out)
+  Future<void> requestUndock({
+    bool showWindow = true,
+    String? activeUrl,
+    String? activeTitle,
   }) async {
-    if (!state.isDocked) return;
-    _lastDockedBounds = (
-      viewX: viewX,
-      viewY: viewY,
-      width: width,
-      height: height,
-    );
-    try {
-      final windowService = ref.read(windowServiceProvider);
-      if (windowService is DefaultWindowService) {
-        await windowService.sendBrowserUpdateBoundsCommand(
-          x: viewX,
-          y: viewY,
-          width: width,
-          height: height,
-        );
-      }
-    } catch (e) {
-      debugPrint('[BrowserDock Dart] updateDockedBounds error: $e');
-    }
-  }
-
-  /// 请求从聊天右侧脱离挂载，恢复为独立系统窗口 (Pop out)
-  Future<void> requestUndock({bool showWindow = true}) async {
     debugPrint(
-      '[BrowserDock Dart] requestUndock called: status=${state.status}, isTransitioning=${state.isTransitioning}, showWindow=$showWindow',
+      '[BrowserDock Dart] requestUndock called: status=${state.status}, showWindow=$showWindow, activeUrl=$activeUrl',
     );
-    if (state.isTransitioning || !state.isDocked) return;
-    _loadTimeoutTimer?.cancel();
-    _loadTimeoutTimer = null;
-    _isPageLoaded = false;
-    _pendingBounds = null;
-    state = state.copyWith(status: BrowserDockingStatus.undocking);
+    if (!state.shouldRenderPlaceholder) return;
 
-    try {
-      final windowService = ref.read(windowServiceProvider);
-      if (windowService is DefaultWindowService) {
-        final res = await windowService.sendBrowserUndockCommand(
-          showWindow: showWindow,
-        );
-        debugPrint('[BrowserDock Dart] sendBrowserUndockCommand result: $res');
-      }
-    } catch (e) {
-      debugPrint('[BrowserDock Dart] requestUndock error: $e');
-    }
+    final targetUrl = activeUrl ?? state.currentUrl ?? 'https://www.bing.com';
+    final targetTitle = activeTitle ?? state.currentTitle ?? '网页浏览';
 
     state = state.copyWith(
       status: BrowserDockingStatus.unattached,
+      currentUrl: targetUrl,
+      currentTitle: targetTitle,
       clearError: true,
     );
+
+    if (showWindow) {
+      try {
+        final windowService = ref.read(windowServiceProvider);
+        await windowService.openWebBrowser(
+          url: targetUrl,
+          title: targetTitle,
+          showImmediately: true,
+        );
+      } catch (e) {
+        debugPrint('[BrowserDock Dart] requestUndock error: $e');
+      }
+    }
   }
 
   /// 调整右侧分栏宽度
@@ -354,20 +218,10 @@ class DesktopBrowserDockNotifier extends Notifier<DesktopBrowserDockState> {
   /// 关闭内嵌浏览器分栏
   Future<void> closeDocked() async {
     debugPrint('[BrowserDock Dart] closeDocked called');
-    _loadTimeoutTimer?.cancel();
-    _loadTimeoutTimer = null;
-    _isPageLoaded = false;
-    _pendingBounds = null;
-    if (state.isDocked) {
-      // 1. 在完全不可见状态下脱离挂载，彻底避免闪现独立窗口
-      await requestUndock(showWindow: false);
-    }
-    // 2. 关闭/隐藏浏览器窗口控制器
-    try {
-      final windowService = ref.read(windowServiceProvider);
-      await windowService.closeWindow(browserTargetId);
-    } catch (_) {}
-    state = state.copyWith(status: BrowserDockingStatus.unattached);
+    state = state.copyWith(
+      status: BrowserDockingStatus.unattached,
+      clearError: true,
+    );
   }
 }
 

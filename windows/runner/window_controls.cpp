@@ -234,21 +234,8 @@ static LRESULT CALLBACK ChildViewSubclassProc(
         }
       }
     }
-  } else if (uMsg == WM_MOUSEACTIVATE) {
-    HWND top_hwnd = GetAncestor(hwnd, GA_ROOT);
-    if (top_hwnd && IsWindow(top_hwnd) && top_hwnd != GetMainWindowHandle()) {
-      SetWindowPos(top_hwnd, HWND_TOP, 0, 0, 0, 0,
-                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-      BringWindowToTop(top_hwnd);
-    }
-    return MA_ACTIVATE;
-  } else if (uMsg == WM_LBUTTONDOWN || uMsg == WM_RBUTTONDOWN || uMsg == WM_MBUTTONDOWN) {
-    HWND top_hwnd = GetAncestor(hwnd, GA_ROOT);
-    if (top_hwnd && IsWindow(top_hwnd) && top_hwnd != GetMainWindowHandle()) {
-      SetWindowPos(top_hwnd, HWND_TOP, 0, 0, 0, 0,
-                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-      BringWindowToTop(top_hwnd);
-    }
+  } else if (uMsg == WM_NCDESTROY) {
+    RemoveWindowSubclass(hwnd, ChildViewSubclassProc, uIdSubclass);
   }
   return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 }
@@ -282,27 +269,6 @@ LRESULT CALLBACK SubWindowSubclassProc(
     }
     case WM_NCPAINT: {
       return 0;
-    }
-    case WM_MOUSEACTIVATE: {
-      HWND root = GetAncestor(hwnd, GA_ROOT);
-      if (root == hwnd) {
-        SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        BringWindowToTop(hwnd);
-        return MA_ACTIVATE;
-      }
-      return DefSubclassProc(hwnd, uMsg, wParam, lParam);
-    }
-    case WM_LBUTTONDOWN:
-    case WM_RBUTTONDOWN:
-    case WM_MBUTTONDOWN: {
-      HWND root = GetAncestor(hwnd, GA_ROOT);
-      if (root == hwnd) {
-        SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        BringWindowToTop(hwnd);
-      }
-      break;
     }
     case WM_NCHITTEST: {
       HWND root = GetAncestor(hwnd, GA_ROOT);
