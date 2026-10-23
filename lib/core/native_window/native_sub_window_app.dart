@@ -170,6 +170,7 @@ class NativeSubWindowApp extends ConsumerStatefulWidget {
 
 class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
   bool _visible = true;
+  bool _isDockedSubWindow = false;
   Future<void>? _closing;
   late final WindowMethodChannel _mainIpcChannel;
   ThemeMode _themeMode = ThemeMode.dark;
@@ -261,6 +262,10 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isDockedSubWindow) {
+        _refreshTraySnapshot();
+        return;
+      }
       WindowsWindowAdapter.setupCustomTitleBar();
       _refreshTraySnapshot();
       if (_currentPayload.type == SubWindowType.tray ||
@@ -286,13 +291,15 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             WindowsWindowAdapter.center(width: 860, height: 620);
             break;
           case SubWindowType.browser:
-            final initW =
-                (widget.payload.extra?['initialWidth'] as num?)?.toInt() ??
-                1024;
-            final initH =
-                (widget.payload.extra?['initialHeight'] as num?)?.toInt() ??
-                720;
-            WindowsWindowAdapter.center(width: initW, height: initH);
+            if (!_isDockedSubWindow) {
+              final initW =
+                  (widget.payload.extra?['initialWidth'] as num?)?.toInt() ??
+                  1024;
+              final initH =
+                  (widget.payload.extra?['initialHeight'] as num?)?.toInt() ??
+                  720;
+              WindowsWindowAdapter.center(width: initW, height: initH);
+            }
             break;
           case SubWindowType.media:
             WindowsWindowAdapter.center(width: 960, height: 700);
@@ -421,6 +428,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             '[BrowserDock SubWindow] received dock_to_parent: args=$dockArgs',
           );
           if (dockArgs != null) {
+            _isDockedSubWindow = true;
             final x = (dockArgs['x'] as num?)?.toInt() ?? 0;
             final y = (dockArgs['y'] as num?)?.toInt() ?? 0;
             final w = (dockArgs['width'] as num?)?.toInt() ?? 400;
@@ -443,6 +451,8 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
                   const MethodCall('set_dock_mode', true),
                 );
               }
+            } else {
+              _isDockedSubWindow = false;
             }
             return success;
           }
@@ -476,6 +486,10 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             '[BrowserDock SubWindow] undockFromParent native result=$success',
           );
           if (success) {
+            _isDockedSubWindow = false;
+            if (showWindow && _currentPayload.type == SubWindowType.browser) {
+              await WindowsWindowAdapter.center(width: 1024, height: 720);
+            }
             if (_childMethodHandler != null) {
               await _childMethodHandler!(
                 const MethodCall('set_dock_mode', false),
@@ -492,6 +506,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           await WindowsWindowAdapter.setModal(enable);
           return true;
         case 'center':
+          if (_isDockedSubWindow) return false;
           final args = call.arguments as Map?;
           final w = args?['width'] as int?;
           final h = args?['height'] as int?;
@@ -661,6 +676,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           onClose: _handleClose,
           onRegisterMethodHandler: (handler) {
             _childMethodHandler = handler;
+            if (_isDockedSubWindow) {
+              unawaited(handler(const MethodCall('set_dock_mode', true)));
+            }
           },
         );
 
