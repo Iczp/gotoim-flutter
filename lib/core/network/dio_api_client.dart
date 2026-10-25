@@ -31,8 +31,8 @@ class DioApiClient implements ApiClient {
   final ClientDeviceContext _deviceContext;
   final FutureOr<void> Function()? _onSessionInvalidated;
   final Map<Object, CancelToken> _cancelTokens = <Object, CancelToken>{};
-  Future<void>? _refreshInFlight;
-  Future<void>? _sessionInvalidationInFlight;
+  static Future<void>? _globalRefreshInFlight;
+  static Future<void>? _globalSessionInvalidationInFlight;
 
   @override
   Future<void> cancelByTag(Object tag) async {
@@ -162,6 +162,13 @@ class DioApiClient implements ApiClient {
     final traceId = DiagnosticTrace.create('http');
     final stopwatch = Stopwatch()..start();
     final usesStoredAccessToken = headers?.containsKey('Authorization') != true;
+    if (usesStoredAccessToken && _globalRefreshInFlight != null) {
+      try {
+        await _globalRefreshInFlight;
+      } catch (_) {
+        // If the in-flight refresh failed, let the subsequent token check/refresh handle it.
+      }
+    }
     var accessToken = await _tokenStorage.readAccessToken();
     if (retryOnUnauthorized &&
         usesStoredAccessToken &&
@@ -221,9 +228,14 @@ class DioApiClient implements ApiClient {
           error.response?.statusCode == 401 &&
           !hasRetriedAfterRefresh) {
         try {
-          final currentToken = await _tokenStorage.readAccessToken();
-          if (currentToken == accessToken) {
-            await _refreshOnce();
+          final inFlight = _globalRefreshInFlight;
+          if (inFlight != null) {
+            await inFlight;
+          } else {
+            final currentToken = await _tokenStorage.readAccessToken();
+            if (currentToken == accessToken) {
+              await _refreshOnce();
+            }
           }
         } on TokenRefreshRejectedException catch (error) {
           if (error.code != 'session_signed_out') await _invalidateSession();
@@ -273,12 +285,14 @@ class DioApiClient implements ApiClient {
   }
 
   Future<void> _refreshOnce() {
-    final inFlight = _refreshInFlight;
+    final inFlight = _globalRefreshInFlight;
     if (inFlight != null) return inFlight;
     final refresh = _tokenRefresher.refreshAccessToken();
-    _refreshInFlight = refresh;
+    _globalRefreshInFlight = refresh;
     return refresh.whenComplete(() {
-      if (identical(_refreshInFlight, refresh)) _refreshInFlight = null;
+      if (identical(_globalRefreshInFlight, refresh)) {
+        _globalRefreshInFlight = null;
+      }
     });
   }
 
@@ -293,16 +307,16 @@ class DioApiClient implements ApiClient {
   }
 
   Future<void> _invalidateSession() {
-    final inFlight = _sessionInvalidationInFlight;
+    final inFlight = _globalSessionInvalidationInFlight;
     if (inFlight != null) return inFlight;
     final invalidation = () async {
       await _tokenRefresher.clearSession();
       await _onSessionInvalidated?.call();
     }();
-    _sessionInvalidationInFlight = invalidation;
+    _globalSessionInvalidationInFlight = invalidation;
     return invalidation.whenComplete(() {
-      if (identical(_sessionInvalidationInFlight, invalidation)) {
-        _sessionInvalidationInFlight = null;
+      if (identical(_globalSessionInvalidationInFlight, invalidation)) {
+        _globalSessionInvalidationInFlight = null;
       }
     });
   }

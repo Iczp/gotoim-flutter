@@ -131,6 +131,40 @@ void main() {
     expect(tokens, <String>['Bearer fresh-token']);
   });
 
+  test(
+    'concurrent requests wait for in-flight pre-refresh and use fresh token without hitting 401',
+    () async {
+      final storage = _MemoryTokenStorage(
+        _jwt(DateTime.now().add(const Duration(minutes: 3))),
+        'refresh',
+      );
+      final refresher = _FakeRefresher(storage);
+      final tokens = <String?>[];
+      final dio = _tokenDio(tokens);
+      final client = DioApiClient(
+        dio: dio,
+        tokenStorage: storage,
+        tokenRefresher: refresher,
+        deviceContext: _device,
+      );
+
+      final results = await Future.wait(<Future<Map<String, dynamic>>>[
+        client.get<Map<String, dynamic>>('/one'),
+        client.get<Map<String, dynamic>>('/two'),
+        client.get<Map<String, dynamic>>('/three'),
+      ]);
+
+      expect(refresher.calls, 1);
+      expect(results.length, 3);
+      // All requests must send ONLY 'Bearer fresh-token' - no 401 requests sent with old token!
+      expect(tokens, <String>[
+        'Bearer fresh-token',
+        'Bearer fresh-token',
+        'Bearer fresh-token',
+      ]);
+    },
+  );
+
   test('concurrent 401 responses share one refresh and all retry', () async {
     final storage = _MemoryTokenStorage('old-token', 'refresh');
     final refresher = _FakeRefresher(storage);

@@ -58,6 +58,7 @@ class ChatMessageRow extends StatelessWidget {
     this.showArticleAvatar,
     this.myAvatarUrl,
     this.peerAvatarUrl,
+    this.peerDisplayName,
     this.peerChatObjectId,
     this.myChatObjectId,
     super.key,
@@ -84,6 +85,7 @@ class ChatMessageRow extends StatelessWidget {
   /// 当前登录用户的头像 URL（确保本地发送中的消息即时渲染头像）
   final String? myAvatarUrl;
   final String? peerAvatarUrl;
+  final String? peerDisplayName;
   final int? peerChatObjectId;
 
   /// 当前登录用户的 ChatObjectId
@@ -192,9 +194,16 @@ class ChatMessageRow extends StatelessWidget {
   final VoidCallback? onTap;
 
   String get _senderLabel {
-    if (!kDebugMode) return message.senderName;
+    var name = message.senderName;
+    if ((name == '未知用户' || name.isEmpty) &&
+        !message.isMine &&
+        peerDisplayName != null &&
+        peerDisplayName!.isNotEmpty) {
+      name = peerDisplayName!;
+    }
+    if (!kDebugMode) return name;
     final messageId = message.serverId?.toString() ?? message.localId;
-    return '${message.senderName} · $messageId';
+    return '$name · $messageId';
   }
 
   /// 综合全局配置、自身/对方维度以及文章类型，计算当前消息是否显示头像
@@ -296,10 +305,16 @@ class ChatMessageRow extends StatelessWidget {
                           : (message.senderAvatarUrl ?? peerAvatarUrl);
                   final avatarName =
                       message.isMine
-                          ? (message.senderName != '未知用户'
+                          ? (message.senderName != '未知用户' &&
+                                  message.senderName.isNotEmpty
                               ? message.senderName
                               : '我')
-                          : message.senderName;
+                          : (message.senderName != '未知用户' &&
+                                  message.senderName.isNotEmpty
+                              ? message.senderName
+                              : (peerDisplayName?.isNotEmpty == true
+                                  ? peerDisplayName!
+                                  : '未知用户'));
                   final avatarObjectId =
                       message.isMine
                           ? (message.senderChatObjectId ?? myChatObjectId)

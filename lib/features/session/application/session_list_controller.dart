@@ -327,6 +327,7 @@ class SessionListController extends ChangeNotifier {
       }
       if (_owners.isNotEmpty) {
         _currentOwner = _ownerById(savedOwnerId) ?? _owners.first;
+        await _repository.saveCurrentOwnerId(_currentOwner!.id);
         final cached = await _repository.loadLocalFriends(
           ownerId: _currentOwner!.id,
           limit: pageSize,
@@ -356,7 +357,7 @@ class SessionListController extends ChangeNotifier {
             remoteOwners.first;
         await _repository.saveCurrentOwnerId(_currentOwner!.id);
         unawaited(_friendPresenceStore.activateOwner(_currentOwner!.id));
-        await _loadNextPageInternal(reset: true);
+        await _loadNextPageInternal(reset: _sessions.isEmpty);
         _syncCurrentOwnerUnread();
         _remoteInitialized = true;
       }

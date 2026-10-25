@@ -814,13 +814,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
       showMyAvatar: showMy,
       showPeerAvatar: showPeer,
       showArticleAvatar: widget.showArticleAvatar,
-      myAvatarUrl: controller.myAvatarUrl,
+      peerDisplayName: controller.peerDisplayName,
+      myAvatarUrl:
+          controller.myAvatarUrl ??
+          ref.watch(sessionListControllerProvider).currentOwner?.imageUrl,
       peerAvatarUrl:
-          [1, 6, 9].contains(controller.destinationObjectType)
+          controller.destinationObjectType != 2
               ? controller.peerAvatarUrl
               : null,
       peerChatObjectId:
-          [1, 6, 9].contains(controller.destinationObjectType)
+          controller.destinationObjectType != 2
               ? controller.peerChatObjectId
               : null,
       myChatObjectId: controller.effectiveOwnerId,
