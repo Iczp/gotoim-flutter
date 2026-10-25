@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../platform/windows/windows_window_adapter.dart';
+import '../platform/desktop_window_adapter.dart';
 
 /// Router builders sit above the route overlay. Tooltips in native chrome need
 /// an overlay covering the whole frame, including the custom caption.
@@ -66,16 +66,16 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         setState(() {
-          _maximized = WindowsWindowAdapter.isMaximized();
+          _maximized = DesktopWindowAdapter.isMaximized();
         });
       }
     });
   }
 
   Future<void> _toggleMaximize() async {
-    await WindowsWindowAdapter.toggleMaximize();
+    await DesktopWindowAdapter.toggleMaximize();
     if (mounted) {
-      setState(() => _maximized = WindowsWindowAdapter.isMaximized());
+      setState(() => _maximized = DesktopWindowAdapter.isMaximized());
     }
   }
 
@@ -99,7 +99,7 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar> {
             Expanded(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onPanStart: (_) => WindowsWindowAdapter.startDragging(),
+                onPanStart: (_) => DesktopWindowAdapter.startDragging(),
                 onDoubleTap:
                     widget.allowDoubleClickMaximize ? _toggleMaximize : null,
                 child: Padding(
@@ -124,7 +124,8 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar> {
               ),
             ),
             if (widget.actions != null) ...widget.actions!,
-            if (widget.showPin)
+            if (widget.showPin &&
+                DesktopWindowAdapter.capabilities.supportsAlwaysOnTop)
               IconButton(
                 tooltip: _pinned ? '取消置顶' : '置顶',
                 visualDensity: VisualDensity.compact,
@@ -136,7 +137,7 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar> {
                 ),
                 onPressed: () {
                   setState(() => _pinned = !_pinned);
-                  WindowsWindowAdapter.setAlwaysOnTop(_pinned);
+                  DesktopWindowAdapter.setAlwaysOnTop(_pinned);
                 },
               ),
             if (widget.showMinimize)
@@ -146,7 +147,7 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar> {
                 padding: const EdgeInsets.all(4),
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 icon: const Icon(Icons.remove_rounded, size: 15),
-                onPressed: WindowsWindowAdapter.minimize,
+                onPressed: DesktopWindowAdapter.minimize,
               ),
             if (widget.showMaximize)
               IconButton(

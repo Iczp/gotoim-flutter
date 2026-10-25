@@ -10,9 +10,11 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    WindowControls.register(with: flutterViewController, window: self)
 
     FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
       RegisterGeneratedPlugins(registry: controller)
+      WindowControls.register(with: controller)
     }
 
     super.awakeFromNib()

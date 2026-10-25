@@ -1,4 +1,5 @@
 #include "my_application.h"
+#include "window_controls.h"
 
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
@@ -6,6 +7,7 @@
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+#include "desktop_multi_window/desktop_multi_window_plugin.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -74,6 +76,12 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  register_window_controls(FL_PLUGIN_REGISTRY(view));
+
+  desktop_multi_window_plugin_set_window_created_callback([](FlPluginRegistry* registry) {
+    fl_register_plugins(registry);
+    register_window_controls(registry);
+  });
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

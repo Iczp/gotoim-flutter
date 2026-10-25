@@ -12,7 +12,7 @@ import '../../app/app_navigation.dart';
 import '../config/app_environment.dart';
 import '../theme/app_theme.dart';
 import '../platform/platform_facade.dart';
-import '../platform/windows/windows_window_adapter.dart';
+import '../platform/desktop_window_adapter.dart';
 import '../browser/desktop_browser_window.dart';
 import '../media/media_preview.dart';
 import '../../features/diagnostics/presentation/abp_configuration_diagnostics_page.dart';
@@ -268,29 +268,31 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         _refreshTraySnapshot();
         return;
       }
-      WindowsWindowAdapter.setupCustomTitleBar();
+      DesktopWindowAdapter.setupCustomTitleBar();
       _refreshTraySnapshot();
       if (_currentPayload.type == SubWindowType.tray ||
           _currentPayload.type == SubWindowType.profileCard ||
           _currentPayload.type == SubWindowType.screenCapture) {
         // Flyout/tool sub-windows must remain hidden on launch until explicitly triggered
         // and must never show on the Windows taskbar.
-        WindowsWindowAdapter.setToolWindow(true);
-        WindowsWindowAdapter.hide();
+        DesktopWindowAdapter.setToolWindow(true);
+        DesktopWindowAdapter.hide();
       } else if (_currentPayload.type == SubWindowType.settings) {
         // Modal sub-window disabling parent window (Electron-style parent/modal)
-        WindowsWindowAdapter.setModal(true);
+        if (DesktopWindowAdapter.isWindows) {
+          DesktopWindowAdapter.setModal(true);
+        }
       } else {
         // Ensure all other new sub-windows are centered on screen with responsive sizes
         switch (_currentPayload.type) {
           case SubWindowType.chat:
-            WindowsWindowAdapter.center(width: 880, height: 640);
+            DesktopWindowAdapter.center(width: 880, height: 640);
             break;
           case SubWindowType.diagnostics:
-            WindowsWindowAdapter.center(width: 960, height: 700);
+            DesktopWindowAdapter.center(width: 960, height: 700);
             break;
           case SubWindowType.localFileServer:
-            WindowsWindowAdapter.center(width: 860, height: 620);
+            DesktopWindowAdapter.center(width: 860, height: 620);
             break;
           case SubWindowType.browser:
             if (!_isDockedSubWindow) {
@@ -300,19 +302,19 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
               final initH =
                   (widget.payload.extra?['initialHeight'] as num?)?.toInt() ??
                   720;
-              WindowsWindowAdapter.center(width: initW, height: initH);
+              DesktopWindowAdapter.center(width: initW, height: initH);
             }
             break;
           case SubWindowType.media:
-            WindowsWindowAdapter.center(width: 960, height: 700);
+            DesktopWindowAdapter.center(width: 960, height: 700);
             break;
           default:
-            WindowsWindowAdapter.center();
+            DesktopWindowAdapter.center();
             break;
         }
       }
     });
-    WindowsWindowAdapter.onCloseRequested = _handleClose;
+    DesktopWindowAdapter.onCloseRequested = _handleClose;
     _currentPayload = widget.payload;
     final initialThemeStr = widget.payload.extra?['themeMode'] as String?;
     if (initialThemeStr != null) {
@@ -354,7 +356,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
               : await _childMethodHandler!(call);
         case 'window_native_diagnostics':
         case 'browser_native_diagnostics':
-          return WindowsWindowAdapter.browserDockDiagnostics();
+          return DesktopWindowAdapter.browserDockDiagnostics();
         case 'theme_changed':
           final args = call.arguments as Map?;
           final modeStr = args?['themeMode'] as String?;
@@ -399,7 +401,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           }
           return true;
         case 'disposeWindow':
-          await WindowsWindowAdapter.destroy();
+          await DesktopWindowAdapter.destroy();
           return true;
         case 'bringToFront':
           if (mounted) setState(() => _visible = true);
@@ -407,9 +409,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           await widget.controller?.show();
           if (_currentPayload.type == SubWindowType.tray) {
             await _refreshTraySnapshot();
-            await WindowsWindowAdapter.showTrayFlyout();
+            await DesktopWindowAdapter.showTrayFlyout();
           } else {
-            await WindowsWindowAdapter.bringToFront();
+            await DesktopWindowAdapter.bringToFront();
           }
           if (_childMethodHandler != null) {
             await _childMethodHandler!(call);
@@ -424,7 +426,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             final w = (map['width'] as num?)?.toInt() ?? 380;
             final h = (map['height'] as num?)?.toInt() ?? 420;
             final noActivate = map['noActivate'] != false;
-            await WindowsWindowAdapter.positionFlyout(
+            await DesktopWindowAdapter.positionFlyout(
               x: x,
               y: y,
               width: w,
@@ -438,7 +440,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           await _handleLogout(notifyMain: false);
           return true;
         case 'hide_profile':
-          await WindowsWindowAdapter.hide();
+          await DesktopWindowAdapter.hide();
           if (_childMethodHandler != null) {
             await _childMethodHandler!(call);
           }
@@ -449,7 +451,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           }
           return true;
         case 'hide_screen_capture':
-          await WindowsWindowAdapter.hide();
+          await DesktopWindowAdapter.hide();
           return true;
         case 'window_dock':
         case 'dock_to_parent':
@@ -464,7 +466,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             final y = (dockArgs['y'] as num?)?.toInt() ?? 0;
             final w = (dockArgs['width'] as num?)?.toInt() ?? 400;
             final h = (dockArgs['height'] as num?)?.toInt() ?? 600;
-            final success = await WindowsWindowAdapter.dockToParent(
+            final success = await DesktopWindowAdapter.dockToParent(
               x: x,
               y: y,
               width: w,
@@ -504,7 +506,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             debugPrint(
               '[BrowserDock SubWindow] update_docked_bounds: ($x, $y, $w, $h)',
             );
-            return await WindowsWindowAdapter.updateDockedBounds(
+            return await DesktopWindowAdapter.updateDockedBounds(
               x: x,
               y: y,
               width: w,
@@ -517,7 +519,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           debugPrint('[BrowserDock SubWindow] received undock_from_parent');
           final args = call.arguments as Map?;
           final showWindow = args?['showWindow'] as bool? ?? true;
-          final success = await WindowsWindowAdapter.undockFromParent(
+          final success = await DesktopWindowAdapter.undockFromParent(
             showWindow: showWindow,
           );
           debugPrint(
@@ -537,18 +539,18 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         case 'tray_flyout':
           await prepareDesktopWindowFrame();
           await _refreshTraySnapshot();
-          await WindowsWindowAdapter.showTrayFlyout();
+          await DesktopWindowAdapter.showTrayFlyout();
           return true;
         case 'setModal':
           final enable = call.arguments != false;
-          await WindowsWindowAdapter.setModal(enable);
+          await DesktopWindowAdapter.setModal(enable);
           return true;
         case 'center':
           if (_isDockedSubWindow) return false;
           final args = call.arguments as Map?;
           final w = args?['width'] as int?;
           final h = args?['height'] as int?;
-          await WindowsWindowAdapter.center(width: w, height: h);
+          await DesktopWindowAdapter.center(width: w, height: h);
           return true;
         case 'close':
           await _handleClose();
@@ -581,7 +583,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
 
   @override
   void dispose() {
-    WindowsWindowAdapter.onCloseRequested = null;
+    DesktopWindowAdapter.onCloseRequested = null;
     _diagnosticRouter.dispose();
     _fileServerRouter.dispose();
     super.dispose();
@@ -596,8 +598,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
     if (mounted && _currentPayload.type == SubWindowType.media) {
       setState(() => _visible = false);
     }
-    if (_currentPayload.type == SubWindowType.settings) {
-      await WindowsWindowAdapter.setModal(false);
+    if (_currentPayload.type == SubWindowType.settings &&
+        DesktopWindowAdapter.isWindows) {
+      await DesktopWindowAdapter.setModal(false);
     }
     try {
       await _mainIpcChannel.invokeMethod('sub_window_closed', {

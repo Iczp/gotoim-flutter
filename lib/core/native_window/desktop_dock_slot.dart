@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../platform/windows/windows_window_adapter.dart';
+import '../platform/desktop_window_adapter.dart';
 import 'desktop_window_dock_controller.dart';
 import 'desktop_window_loading.dart';
 
@@ -29,7 +29,7 @@ class _DesktopDockSlotState extends ConsumerState<DesktopDockSlot>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.slotId != widget.slotId) {
       unawaited(
-        WindowsWindowAdapter.setDockSlotVisible(oldWidget.slotId, false),
+        DesktopWindowAdapter.setDockSlotVisible(oldWidget.slotId, false),
       );
     }
   }
@@ -54,7 +54,7 @@ class _DesktopDockSlotState extends ConsumerState<DesktopDockSlot>
         width: (box.size.width * scale).round(),
         height: (box.size.height * scale).round(),
       ));
-      unawaited(WindowsWindowAdapter.setDockSlotVisible(widget.slotId, true));
+      unawaited(DesktopWindowAdapter.setDockSlotVisible(widget.slotId, true));
     });
   }
 
@@ -75,7 +75,7 @@ class _DesktopDockSlotState extends ConsumerState<DesktopDockSlot>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(WindowsWindowAdapter.setDockSlotVisible(widget.slotId, false));
+    unawaited(DesktopWindowAdapter.setDockSlotVisible(widget.slotId, false));
     super.dispose();
   }
 }

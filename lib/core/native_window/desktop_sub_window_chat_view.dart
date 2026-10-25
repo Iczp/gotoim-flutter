@@ -19,7 +19,7 @@ import '../../features/chat/presentation/widgets/chat_composer_controller.dart';
 import '../../features/chat_settings/data/models/chat_member.dart';
 
 import '../../core/widgets/app_toast.dart';
-import '../platform/windows/windows_window_adapter.dart';
+import '../platform/desktop_window_adapter.dart';
 import 'native_window_payload.dart';
 
 /// 桌面端微信风格独立聊天子窗口视图
@@ -63,11 +63,11 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      WindowsWindowAdapter.setupCustomTitleBar();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await DesktopWindowAdapter.setupCustomTitleBar();
       if (mounted) {
         setState(() {
-          _isMaximized = WindowsWindowAdapter.isMaximized();
+          _isMaximized = DesktopWindowAdapter.isMaximized();
         });
       }
     });
@@ -464,12 +464,12 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   Widget _buildTitleBar(bool isDark, Color bg) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onPanStart: (_) => WindowsWindowAdapter.startDragging(),
-      onDoubleTap: () {
-        WindowsWindowAdapter.toggleMaximize();
+      onPanStart: (_) => DesktopWindowAdapter.startDragging(),
+      onDoubleTap: () async {
+        await DesktopWindowAdapter.toggleMaximize();
         if (mounted) {
           setState(() {
-            _isMaximized = WindowsWindowAdapter.isMaximized();
+            _isMaximized = DesktopWindowAdapter.isMaximized();
           });
         }
       },
@@ -517,7 +517,7 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
                 setState(() {
                   _isPinned = !_isPinned;
                 });
-                WindowsWindowAdapter.setAlwaysOnTop(_isPinned);
+                DesktopWindowAdapter.setAlwaysOnTop(_isPinned);
               },
             ),
             // 最小化
@@ -525,7 +525,7 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
               icon: const Icon(Icons.remove_rounded, size: 16),
               tooltip: '最小化',
               visualDensity: VisualDensity.compact,
-              onPressed: () => WindowsWindowAdapter.minimize(),
+              onPressed: () => DesktopWindowAdapter.minimize(),
             ),
             // 最大化/还原
             IconButton(
@@ -537,11 +537,11 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
               ),
               tooltip: _isMaximized ? '还原' : '最大化',
               visualDensity: VisualDensity.compact,
-              onPressed: () {
-                WindowsWindowAdapter.toggleMaximize();
+              onPressed: () async {
+                await DesktopWindowAdapter.toggleMaximize();
                 if (mounted) {
                   setState(() {
-                    _isMaximized = WindowsWindowAdapter.isMaximized();
+                    _isMaximized = DesktopWindowAdapter.isMaximized();
                   });
                 }
               },
@@ -555,7 +555,7 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
                 if (widget.onClose != null) {
                   widget.onClose!();
                 } else {
-                  WindowsWindowAdapter.close();
+                  DesktopWindowAdapter.close();
                 }
               },
             ),

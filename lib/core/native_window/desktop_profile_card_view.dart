@@ -7,7 +7,7 @@ import '../../features/session/presentation/chat_object_avatar.dart';
 import '../../features/user/data/models/profile_subject.dart';
 import '../../features/user/presentation/widgets/profile_action_sheets.dart';
 import '../../features/user/presentation/widgets/profile_gender_badge.dart';
-import '../platform/windows/windows_window_adapter.dart';
+import '../platform/desktop_window_adapter.dart';
 import '../widgets/app_toast.dart';
 
 /// 桌面端无边框常驻复用资料卡悬浮窗视图 (DesktopProfileCardView)
@@ -83,7 +83,7 @@ class _DesktopProfileCardViewState
     if (widget.onClose != null) {
       widget.onClose!();
     } else {
-      await WindowsWindowAdapter.hide();
+      await DesktopWindowAdapter.hide();
     }
   }
 

@@ -6,7 +6,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../../../core/compliance/agreement_viewer_page.dart';
 import '../../../core/compliance/privacy_service.dart';
-import '../../../core/platform/windows/windows_window_adapter.dart';
+import '../../../core/platform/desktop_window_adapter.dart';
 import '../../../core/services/file/storage_path_service.dart';
 import '../../../core/services/window_service.dart';
 import '../../../core/theme/font_scale_controller.dart';
@@ -102,7 +102,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     _initStoragePath();
     if (widget.isSubWindow) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        WindowsWindowAdapter.setupCustomTitleBar();
+        DesktopWindowAdapter.setupCustomTitleBar();
       });
     }
   }
@@ -457,7 +457,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     if (widget.onClose != null) {
       widget.onClose!();
     } else if (widget.isSubWindow) {
-      WindowsWindowAdapter.close();
+      DesktopWindowAdapter.close();
     } else {
       Navigator.of(context).maybePop();
     }
@@ -473,7 +473,7 @@ class _DesktopSettingsWindowState extends ConsumerState<DesktopSettingsWindow> {
     );
     if (confirmed && mounted) {
       if (widget.isSubWindow) {
-        WindowsWindowAdapter.setModal(false);
+        DesktopWindowAdapter.setModal(false);
         widget.onLogout?.call();
         widget.onClose?.call();
         return;

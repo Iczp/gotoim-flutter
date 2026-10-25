@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/compliance/agreement_viewer_page.dart';
 import '../../../core/compliance/privacy_service.dart';
 import '../../../core/native_window/desktop_window_title_bar.dart';
-import '../../../core/platform/windows/windows_window_adapter.dart';
+import '../../../core/platform/desktop_window_adapter.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/glass_container.dart';
@@ -41,9 +41,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void initState() {
     super.initState();
     _agreeTerms = ref.read(privacyServiceProvider).hasAgreed;
-    if (WindowsWindowAdapter.isWindows) {
+    if (DesktopWindowAdapter.isWindows) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        WindowsWindowAdapter.setupCustomTitleBar();
+        DesktopWindowAdapter.setupCustomTitleBar();
       });
     }
   }
@@ -242,7 +242,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ),
                     const SizedBox(width: 4),
                   ],
-                  onClose: WindowsWindowAdapter.close,
+                  onClose: DesktopWindowAdapter.close,
                 ),
               Expanded(
                 child: SafeArea(

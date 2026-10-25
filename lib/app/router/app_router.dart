@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/browser/app_webview_page.dart';
-import '../../core/platform/windows/windows_window_adapter.dart';
+import '../../core/platform/desktop_window_adapter.dart';
 import '../../core/compliance/agreement_viewer_page.dart';
 import '../../core/compliance/privacy_service.dart';
 import '../../core/statistic/statistic_route_observer.dart';
@@ -115,7 +115,7 @@ class _BrowserDockRouteObserver extends NavigatorObserver {
   @override
   void didChangeTop(Route<dynamic> topRoute, Route<dynamic>? previousTopRoute) {
     unawaited(
-      WindowsWindowAdapter.setBrowserDockVisible(
+      DesktopWindowAdapter.setBrowserDockVisible(
         topRoute.settings.name == '/',
         route: true,
       ),

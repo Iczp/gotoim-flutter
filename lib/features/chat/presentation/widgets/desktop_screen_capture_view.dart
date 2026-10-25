@@ -10,7 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/media/media_preview.dart';
 import '../../../../core/native_window/desktop_window_loading.dart';
-import '../../../../core/platform/windows/windows_window_adapter.dart';
+import '../../../../core/platform/desktop_window_adapter.dart';
 import '../../../../core/services/clipboard_service.dart';
 import '../../../../core/services/window_service.dart';
 import '../../../../core/widgets/app_toast.dart';
@@ -195,7 +195,7 @@ class _DesktopScreenCaptureViewState
     if (!mounted || generation != _loadGeneration) return;
     await prepareDesktopWindowFrame();
     if (!mounted || generation != _loadGeneration) return;
-    await WindowsWindowAdapter.showScreenCapture(
+    await DesktopWindowAdapter.showScreenCapture(
       x: x,
       y: y,
       width: width,
@@ -720,7 +720,7 @@ class _DesktopScreenCaptureViewState
       await _mainIpcChannel.invokeMethod('screen_capture_result', {
         'bytes': imageBytes.toList(),
       });
-      await WindowsWindowAdapter.hide();
+      await DesktopWindowAdapter.hide();
     } catch (e) {
       debugPrint('[DesktopScreenCaptureView] 确认导出失败: $e');
     }
@@ -794,7 +794,7 @@ class _DesktopScreenCaptureViewState
       await _mainIpcChannel.invokeMethod('screen_capture_result', {
         'bytes': imageBytes.toList(),
       });
-      await WindowsWindowAdapter.hide();
+      await DesktopWindowAdapter.hide();
     } catch (e) {
       debugPrint('[DesktopScreenCaptureView] 复制截图失败: $e');
     }
@@ -860,7 +860,7 @@ class _DesktopScreenCaptureViewState
     try {
       await _mainIpcChannel.invokeMethod('screen_capture_cancel');
     } catch (_) {}
-    await WindowsWindowAdapter.hide();
+    await DesktopWindowAdapter.hide();
   }
 
   // -------------------------------------------------------------

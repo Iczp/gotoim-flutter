@@ -10,6 +10,7 @@ import '../../../core/services/clipboard_service.dart';
 import '../../../core/services/screen_capture_service.dart';
 import '../../../core/services/tray_grouped_unread_provider.dart';
 import '../../../core/services/tray_service.dart';
+import '../../../core/platform/desktop_window_adapter.dart';
 import '../../../core/services/window_service.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/desktop_dialog.dart';
@@ -76,6 +77,25 @@ class _DesktopWindowsDiagnosticsPageState
     _profileDeptController.dispose();
     _profileStatusController.dispose();
     super.dispose();
+  }
+
+  void _testInspectPlatformCapabilities() {
+    final sw = Stopwatch()..start();
+    final service = ref.read(windowServiceProvider);
+    final caps = service.desktopCapabilities;
+    sw.stop();
+    setState(() {
+      _status = '成功';
+      _elapsedMs = sw.elapsedMilliseconds;
+      _lastResult = const JsonEncoder.withIndent('  ').convert({
+        'currentPlatform': caps.platformName,
+        'capabilities': caps.toMap(),
+        'windowsAdapterActive': DesktopWindowAdapter.isWindows,
+        'macosAdapterActive': DesktopWindowAdapter.isMacOS,
+        'linuxAdapterActive': DesktopWindowAdapter.isLinux,
+      });
+      _error = null;
+    });
   }
 
   void _resetDefaults() {
@@ -437,8 +457,18 @@ class _DesktopWindowsDiagnosticsPageState
       setState(() {
         _status = '成功';
         _elapsedMs = sw.elapsedMilliseconds;
-        _lastResult =
-            '已成功在后台预热常驻子窗口：\n1. tool:profile_card (悬浮资料卡)\n2. tool:tray (托盘新消息悬浮窗)\n3. tool:screen_capture (截图标注工作台)\n状态：常驻后台保持预热，呼出零延迟 (支持8锚点缩放与直接涂鸦)';
+        _lastResult = const JsonEncoder.withIndent('  ').convert({
+          'registeredWindows':
+              windowService.openWindows
+                  .map((record) => record.targetId)
+                  .toList(),
+          'profileFlyoutSupported':
+              windowService.desktopCapabilities.supportsNativeProfileFlyout,
+          'annotationSupported':
+              windowService.desktopCapabilities.supportsBuiltinAnnotation,
+          'nativeTrayFlyoutSupported': DesktopWindowAdapter.isWindows,
+          'note': '仅预热当前平台已实现的工具；不支持的工具跳过创建。',
+        });
       });
     } catch (e, st) {
       sw.stop();
@@ -458,6 +488,14 @@ class _DesktopWindowsDiagnosticsPageState
     });
     try {
       final windowService = ref.read(windowServiceProvider);
+      if (!windowService.desktopCapabilities.supportsNativeProfileFlyout) {
+        throw UnsupportedError(
+          windowService
+                  .desktopCapabilities
+                  .statusReasons['supportsNativeProfileFlyout'] ??
+              '当前平台不支持原生悬浮资料卡',
+        );
+      }
       final subjectData = {
         'id': 'diag_user_888',
         'displayName': _profileNameController.text.trim(),
@@ -1152,6 +1190,11 @@ class _DesktopWindowsDiagnosticsPageState
                     '4. 非桌面端（移动端/Web）平滑降级为应用内标准页面导航。',
                     style: TextStyle(fontSize: 12, height: 1.5),
                   ),
+                  TextButton.icon(
+                    onPressed: _testInspectPlatformCapabilities,
+                    icon: const Icon(Icons.fact_check_outlined, size: 16),
+                    label: const Text('查看当前平台能力与限制'),
+                  ),
                   const SizedBox(height: 10),
                   const Divider(height: 1, thickness: 0.5),
                   const SizedBox(height: 8),
@@ -1159,8 +1202,8 @@ class _DesktopWindowsDiagnosticsPageState
                     spacing: 12,
                     children: [
                       _buildPlatformBadge('Windows', true),
-                      _buildPlatformBadge('macOS', true),
-                      _buildPlatformBadge('Linux', true),
+                      _buildPlatformBadge('macOS（部分接入，待验收）', false),
+                      _buildPlatformBadge('Linux（部分接入，待验收）', false),
                       _buildPlatformBadge('Android (降级)', true),
                       _buildPlatformBadge('iOS (降级)', true),
                       _buildPlatformBadge('Web (降级)', true),
@@ -1195,7 +1238,7 @@ class _DesktopWindowsDiagnosticsPageState
                       const Spacer(),
                       FilledButton.tonalIcon(
                         icon: const Icon(Icons.bolt_rounded, size: 16),
-                        label: const Text('一键预热全部常驻窗口'),
+                        label: const Text('预热当前平台支持的窗口'),
                         onPressed: _testPrewarmSubWindows,
                       ),
                     ],

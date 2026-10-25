@@ -9,7 +9,7 @@ import '../../core/compliance/privacy_consent_dialog.dart';
 import '../../core/browser/desktop_browser_dock_controller.dart';
 import '../../core/compliance/privacy_service.dart';
 import '../../core/native/native.dart';
-import '../../core/platform/windows/windows_window_adapter.dart';
+import '../../core/platform/desktop_window_adapter.dart';
 import '../../core/services/tray_grouped_unread_provider.dart';
 import '../../core/services/tray_service.dart';
 import '../../core/services/window_service.dart';
@@ -65,9 +65,9 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       windowService.onWindowDockLayoutRequested = _prepareBrowserDock;
     }
     HardwareKeyboard.instance.addHandler(_handleAppWideKeyEvent);
-    WindowsWindowAdapter.onHotkey = _handleHotkeyAction;
+    DesktopWindowAdapter.onHotkey = _handleHotkeyAction;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      WindowsWindowAdapter.setupCustomTitleBar();
+      DesktopWindowAdapter.setupCustomTitleBar();
     });
     Future<void>.microtask(() async {
       final privacy = ref.read(privacyServiceProvider);
@@ -109,8 +109,8 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       windowService.onWindowDockLayoutRequested = null;
     }
     HardwareKeyboard.instance.removeHandler(_handleAppWideKeyEvent);
-    if (WindowsWindowAdapter.onHotkey == _handleHotkeyAction) {
-      WindowsWindowAdapter.onHotkey = null;
+    if (DesktopWindowAdapter.onHotkey == _handleHotkeyAction) {
+      DesktopWindowAdapter.onHotkey = null;
     }
     super.dispose();
   }
@@ -152,7 +152,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
     final totalUnread = controller.totalUnreadCount;
     if (totalUnread > 0) {
       // 1. 若当前主窗口最小化或处于后台，激活并置顶
-      await WindowsWindowAdapter.bringToFront();
+      await DesktopWindowAdapter.bringToFront();
       // 2. 切换至消息 Tab
       _select(HomeSection.messages);
 
@@ -191,13 +191,13 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       }
     } else {
       // 没有新消息时，切换 显示/隐藏 应用
-      await WindowsWindowAdapter.toggleVisibility();
+      await DesktopWindowAdapter.toggleVisibility();
     }
   }
 
   void _select(HomeSection section) {
     unawaited(
-      WindowsWindowAdapter.setBrowserDockVisible(
+      DesktopWindowAdapter.setBrowserDockVisible(
         section == HomeSection.messages,
       ),
     );
@@ -550,7 +550,7 @@ class _DesktopMainWindowTitleBarState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         setState(() {
-          _isMaximized = WindowsWindowAdapter.isMaximized();
+          _isMaximized = DesktopWindowAdapter.isMaximized();
         });
       }
     });
@@ -566,12 +566,12 @@ class _DesktopMainWindowTitleBarState
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onPanStart: (_) => WindowsWindowAdapter.startDragging(),
-      onDoubleTap: () {
-        WindowsWindowAdapter.toggleMaximize();
+      onPanStart: (_) => DesktopWindowAdapter.startDragging(),
+      onDoubleTap: () async {
+        await DesktopWindowAdapter.toggleMaximize();
         if (mounted) {
           setState(() {
-            _isMaximized = WindowsWindowAdapter.isMaximized();
+            _isMaximized = DesktopWindowAdapter.isMaximized();
           });
         }
       },
@@ -614,7 +614,7 @@ class _DesktopMainWindowTitleBarState
             _WindowButton(
               icon: const Icon(Icons.remove_rounded, size: 14),
               tooltip: '最小化',
-              onPressed: () => WindowsWindowAdapter.minimize(),
+              onPressed: () => DesktopWindowAdapter.minimize(),
             ),
             const SizedBox(width: 2),
             // 最大化/还原按钮
@@ -626,11 +626,11 @@ class _DesktopMainWindowTitleBarState
                 size: 13,
               ),
               tooltip: _isMaximized ? '还原' : '最大化',
-              onPressed: () {
-                WindowsWindowAdapter.toggleMaximize();
+              onPressed: () async {
+                await DesktopWindowAdapter.toggleMaximize();
                 if (mounted) {
                   setState(() {
-                    _isMaximized = WindowsWindowAdapter.isMaximized();
+                    _isMaximized = DesktopWindowAdapter.isMaximized();
                   });
                 }
               },
@@ -641,7 +641,7 @@ class _DesktopMainWindowTitleBarState
               icon: const Icon(Icons.close_rounded, size: 15),
               tooltip: '关闭',
               isClose: true,
-              onPressed: () => WindowsWindowAdapter.close(),
+              onPressed: () => DesktopWindowAdapter.close(),
             ),
           ],
         ),

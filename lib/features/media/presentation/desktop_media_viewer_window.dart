@@ -11,7 +11,7 @@ import 'package:video_player/video_player.dart';
 import '../../../core/media/media_preview.dart';
 import '../../../core/media/image_viewer.dart';
 import '../../../core/media/image_provider_factory.dart';
-import '../../../core/platform/windows/windows_window_adapter.dart';
+import '../../../core/platform/desktop_window_adapter.dart';
 import '../../../core/native_window/desktop_window_dock_button.dart';
 import '../../../core/services/media/media_gallery_saver.dart';
 import '../../../core/services/scan/image_qr_detector.dart';
@@ -107,11 +107,11 @@ class _DesktopMediaViewerWindowState
   void initState() {
     super.initState();
     if (widget.isSubWindow) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        WindowsWindowAdapter.setupCustomTitleBar();
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await DesktopWindowAdapter.setupCustomTitleBar();
         if (mounted) {
           setState(() {
-            _isMaximized = WindowsWindowAdapter.isMaximized();
+            _isMaximized = DesktopWindowAdapter.isMaximized();
           });
         }
       });
@@ -165,6 +165,11 @@ class _DesktopMediaViewerWindowState
 
     final item = _currentItem;
     if (item.type == MediaPreviewType.video) {
+      if (DesktopWindowAdapter.isLinux &&
+          !DesktopWindowAdapter.capabilities.supportsVideoPlayback) {
+        _videoError = '当前平台尚未接入视频播放后端，请使用系统播放器打开';
+        return;
+      }
       try {
         final source = localSource ?? item.playableSource;
         final uri = Uri.tryParse(source);
@@ -1090,15 +1095,15 @@ class _DesktopMediaViewerWindowState
       behavior: HitTestBehavior.translucent,
       onPanStart: (_) {
         if (widget.isSubWindow && !docked) {
-          WindowsWindowAdapter.startDragging();
+          DesktopWindowAdapter.startDragging();
         }
       },
-      onDoubleTap: () {
+      onDoubleTap: () async {
         if (widget.isSubWindow && !docked) {
-          WindowsWindowAdapter.toggleMaximize();
+          await DesktopWindowAdapter.toggleMaximize();
           if (mounted) {
             setState(() {
-              _isMaximized = WindowsWindowAdapter.isMaximized();
+              _isMaximized = DesktopWindowAdapter.isMaximized();
             });
           }
         }
@@ -1126,33 +1131,34 @@ class _DesktopMediaViewerWindowState
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // 置顶按钮
-                      IconButton(
-                        icon: Icon(
-                          _isPinned
-                              ? Icons.push_pin_rounded
-                              : Icons.push_pin_outlined,
-                          size: 16,
-                          color:
-                              _isPinned
-                                  ? const Color(0xFF07C160)
-                                  : Colors.white70,
+                      if (DesktopWindowAdapter.capabilities.supportsAlwaysOnTop)
+                        IconButton(
+                          icon: Icon(
+                            _isPinned
+                                ? Icons.push_pin_rounded
+                                : Icons.push_pin_outlined,
+                            size: 16,
+                            color:
+                                _isPinned
+                                    ? const Color(0xFF07C160)
+                                    : Colors.white70,
+                          ),
+                          tooltip: _isPinned ? '取消置顶' : '固定置顶',
+                          visualDensity: VisualDensity.compact,
+                          onPressed:
+                              docked
+                                  ? null
+                                  : () {
+                                    setState(() {
+                                      _isPinned = !_isPinned;
+                                    });
+                                    if (widget.isSubWindow && !docked) {
+                                      DesktopWindowAdapter.setAlwaysOnTop(
+                                        _isPinned,
+                                      );
+                                    }
+                                  },
                         ),
-                        tooltip: _isPinned ? '取消置顶' : '固定置顶',
-                        visualDensity: VisualDensity.compact,
-                        onPressed:
-                            docked
-                                ? null
-                                : () {
-                                  setState(() {
-                                    _isPinned = !_isPinned;
-                                  });
-                                  if (widget.isSubWindow && !docked) {
-                                    WindowsWindowAdapter.setAlwaysOnTop(
-                                      _isPinned,
-                                    );
-                                  }
-                                },
-                      ),
 
                       // 上一张 / 下一张
                       IconButton(
@@ -1335,7 +1341,7 @@ class _DesktopMediaViewerWindowState
                       ? null
                       : () {
                         if (widget.isSubWindow && !docked) {
-                          WindowsWindowAdapter.minimize();
+                          DesktopWindowAdapter.minimize();
                         } else {
                           Navigator.of(context).maybePop();
                         }
@@ -1354,12 +1360,12 @@ class _DesktopMediaViewerWindowState
               onPressed:
                   docked
                       ? null
-                      : () {
+                      : () async {
                         if (widget.isSubWindow && !docked) {
-                          WindowsWindowAdapter.toggleMaximize();
+                          await DesktopWindowAdapter.toggleMaximize();
                           if (mounted) {
                             setState(() {
-                              _isMaximized = WindowsWindowAdapter.isMaximized();
+                              _isMaximized = DesktopWindowAdapter.isMaximized();
                             });
                           }
                         } else {
@@ -1381,7 +1387,7 @@ class _DesktopMediaViewerWindowState
                 if (widget.onClose != null) {
                   widget.onClose!();
                 } else if (widget.isSubWindow && !docked) {
-                  WindowsWindowAdapter.close();
+                  DesktopWindowAdapter.close();
                 } else if (Navigator.of(context).canPop()) {
                   Navigator.of(context).pop();
                 }
@@ -1440,30 +1446,32 @@ class _DesktopMediaViewerWindowState
                   spacing: 12,
                   runSpacing: 8,
                   children: [
-                    if (_currentItem.source.startsWith('http'))
+                    if (_currentItem.source.startsWith('http') &&
+                        !DesktopWindowAdapter.isLinux)
                       OutlinedButton.icon(
                         icon: const Icon(Icons.download_outlined, size: 16),
                         label: const Text('下载后播放'),
                         onPressed: _downloadAndPlayVideo,
                       ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        side: const BorderSide(color: Colors.white24),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
+                    if (!DesktopWindowAdapter.isLinux)
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: const BorderSide(color: Colors.white24),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
                         ),
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('重试', style: TextStyle(fontSize: 13)),
+                        onPressed: () {
+                          setState(() {
+                            _videoError = null;
+                          });
+                          _checkVideoController();
+                        },
                       ),
-                      icon: const Icon(Icons.refresh_rounded, size: 16),
-                      label: const Text('重试', style: TextStyle(fontSize: 13)),
-                      onPressed: () {
-                        setState(() {
-                          _videoError = null;
-                        });
-                        _checkVideoController();
-                      },
-                    ),
                     const SizedBox(width: 12),
                     FilledButton.icon(
                       style: FilledButton.styleFrom(

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
-import '../platform/windows/windows_window_adapter.dart';
+import '../platform/desktop_window_adapter.dart';
 
 /// Hidden engines have no regular vsync: explicitly render the latest widget
-/// tree and wait for its native surface before exposing a window.
+/// tree before exposing a window. Await native raster acknowledgement only
+/// on platforms that implement the per-engine protocol.
 Future<void> prepareDesktopWindowFrame() async {
   final binding = WidgetsBinding.instance;
   final frame = binding.endOfFrame;
   binding.scheduleWarmUpFrame();
   await frame.timeout(const Duration(seconds: 5));
-  await WindowsWindowAdapter.prepareFrame();
+  if (DesktopWindowAdapter.capabilities.supportsNativeFirstFrameAck) {
+    await DesktopWindowAdapter.prepareFrame();
+  }
 }
 
 class DesktopWindowLoading extends StatelessWidget {

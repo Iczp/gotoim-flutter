@@ -1,4 +1,4 @@
-import '../platform/windows/windows_window_adapter.dart';
+import '../platform/desktop_window_adapter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,7 +22,7 @@ class DesktopTrayMessageBox extends ConsumerStatefulWidget {
 
   /// 在桌面右下角（任务栏托盘上方）弹出微信风格无边框浮窗
   static Future<void> show(BuildContext context) {
-    if (WindowsWindowAdapter.isWindows) {
+    if (DesktopWindowAdapter.isWindows) {
       return ProviderScope.containerOf(
         context,
         listen: false,
@@ -141,7 +141,7 @@ class _DesktopTrayMessageBoxState extends ConsumerState<DesktopTrayMessageBox> {
 
   void _close() {
     if (widget.nativeWindow) {
-      WindowsWindowAdapter.close();
+      DesktopWindowAdapter.close();
     } else {
       Navigator.of(context).pop();
     }

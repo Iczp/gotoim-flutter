@@ -4,10 +4,10 @@ import 'package:gotoim_flutter/core/platform/platform_facade.dart';
 import 'package:gotoim_flutter/core/services/window_service.dart';
 
 class _FakePlatformFacade implements PlatformFacade {
-  const _FakePlatformFacade();
+  const _FakePlatformFacade([this.kind = PlatformKind.windows]);
 
   @override
-  PlatformKind get kind => PlatformKind.windows;
+  final PlatformKind kind;
 
   @override
   bool get isWeb => false;
@@ -63,6 +63,18 @@ void main() {
           },
         );
   });
+
+  for (final kind in [PlatformKind.macos, PlatformKind.linux]) {
+    test('$kind does not prewarm unsupported native tools', () async {
+      final service = DefaultWindowService(
+        platformFacade: _FakePlatformFacade(kind),
+      );
+      await service.prewarmProfileCard();
+      await service.prewarmScreenCapture();
+      expect(await service.captureScreenInteractive(), isNull);
+      expect(service.openWindows, isEmpty);
+    });
+  }
 
   group('DefaultWindowService Tests', () {
     late DefaultWindowService windowService;

@@ -10,7 +10,7 @@ import '../../app/app_navigation.dart';
 import '../widgets/desktop_tray_message_box.dart';
 import 'tray_badge_generator.dart';
 import 'window_service.dart';
-import '../platform/windows/windows_window_adapter.dart';
+import '../platform/desktop_window_adapter.dart';
 
 /// 统一跨平台系统托盘服务抽象 (TrayService Facade)
 ///
@@ -79,9 +79,9 @@ class DesktopTrayService with TrayListener implements TrayService {
     if (!isSupported || _initialized) return;
     try {
       _lastError = null;
-      if (WindowsWindowAdapter.isWindows) {
-        await WindowsWindowAdapter.setupCustomTitleBar();
-        WindowsWindowAdapter.onTrayEvent = (event) {
+      if (DesktopWindowAdapter.isWindows) {
+        await DesktopWindowAdapter.setupCustomTitleBar();
+        DesktopWindowAdapter.onTrayEvent = (event) {
           if (event == 'left') onTrayIconMouseDown();
           if (event == 'show') windowService.bringToFront('main');
           if (event == 'unread') onTrayIconMouseDown();
@@ -90,7 +90,7 @@ class DesktopTrayService with TrayListener implements TrayService {
             exit(0);
           }
         };
-        await WindowsWindowAdapter.initializeTray();
+        await DesktopWindowAdapter.initializeTray();
       } else {
         trayManager.addListener(this);
         await trayManager.setIcon(_getDefaultIconPath());
@@ -121,8 +121,8 @@ class DesktopTrayService with TrayListener implements TrayService {
 
   Future<void> _buildMenu() async {
     if (!isSupported) return;
-    if (WindowsWindowAdapter.isWindows) {
-      await WindowsWindowAdapter.updateTray({
+    if (DesktopWindowAdapter.isWindows) {
+      await DesktopWindowAdapter.updateTray({
         'owner': _currentOwnerName ?? '',
         'unread': _unreadCount,
         'tooltip':
@@ -165,7 +165,7 @@ class DesktopTrayService with TrayListener implements TrayService {
     return _enqueue(() async {
       // Coalesce notifications queued before the platform finishes a frame.
       if (count != _unreadCount) return;
-      if (!WindowsWindowAdapter.isWindows) {
+      if (!DesktopWindowAdapter.isWindows) {
         await trayManager.setToolTip(
           count > 0 ? 'Goto IM ($count条新消息)' : 'Goto IM 跨平台即时通讯',
         );
@@ -185,13 +185,13 @@ class DesktopTrayService with TrayListener implements TrayService {
               unreadCount: count,
               isDimmed: dimmed,
             )
-            : (WindowsWindowAdapter.isWindows ? '' : _getDefaultIconPath());
+            : (DesktopWindowAdapter.isWindows ? '' : _getDefaultIconPath());
     if (path != null &&
         count == _unreadCount &&
         dimmed == _isBlinkDimmed &&
         _initialized) {
-      if (WindowsWindowAdapter.isWindows) {
-        await WindowsWindowAdapter.updateTray({'iconPath': path});
+      if (DesktopWindowAdapter.isWindows) {
+        await DesktopWindowAdapter.updateTray({'iconPath': path});
       } else {
         await trayManager.setIcon(path);
       }
@@ -268,8 +268,8 @@ class DesktopTrayService with TrayListener implements TrayService {
   @override
   Future<void> showContextMenu() async {
     if (!_initialized) return;
-    if (WindowsWindowAdapter.isWindows) {
-      await WindowsWindowAdapter.showTrayMenu();
+    if (DesktopWindowAdapter.isWindows) {
+      await DesktopWindowAdapter.showTrayMenu();
     } else {
       await trayManager.popUpContextMenu();
     }
@@ -294,9 +294,9 @@ class DesktopTrayService with TrayListener implements TrayService {
       _stopBlinking();
       _initialized = false;
       await _updates;
-      if (WindowsWindowAdapter.isWindows) {
-        WindowsWindowAdapter.onTrayEvent = null;
-        await WindowsWindowAdapter.destroyTray();
+      if (DesktopWindowAdapter.isWindows) {
+        DesktopWindowAdapter.onTrayEvent = null;
+        await DesktopWindowAdapter.destroyTray();
       } else {
         trayManager.removeListener(this);
         await trayManager.destroy();

@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../platform/windows/windows_window_adapter.dart';
+import '../platform/desktop_window_adapter.dart';
 import '../services/window_service.dart';
 import 'browser_thumbnail.dart';
 import '../security/url_security_level.dart';
@@ -486,15 +486,15 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         _startWaitingForTabLoad(firstTab.url, widget.title);
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        WindowsWindowAdapter.setupCustomTitleBar();
-        WindowsWindowAdapter.isDocked().then((docked) {
+        DesktopWindowAdapter.setupCustomTitleBar();
+        DesktopWindowAdapter.isDocked().then((docked) {
           if (mounted && docked != _isDocked) {
             setState(() => _isDocked = docked);
           }
         });
         if (mounted) {
           setState(() {
-            _isMaximized = WindowsWindowAdapter.isMaximized();
+            _isMaximized = DesktopWindowAdapter.isMaximized();
           });
         }
       });
@@ -737,7 +737,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     if (widget.onClose != null) {
       widget.onClose!();
     } else if (widget.isSubWindow) {
-      WindowsWindowAdapter.close();
+      DesktopWindowAdapter.close();
       _clearAllTabs();
     } else {
       Navigator.of(context).maybePop();
@@ -1487,15 +1487,15 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
           behavior: HitTestBehavior.translucent,
           onPanStart: (_) {
             if (widget.isSubWindow && !_isDocked) {
-              WindowsWindowAdapter.startDragging();
+              DesktopWindowAdapter.startDragging();
             }
           },
-          onDoubleTap: () {
+          onDoubleTap: () async {
             if (widget.isSubWindow && !_isDocked) {
-              WindowsWindowAdapter.toggleMaximize();
+              await DesktopWindowAdapter.toggleMaximize();
               if (mounted) {
                 setState(() {
-                  _isMaximized = WindowsWindowAdapter.isMaximized();
+                  _isMaximized = DesktopWindowAdapter.isMaximized();
                 });
               }
             }
@@ -1510,7 +1510,9 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             child: Row(
               children: [
                 // 置顶图标 (仅独立大窗口模式显示，节省空间)
-                if (!_isDocked && !isCompact)
+                if (!_isDocked &&
+                    !isCompact &&
+                    DesktopWindowAdapter.capabilities.supportsAlwaysOnTop)
                   IconButton(
                     icon: Icon(
                       _isPinned
@@ -1526,7 +1528,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                         _isPinned = !_isPinned;
                       });
                       if (widget.isSubWindow) {
-                        WindowsWindowAdapter.setAlwaysOnTop(_isPinned);
+                        DesktopWindowAdapter.setAlwaysOnTop(_isPinned);
                       }
                     },
                   ),
@@ -1855,7 +1857,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       onPressed: _closeWindow,
                     ),
                   ] else ...[
-                    if (WindowsWindowAdapter.isWindows && widget.isSubWindow)
+                    if (DesktopWindowAdapter.isWindows && widget.isSubWindow)
                       IconButton(
                         icon: const Icon(
                           Icons.vertical_align_bottom_rounded,
@@ -1871,7 +1873,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       visualDensity: VisualDensity.compact,
                       onPressed: () {
                         if (widget.isSubWindow) {
-                          WindowsWindowAdapter.minimize();
+                          DesktopWindowAdapter.minimize();
                         } else {
                           Navigator.of(context).maybePop();
                         }
@@ -1886,12 +1888,12 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                       ),
                       tooltip: _isMaximized ? '还原窗口' : '最大化窗口',
                       visualDensity: VisualDensity.compact,
-                      onPressed: () {
+                      onPressed: () async {
                         if (widget.isSubWindow) {
-                          WindowsWindowAdapter.toggleMaximize();
+                          await DesktopWindowAdapter.toggleMaximize();
                           if (mounted) {
                             setState(() {
-                              _isMaximized = WindowsWindowAdapter.isMaximized();
+                              _isMaximized = DesktopWindowAdapter.isMaximized();
                             });
                           }
                         } else {
@@ -2108,22 +2110,22 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               _isPinned = !_isPinned;
             });
             if (widget.isSubWindow) {
-              WindowsWindowAdapter.setAlwaysOnTop(_isPinned);
+              DesktopWindowAdapter.setAlwaysOnTop(_isPinned);
             }
             break;
           case 'minimize':
             if (widget.isSubWindow) {
-              WindowsWindowAdapter.minimize();
+              DesktopWindowAdapter.minimize();
             } else {
               Navigator.of(context).maybePop();
             }
             break;
           case 'maximize':
             if (widget.isSubWindow) {
-              WindowsWindowAdapter.toggleMaximize();
+              await DesktopWindowAdapter.toggleMaximize();
               if (mounted) {
                 setState(() {
-                  _isMaximized = WindowsWindowAdapter.isMaximized();
+                  _isMaximized = DesktopWindowAdapter.isMaximized();
                 });
               }
             }
@@ -2248,7 +2250,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 ),
               )
             else ...[
-              if (WindowsWindowAdapter.isWindows && widget.isSubWindow)
+              if (DesktopWindowAdapter.isWindows && widget.isSubWindow)
                 const PopupMenuItem(
                   value: 'dock',
                   height: 36,
@@ -2260,26 +2262,27 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                     ],
                   ),
                 ),
-              PopupMenuItem(
-                value: 'pin',
-                height: 36,
-                child: Row(
-                  children: [
-                    Icon(
-                      _isPinned
-                          ? Icons.push_pin_rounded
-                          : Icons.push_pin_outlined,
-                      size: 16,
-                      color: _isPinned ? const Color(0xFF07C160) : null,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      _isPinned ? '取消置顶' : '固定置顶',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ],
+              if (DesktopWindowAdapter.capabilities.supportsAlwaysOnTop)
+                PopupMenuItem(
+                  value: 'pin',
+                  height: 36,
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isPinned
+                            ? Icons.push_pin_rounded
+                            : Icons.push_pin_outlined,
+                        size: 16,
+                        color: _isPinned ? const Color(0xFF07C160) : null,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        _isPinned ? '取消置顶' : '固定置顶',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
               const PopupMenuItem(
                 value: 'minimize',
                 height: 36,
