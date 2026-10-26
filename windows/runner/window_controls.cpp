@@ -145,9 +145,14 @@ static bool RestoreDockedWindow(HWND hwnd, bool show) {
   const auto it = g_dock_snapshots.find(hwnd);
   if (it == g_dock_snapshots.end()) return true; // idempotent close/rollback
   const auto snapshot = it->second;
+  // Style/placement changes dispatch owner messages synchronously. Stop dock
+  // synchronization BEFORE restoring, otherwise it re-shows/resizes this HWND
+  // halfway through the transaction and the Flutter surface keeps dock bounds.
+  g_dock_snapshots.erase(it);
   const LONG_PTR docked_style = GetWindowLongPtr(hwnd, GWL_STYLE);
   const LONG_PTR docked_ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
   const auto rollback = [&]() {
+    g_dock_snapshots[hwnd] = snapshot;
     WriteWindowLong(hwnd, GWL_STYLE, docked_style);
     WriteWindowLong(hwnd, GWL_EXSTYLE, docked_ex_style);
     WriteWindowLong(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_main_window));
@@ -170,7 +175,6 @@ static bool RestoreDockedWindow(HWND hwnd, bool show) {
   DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
   if (!SetWindowPos(hwnd, (snapshot.ex_style & WS_EX_TOPMOST) ? HWND_TOPMOST : HWND_NOTOPMOST,
       0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED)) return rollback();
-  g_dock_snapshots.erase(it);
   if (show) {
     ShowWindow(hwnd, snapshot.placement.showCmd == SW_SHOWMAXIMIZED ? SW_MAXIMIZE : SW_SHOWNORMAL);
     SetForegroundWindow(hwnd);
@@ -396,7 +400,7 @@ LRESULT CALLBACK SubWindowSubclassProc(
 void ConfigureSubWindowNative(HWND sub_hwnd, HWND child_hwnd) {
   if (!sub_hwnd || !IsWindow(sub_hwnd)) return;
   const LONG_PTR style = GetWindowLongPtr(sub_hwnd, GWL_STYLE);
-  const LONG_PTR custom = (style & ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) | WS_THICKFRAME | WS_CLIPCHILDREN;
+  const LONG_PTR custom = (style & ~WS_CAPTION) | WS_THICKFRAME | WS_CLIPCHILDREN;
   if (style != custom) {
     SetWindowLongPtr(sub_hwnd, GWL_STYLE, custom);
   }
@@ -419,6 +423,7 @@ void ConfigureSubWindowNative(HWND sub_hwnd, HWND child_hwnd) {
 namespace {
 constexpr UINT kTrayCallback = WM_APP + 0x48;
 constexpr UINT kShowTrayMenu = WM_APP + 0x49;
+constexpr UINT kStartWindowDrag = WM_APP + 0x4A;
 
 std::string Narrow(const std::wstring& value) {
   if (value.empty()) return {};
@@ -452,6 +457,12 @@ class WindowControls : public flutter::Plugin {
     delegate_ = registrar_->RegisterTopLevelWindowProcDelegate(
         [this](HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
             -> std::optional<LRESULT> {
+          if (hwnd == Window() && message == kStartWindowDrag) {
+            // Bypass Flutter/plugin mouse handling. Enter the system move loop
+            // only after the MethodChannel handler has replied to Dart.
+            ReleaseCapture();
+            return DefWindowProc(hwnd, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, lparam);
+          }
           if (hwnd == Window() && hwnd == g_main_window &&
               (message == WM_WINDOWPOSCHANGED || message == WM_SIZE ||
                message == WM_SHOWWINDOW || message == WM_ENABLE || message == WM_DPICHANGED)) {
@@ -659,7 +670,7 @@ class WindowControls : public flutter::Plugin {
         GetCursorPos(&cursor);
         ReleaseCapture();
         // Reply before entering the native move loop; never block Dart's UI.
-        PostMessage(target_hwnd, WM_NCLBUTTONDOWN, HTCAPTION,
+        PostMessage(target_hwnd, kStartWindowDrag, 0,
                     MAKELPARAM(cursor.x, cursor.y));
       } else if (method == "minimize") {
         HWND target_hwnd = (IsWindowDocked(hwnd) && g_main_window && IsWindow(g_main_window))
@@ -1034,7 +1045,18 @@ class WindowControls : public flutter::Plugin {
           auto it = args->find(flutter::EncodableValue("showWindow"));
           if (it != args->end()) if (auto v = std::get_if<bool>(&it->second)) show = *v;
         }
-        result->Success(flutter::EncodableValue(RestoreDockedWindow(hwnd, show)));
+        const bool restored = RestoreDockedWindow(hwnd, show);
+        if (restored) {
+          auto* view = registrar_->GetView();
+          RECT client{};
+          if (view && GetClientRect(hwnd, &client)) {
+            MoveWindow(view->GetNativeWindow(), 0, 0,
+                client.right - client.left, client.bottom - client.top, TRUE);
+          }
+          if (view_controller_) view_controller_->ForceRedraw();
+          RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_FRAME);
+        }
+        result->Success(flutter::EncodableValue(restored));
         return;
       } else if (method == "isDocked") {
         result->Success(flutter::EncodableValue(IsWindowDocked(hwnd)));
@@ -1195,7 +1217,7 @@ class WindowControls : public flutter::Plugin {
     if (!hwnd || configured_window_ == hwnd || IsWindowDocked(hwnd)) return;
     configured_window_ = hwnd;
     const LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
-    const LONG_PTR custom = (style & ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) | WS_THICKFRAME | WS_CLIPCHILDREN;
+    const LONG_PTR custom = (style & ~WS_CAPTION) | WS_THICKFRAME | WS_CLIPCHILDREN;
     if (style != custom) {
       SetWindowLongPtr(hwnd, GWL_STYLE, custom);
       SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,

@@ -95,8 +95,30 @@ Future<void> main(List<String> args) async {
       'Browser was exposed before native frame preparation',
     );
     for (var iteration = 0; iteration < 4; iteration++) {
-      await notifier.requestUndock(showWindow: false);
-      results.add(await _ready(service, 2));
+      await notifier.requestUndock(showWindow: true);
+      final detached = await _ready(service, 2);
+      results.add(detached);
+      final detachedNative = detached['native'] as Map;
+      if (iteration == 0 && args.contains('--inspect-detached')) {
+        phase('visible pop-out ready for inspection');
+        final deadline = Stopwatch()..start();
+        while (!File('$resultPath.resume').existsSync() &&
+            deadline.elapsed < const Duration(seconds: 90)) {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        }
+      }
+      _check(
+        detachedNative['isDocked'] == false,
+        'Browser is still docked after pop-out',
+      );
+      _check(
+        detachedNative['windowHwnd'] == host,
+        'Pop-out replaced the native browser',
+      );
+      _check(
+        (detached['session']['pageProbe'] as Map)['marker'] == marker,
+        'Visible pop-out reset JavaScript memory',
+      );
       await WindowsWindowAdapter.center(
         width: 1100 + iteration * 40,
         height: 760,
@@ -317,7 +339,15 @@ class _ProbeShell extends ConsumerWidget {
       home: Scaffold(
         body: Row(
           children: [
-            const Expanded(child: Text('Browser dock smoke probe')),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => WindowsWindowAdapter.startDragging(),
+                child: const Center(
+                  child: Text('Browser dock smoke probe — drag here'),
+                ),
+              ),
+            ),
             if (state.shouldRenderPlaceholder)
               SizedBox(
                 width: 520,

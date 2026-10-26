@@ -91,3 +91,13 @@ flutter test --no-pub test/core/native_window/desktop_window_dock_test.dart test
 `DesktopWindowLoading` 提供窗口加载、吸附等待、安全核验和截图准备的统一外观。`prepareDesktopWindowFrame` 主动调度隐藏引擎的 warm-up frame，再通过原生 `prepareFrame` 等待 `SetNextFrameCallback` 确认绘制完成；不能只等待隐藏窗口下一次常规 vsync。
 
 `WindowService` 创建窗口时保持 `hiddenAtLaunch`，收到子窗口 `window_prepare_show` 确认后才显示；缓存窗口、吸附、资料卡定位、托盘和截图唤醒复用同一首帧门槛。失败时保持隐藏、保留引擎供重试，不用固定延时掩盖白屏。原生诊断的 `preparedFrameCount` 用于验证显示前确实执行了准备流程。
+
+## 2026-10-26：拖动与可见弹出回归修复
+
+Windows 自绘标题栏保留 WS_SYSMENU 等系统命令样式，只移除 WS_CAPTION；拖动经专用 WM_APP 消息在 MethodChannel 回复后进入 DefWindowProc 的 SC_MOVE 系统循环，避免普通鼠标消息再次经过 Flutter/plugin 分发。
+
+脱离吸附先从原生吸附注册表移除 HWND，再恢复样式、owner 和 WINDOWPLACEMENT，防止同步消息重入时按旧槽位重新定位。失败回滚会重新登记原快照。恢复后显式同步 Flutter 子视图客户区尺寸，调用 ForceRedraw，并使子窗口内容失效重绘；不销毁 WebView，也不重新导航。
+
+原生冒烟测试改为 showWindow:true 的实际可见弹出，检查 HWND、JS 标记和 Tab 实例连续性。原有隐藏弹出验证无法覆盖本次显示回归。
+
+本轮验证：`flutter build windows --debug --no-pub` 完整构建成功；吸附控制器、浏览器吸附及 Windows 交互回归共 24 项全部通过；原生冒烟入口静态分析通过，`git diff --check` 通过。独立原生测试副本启动后停留在首次显示握手（进度到 runApp called），未完成可视化及鼠标拖动验收，已结束该测试进程；不能把本轮单元测试当作画面验收。使用新程序时需要完整退出并重启，热重载不能加载修改后的 C++。
