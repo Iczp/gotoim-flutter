@@ -109,17 +109,62 @@ GoRoute _buildAppRoute({
   );
 }
 
-/// Native browser overlays cannot be covered by Flutter popup routes. Hide the
-/// owned window while another route/menu/dialog covers the main chat surface.
-class _BrowserDockRouteObserver extends NavigatorObserver {
+/// Small transparent popup menus do not cover the native browser pane. Modal
+/// dialogs/pages still hide it to respect Win32 airspace and modal interaction.
+class DesktopDockRouteObserver extends NavigatorObserver {
+  final List<Route<dynamic>> _routes = [];
+  bool? _visible;
+
   @override
-  void didChangeTop(Route<dynamic> topRoute, Route<dynamic>? previousTopRoute) {
-    unawaited(
-      DesktopWindowAdapter.setBrowserDockVisible(
-        topRoute.settings.name == '/',
-        route: true,
-      ),
-    );
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _routes.add(route);
+    _sync();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _routes.remove(route);
+    _sync();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _routes.remove(route);
+    _sync();
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    final index = oldRoute == null ? -1 : _routes.indexOf(oldRoute);
+    if (index >= 0) {
+      if (newRoute == null) {
+        _routes.removeAt(index);
+      } else {
+        _routes[index] = newRoute;
+      }
+    } else if (newRoute != null) {
+      _routes.add(newRoute);
+    }
+    _sync();
+  }
+
+  void _sync() {
+    final pageIndex = _routes.lastIndexWhere((route) => route is PageRoute);
+    final chat = pageIndex >= 0 && _routes[pageIndex].settings.name == '/';
+    final covered =
+        pageIndex >= 0 &&
+        _routes
+            .skip(pageIndex + 1)
+            .any(
+              (route) =>
+                  route is RawDialogRoute ||
+                  route is ModalBottomSheetRoute ||
+                  (route is PopupRoute && (route.barrierColor?.a ?? 0) > 0),
+            );
+    final next = chat && !covered;
+    if (_visible == next) return;
+    _visible = next;
+    unawaited(DesktopWindowAdapter.setBrowserDockVisible(next, route: true));
   }
 }
 
@@ -128,7 +173,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
-    observers: [StatisticRouteObserver(), _BrowserDockRouteObserver()],
+    observers: [StatisticRouteObserver(), DesktopDockRouteObserver()],
     refreshListenable: authNotifier,
     redirect: (context, state) {
       final location = state.uri.path;

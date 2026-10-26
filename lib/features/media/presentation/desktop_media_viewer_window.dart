@@ -940,59 +940,62 @@ class _DesktopMediaViewerWindowState
 
         // 2. 媒体主展示画布 (支持右键菜单)
         Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onSecondaryTapDown: (details) {
-              _showContextMenu(context, details.globalPosition);
-            },
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // 核心视窗
-                Center(
-                  child: RotatedBox(
-                    quarterTurns: _rotationQuarterTurns,
-                    child: InteractiveViewer(
-                      transformationController: _transformController,
-                      minScale: 0.2,
-                      maxScale: 6.0,
-                      clipBehavior: Clip.none,
-                      child: _buildMediaContent(),
-                    ),
-                  ),
-                ),
-
-                // 左侧快速翻页指示按钮
-                if (_currentIndex > 0)
-                  Positioned(
-                    left: 16,
-                    child: _buildNavArrowButton(
-                      icon: Icons.chevron_left_rounded,
-                      onTap: () => _goTo(_currentIndex - 1),
-                      tooltip: '上一张',
+          child: ClipRect(
+            key: const ValueKey('media_canvas_clip'),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onSecondaryTapDown: (details) {
+                _showContextMenu(context, details.globalPosition);
+              },
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 核心视窗
+                  Center(
+                    child: RotatedBox(
+                      quarterTurns: _rotationQuarterTurns,
+                      child: InteractiveViewer(
+                        transformationController: _transformController,
+                        minScale: 0.2,
+                        maxScale: 6.0,
+                        clipBehavior: Clip.hardEdge,
+                        child: _buildMediaContent(),
+                      ),
                     ),
                   ),
 
-                // 右侧快速翻页指示按钮
-                if (_currentIndex < widget.items.length - 1)
-                  Positioned(
-                    right: 16,
-                    child: _buildNavArrowButton(
-                      icon: Icons.chevron_right_rounded,
-                      onTap: () => _goTo(_currentIndex + 1),
-                      tooltip: '下一张',
+                  // 左侧快速翻页指示按钮
+                  if (_currentIndex > 0)
+                    Positioned(
+                      left: 16,
+                      child: _buildNavArrowButton(
+                        icon: Icons.chevron_left_rounded,
+                        onTap: () => _goTo(_currentIndex - 1),
+                        tooltip: '上一张',
+                      ),
                     ),
-                  ),
 
-                // 底部折叠缩略图条 (当 _showThumbnails 为 true)
-                if (_showThumbnails && widget.items.length > 1)
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: _buildThumbnailStrip(),
-                  ),
-              ],
+                  // 右侧快速翻页指示按钮
+                  if (_currentIndex < widget.items.length - 1)
+                    Positioned(
+                      right: 16,
+                      child: _buildNavArrowButton(
+                        icon: Icons.chevron_right_rounded,
+                        onTap: () => _goTo(_currentIndex + 1),
+                        tooltip: '下一张',
+                      ),
+                    ),
+
+                  // 底部折叠缩略图条 (当 _showThumbnails 为 true)
+                  if (_showThumbnails && widget.items.length > 1)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: _buildThumbnailStrip(),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

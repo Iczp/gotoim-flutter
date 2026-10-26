@@ -1,3 +1,4 @@
+import '../core/localization/app_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -16,6 +17,9 @@ class BootstrapErrorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      locale: AppLocalization.locale,
+      supportedLocales: AppLocalization.supportedLocales,
+      localizationsDelegates: AppLocalization.delegates,
       title: 'Goto IM - 启动异常',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

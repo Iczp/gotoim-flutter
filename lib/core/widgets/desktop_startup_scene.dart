@@ -1,3 +1,4 @@
+import '../localization/app_localization.dart';
 import 'package:flutter/material.dart';
 import '../native_window/desktop_window_title_bar.dart';
 import '../platform/desktop_window_adapter.dart';
@@ -16,6 +17,9 @@ class DesktopStartupScene extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+    locale: AppLocalization.locale,
+    supportedLocales: AppLocalization.supportedLocales,
+    localizationsDelegates: AppLocalization.delegates,
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       colorSchemeSeed: const Color(0xFF07A86A),

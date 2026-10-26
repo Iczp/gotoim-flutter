@@ -1,3 +1,4 @@
+import '../core/localization/app_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,6 +76,9 @@ class _MiniAppAppState extends ConsumerState<MiniAppApp> {
     final manager = ref.read(floatingWindowManagerProvider);
 
     return MaterialApp(
+      locale: AppLocalization.locale,
+      supportedLocales: AppLocalization.supportedLocales,
+      localizationsDelegates: AppLocalization.delegates,
       title: _currentRequest?.title ?? 'MiniApp',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -110,4 +114,3 @@ class _MiniAppAppState extends ConsumerState<MiniAppApp> {
     );
   }
 }
-

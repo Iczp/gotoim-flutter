@@ -357,7 +357,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
               onTransfer: _openTransferSheet,
               onOpenSettings: _openChatSettings,
               onOpenAiRuns: _openAiRunTimeline,
-              onPopOut: widget.onPopOut ??
+              onPopOut:
+                  widget.onPopOut ??
                   () {
                     ref
                         .read(windowServiceProvider)
@@ -976,8 +977,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (overlay == null) return;
 
+    final chatBox = context.findRenderObject() as RenderBox?;
+    if (chatBox == null || !chatBox.hasSize) return;
+    final origin = chatBox.localToGlobal(Offset.zero, ancestor: overlay);
+    final left = origin.dx + 8;
+    final available = (chatBox.size.width - 16).clamp(1.0, 220.0);
+    final maxLeft = origin.dx + chatBox.size.width - 8 - available;
+    final point = overlay.globalToLocal(details.globalPosition);
+    final anchor = Offset(
+      point.dx.clamp(left, maxLeft < left ? left : maxLeft),
+      point.dy,
+    );
     final position = RelativeRect.fromRect(
-      details.globalPosition & const Size(1, 1),
+      anchor & const Size(1, 1),
       Offset.zero & overlay.size,
     );
 
@@ -986,44 +998,53 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final selectedId = await showMenu<String>(
       context: context,
       position: position,
+      constraints: BoxConstraints(
+        minWidth: available < 160 ? available : 160,
+        maxWidth: available,
+      ),
+      routeSettings: const RouteSettings(name: 'chat-message-menu'),
       elevation: 8,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.12)
-              : Colors.black.withValues(alpha: 0.08),
+          color:
+              isDark
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : Colors.black.withValues(alpha: 0.08),
           width: 0.8,
         ),
       ),
-      items: menuItems.map((item) {
-        return PopupMenuItem<String>(
-          value: item.id,
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Row(
-            children: [
-              Icon(
-                item.icon,
-                size: 16,
-                color: item.destructive
-                    ? Theme.of(context).colorScheme.error
-                    : Theme.of(context).colorScheme.onSurface,
+      items:
+          menuItems.map((item) {
+            return PopupMenuItem<String>(
+              value: item.id,
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: [
+                  Icon(
+                    item.icon,
+                    size: 16,
+                    color:
+                        item.destructive
+                            ? Theme.of(context).colorScheme.error
+                            : Theme.of(context).colorScheme.onSurface,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    item.label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color:
+                          item.destructive
+                              ? Theme.of(context).colorScheme.error
+                              : Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Text(
-                item.label,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: item.destructive
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
+            );
+          }).toList(),
     );
 
     if (selectedId != null) {
@@ -1540,10 +1561,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
       final member = ChatMember.fromJson(sender);
       final subject = ProfileSubject.member(member);
-      ref.read(windowServiceProvider).showProfileCardAt(
-        subjectData: subject.toMap(),
-        localRect: rect,
-      );
+      ref
+          .read(windowServiceProvider)
+          .showProfileCardAt(subjectData: subject.toMap(), localRect: rect);
     });
   }
 

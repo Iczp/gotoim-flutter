@@ -20,10 +20,11 @@ class _FileStyle {
 }
 
 _FileStyle _resolveFileStyle(String name, String suffix) {
-  final ext = (suffix.isNotEmpty
-          ? suffix
-          : (name.contains('.') ? '.${name.split('.').last}' : ''))
-      .toLowerCase();
+  final ext =
+      (suffix.isNotEmpty
+              ? suffix
+              : (name.contains('.') ? '.${name.split('.').last}' : ''))
+          .toLowerCase();
   switch (ext) {
     case '.pdf':
       return const _FileStyle(
@@ -102,7 +103,8 @@ _FileStyle _resolveFileStyle(String name, String suffix) {
         tag: 'TXT',
       );
     default:
-      final rawTag = ext.startsWith('.') ? ext.substring(1).toUpperCase() : 'FILE';
+      final rawTag =
+          ext.startsWith('.') ? ext.substring(1).toUpperCase() : 'FILE';
       return _FileStyle(
         icon: Icons.insert_drive_file_rounded,
         backgroundColor: const Color(0xFFF0F4F8),
@@ -161,32 +163,87 @@ class FileMessageContent extends StatelessWidget {
       _ => message.state == 'sending' ? null : onDownload,
     };
 
+    final name = message.fileName.isEmpty ? '文件' : message.fileName;
+    final smallStyle = Theme.of(context).textTheme.labelSmall;
+    Widget summary({required bool compact}) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          name,
+          maxLines: compact ? 1 : 2,
+          overflow: TextOverflow.ellipsis,
+          style:
+              compact
+                  ? null
+                  : const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                  ),
+        ),
+        const SizedBox(height: 4),
+        if (compact)
+          Text(
+            _formatFileSize(message.fileSize),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: smallStyle,
+          )
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 2,
+            children: [
+              Text(
+                _formatFileSize(message.fileSize),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: smallStyle,
+              ),
+              Text(
+                stateLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: smallStyle?.copyWith(
+                  color:
+                      transfer.status == AttachmentTransferStatus.failed ||
+                              message.state == 'failed'
+                          ? Colors.red
+                          : isReady
+                          ? Colors.green
+                          : isDownloading
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+
     if (presentation == ChatMessagePresentation.quote) {
       return InkWell(
         onTap: onTap,
         onLongPress: isReady ? onSaveAs : null,
         borderRadius: BorderRadius.circular(6),
-        child: Row(
-          children: <Widget>[
-            _buildFileIcon(style, compact: true),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message.fileName.isEmpty ? '文件' : message.fileName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              _formatFileSize(message.fileSize),
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-          ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 240),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 72) return summary(compact: true);
+              return Row(
+                children: [
+                  _buildFileIcon(style, compact: true),
+                  const SizedBox(width: 8),
+                  Expanded(child: summary(compact: true)),
+                ],
+              );
+            },
+          ),
         ),
       );
     }
-
     return MessageBubble(
       message: message,
       child: InkWell(
@@ -196,83 +253,29 @@ class FileMessageContent extends StatelessWidget {
         child: Container(
           width: 240,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: <Widget>[
-              // 文件图标 + 浮动百分比层
-              _buildFileIcon(style),
-              const SizedBox(width: 12),
-              // 文件名与大小、状态
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      message.fileName.isEmpty ? '文件' : message.fileName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        height: 1.3,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 160) return summary(compact: false);
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  _buildFileIcon(style),
+                  const SizedBox(width: 12),
+                  Expanded(child: summary(compact: false)),
+                  if (isReady)
+                    IconButton(
+                      icon: const Icon(Icons.save_alt_rounded, size: 18),
+                      tooltip: '另存为',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
                       ),
+                      onPressed: onSaveAs,
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          _formatFileSize(message.fileSize),
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant
-                                    .withValues(alpha: 0.75),
-                              ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '·',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant
-                                    .withValues(alpha: 0.75),
-                              ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            stateLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  color: transfer.status ==
-                                              AttachmentTransferStatus.failed ||
-                                          message.state == 'failed'
-                                      ? Colors.red
-                                      : isReady
-                                          ? Colors.green
-                                          : isDownloading
-                                              ? Theme.of(context).colorScheme.primary
-                                              : null,
-                                ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (isReady)
-                IconButton(
-                  icon: const Icon(Icons.save_alt_rounded, size: 18),
-                  tooltip: '另存为',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  onPressed: onSaveAs,
-                ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -308,11 +311,7 @@ class FileMessageContent extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  style.icon,
-                  size: iconSize,
-                  color: style.iconColor,
-                ),
+                Icon(style.icon, size: iconSize, color: style.iconColor),
                 if (!compact && style.tag.isNotEmpty)
                   Text(
                     style.tag,

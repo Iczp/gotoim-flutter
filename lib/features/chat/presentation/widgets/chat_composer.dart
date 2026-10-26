@@ -63,6 +63,7 @@ class ChatComposerState extends ConsumerState<ChatComposer>
   final FocusNode _focusNode = FocusNode();
   final PageController _pageController = PageController();
   bool _showFunctions = false;
+  bool _desktopCapturePending = false;
   bool _isSwitchingToKeyboard = false;
   bool _voiceMode = false;
   bool _startingRecording = false;
@@ -1032,19 +1033,52 @@ class ChatComposerState extends ConsumerState<ChatComposer>
 
   /// 触发桌面端屏幕截图 (截图按钮或 Alt+A 快捷键触发)
   Future<void> _handleDesktopScreenshot() async {
+    if (_desktopCapturePending) return;
+    _desktopCapturePending = true;
+    final target = widget.controller;
     try {
       final screenCapture = ref.read(screenCaptureServiceProvider);
       final imageBytes = await screenCapture.capture(
         hideMainWindow: _hideWindowOnScreenshot,
       );
-      if (imageBytes != null && imageBytes.isNotEmpty && mounted) {
-        await widget.controller.sendImageBytes(
+      if (imageBytes != null &&
+          imageBytes.isNotEmpty &&
+          mounted &&
+          identical(target, widget.controller)) {
+        await _confirmImageSend(
           imageBytes,
           fileName: 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png',
         );
       }
     } catch (e) {
       debugPrint('[ChatComposer] 屏幕截图异常: $e');
+    } finally {
+      _desktopCapturePending = false;
+    }
+  }
+
+  Future<void> _confirmImageSend(Uint8List bytes, {String? fileName}) async {
+    if (!mounted) return;
+    final target = widget.controller;
+    final result = await ClipboardImageConfirmDialog.show(
+      context,
+      imageBytes: bytes,
+      onAnnotatedSend: (annotatedBytes, caption) async {
+        if (!mounted || !identical(target, widget.controller)) return;
+        await target.sendImageBytes(
+          annotatedBytes,
+          caption: caption,
+          fileName: fileName,
+        );
+      },
+    );
+    if (!mounted || !identical(target, widget.controller)) return;
+    if (result != null && result.confirmed) {
+      await target.sendImageBytes(
+        bytes,
+        caption: result.caption,
+        fileName: fileName,
+      );
     }
   }
 
@@ -1077,22 +1111,7 @@ class ChatComposerState extends ConsumerState<ChatComposer>
       final imageBytes = await clipboard.readImage();
       if (imageBytes != null && imageBytes.isNotEmpty) {
         if (!mounted) return true;
-        final result = await ClipboardImageConfirmDialog.show(
-          context,
-          imageBytes: imageBytes,
-          onAnnotatedSend: (annotatedBytes, caption) async {
-            await widget.controller.sendImageBytes(
-              annotatedBytes,
-              caption: caption,
-            );
-          },
-        );
-        if (result != null && result.confirmed) {
-          await widget.controller.sendImageBytes(
-            imageBytes,
-            caption: result.caption,
-          );
-        }
+        await _confirmImageSend(imageBytes);
         return true; // 拦截默认文本粘贴
       }
     } catch (e) {
@@ -1125,8 +1144,9 @@ class ChatComposerState extends ConsumerState<ChatComposer>
       );
     } else {
       widget.input.text = '$text\n';
-      widget.input.selection =
-          TextSelection.collapsed(offset: widget.input.text.length);
+      widget.input.selection = TextSelection.collapsed(
+        offset: widget.input.text.length,
+      );
     }
   }
 

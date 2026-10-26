@@ -86,12 +86,20 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         unawaited(ref.read(trayServiceProvider).initialize());
         if (!kIsWeb &&
             (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
-          Future.delayed(const Duration(milliseconds: 1500), () {
+          Future.delayed(const Duration(milliseconds: 1500), () async {
             if (!mounted) return;
             final windowService = ref.read(windowServiceProvider);
-            windowService.prewarmProfileCard();
-            windowService.prewarmTrayFlyout();
-            windowService.prewarmScreenCapture();
+            for (final warm in [
+              windowService.prewarmMediaViewer,
+              windowService.prewarmProfileCard,
+              windowService.prewarmTrayFlyout,
+              windowService.prewarmScreenCapture,
+            ]) {
+              if (!mounted) return;
+              await warm();
+              if (!mounted) return;
+              await WidgetsBinding.instance.endOfFrame;
+            }
           });
         }
       }

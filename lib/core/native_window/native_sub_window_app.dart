@@ -1,3 +1,4 @@
+import '../localization/app_localization.dart';
 import 'desktop_window_dock_button.dart';
 import 'dart:async';
 
@@ -632,6 +633,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
 
     if (_currentPayload.type == SubWindowType.diagnostics) {
       return MaterialApp.router(
+        locale: AppLocalization.locale,
+        supportedLocales: AppLocalization.supportedLocales,
+        localizationsDelegates: AppLocalization.delegates,
         title: _currentPayload.title,
         debugShowCheckedModeBanner: false,
         themeMode: _themeMode,

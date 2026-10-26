@@ -148,6 +148,9 @@ abstract class WindowService {
     int initialIndex = 0,
   });
 
+  /// 首页就绪后预热媒体窗口；不显示，不加载任何远程媒体。
+  Future<void> prewarmMediaViewer() async {}
+
   /// 打开或激活独立设置窗口
   Future<void> openSettings();
 
@@ -280,6 +283,8 @@ class DefaultWindowService implements WindowService {
   void Function(String targetId)? onWindowClosed;
   void Function()? onBrowserClosed;
   Future<void> _browserRequests = Future<void>.value();
+  Future<void>? _mediaPrewarmFuture;
+  int _mediaGeneration = 0;
   final Future<void> Function(int ownerId)? switchOwnerHandler;
   @override
   final bool isSubWindow;
@@ -1024,6 +1029,8 @@ class DefaultWindowService implements WindowService {
   }
 
   Future<void> closeAllSubWindows({bool isLogout = false}) async {
+    _mediaGeneration++;
+    await _mediaPrewarmFuture;
     final targets = _registry.keys.toList();
     for (final target in targets) {
       await closeWindow(target);
@@ -1110,6 +1117,52 @@ class DefaultWindowService implements WindowService {
         await controller.invokeMethod(method, arguments);
       } catch (_) {}
     }
+  }
+
+  @override
+  Future<void> prewarmMediaViewer() {
+    final warming = _mediaPrewarmFuture;
+    if (warming != null) return warming;
+    if (isSubWindow ||
+        !platformFacade.supportsMultipleWindows ||
+        isWindowOpen('tool:media') ||
+        _pendingCreations.containsKey('tool:media') ||
+        _reusableControllers.containsKey('tool:media')) {
+      return Future.value();
+    }
+    return _mediaPrewarmFuture ??= (() async {
+      const targetId = 'tool:media';
+      // A tiny in-memory image warms the actual viewer/toolbar/decoder without
+      // touching user media, the network or a video player.
+      const warmImage =
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
+      try {
+        await _openNativeSubWindow(
+          targetId: targetId,
+          type: WindowType.media,
+          title: '媒体预览',
+          showImmediately: false,
+          payload: const NativeWindowPayload(
+            type: SubWindowType.media,
+            title: '媒体预览',
+            targetId: targetId,
+            url: warmImage,
+            extra: {'prewarm': true},
+          ),
+        );
+        final controller = _nativeControllers[targetId];
+        if (controller == null) return;
+        await _prepareNativeWindow(controller);
+        // Reuse the existing hidden-window cache; a warm host is not an open
+        // user viewer and must not appear in active-window lists.
+        _nativeControllers.remove(targetId);
+        _registry.remove(targetId);
+        _reusableControllers[targetId] = controller;
+        _notify();
+      } catch (e) {
+        debugPrint('[WindowService] Media prewarm failed: ${e.runtimeType}');
+      }
+    })().whenComplete(() => _mediaPrewarmFuture = null);
   }
 
   @override
@@ -1783,6 +1836,11 @@ class DefaultWindowService implements WindowService {
       });
     }
 
+    final mediaGeneration = _mediaGeneration;
+    await _mediaPrewarmFuture;
+    final pending = _pendingCreations['tool:media'];
+    if (pending != null) await pending;
+    if (mediaGeneration != _mediaGeneration) return;
     const targetId = 'tool:media';
     final previewItems =
         items ??

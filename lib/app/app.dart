@@ -1,3 +1,4 @@
+import '../core/localization/app_localization.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -78,6 +79,9 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
     final layoutSettings = ref.watch(appLayoutSettingsProvider);
 
     return MaterialApp.router(
+      locale: AppLocalization.locale,
+      supportedLocales: AppLocalization.supportedLocales,
+      localizationsDelegates: AppLocalization.delegates,
       title: 'Goto IM',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme(
