@@ -5,12 +5,44 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/device/client_device_context.dart';
 import 'package:gotoim_flutter/core/network/dio_api_client.dart';
+import 'package:gotoim_flutter/core/network/api_exception.dart';
 import 'package:gotoim_flutter/core/network/jwt_token_expiry.dart';
 import 'package:gotoim_flutter/core/network/token_refresher.dart';
 import 'package:gotoim_flutter/core/network/token_storage.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_unit_api.dart';
 
 void main() {
+  for (final anonymousToken in <String?>[null, '']) {
+    test(
+      'anonymous 401 does not refresh or invalidate the login page ($anonymousToken)',
+      () async {
+        final storage = _MemoryTokenStorage(anonymousToken, null);
+        final refresher = _FakeRefresher(storage);
+        var invalidations = 0;
+        final client = DioApiClient(
+          dio: _tokenDio([]),
+          tokenStorage: storage,
+          tokenRefresher: refresher,
+          deviceContext: _device,
+          onSessionInvalidated: () => invalidations++,
+        );
+        await expectLater(
+          client.get<Map<String, dynamic>>('/public'),
+          throwsA(
+            isA<ApiException>().having(
+              (error) => error.statusCode,
+              'statusCode',
+              401,
+            ),
+          ),
+        );
+        expect(refresher.calls, 0);
+        expect(invalidations, 0);
+        expect(storage.accessToken, anonymousToken);
+      },
+    );
+  }
+
   test(
     'a stale refresh from a logged-out session cannot clear a newer login',
     () async {

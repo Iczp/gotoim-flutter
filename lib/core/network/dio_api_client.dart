@@ -225,6 +225,8 @@ class DioApiClient implements ApiClient {
       if (cancelTag != null) _cancelTokens.remove(cancelTag);
       if (retryOnUnauthorized &&
           usesStoredAccessToken &&
+          accessToken != null &&
+          accessToken.isNotEmpty &&
           error.response?.statusCode == 401 &&
           !hasRetriedAfterRefresh) {
         try {
@@ -258,6 +260,8 @@ class DioApiClient implements ApiClient {
       }
       if (retryOnUnauthorized &&
           usesStoredAccessToken &&
+          accessToken != null &&
+          accessToken.isNotEmpty &&
           hasRetriedAfterRefresh &&
           error.response?.statusCode == 401) {
         await _invalidateSession();

@@ -146,7 +146,7 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
         tokenUrl: _environment.authTokenUrl,
         clientId: _environment.authClientId,
         clientSecret: _environment.authClientSecret,
-        scope: 'IM',
+        scope: 'Chat',
       );
 
   Future<String> _getClientCredentialsToken({

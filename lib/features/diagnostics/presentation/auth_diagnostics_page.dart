@@ -90,6 +90,11 @@ class _AuthDiagnosticsPageState extends ConsumerState<AuthDiagnosticsPage> {
           ),
           const SizedBox(height: 16),
           Text('登录参数', style: Theme.of(context).textTheme.titleMedium),
+          _DebugValue(
+            label: '新登录申请的 scope（旧令牌需重新登录）',
+            value: environment.authScope,
+            onCopy: _copy,
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _usernameController,

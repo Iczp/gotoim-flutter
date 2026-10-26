@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -19,7 +22,10 @@ class _FakeAuthRepository implements AuthRepository {
   Future<bool> restoreSession() async => false;
 
   @override
-  Future<void> login({required String username, required String password}) async {
+  Future<void> login({
+    required String username,
+    required String password,
+  }) async {
     loggedInUsername = username;
     loggedInPassword = password;
   }
@@ -45,16 +51,18 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<AuthSession> refreshSession() async => const AuthSession(
-        accessToken: 'token',
-        refreshToken: 'refresh',
-        expiresIn: Duration(hours: 1),
-      );
+    accessToken: 'token',
+    refreshToken: 'refresh',
+    expiresIn: Duration(hours: 1),
+  );
 
   @override
   Future<Map<String, dynamic>> getUserInfo() async => {'userName': 'test'};
 
   @override
-  Future<Map<String, dynamic>> introspect(RevocationTokenType tokenType) async => {};
+  Future<Map<String, dynamic>> introspect(
+    RevocationTokenType tokenType,
+  ) async => {};
 
   @override
   Future<void> revoke(RevocationTokenType tokenType) async {}
@@ -97,6 +105,46 @@ void main() {
   });
 
   testWidgets(
+    'Windows login initializes with a mouse present and survives route removal',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      const channel = MethodChannel('gotoim/window');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (_) async => null);
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(1180, 15));
+      final auth = AuthController(_FakeAuthRepository(), _FakeSignalRGateway());
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authControllerProvider.overrideWith((ref) => auth),
+            privacyServiceProvider.overrideWith((ref) => _FakePrivacyService()),
+          ],
+          child: const MaterialApp(home: LoginPage()),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.takeException(), isNull);
+      await mouse.moveTo(tester.getCenter(find.byTooltip('切换浅色/深色主题')));
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+      await mouse.moveTo(const Offset(20, 20));
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.takeException(), isNull);
+      await mouse.removePointer();
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
+
+  testWidgets(
     'LoginPage renders without overflow on standard phone viewport and toggles between login and register',
     (tester) async {
       // Standard phone screen resolution: 390x844 (iPhone 12/13/14)
@@ -116,9 +164,7 @@ void main() {
             authControllerProvider.overrideWith((ref) => authController),
             privacyServiceProvider.overrideWith((ref) => fakePrivacy),
           ],
-          child: const MaterialApp(
-            home: LoginPage(),
-          ),
+          child: const MaterialApp(home: LoginPage()),
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
@@ -129,6 +175,37 @@ void main() {
       expect(find.text('登 录'), findsOneWidget);
       expect(find.text('没有账号？立即注册'), findsOneWidget);
       expect(find.text('扫码登录'), findsOneWidget);
+
+      // Exercise the same tooltip State across password/label rebuilds.
+      for (var i = 0; i < 3; i++) {
+        await tester.longPress(find.byTooltip('显示密码'));
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.tap(find.byTooltip('显示密码'));
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.tap(find.byTooltip('隐藏密码'));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(tester.takeException(), isNull);
+      }
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer();
+      for (var i = 0; i < 3; i++) {
+        await mouse.moveTo(tester.getCenter(find.byTooltip('显示密码')));
+        await tester.pump(const Duration(seconds: 1));
+        await mouse.down(tester.getCenter(find.byTooltip('显示密码')));
+        await mouse.up();
+        await tester.pump(const Duration(milliseconds: 300));
+        await mouse.moveTo(tester.getCenter(find.byTooltip('切换浅色/深色主题')));
+        await tester.pump(const Duration(seconds: 1));
+        await mouse.down(tester.getCenter(find.byTooltip('切换浅色/深色主题')));
+        await mouse.up();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.byTooltip('隐藏密码'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.takeException(), isNull);
+      }
+      await mouse.removePointer();
+      await tester.pump(const Duration(seconds: 1));
 
       // Verify confirm password field is NOT present in login mode
       expect(find.text('确认密码'), findsNothing);
