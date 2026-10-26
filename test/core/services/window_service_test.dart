@@ -174,6 +174,31 @@ void main() {
     );
 
     test(
+      'image send request waits for main confirmation callback result',
+      () async {
+        final bytes = Uint8List.fromList([1, 2, 3]);
+        expect(await windowService.requestImageSend(bytes), isFalse);
+        var calls = 0;
+        windowService.onImageSendRequested = (image, fileName, caption) async {
+          calls++;
+          expect(image, bytes);
+          expect(fileName, 'edited.png');
+          expect(caption, 'caption');
+          return false; // User cancelled; never report a successful send.
+        };
+        expect(
+          await windowService.requestImageSend(
+            bytes,
+            fileName: 'edited.png',
+            caption: 'caption',
+          ),
+          isFalse,
+        );
+        expect(calls, 1);
+      },
+    );
+
+    test(
       'Creation failure rolls back atomic opening placeholder and leaves no fake records',
       () async {
         // Temporarily make createWindow throw

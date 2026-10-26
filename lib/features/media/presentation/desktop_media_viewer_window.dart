@@ -16,9 +16,9 @@ import '../../../core/native_window/desktop_window_dock_button.dart';
 import '../../../core/services/media/media_gallery_saver.dart';
 import '../../../core/services/scan/image_qr_detector.dart';
 import '../../../core/services/scan/qr_action_resolver.dart';
+import '../../../core/services/window_service.dart';
 import '../../../core/widgets/app_toast.dart';
-import '../../../core/widgets/target_picker/target_picker.dart';
-import '../../session/application/session_list_controller.dart';
+import '../../chat/presentation/widgets/screenshot_annotation_dialog.dart';
 
 /// 桌面端微信同款独立媒体查看窗口 (DesktopMediaViewerWindow - 查看图片/视频)
 ///
@@ -102,6 +102,8 @@ class _DesktopMediaViewerWindowState
   bool _isLooping = false;
   double _playbackSpeed = 1.0;
   bool _isShowingContextMenu = false;
+  bool _qrScanPending = false;
+  bool _imageActionPending = false;
 
   @override
   void initState() {
@@ -238,8 +240,8 @@ class _DesktopMediaViewerWindowState
   }
 
   /// 获取当前媒体的本地路径（已缓存或下载）
-  Future<String?> _ensureDownloadedLocalPath() async {
-    final item = _currentItem;
+  Future<String?> _ensureDownloadedLocalPath([MediaPreviewItem? target]) async {
+    final item = target ?? _currentItem;
     if (item.localPath != null && item.localPath!.isNotEmpty) {
       if (await File(item.localPath!).exists()) {
         return item.localPath;
@@ -269,12 +271,16 @@ class _DesktopMediaViewerWindowState
   }
 
   /// 获取当前媒体字节流
-  Future<Uint8List?> _getCurrentItemBytes() async {
-    final item = _currentItem;
+  Future<Uint8List?> _getCurrentItemBytes([MediaPreviewItem? target]) async {
+    final item = target ?? _currentItem;
     if (item.bytes != null && item.bytes!.isNotEmpty) {
       return item.bytes;
     }
-    final localPath = await _ensureDownloadedLocalPath();
+    final data = Uri.tryParse(item.source)?.data;
+    if (data != null && data.mimeType.startsWith('image/')) {
+      return data.contentAsBytes();
+    }
+    final localPath = await _ensureDownloadedLocalPath(item);
     if (localPath != null && await File(localPath).exists()) {
       try {
         return await File(localPath).readAsBytes();
@@ -554,57 +560,97 @@ class _DesktopMediaViewerWindowState
   }
 
   Future<void> _handleScanQr() async {
-    if (widget.isSubWindow) {
-      showToast('独立窗口中暂不支持二维码识别', type: ToastType.info);
-      return;
-    }
+    if (_qrScanPending || _currentItem.type != MediaPreviewType.image) return;
+    _qrScanPending = true;
     final detector = ref.read(imageQrDetectorProvider);
     final item = _currentItem;
-    final cacheKey = item.localPath ?? item.source;
-    var qrResult = detector.getCached(cacheKey);
+    final cacheKey = '${item.id}:${item.localPath ?? item.source}';
+    bool isCurrent() => mounted && identical(item, _currentItem);
+    try {
+      showToast('正在识别二维码…', type: ToastType.info);
+      var qrResult = detector.getCached(cacheKey);
 
-    if (qrResult == null && !detector.hasCache(cacheKey)) {
-      Uint8List? bytes = item.bytes;
-      if (bytes == null &&
-          item.localPath != null &&
-          item.localPath!.isNotEmpty) {
-        try {
-          final f = File(item.localPath!);
-          if (await f.exists()) bytes = await f.readAsBytes();
-        } catch (_) {}
-      }
-      if (bytes != null) {
+      if (qrResult == null && !detector.hasCache(cacheKey)) {
+        final bytes = await _getCurrentItemBytes(item);
+        if (!isCurrent()) return;
+        if (bytes == null || bytes.isEmpty) {
+          showToast('读取图片失败，请下载后重试', type: ToastType.warning);
+          return;
+        }
         qrResult = await detector.detectFromBytes(bytes, cacheKey: cacheKey);
       }
-    }
 
-    if (qrResult != null && qrResult.content.isNotEmpty) {
-      final act = await QrActionResolver.resolve(
-        ref: ref,
-        rawText: qrResult.content,
-      );
-      if (act != null && mounted) {
-        await act.onExecute(context, ref);
-        return;
+      if (!isCurrent()) return;
+      if (qrResult != null && qrResult.content.isNotEmpty) {
+        if (widget.isSubWindow) {
+          final handled = await ref
+              .read(windowServiceProvider)
+              .handleImageQrResult(qrResult.content);
+          if (!handled && mounted) {
+            showToast('主窗口暂不可用，请重试', type: ToastType.warning);
+          }
+          return;
+        }
+        final act = await QrActionResolver.resolve(
+          ref: ref,
+          rawText: qrResult.content,
+        );
+        if (act != null && mounted && isCurrent()) {
+          await act.onExecute(context, ref);
+          return;
+        }
       }
+      showToast('未在当前图片中检测到有效二维码', type: ToastType.info);
+    } catch (_) {
+      if (isCurrent()) showToast('二维码识别失败，请重试', type: ToastType.error);
+    } finally {
+      _qrScanPending = false;
     }
-    showToast('未在当前图片中检测到有效二维码', type: ToastType.info);
   }
 
   Future<void> _handleForward() async {
-    final targets = await ForwardTargetPicker.pickTargets(
-      context: context,
-      sessionLoader: () async {
-        if (widget.isSubWindow) return [];
-        final sessionList = ref.read(sessionListControllerProvider);
-        return sessionList.sessions;
-      },
-      title: '发送给朋友',
-    );
-    if (targets == null || targets.isEmpty || !mounted) return;
+    if (_currentItem.type == MediaPreviewType.image) {
+      await _sendImage();
+      return;
+    }
+    showToast('请在聊天消息菜单中转发视频', type: ToastType.info);
+  }
 
-    final targetNames = targets.map((t) => t.title).join('、');
-    showToast('已发送给: $targetNames', type: ToastType.success);
+  Future<void> _sendImage({bool edit = false}) async {
+    if (_imageActionPending || _currentItem.type != MediaPreviewType.image) {
+      return;
+    }
+    _imageActionPending = true;
+    final item = _currentItem;
+    try {
+      var bytes = await _getCurrentItemBytes(item);
+      if (!mounted || !identical(item, _currentItem)) return;
+      if (bytes == null || bytes.isEmpty) {
+        showToast('读取图片失败，请下载后重试', type: ToastType.warning);
+        return;
+      }
+      String? caption;
+      if (edit) {
+        final result = await ScreenshotAnnotationDialog.show(
+          context,
+          imageBytes: bytes,
+        );
+        if (!mounted || result?.confirmed != true) return;
+        bytes = result!.imageBytes;
+        caption = result.caption;
+      }
+      await ref
+          .read(windowServiceProvider)
+          .requestImageSend(
+            bytes,
+            fileName: edit ? 'edited_image.png' : _getDefaultFileName(),
+            caption: caption,
+          );
+    } catch (_) {
+      if (mounted) showToast('图片操作失败，请重试', type: ToastType.error);
+    } finally {
+      _imageActionPending = false;
+    }
   }
 
   /// 弹出桌面端多媒体右键上下文菜单
@@ -664,6 +710,9 @@ class _DesktopMediaViewerWindowState
         break;
       case 'qr':
         await _handleScanQr();
+        break;
+      case 'edit_image':
+        await _sendImage(edit: true);
         break;
       case 'forward':
         await _handleForward();
@@ -826,6 +875,11 @@ class _DesktopMediaViewerWindowState
         value: 'qr',
         icon: Icons.qr_code_scanner_rounded,
         label: '识别图中二维码',
+      ),
+      _buildMenuItem(
+        value: 'edit_image',
+        icon: Icons.edit_outlined,
+        label: '编辑图片',
       ),
       _buildMenuItem(
         value: 'forward',

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/native_window/desktop_window_dock_controller.dart';
@@ -27,6 +29,10 @@ class _Windows extends DefaultWindowService {
   final failedDocks = <String>{};
   final failedUndocks = <String>{};
   Completer<void>? mediaWait;
+  Completer<Uint8List?>? previewWait;
+  @override
+  Future<Uint8List?> captureDockPreview(String targetId) async =>
+      previewWait == null ? Uint8List.fromList([1, 2, 3]) : previewWait!.future;
   @override
   Future<void> bringToFront(String targetId) async {}
   @override
@@ -91,6 +97,63 @@ void main() {
             dock.updateBounds(id, (x: 600, y: 44, width: 520, height: 700));
   });
   tearDown(() => container.dispose());
+
+  testWidgets('modal route keeps preview until native pane is restored', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    final visibility = <bool>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(const MethodChannel('gotoim/window'), (
+      call,
+    ) async {
+      if (call.method == 'setBrowserDockVisible') {
+        visibility.add((call.arguments as Map)['visible'] as bool);
+      }
+      return true;
+    });
+    await tester.runAsync(() => dock.dock(targetId: 'browser'));
+    final covering = dock.setRouteVisible(false);
+    await tester.pump();
+    await tester.pump();
+    await tester.runAsync(() => covering);
+    expect(dock.slot(DesktopWindowDockNotifier.chatRight).routeCovered, isTrue);
+    expect(dock.slot(DesktopWindowDockNotifier.chatRight).preview, [1, 2, 3]);
+    expect(visibility, [false]);
+    await tester.runAsync(() => dock.setRouteVisible(true));
+    expect(dock.slot(DesktopWindowDockNotifier.chatRight).preview, isNull);
+    expect(
+      dock.slot(DesktopWindowDockNotifier.chatRight).routeCovered,
+      isFalse,
+    );
+    expect(visibility, [false, true]);
+    expect(
+      service.events.where((event) => event.startsWith('close:')),
+      isEmpty,
+    );
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('gotoim/window'),
+      null,
+    );
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('closing modal during capture never hides restored browser', (
+    tester,
+  ) async {
+    await tester.runAsync(() => dock.dock(targetId: 'browser'));
+    service.previewWait = Completer<Uint8List?>();
+    final covering = dock.setRouteVisible(false);
+    await dock.setRouteVisible(true);
+    service.previewWait!.complete(Uint8List.fromList([1]));
+    await covering;
+    expect(
+      dock.slot(DesktopWindowDockNotifier.chatRight).routeCovered,
+      isFalse,
+    );
+    expect(dock.slot(DesktopWindowDockNotifier.chatRight).preview, isNull);
+  });
 
   test(
     'replacing a slot pops out its occupant without closing either content',

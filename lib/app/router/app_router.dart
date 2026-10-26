@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/browser/app_webview_page.dart';
+import '../../core/native_window/desktop_window_dock_controller.dart';
 import '../../core/platform/desktop_window_adapter.dart';
 import '../../core/compliance/agreement_viewer_page.dart';
 import '../../core/compliance/privacy_service.dart';
@@ -112,6 +113,8 @@ GoRoute _buildAppRoute({
 /// Small transparent popup menus do not cover the native browser pane. Modal
 /// dialogs/pages still hide it to respect Win32 airspace and modal interaction.
 class DesktopDockRouteObserver extends NavigatorObserver {
+  DesktopDockRouteObserver({this.onVisibilityChanged});
+  final Future<void> Function(bool visible)? onVisibilityChanged;
   final List<Route<dynamic>> _routes = [];
   bool? _visible;
 
@@ -164,7 +167,10 @@ class DesktopDockRouteObserver extends NavigatorObserver {
     final next = chat && !covered;
     if (_visible == next) return;
     _visible = next;
-    unawaited(DesktopWindowAdapter.setBrowserDockVisible(next, route: true));
+    unawaited(
+      onVisibilityChanged?.call(next) ??
+          DesktopWindowAdapter.setBrowserDockVisible(next, route: true),
+    );
   }
 }
 
@@ -173,7 +179,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
-    observers: [StatisticRouteObserver(), DesktopDockRouteObserver()],
+    observers: [
+      StatisticRouteObserver(),
+      DesktopDockRouteObserver(
+        onVisibilityChanged:
+            (visible) => ref
+                .read(desktopWindowDockProvider.notifier)
+                .setRouteVisible(visible),
+      ),
+    ],
     refreshListenable: authNotifier,
     redirect: (context, state) {
       final location = state.uri.path;

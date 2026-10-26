@@ -26,56 +26,62 @@ class DesktopChatOwnerPopover extends ConsumerWidget {
     required SessionListController controller,
     Offset? anchorOffset,
   }) {
-    return showDialog<void>(
-      context: context,
-      barrierColor: Colors.black26,
-      builder: (dialogContext) {
-        final theme = Theme.of(dialogContext);
-        final isDark = theme.brightness == Brightness.dark;
-        final screenSize = MediaQuery.of(dialogContext).size;
-        final left = anchorOffset?.dx ?? 72.0;
-        final bool isNearBottom =
-            anchorOffset != null && anchorOffset.dy > screenSize.height * 0.55;
-        final double? top =
-            isNearBottom
-                ? null
-                : (anchorOffset?.dy ?? 20.0).clamp(16.0, screenSize.height - 120);
-        final double? bottom =
-            isNearBottom
-                ? (screenSize.height - anchorOffset.dy - 40)
-                    .clamp(16.0, screenSize.height - 200)
-                : null;
+    return Navigator.of(context, rootNavigator: true).push<void>(
+      _OwnerPopoverRoute(
+        builder: (dialogContext) {
+          final theme = Theme.of(dialogContext);
+          final isDark = theme.brightness == Brightness.dark;
+          final screenSize = MediaQuery.of(dialogContext).size;
+          final left = anchorOffset?.dx ?? 72.0;
+          final bool isNearBottom =
+              anchorOffset != null &&
+              anchorOffset.dy > screenSize.height * 0.55;
+          final double? top =
+              isNearBottom
+                  ? null
+                  : (anchorOffset?.dy ?? 20.0).clamp(
+                    16.0,
+                    screenSize.height - 120,
+                  );
+          final double? bottom =
+              isNearBottom
+                  ? (screenSize.height - anchorOffset.dy - 40).clamp(
+                    16.0,
+                    screenSize.height - 200,
+                  )
+                  : null;
 
-        return Stack(
-          children: [
-            Positioned(
-              left: left,
-              top: top,
-              bottom: bottom,
-              child: Material(
-                color: Colors.transparent,
-                child: GlassContainer(
-                  borderRadius: BorderRadius.circular(14),
-                  borderWidth: 1,
-                  blurSigma: 24,
-                  backgroundColor:
-                      isDark
-                          ? const Color(0xE6252525)
-                          : const Color(0xF2FFFFFF),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minWidth: 280,
-                      maxWidth: 320,
-                      maxHeight: 520,
+          return Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: top,
+                bottom: bottom,
+                child: Material(
+                  color: Colors.transparent,
+                  child: GlassContainer(
+                    borderRadius: BorderRadius.circular(14),
+                    borderWidth: 1,
+                    blurSigma: 24,
+                    backgroundColor:
+                        isDark
+                            ? const Color(0xE6252525)
+                            : const Color(0xF2FFFFFF),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minWidth: 280,
+                        maxWidth: 320,
+                        maxHeight: 520,
+                      ),
+                      child: DesktopChatOwnerPopover(controller: controller),
                     ),
-                    child: DesktopChatOwnerPopover(controller: controller),
                   ),
                 ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -167,6 +173,40 @@ class DesktopChatOwnerPopover extends ConsumerWidget {
   }
 }
 
+/// A local popover must not hide native docked panes like a modal dialog does.
+class _OwnerPopoverRoute extends PopupRoute<void> {
+  _OwnerPopoverRoute({required this.builder});
+
+  final WidgetBuilder builder;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  String get barrierLabel => '关闭身份切换';
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 120);
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) => SafeArea(child: builder(context));
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => FadeTransition(opacity: animation, child: child);
+}
+
 class _OwnerCard extends StatelessWidget {
   const _OwnerCard({
     required this.owner,
@@ -197,8 +237,13 @@ class _OwnerCard extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: ListTile(
           dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 2,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           leading: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -250,7 +295,10 @@ class _OwnerCard extends StatelessWidget {
               if (owner.typeDescription.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(top: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color:
                         isDark

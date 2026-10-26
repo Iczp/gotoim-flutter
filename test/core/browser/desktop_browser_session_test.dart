@@ -193,6 +193,23 @@ void main() {
   }
 
   testWidgets(
+    'modal preview captures existing page without navigation or disposal',
+    (tester) async {
+      await open(tester);
+      final surface = platform.mounted['https://a.test']!;
+      surface.controller.screenshot = Uint8List.fromList([1, 2, 3]);
+      surface.text.text = 'unsent form';
+      final bytes = await handler(const MethodCall('window_dock_preview'));
+      expect(bytes, [1, 2, 3]);
+      expect(surface.text.text, 'unsent form');
+      expect(surface.controller.loaded, isEmpty);
+      expect(platform.created, ['https://a.test']);
+      expect(platform.disposed, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'first paint replaces loading feedback without recreating the page',
     (tester) async {
       platform.autoCommit = false;

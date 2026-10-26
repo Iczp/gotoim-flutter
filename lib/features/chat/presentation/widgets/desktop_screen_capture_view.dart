@@ -62,6 +62,10 @@ class _DesktopScreenCaptureViewState
   bool _isLoading = false;
 
   Rect? _cropRect;
+  Rect? _hoverRect;
+  Rect? _pointerWindowCandidate;
+  List<Rect> _windowRegions = const [];
+  Size _capturePixelSize = Size.zero;
   _CropPhase _phase = _CropPhase.none;
   _ResizeHandle? _activeHandle;
   Offset? _dragStart;
@@ -125,6 +129,7 @@ class _DesktopScreenCaptureViewState
             x: x,
             y: y,
             dpi: dpi,
+            windows: args['windows'] as List?,
           );
         }
         return true;
@@ -143,11 +148,30 @@ class _DesktopScreenCaptureViewState
     required int x,
     required int y,
     required int dpi,
+    List? windows,
   }) async {
     final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _cropRect = null;
+      _hoverRect = null;
+      _pointerWindowCandidate = null;
+      _capturePixelSize = Size(width.toDouble(), height.toDouble());
+      _windowRegions =
+          [
+            for (final value in windows ?? const [])
+              if (value is Map &&
+                  value['x'] is num &&
+                  value['y'] is num &&
+                  value['width'] is num &&
+                  value['height'] is num)
+                Rect.fromLTWH(
+                  (value['x'] as num).toDouble() - x,
+                  (value['y'] as num).toDouble() - y,
+                  (value['width'] as num).toDouble(),
+                  (value['height'] as num).toDouble(),
+                ).intersect(Offset.zero & _capturePixelSize),
+          ].where((rect) => rect.width >= 16 && rect.height >= 16).toList();
       _phase = _CropPhase.none;
       _activeHandle = null;
       _activePointer = null;
@@ -251,6 +275,10 @@ class _DesktopScreenCaptureViewState
   }
 
   void _onHover(PointerHoverEvent event) {
+    if (_phase == _CropPhase.none && _baseImage != null) {
+      final next = _windowAt(event.localPosition);
+      if (next != _hoverRect) setState(() => _hoverRect = next);
+    }
     if (_phase == _CropPhase.selected && _cropRect != null) {
       final pos = event.localPosition;
       final handle = _hitTestHandle(pos, _cropRect!);
@@ -275,6 +303,22 @@ class _DesktopScreenCaptureViewState
         setState(() => _cursor = SystemMouseCursors.basic);
       }
     }
+  }
+
+  Rect? _windowAt(Offset point) {
+    if (_canvasSize.isEmpty || _capturePixelSize.isEmpty) return null;
+    final sx = _canvasSize.width / _capturePixelSize.width;
+    final sy = _canvasSize.height / _capturePixelSize.height;
+    for (final region in _windowRegions) {
+      final rect = Rect.fromLTRB(
+        region.left * sx,
+        region.top * sy,
+        region.right * sx,
+        region.bottom * sy,
+      );
+      if (rect.contains(point)) return rect;
+    }
+    return null;
   }
 
   Offset _clampToCanvas(Offset point) => Offset(
@@ -738,6 +782,14 @@ class _DesktopScreenCaptureViewState
     _activePointer = event.pointer;
     _pointerDownPosition = event.localPosition;
     _pointerMoved = false;
+    _pointerWindowCandidate =
+        _phase == _CropPhase.none ||
+                (_phase == _CropPhase.selected &&
+                    _cropRect?.inflate(12).contains(event.localPosition) !=
+                        true)
+            ? _windowAt(event.localPosition)
+            : null;
+    _hoverRect = null;
     _onPanStart(DragStartDetails(localPosition: event.localPosition));
   }
 
@@ -758,6 +810,14 @@ class _DesktopScreenCaptureViewState
   void _onPointerUp(PointerUpEvent event) {
     if (_activePointer != event.pointer) return;
     _activePointer = null;
+    final window = _pointerWindowCandidate;
+    _pointerWindowCandidate = null;
+    if (!_pointerMoved && window != null) {
+      setState(() {
+        _cropRect = window;
+        _phase = _CropPhase.selected;
+      });
+    }
     _onPanEnd(DragEndDetails());
     if (_pointerMoved ||
         _cropRect?.contains(event.localPosition) != true ||
@@ -780,6 +840,7 @@ class _DesktopScreenCaptureViewState
   void _onPointerCancel(PointerCancelEvent event) {
     if (_activePointer != event.pointer) return;
     _activePointer = null;
+    _pointerWindowCandidate = null;
     _resetToolDrag();
     _onPanEnd(DragEndDetails());
   }
@@ -924,7 +985,7 @@ class _DesktopScreenCaptureViewState
                         painter: _ScreenCaptureCanvasPainter(
                           baseImage: _baseImage,
                           canvasSize: _canvasSize,
-                          cropRect: _cropRect,
+                          cropRect: _cropRect ?? _hoverRect,
                           phase: _phase,
                           annotations: _annotations,
                           currentTool: _currentTool,
@@ -970,7 +1031,7 @@ class _DesktopScreenCaptureViewState
                             ),
                             SizedBox(width: 8),
                             Text(
-                              '按住鼠标左键拖拽框选截图区域 · Esc 退出截图',
+                              '单击选取窗口 · 按住左键拖拽自由框选 · Esc 退出截图',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 13,

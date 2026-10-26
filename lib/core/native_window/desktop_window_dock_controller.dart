@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../platform/desktop_window_adapter.dart';
 import '../services/window_service.dart';
 
 enum WindowDockingStatus { unattached, docking, docked, undocking }
@@ -11,12 +14,16 @@ class DesktopWindowDockState {
     this.width = 520,
     this.lastError,
     this.requestSeq = 0,
+    this.routeCovered = false,
+    this.preview,
   });
   final String? targetId;
   final WindowDockingStatus status;
   final double width;
   final String? lastError;
   final int requestSeq;
+  final bool routeCovered;
+  final Uint8List? preview;
   bool get isDocked => status == WindowDockingStatus.docked;
   bool get isTransitioning =>
       status == WindowDockingStatus.docking ||
@@ -29,12 +36,17 @@ class DesktopWindowDockState {
     String? lastError,
     int? requestSeq,
     bool clearError = false,
+    bool? routeCovered,
+    Uint8List? preview,
+    bool clearPreview = false,
   }) => DesktopWindowDockState(
     targetId: targetId ?? this.targetId,
     status: status ?? this.status,
     width: width ?? this.width,
     lastError: clearError ? null : lastError ?? this.lastError,
     requestSeq: requestSeq ?? this.requestSeq,
+    routeCovered: routeCovered ?? this.routeCovered,
+    preview: clearPreview ? null : preview ?? this.preview,
   );
 }
 
@@ -51,6 +63,47 @@ class DesktopWindowDockNotifier
   final _updating = <String>{};
   final _generations = <String, int>{};
   bool _disposed = false;
+  int _routeRevision = 0;
+
+  /// Keep a memory-only preview underneath modal Flutter routes. The native
+  /// window remains alive, but must hide so it cannot paint over the dialog.
+  Future<void> setRouteVisible(bool visible) async {
+    final revision = ++_routeRevision;
+    if (visible) {
+      await DesktopWindowAdapter.setBrowserDockVisible(true, route: true);
+      if (_disposed || revision != _routeRevision) return;
+      for (final id in state.keys.toList()) {
+        _put(id, slot(id).copyWith(routeCovered: false, clearPreview: true));
+      }
+      return;
+    }
+    final targets = Map.of(state);
+    await Future.wait(
+      targets.entries.where((entry) => entry.value.isDocked).map((entry) async {
+        final bytes = await _service.captureDockPreview(entry.value.targetId!);
+        if (_disposed ||
+            revision != _routeRevision ||
+            slot(entry.key).targetId != entry.value.targetId ||
+            !slot(entry.key).isDocked) {
+          return;
+        }
+        _put(
+          entry.key,
+          slot(entry.key).copyWith(
+            routeCovered: true,
+            preview: bytes,
+            clearPreview: bytes == null,
+          ),
+        );
+      }),
+    );
+    if (_disposed || revision != _routeRevision) return;
+    // Paint the replacement before exposing it by hiding the native HWND.
+    await WidgetsBinding.instance.endOfFrame;
+    if (_disposed || revision != _routeRevision) return;
+    await DesktopWindowAdapter.setBrowserDockVisible(false, route: true);
+  }
+
   DefaultWindowService get _service =>
       ref.read(windowServiceProvider) as DefaultWindowService;
   DesktopWindowDockState slot(String id) =>
@@ -120,6 +173,8 @@ class DesktopWindowDockNotifier
         status: WindowDockingStatus.docking,
         requestSeq: previous.requestSeq + 1,
         clearError: true,
+        routeCovered: false,
+        clearPreview: true,
       ),
     );
     try {

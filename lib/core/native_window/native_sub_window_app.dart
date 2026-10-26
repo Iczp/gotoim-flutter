@@ -351,6 +351,10 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             });
           }
           return true;
+        case 'window_dock_preview':
+          return _childMethodHandler == null
+              ? null
+              : await _childMethodHandler!(call);
         case 'window_content_diagnostics':
           return _childMethodHandler == null
               ? {'type': _currentPayload.type.name}
@@ -440,6 +444,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         case 'account_logout':
           await _handleLogout(notifyMain: false);
           return true;
+        case 'window_hide_for_action':
         case 'hide_profile':
           await DesktopWindowAdapter.hide();
           if (_childMethodHandler != null) {
@@ -648,6 +653,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
 
     if (_currentPayload.type == SubWindowType.localFileServer) {
       return MaterialApp.router(
+        locale: AppLocalization.locale,
+        supportedLocales: AppLocalization.supportedLocales,
+        localizationsDelegates: AppLocalization.delegates,
         title: _currentPayload.title,
         debugShowCheckedModeBanner: false,
         themeMode: _themeMode,
@@ -659,6 +667,10 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
     }
 
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
+      locale: AppLocalization.locale,
+      supportedLocales: AppLocalization.supportedLocales,
+      localizationsDelegates: AppLocalization.delegates,
       title: _currentPayload.title,
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,

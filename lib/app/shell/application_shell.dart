@@ -13,9 +13,13 @@ import '../../core/platform/desktop_window_adapter.dart';
 import '../../core/services/tray_grouped_unread_provider.dart';
 import '../../core/services/tray_service.dart';
 import '../../core/services/window_service.dart';
+import '../../core/services/scan/qr_action_resolver.dart';
 import '../../core/theme/tab_glass_controller.dart';
 import '../../core/widgets/app_badge.dart';
 import '../../core/widgets/glass_container.dart';
+import '../../core/widgets/app_toast.dart';
+import '../../core/widgets/target_picker/target_picker.dart';
+import '../../features/chat/presentation/widgets/clipboard_image_confirm_dialog.dart';
 import '../../features/app_update/application/app_update_service.dart';
 import '../../features/home/presentation/home_sections.dart';
 import '../app_navigation.dart';
@@ -54,6 +58,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
   // not recreate lists, restart requests, or reset their scroll positions.
   final Set<HomeSection> _visitedSections = <HomeSection>{HomeSection.messages};
   DateTime? _lastMessagesTabTap;
+  bool _imageSendPending = false;
 
   @override
   void initState() {
@@ -63,6 +68,8 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
     if (windowService is DefaultWindowService) {
       _browserWindowService = windowService;
       windowService.onWindowDockLayoutRequested = _prepareBrowserDock;
+      windowService.onImageQrRequested = _handleImageQr;
+      windowService.onImageSendRequested = _handleImageSend;
     }
     HardwareKeyboard.instance.addHandler(_handleAppWideKeyEvent);
     DesktopWindowAdapter.onHotkey = _handleHotkeyAction;
@@ -116,11 +123,100 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
         windowService.onWindowDockLayoutRequested == _prepareBrowserDock) {
       windowService.onWindowDockLayoutRequested = null;
     }
+    if (windowService?.onImageQrRequested == _handleImageQr) {
+      windowService?.onImageQrRequested = null;
+    }
+    if (windowService?.onImageSendRequested == _handleImageSend) {
+      windowService?.onImageSendRequested = null;
+    }
     HardwareKeyboard.instance.removeHandler(_handleAppWideKeyEvent);
     if (DesktopWindowAdapter.onHotkey == _handleHotkeyAction) {
       DesktopWindowAdapter.onHotkey = null;
     }
     super.dispose();
+  }
+
+  Future<bool> _handleImageQr(String text) async {
+    if (!mounted) return false;
+    final action = await QrActionResolver.resolve(ref: ref, rawText: text);
+    if (!mounted || action == null) return false;
+    await action.onExecute(context, ref);
+    return true;
+  }
+
+  Future<bool> _handleImageSend(
+    Uint8List bytes,
+    String? fileName,
+    String? caption,
+  ) async {
+    if (!mounted || _imageSendPending) return false;
+    final sender = _browserWindowService?.imageSender;
+    if (sender == null) return false;
+    _imageSendPending = true;
+    try {
+      final sessions = ref.read(sessionListControllerProvider);
+      final owner = sessions.currentOwnerId;
+      if (owner == null) return false;
+      final targets = await ForwardTargetPicker.pickTargets(
+        context: context,
+        sessions: sessions.sessions,
+        title: '发送给朋友',
+        multiple: true,
+      );
+      if (!mounted || targets == null || targets.isEmpty) return false;
+      bool sameOwner() => mounted && sessions.currentOwnerId == owner;
+      if (!sameOwner()) return false;
+      Future<bool> send(Uint8List image, String? message) async {
+        if (!sameOwner()) return false;
+        var sent = 0;
+        try {
+          for (final target in targets) {
+            if (!sameOwner() || target.ownerId != owner) {
+              throw StateError('聊天身份已改变');
+            }
+            await sender(
+              ownerId: owner,
+              sessionUnitId: target.id,
+              bytes: image,
+              fileName:
+                  identical(image, bytes)
+                      ? fileName ?? 'image.png'
+                      : 'edited_image.png',
+              caption: message,
+            );
+            sent++;
+          }
+          showToast(
+            '已发送给 ${targets.map((item) => item.title).join('、')}',
+            type: ToastType.success,
+          );
+          return true;
+        } catch (_) {
+          showToast(
+            '已发送 $sent/${targets.length} 个会话，其余发送失败，请检查后重试',
+            type: ToastType.error,
+          );
+          return false;
+        }
+      }
+
+      Future<bool>? editedSend;
+      final result = await ClipboardImageConfirmDialog.show(
+        context,
+        imageBytes: bytes,
+        initialCaption: caption,
+        recipientLabel: targets.map((item) => item.title).join('、'),
+        onAnnotatedSend: (image, message) async {
+          editedSend = send(image, message);
+          await editedSend;
+        },
+      );
+      if (editedSend != null) return await editedSend!;
+      if (result?.confirmed != true || !sameOwner()) return false;
+      return await send(bytes, result?.caption);
+    } finally {
+      _imageSendPending = false;
+    }
   }
 
   void _handleHotkeyAction(String action) {

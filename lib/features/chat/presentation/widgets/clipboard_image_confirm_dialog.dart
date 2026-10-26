@@ -17,11 +17,13 @@ class ClipboardImageConfirmDialog extends StatefulWidget {
     required this.imageBytes,
     this.initialCaption,
     this.onAnnotatedSend,
+    this.recipientLabel,
     super.key,
   });
 
   final Uint8List imageBytes;
   final String? initialCaption;
+  final String? recipientLabel;
   final Future<void> Function(Uint8List annotatedBytes, String? caption)?
   onAnnotatedSend;
 
@@ -30,6 +32,7 @@ class ClipboardImageConfirmDialog extends StatefulWidget {
     BuildContext context, {
     required Uint8List imageBytes,
     String? initialCaption,
+    String? recipientLabel,
     Future<void> Function(Uint8List annotatedBytes, String? caption)?
     onAnnotatedSend,
   }) {
@@ -54,6 +57,7 @@ class ClipboardImageConfirmDialog extends StatefulWidget {
           child: ClipboardImageConfirmDialog(
             imageBytes: imageBytes,
             initialCaption: initialCaption,
+            recipientLabel: recipientLabel,
             onAnnotatedSend: onAnnotatedSend,
           ),
         );
@@ -68,6 +72,7 @@ class ClipboardImageConfirmDialog extends StatefulWidget {
 
 class _ClipboardImageConfirmDialogState
     extends State<ClipboardImageConfirmDialog> {
+  Uint8List? _editedBytes;
   late final TextEditingController _captionController;
   final FocusNode _focusNode = FocusNode();
 
@@ -86,6 +91,12 @@ class _ClipboardImageConfirmDialogState
 
   void _onConfirm() {
     final caption = _captionController.text.trim();
+    final edited = _editedBytes;
+    if (edited != null && widget.onAnnotatedSend != null) {
+      Navigator.of(context).pop((confirmed: false, caption: null));
+      widget.onAnnotatedSend!(edited, caption.isNotEmpty ? caption : null);
+      return;
+    }
     Navigator.of(
       context,
     ).pop((confirmed: true, caption: caption.isNotEmpty ? caption : null));
@@ -186,6 +197,15 @@ class _ClipboardImageConfirmDialogState
                 ),
               ),
 
+              if (widget.recipientLabel != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: Text(
+                    '发送给：${widget.recipientLabel}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               // 2. 图片缩略预览区
               Flexible(
                 child: Padding(
@@ -193,17 +213,21 @@ class _ClipboardImageConfirmDialogState
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        constraints: const BoxConstraints(maxHeight: 250),
-                        decoration: BoxDecoration(
-                          color:
-                              isDark ? Colors.black26 : const Color(0xFFF0F0F0),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Image.memory(
-                          widget.imageBytes,
-                          fit: BoxFit.contain,
+                      Flexible(
+                        child: Container(
+                          constraints: const BoxConstraints(maxHeight: 250),
+                          decoration: BoxDecoration(
+                            color:
+                                isDark
+                                    ? Colors.black26
+                                    : const Color(0xFFF0F0F0),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Image.memory(
+                            _editedBytes ?? widget.imageBytes,
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -221,7 +245,7 @@ class _ClipboardImageConfirmDialogState
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              '剪贴板图片 · ${_formatSize(widget.imageBytes.lengthInBytes)}',
+                              '图片 · ${_formatSize((_editedBytes ?? widget.imageBytes).lengthInBytes)}',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: textSecondary,
@@ -266,31 +290,45 @@ class _ClipboardImageConfirmDialogState
 
               // 4. 底部操作按钮栏 (取消 / 确认发送)
               Container(
-                height: 48,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                constraints: const BoxConstraints(minHeight: 48),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 color: headerBg,
-                child: Row(
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
                   children: [
                     // 微信同款: "编辑 / 标注" 入口
                     TextButton.icon(
-                      onPressed: () async {
-                        final currentCaption = _captionController.text.trim();
-                        Navigator.of(context).pop((confirmed: false, caption: null));
-                        final result = await ScreenshotAnnotationDialog.show(
-                          context,
-                          imageBytes: widget.imageBytes,
-                          initialCaption:
-                              currentCaption.isNotEmpty ? currentCaption : null,
-                        );
-                        if (result != null && result.confirmed) {
-                          if (widget.onAnnotatedSend != null) {
-                            await widget.onAnnotatedSend!(
-                              result.imageBytes,
-                              result.caption,
-                            );
-                          }
-                        }
-                      },
+                      onPressed:
+                          widget.onAnnotatedSend == null
+                              ? null
+                              : () async {
+                                final currentCaption =
+                                    _captionController.text.trim();
+                                final result =
+                                    await ScreenshotAnnotationDialog.show(
+                                      context,
+                                      imageBytes:
+                                          _editedBytes ?? widget.imageBytes,
+                                      initialCaption:
+                                          currentCaption.isNotEmpty
+                                              ? currentCaption
+                                              : null,
+                                    );
+                                if (result != null &&
+                                    result.confirmed &&
+                                    mounted) {
+                                  setState(
+                                    () => _editedBytes = result.imageBytes,
+                                  );
+                                  _captionController.text =
+                                      result.caption ?? '';
+                                }
+                              },
                       icon: const Icon(Icons.draw_outlined, size: 16),
                       label: const Text('编辑 / 标注'),
                       style: TextButton.styleFrom(
@@ -299,7 +337,6 @@ class _ClipboardImageConfirmDialogState
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                       ),
                     ),
-                    const Spacer(),
                     TextButton(
                       onPressed: _onCancel,
                       style: TextButton.styleFrom(
@@ -309,7 +346,6 @@ class _ClipboardImageConfirmDialogState
                       ),
                       child: const Text('取消 (Esc)'),
                     ),
-                    const SizedBox(width: 10),
                     FilledButton(
                       onPressed: _onConfirm,
                       style: FilledButton.styleFrom(

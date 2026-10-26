@@ -82,6 +82,23 @@ void main() {
             'width': (800 * ratio).round(),
             'height': (600 * ratio).round(),
             'dpi': (96 * ratio).round(),
+            'x': (-400 * ratio).round(),
+            'y': (-100 * ratio).round(),
+            // Global physical coordinates, frontmost region first.
+            'windows': [
+              {
+                'x': (-300 * ratio).round(),
+                'y': 0,
+                'width': (200 * ratio).round(),
+                'height': (150 * ratio).round(),
+              },
+              {
+                'x': (-350 * ratio).round(),
+                'y': (-50 * ratio).round(),
+                'width': (450 * ratio).round(),
+                'height': (350 * ratio).round(),
+              },
+            ],
           }),
         );
       });
@@ -105,6 +122,27 @@ void main() {
       }
 
       final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await pointer.addPointer(location: const Offset(10, 10));
+      await pointer.moveTo(const Offset(200, 175));
+      await tester.pump();
+      expect(crop(), const Rect.fromLTRB(100, 100, 300, 250));
+      await pointer.moveTo(const Offset(400, 300));
+      await tester.pump();
+      expect(crop(), const Rect.fromLTWH(50, 50, 450, 350));
+      await pointer.down(const Offset(200, 175));
+      await pointer.up();
+      await tester.pump();
+      expect(crop(), const Rect.fromLTRB(100, 100, 300, 250));
+      // Dragging outside the selected window always starts a free selection.
+      await pointer.down(const Offset(550, 420));
+      await pointer.moveTo(const Offset(650, 500));
+      await pointer.up();
+      await tester.pump();
+      expect(crop(), const Rect.fromLTWH(550, 420, 100, 80));
+      await pointer.down(const Offset(700, 100));
+      await pointer.up();
+      await tester.pump();
+      expect(crop(), isNull);
       await pointer.down(const Offset(100, 100));
       // No gesture slop or double-click delay: even the first 2px count.
       await pointer.moveTo(const Offset(102, 102));

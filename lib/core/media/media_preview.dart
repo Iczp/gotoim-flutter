@@ -466,6 +466,26 @@ abstract class MediaPreview {
     required WidgetRef ref,
     required MediaPreviewItem item,
   }) async {
+    if (item.type == MediaPreviewType.image) {
+      try {
+        var bytes = item.bytes;
+        if (bytes == null || bytes.isEmpty) {
+          final downloader = DefaultMediaDownloader.instance;
+          final path =
+              item.localPath ??
+              await downloader.getCachedPath(item) ??
+              await downloader.download(item);
+          bytes = await File(path).readAsBytes();
+        }
+        if (!context.mounted) return;
+        await ref
+            .read(windowServiceProvider)
+            .requestImageSend(bytes, fileName: item.fileName);
+      } catch (_) {
+        showToast('图片读取或发送失败，请重试', type: ToastType.error);
+      }
+      return;
+    }
     final targets = await ForwardTargetPicker.pickTargets(
       context: context,
       sessionLoader: () async {

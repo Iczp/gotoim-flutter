@@ -34,6 +34,45 @@
 static HWND g_main_window = nullptr;
 static HWND g_main_child_content = nullptr;
 
+// EnumWindows visits top-level windows in front-to-back Z order. Snapshot the
+// geometry before showing the capture overlay, so it cannot select itself.
+static flutter::EncodableList CaptureWindowRegions(const RECT& desktop) {
+  struct Context {
+    RECT desktop;
+    flutter::EncodableList regions;
+  } context{desktop, {}};
+  EnumWindows([](HWND window, LPARAM parameter) -> BOOL {
+    auto& context = *reinterpret_cast<Context*>(parameter);
+    if (!IsWindowVisible(window) || IsIconic(window)) return TRUE;
+    const auto ex_style = GetWindowLongPtr(window, GWL_EXSTYLE);
+    if (ex_style & (WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)) return TRUE;
+    DWORD cloaked = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(window, DWMWA_CLOAKED,
+                                       &cloaked, sizeof(cloaked))) && cloaked) return TRUE;
+    wchar_t class_name[128]{};
+    GetClassNameW(window, class_name, 128);
+    if (wcscmp(class_name, L"Progman") == 0 ||
+        wcscmp(class_name, L"WorkerW") == 0 ||
+        wcscmp(class_name, L"Shell_TrayWnd") == 0 ||
+        wcscmp(class_name, L"Shell_SecondaryTrayWnd") == 0) return TRUE;
+    RECT bounds{};
+    if (FAILED(DwmGetWindowAttribute(window, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                     &bounds, sizeof(bounds))) &&
+        !GetWindowRect(window, &bounds)) return TRUE;
+    RECT clipped{};
+    if (!IntersectRect(&clipped, &bounds, &context.desktop) ||
+        clipped.right - clipped.left < 16 || clipped.bottom - clipped.top < 16) return TRUE;
+    flutter::EncodableMap region;
+    region[flutter::EncodableValue("x")] = flutter::EncodableValue(static_cast<int32_t>(clipped.left));
+    region[flutter::EncodableValue("y")] = flutter::EncodableValue(static_cast<int32_t>(clipped.top));
+    region[flutter::EncodableValue("width")] = flutter::EncodableValue(static_cast<int32_t>(clipped.right - clipped.left));
+    region[flutter::EncodableValue("height")] = flutter::EncodableValue(static_cast<int32_t>(clipped.bottom - clipped.top));
+    context.regions.emplace_back(region);
+    return TRUE;
+  }, reinterpret_cast<LPARAM>(&context));
+  return context.regions;
+}
+
 static void DockLog(const char* format, ...) {
   char buffer[512];
   va_list args;
@@ -1085,6 +1124,7 @@ class WindowControls : public flutter::Plugin {
         int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
         if (vw <= 0) vw = GetSystemMetrics(SM_CXSCREEN);
         if (vh <= 0) vh = GetSystemMetrics(SM_CYSCREEN);
+        const auto window_regions = CaptureWindowRegions(RECT{vx, vy, vx + vw, vy + vh});
 
         HDC hScreenDC = GetDC(nullptr);
         HDC hMemDC = CreateCompatibleDC(hScreenDC);
@@ -1131,6 +1171,7 @@ class WindowControls : public flutter::Plugin {
         }
 
         flutter::EncodableMap res;
+        res[flutter::EncodableValue("windows")] = flutter::EncodableValue(window_regions);
         res[flutter::EncodableValue("path")] = flutter::EncodableValue(Narrow(file_path));
         res[flutter::EncodableValue("x")] = flutter::EncodableValue(static_cast<int32_t>(vx));
         res[flutter::EncodableValue("y")] = flutter::EncodableValue(static_cast<int32_t>(vy));

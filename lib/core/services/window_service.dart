@@ -213,6 +213,14 @@ abstract class WindowService {
 
   /// 唤醒独立截图标注窗口进行桌面截取，返回标注合成后的图像字节流
   Future<Uint8List?> captureScreenInteractive({bool hideMainWindow = true});
+
+  /// Dispatch decoded image QR content in the authenticated main window.
+  Future<bool> handleImageQrResult(String content);
+  Future<bool> requestImageSend(
+    Uint8List bytes, {
+    String? fileName,
+    String? caption,
+  });
 }
 
 typedef MessageSenderCallback =
@@ -276,6 +284,9 @@ class DefaultWindowService implements WindowService {
   Future<void> Function()? onBrowserStandaloneRequested;
   Future<void> Function()? onBrowserDockLayoutRequested;
   Future<void> Function(String slotId)? onWindowDockLayoutRequested;
+  Future<bool> Function(String content)? onImageQrRequested;
+  Future<bool> Function(Uint8List bytes, String? fileName, String? caption)?
+  onImageSendRequested;
   Future<void> Function({required String targetId, String slotId})?
   onWindowDockRequested;
   Future<void> Function({required String targetId, bool showWindow})?
@@ -506,6 +517,18 @@ class DefaultWindowService implements WindowService {
             final args = call.arguments as Map?;
             onBrowserLoadCompleted?.call(args);
             return true;
+          case 'image_qr_result':
+            final content = (call.arguments as Map?)?['content'];
+            return content is String && await handleImageQrResult(content);
+          case 'media_send_image':
+            final args = call.arguments as Map?;
+            final bytes = args?['bytes'];
+            if (bytes is! List || bytes.isEmpty) return false;
+            return requestImageSend(
+              Uint8List.fromList(bytes.cast<int>()),
+              fileName: args?['fileName'] as String?,
+              caption: args?['caption'] as String?,
+            );
           case 'request_window_dock':
             final args = call.arguments as Map;
             await dock(
@@ -863,6 +886,65 @@ class DefaultWindowService implements WindowService {
           'showWindow': showWindow,
         }) ??
         false;
+  }
+
+  @override
+  Future<bool> handleImageQrResult(String content) async {
+    final text = content.trim();
+    if (text.isEmpty) return false;
+    if (isSubWindow) {
+      return await _mainChannel.invokeMethod<bool>('image_qr_result', {
+            'content': text,
+          }) ??
+          false;
+    }
+    final handler = onImageQrRequested;
+    if (handler == null) return false;
+    // The cached viewer is hidden, not destroyed, before main-window routing.
+    await closeWindow('tool:media');
+    await bringToFront('main');
+    return handler(text);
+  }
+
+  @override
+  Future<bool> requestImageSend(
+    Uint8List bytes, {
+    String? fileName,
+    String? caption,
+  }) async {
+    if (bytes.isEmpty) return false;
+    if (isSubWindow) {
+      return await _mainChannel.invokeMethod<bool>('media_send_image', {
+            'bytes': bytes,
+            'fileName': fileName,
+            'caption': caption,
+          }) ??
+          false;
+    }
+    final handler = onImageSendRequested;
+    if (handler == null) return false;
+    final viewer = _nativeControllers['tool:media'];
+    try {
+      await viewer?.invokeMethod('window_hide_for_action');
+      await bringToFront('main');
+      return await handler(bytes, fileName, caption);
+    } finally {
+      if (viewer != null &&
+          identical(_nativeControllers['tool:media'], viewer)) {
+        await viewer.invokeMethod('bringToFront');
+      }
+    }
+  }
+
+  Future<Uint8List?> captureDockPreview(String targetId) async {
+    try {
+      final result = await _nativeControllers[targetId]
+          ?.invokeMethod<Uint8List>('window_dock_preview')
+          .timeout(const Duration(milliseconds: 500));
+      return result == null || result.isEmpty ? null : result;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<Map<String, dynamic>> inspectWindowDock(String targetId) async {
@@ -1359,6 +1441,7 @@ class DefaultWindowService implements WindowService {
     try {
       await controller.invokeMethod('show_screen_capture', {
         'imagePath': rawPath,
+        'windows': capResult['windows'],
         'x': vx,
         'y': vy,
         'width': vw,

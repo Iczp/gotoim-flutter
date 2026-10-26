@@ -69,6 +69,22 @@ class _DesktopDockSlotState extends ConsumerState<DesktopDockSlot>
       desktopWindowDockProvider.select((state) => state[widget.slotId]),
     );
     _schedule();
+    if (slot?.routeCovered == true) {
+      final bytes = slot?.preview;
+      return ColoredBox(
+        color: Theme.of(context).colorScheme.surface,
+        child:
+            bytes == null
+                ? const Center(child: Text('关闭弹窗后继续浏览'))
+                : Image.memory(
+                  bytes,
+                  fit: BoxFit.fill,
+                  gaplessPlayback: true,
+                  errorBuilder:
+                      (_, _, _) => const Center(child: Text('关闭弹窗后继续浏览')),
+                ),
+      );
+    }
     if (slot?.status == WindowDockingStatus.docking) {
       return DesktopWindowLoading(
         message: slot?.targetId == 'tool:browser' ? '正在打开浏览器…' : '正在打开窗口…',

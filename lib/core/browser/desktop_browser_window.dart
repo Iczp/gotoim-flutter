@@ -533,6 +533,27 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
   }
 
   Future<dynamic> _handleWindowMethodCall(MethodCall call) async {
+    if (call.method == 'window_dock_preview') {
+      final tab = _currentTab;
+      final controller = tab.controller;
+      if (controller == null ||
+          tab.isBlocked ||
+          tab.isWarningGateActive ||
+          tab.isSecurityChecking ||
+          tab.isInvalidUrl) {
+        return null;
+      }
+      try {
+        return await controller.takeScreenshot(
+          screenshotConfiguration: ScreenshotConfiguration(
+            compressFormat: CompressFormat.JPEG,
+            quality: 80,
+          ),
+        );
+      } catch (_) {
+        return null;
+      }
+    }
     if (call.method == 'browser_ping') {
       return mounted;
     }
