@@ -547,11 +547,13 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             window.__gotoimDockProbe ??= String(Date.now()) + Math.random();
             return {marker: window.__gotoimDockProbe,
               url: location.href, readyState: document.readyState,
+              innerWidth: window.innerWidth, innerHeight: window.innerHeight,
               videoTime: document.querySelector('video')?.currentTime ?? null};
           })()
         ''',
         );
       }
+      if (!mounted) return {'mounted': false};
       return {
         'tabIds': _tabs.map((tab) => tab.id).toList(),
         'activeTabId': _currentTab.id,
@@ -561,6 +563,12 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         'navigationCounts': _tabs.map((tab) => tab.navigationCount).toList(),
         'loading': _tabs.map((tab) => tab.isLoading).toList(),
         'securityChecking': _tabs.map((tab) => tab.isSecurityChecking).toList(),
+        'flutterViewWidth':
+            View.of(context).physicalSize.width /
+            View.of(context).devicePixelRatio,
+        'flutterViewHeight':
+            View.of(context).physicalSize.height /
+            View.of(context).devicePixelRatio,
         'hoveredTabId': _hoverPreviewNotifier.value.tab?.id,
         'thumbnailReady': _tabs.map((tab) => tab.thumbnail != null).toList(),
         'pageProbe': probe,

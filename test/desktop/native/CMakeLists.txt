@@ -3,3 +3,8 @@ project(profile_flyout_policy_test LANGUAGES CXX)
 add_executable(profile_flyout_policy_test profile_flyout_policy_test.cpp)
 target_compile_features(profile_flyout_policy_test PRIVATE cxx_std_17)
 target_compile_definitions(profile_flyout_policy_test PRIVATE NOMINMAX)
+
+add_executable(window_resize_policy_test window_resize_policy_test.cpp)
+target_compile_features(window_resize_policy_test PRIVATE cxx_std_17)
+target_compile_definitions(window_resize_policy_test PRIVATE NOMINMAX)
+target_link_libraries(window_resize_policy_test PRIVATE user32)

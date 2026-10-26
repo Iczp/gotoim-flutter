@@ -16,6 +16,7 @@ class DesktopDockSlot extends ConsumerStatefulWidget {
 class _DesktopDockSlotState extends ConsumerState<DesktopDockSlot>
     with WidgetsBindingObserver {
   bool _scheduled = false;
+  bool _visibleReported = false;
   @override
   void initState() {
     super.initState();
@@ -28,6 +29,7 @@ class _DesktopDockSlotState extends ConsumerState<DesktopDockSlot>
   void didUpdateWidget(covariant DesktopDockSlot oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.slotId != widget.slotId) {
+      _visibleReported = false;
       unawaited(
         DesktopWindowAdapter.setDockSlotVisible(oldWidget.slotId, false),
       );
@@ -54,7 +56,10 @@ class _DesktopDockSlotState extends ConsumerState<DesktopDockSlot>
         width: (box.size.width * scale).round(),
         height: (box.size.height * scale).round(),
       ));
-      unawaited(DesktopWindowAdapter.setDockSlotVisible(widget.slotId, true));
+      if (!_visibleReported) {
+        _visibleReported = true;
+        unawaited(DesktopWindowAdapter.setDockSlotVisible(widget.slotId, true));
+      }
     });
   }
 

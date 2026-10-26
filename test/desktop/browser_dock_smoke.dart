@@ -15,6 +15,9 @@ import 'package:gotoim_flutter/core/platform/platform_facade.dart';
 import 'package:gotoim_flutter/core/platform/windows/windows_window_adapter.dart';
 import 'package:gotoim_flutter/core/services/window_service.dart';
 
+Size? _lastMainLayout;
+double _mainScale = 1;
+
 class _SmokeWindows extends DefaultWindowService {
   _SmokeWindows() : super(platformFacade: createPlatformFacade());
   // Avoid repeated focus requests while exercising the native test windows.
@@ -46,7 +49,11 @@ Future<void> main(List<String> args) async {
       request.response.headers.contentType = ContentType.html;
       request.response.write(
         '''<!doctype html><title>Probe $path</title>
+        <style>body{background:#edf8f2;font:18px system-ui;padding:24px}input{padding:12px}</style>
+        <h2>Live browser resize probe</h2><p id="dimensions"></p>
         <input id="probe" value="unsent form">
+        <script>function dimensions(){document.querySelector('#dimensions').textContent=innerWidth+' x '+innerHeight;}
+        addEventListener('resize',dimensions);dimensions();</script>
         <script>window.__gotoimDockProbe = String(Date.now()) + Math.random();</script>''',
       );
     } else {
@@ -103,9 +110,59 @@ Future<void> main(List<String> args) async {
         phase('visible pop-out ready for inspection');
         final deadline = Stopwatch()..start();
         while (!File('$resultPath.resume').existsSync() &&
-            deadline.elapsed < const Duration(seconds: 90)) {
+            deadline.elapsed < const Duration(seconds: 180)) {
           await Future<void>.delayed(const Duration(milliseconds: 200));
         }
+      }
+      if (iteration == 0 && args.contains('--inspect-detached')) {
+        final afterResize = await _ready(service, 2);
+        results.add({
+          'afterLiveResize': afterResize,
+          'mainResize': await WindowsWindowAdapter.browserDockDiagnostics(),
+          'mainLayout': {
+            'width': _lastMainLayout?.width,
+            'height': _lastMainLayout?.height,
+            'scale': _mainScale,
+          },
+        });
+        final nativeSize = afterResize['native'] as Map;
+        _check(
+          nativeSize['clientWidth'] == nativeSize['contentWidth'] &&
+              nativeSize['clientHeight'] == nativeSize['contentHeight'],
+          'Flutter native surface did not catch up to the final browser size',
+        );
+        _check(
+          (nativeSize['resizeGestures'] as num? ?? 0) > 0,
+          'Browser live resize was not actually exercised',
+        );
+        final page = afterResize['session']['pageProbe'] as Map;
+        final viewWidth = afterResize['session']['flutterViewWidth'] as num;
+        _check(
+          ((page['innerWidth'] as num) - viewWidth).abs() <= 1,
+          'Browser DOM viewport is stale after resize',
+        );
+        final mainSize = await WindowsWindowAdapter.browserDockDiagnostics();
+        _check(
+          (mainSize['resizeGestures'] as num? ?? 0) > 0,
+          'Main live resize was not actually exercised',
+        );
+        _check(
+          _lastMainLayout != null &&
+              (_lastMainLayout!.width * _mainScale -
+                          (mainSize['clientWidth'] as num))
+                      .abs() <=
+                  1 &&
+              (_lastMainLayout!.height * _mainScale -
+                          (mainSize['clientHeight'] as num))
+                      .abs() <=
+                  1,
+          'Main Flutter layout has not caught up to the native viewport',
+        );
+        _check(
+          mainSize['clientWidth'] == mainSize['contentWidth'] &&
+              mainSize['clientHeight'] == mainSize['contentHeight'],
+          'Flutter main surface did not catch up to the final main size',
+        );
       }
       _check(
         detachedNative['isDocked'] == false,
@@ -343,8 +400,16 @@ class _ProbeShell extends ConsumerWidget {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onPanStart: (_) => WindowsWindowAdapter.startDragging(),
-                child: const Center(
-                  child: Text('Browser dock smoke probe — drag here'),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    _lastMainLayout = constraints.biggest;
+                    _mainScale = View.of(context).devicePixelRatio;
+                    return Center(
+                      child: Text(
+                        'Main resize probe\n${constraints.maxWidth.round()} x ${constraints.maxHeight.round()}',
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

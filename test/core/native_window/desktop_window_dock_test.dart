@@ -151,6 +151,39 @@ void main() {
     },
   );
   test(
+    'unchanged layout completes replacement handshake without repeated bounds IPC',
+    () async {
+      await dock.dock(targetId: 'browser');
+      final before =
+          service.events.where((e) => e.startsWith('bounds:')).length;
+      for (var i = 0; i < 50; i++) {
+        dock.updateBounds(DesktopWindowDockNotifier.chatRight, (
+          x: 600,
+          y: 44,
+          width: 520,
+          height: 700,
+        ));
+      }
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        service.events.where((e) => e.startsWith('bounds:')).length,
+        before,
+      );
+      // The same rectangle must still satisfy a NEW layout request on replacement.
+      await dock.dock(targetId: 'media');
+      expect(dock.slot(DesktopWindowDockNotifier.chatRight).targetId, 'media');
+      dock.updateBounds(DesktopWindowDockNotifier.chatRight, (
+        x: 600,
+        y: 44,
+        width: 600,
+        height: 700,
+      ));
+      await Future<void>.delayed(Duration.zero);
+      expect(service.events.last, 'bounds:media:chat:right:600');
+    },
+  );
+
+  test(
     'different slots own their bounds and one window cannot occupy both',
     () async {
       await dock.dock(targetId: 'browser');

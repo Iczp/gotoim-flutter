@@ -257,9 +257,11 @@ class DesktopWindowDockNotifier
 
   void updateBounds(String slotId, WindowDockBounds bounds) {
     if (_disposed || bounds.width <= 0 || bounds.height <= 0) return;
+    final unchanged = _bounds[slotId] == bounds;
     _bounds[slotId] = bounds;
     final ready = _layouts[slotId];
     if (ready != null && !ready.isCompleted) ready.complete(bounds);
+    if (unchanged) return;
     if (slot(slotId).isDocked) unawaited(_flush(slotId));
   }
 

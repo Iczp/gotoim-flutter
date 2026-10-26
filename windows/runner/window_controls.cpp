@@ -8,6 +8,7 @@
 #include <commctrl.h>
 #include "resource.h"
 #include "profile_flyout_policy.h"
+#include "window_resize_policy.h"
 #include <string>
 #include <memory>
 #include <algorithm>
@@ -431,6 +432,9 @@ constexpr UINT kShowTrayMenu = WM_APP + 0x49;
 constexpr UINT kStartWindowDrag = WM_APP + 0x4A;
 constexpr UINT kUpdateWindowDrag = WM_APP + 0x4B;
 constexpr UINT kRebaseWindowDrag = WM_APP + 0x4C;
+constexpr UINT kUpdateWindowResize = WM_APP + 0x4D;
+constexpr UINT kResizeFlutterContent = WM_APP + 0x4E;
+constexpr UINT kRebaseWindowResize = WM_APP + 0x4F;
 
 std::string Narrow(const std::wstring& value) {
   if (value.empty()) return {};
@@ -464,6 +468,96 @@ class WindowControls : public flutter::Plugin {
     delegate_ = registrar_->RegisterTopLevelWindowProcDelegate(
         [this](HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
             -> std::optional<LRESULT> {
+          if (hwnd == Window() && message == kResizeFlutterContent) {
+            content_resize_pending_ = false;
+            ApplyLatestContentSize();
+            return 0;
+          }
+          if (hwnd == Window() && message == WM_NCLBUTTONDOWN &&
+              wparam >= HTLEFT && wparam <= HTBOTTOMRIGHT && !IsWindowDocked(hwnd) &&
+              !IsZoomed(hwnd) && (GetWindowLongPtr(hwnd, GWL_STYLE) & WS_THICKFRAME)) {
+            if (native_drag_active_ || native_resize_active_ ||
+                !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) return 0;
+            if (!GetCursorPos(&resize_cursor_) || !GetWindowRect(hwnd, &resize_bounds_)) return 0;
+            resize_edge_ = static_cast<UINT>(wparam);
+            const UINT dpi = GetDpiForWindow(hwnd);
+            MINMAXINFO limits{};
+            SendMessage(hwnd, WM_GETMINMAXINFO, 0, reinterpret_cast<LPARAM>(&limits));
+            resize_minimum_ = {(std::max)(limits.ptMinTrackSize.x,
+                static_cast<LONG>(GetSystemMetricsForDpi(SM_CXMINTRACK, dpi))),
+                (std::max)(limits.ptMinTrackSize.y,
+                static_cast<LONG>(GetSystemMetricsForDpi(SM_CYMINTRACK, dpi)))};
+            ReleaseCapture();
+            SetCapture(hwnd);
+            native_resize_active_ = GetCapture() == hwnd;
+            ++resize_gestures_;
+            return 0;
+          }
+          if (hwnd == Window() && native_resize_active_) {
+            if (message == WM_SETCURSOR) {
+              LPCWSTR cursor = IDC_SIZEALL;
+              if (resize_edge_ == HTLEFT || resize_edge_ == HTRIGHT) cursor = IDC_SIZEWE;
+              else if (resize_edge_ == HTTOP || resize_edge_ == HTBOTTOM) cursor = IDC_SIZENS;
+              else if (resize_edge_ == HTTOPLEFT || resize_edge_ == HTBOTTOMRIGHT) cursor = IDC_SIZENWSE;
+              else cursor = IDC_SIZENESW;
+              SetCursor(LoadCursor(nullptr, cursor));
+              return TRUE;
+            }
+            if (message == WM_MOUSEMOVE) {
+              if (!resize_update_pending_) {
+                resize_update_pending_ = true;
+                PostMessage(hwnd, kUpdateWindowResize, 0, 0);
+              }
+              return 0;
+            }
+            if (message == kUpdateWindowResize || message == WM_LBUTTONUP) {
+              resize_update_pending_ = false;
+              POINT cursor{};
+              bool valid = false;
+              if (message == WM_LBUTTONUP) {
+                cursor = {static_cast<short>(LOWORD(lparam)), static_cast<short>(HIWORD(lparam))};
+                valid = ClientToScreen(hwnd, &cursor) != FALSE;
+              } else if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
+                valid = GetCursorPos(&cursor) != FALSE;
+              }
+              if (valid) {
+                const RECT next = WindowResizeBounds(resize_bounds_, resize_cursor_, cursor,
+                                                     resize_edge_, resize_minimum_);
+                RECT current{};
+                if (GetWindowRect(hwnd, &current) && !EqualRect(&next, &current)) {
+                  SetWindowPos(hwnd, nullptr, next.left, next.top,
+                      next.right - next.left, next.bottom - next.top,
+                      SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                }
+              }
+              if (message == WM_LBUTTONUP || !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                native_resize_active_ = false;
+                if (GetCapture() == hwnd) ReleaseCapture();
+                QueueContentResize(); // Always commit the final, latest size.
+              }
+              return 0;
+            }
+            if (message == WM_CAPTURECHANGED || message == WM_CANCELMODE ||
+                (message == WM_KEYDOWN && wparam == VK_ESCAPE)) {
+              native_resize_active_ = false;
+              resize_update_pending_ = false;
+              if (GetCapture() == hwnd) ReleaseCapture();
+              QueueContentResize();
+            }
+            if (message == WM_DPICHANGED) PostMessage(hwnd, kRebaseWindowResize, 0, 0);
+            if (message == kRebaseWindowResize) {
+              GetCursorPos(&resize_cursor_);
+              GetWindowRect(hwnd, &resize_bounds_);
+              const UINT dpi = GetDpiForWindow(hwnd);
+              resize_minimum_ = {GetSystemMetricsForDpi(SM_CXMINTRACK, dpi),
+                                 GetSystemMetricsForDpi(SM_CYMINTRACK, dpi)};
+              return 0;
+            }
+          }
+          if (hwnd == Window() && (message == kUpdateWindowResize || message == kRebaseWindowResize)) {
+            resize_update_pending_ = false;
+            return 0;
+          }
           if (hwnd == Window() && message == kStartWindowDrag) {
             if (native_drag_active_ || !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) return 0;
             if (!GetCursorPos(&drag_cursor_) || !GetWindowRect(hwnd, &drag_bounds_)) return 0;
@@ -540,15 +634,26 @@ class WindowControls : public flutter::Plugin {
             return 0;
           }
           if (hwnd == Window() && hwnd == g_main_window &&
-              (message == WM_WINDOWPOSCHANGED || message == WM_SIZE ||
+              (message == WM_WINDOWPOSCHANGED ||
                message == WM_SHOWWINDOW || message == WM_ENABLE || message == WM_DPICHANGED)) {
             if (message == WM_SHOWWINDOW && !wparam) {
               for (const auto& entry : g_dock_snapshots) {
                 ShowWindow(entry.first, SW_HIDE);
               }
+            } else if (message == WM_WINDOWPOSCHANGED &&
+                !(reinterpret_cast<WINDOWPOS*>(lparam)->flags & SWP_NOSIZE)) {
+              QueueContentResize();
             } else {
               SyncDockedWindows();
             }
+          }
+          if (hwnd == Window() && message == WM_SIZE) {
+            ++content_resize_requests_;
+            if (wparam != SIZE_MINIMIZED) QueueContentResize();
+            return 0;
+          }
+          if (hwnd == Window() && message == WM_WINDOWPOSCHANGED) {
+            return DefWindowProc(hwnd, message, wparam, lparam);
           }
           if (hwnd == Window() && message == WM_NCDESTROY) {
             g_dock_snapshots.erase(hwnd);
@@ -1154,6 +1259,20 @@ class WindowControls : public flutter::Plugin {
         return;
       } else if (method == "browserDockDiagnostics") {
         flutter::EncodableMap data;
+        data[flutter::EncodableValue("nativeResizeActive")] = flutter::EncodableValue(native_resize_active_);
+        data[flutter::EncodableValue("resizeGestures")] = flutter::EncodableValue(resize_gestures_);
+        data[flutter::EncodableValue("contentResizeRequests")] = flutter::EncodableValue(content_resize_requests_);
+        data[flutter::EncodableValue("contentResizeApplied")] = flutter::EncodableValue(content_resize_applied_);
+        data[flutter::EncodableValue("contentResizeSkipped")] = flutter::EncodableValue(content_resize_skipped_);
+        data[flutter::EncodableValue("contentResizeMaxMs")] = flutter::EncodableValue(static_cast<int64_t>(content_resize_max_ms_));
+        data[flutter::EncodableValue("contentResizeQueueMaxMs")] = flutter::EncodableValue(static_cast<int64_t>(content_resize_queue_max_ms_));
+        RECT viewport{}, client{};
+        if (auto* view = registrar_->GetView()) GetClientRect(view->GetNativeWindow(), &viewport);
+        GetClientRect(hwnd, &client);
+        data[flutter::EncodableValue("contentWidth")] = flutter::EncodableValue(static_cast<int32_t>(viewport.right));
+        data[flutter::EncodableValue("contentHeight")] = flutter::EncodableValue(static_cast<int32_t>(viewport.bottom));
+        data[flutter::EncodableValue("clientWidth")] = flutter::EncodableValue(static_cast<int32_t>(client.right));
+        data[flutter::EncodableValue("clientHeight")] = flutter::EncodableValue(static_cast<int32_t>(client.bottom));
         data[flutter::EncodableValue("nativeDragActive")] = flutter::EncodableValue(native_drag_active_);
         data[flutter::EncodableValue("nativeDragUpdatePending")] = flutter::EncodableValue(drag_update_pending_);
         const auto encode_rect = [](RECT rect) {
@@ -1288,6 +1407,35 @@ class WindowControls : public flutter::Plugin {
     auto* view = registrar_->GetView();
     return view ? GetAncestor(view->GetNativeWindow(), GA_ROOT) : nullptr;
   }
+  void QueueContentResize() {
+    if (content_resize_pending_) return;
+    content_resize_pending_ = true;
+    content_resize_queued_at_ = GetTickCount64();
+    if (!PostMessage(Window(), kResizeFlutterContent, 0, 0)) content_resize_pending_ = false;
+  }
+  void ApplyLatestContentSize() {
+    HWND parent = Window();
+    auto* view = registrar_->GetView();
+    if (!parent || !view || IsIconic(parent)) return;
+    HWND child = view->GetNativeWindow();
+    RECT bounds{}, current{};
+    if (!GetClientRect(parent, &bounds) || bounds.right <= 0 || bounds.bottom <= 0) return;
+    if (GetClientRect(child, &current) && current.right == bounds.right &&
+        current.bottom == bounds.bottom) {
+      ++content_resize_skipped_;
+      if (parent == g_main_window) SyncDockedWindows();
+      return;
+    }
+    const ULONGLONG begin = GetTickCount64();
+    content_resize_queue_max_ms_ = (std::max)(content_resize_queue_max_ms_,
+        begin - content_resize_queued_at_);
+    // Unlike MoveWindow(..., TRUE), this does not synchronously UpdateWindow
+    // and wait for raster work. Flutter receives one latest viewport size.
+    if (SetWindowPos(child, nullptr, 0, 0, bounds.right, bounds.bottom,
+        SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS)) ++content_resize_applied_;
+    content_resize_max_ms_ = (std::max)(content_resize_max_ms_, GetTickCount64() - begin);
+    if (parent == g_main_window) SyncDockedWindows();
+  }
   void Configure() {
     HWND hwnd = Window();
     if (!hwnd || configured_window_ == hwnd || IsWindowDocked(hwnd)) return;
@@ -1317,6 +1465,20 @@ class WindowControls : public flutter::Plugin {
   flutter::PluginRegistrarWindows* registrar_;
   HWND explicit_hwnd_ = nullptr;
   flutter::FlutterViewController* view_controller_ = nullptr;
+  bool native_resize_active_ = false;
+  bool resize_update_pending_ = false;
+  POINT resize_cursor_{};
+  RECT resize_bounds_{};
+  SIZE resize_minimum_{};
+  UINT resize_edge_ = 0;
+  int resize_gestures_ = 0;
+  bool content_resize_pending_ = false;
+  int content_resize_requests_ = 0;
+  int content_resize_applied_ = 0;
+  int content_resize_skipped_ = 0;
+  ULONGLONG content_resize_queued_at_ = 0;
+  ULONGLONG content_resize_queue_max_ms_ = 0;
+  ULONGLONG content_resize_max_ms_ = 0;
   bool native_drag_active_ = false;
   bool drag_update_pending_ = false;
   POINT drag_cursor_{};
