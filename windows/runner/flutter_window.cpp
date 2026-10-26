@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <commctrl.h>
 #include "window_controls.h"
 
 #include "flutter/generated_plugin_registrant.h"
@@ -8,6 +9,47 @@
 
 namespace {
 constexpr UINT kRedrawAfterShow = WM_APP + 0x47;
+LRESULT CALLBACK StartupCoverProc(HWND hwnd, UINT message, WPARAM wparam,
+    LPARAM lparam, UINT_PTR id, DWORD_PTR) {
+  if (message == WM_NCHITTEST) return HTTRANSPARENT;
+  if (message == WM_ERASEBKGND) return 1;
+  if (message == WM_PAINT) {
+    PAINTSTRUCT paint{};
+    HDC dc = BeginPaint(hwnd, &paint);
+    RECT area{};
+    GetClientRect(hwnd, &area);
+    HBRUSH background = CreateSolidBrush(RGB(243, 247, 245));
+    FillRect(dc, &area, background);
+    DeleteObject(background);
+    SetBkMode(dc, TRANSPARENT);
+    const int scale = GetDpiForWindow(hwnd);
+    HFONT title = CreateFontW(-MulDiv(30, scale, 96), 0, 0, 0, FW_SEMIBOLD,
+        FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+    HGDIOBJ old_font = SelectObject(dc, title);
+    SetTextColor(dc, RGB(7, 168, 106));
+    RECT text = area;
+    text.top = (area.bottom - MulDiv(90, scale, 96)) / 2;
+    text.bottom = text.top + MulDiv(50, scale, 96);
+    DrawTextW(dc, L"Goto IM", -1, &text, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+    HFONT body = CreateFontW(-MulDiv(14, scale, 96), 0, 0, 0, FW_NORMAL,
+        FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+    SelectObject(dc, body);
+    SetTextColor(dc, RGB(100, 116, 109));
+    text.top = text.bottom + MulDiv(12, scale, 96);
+    text.bottom = text.top + MulDiv(30, scale, 96);
+    DrawTextW(dc, L"正在准备工作区…", -1, &text, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(dc, old_font);
+    DeleteObject(title);
+    DeleteObject(body);
+    EndPaint(hwnd, &paint);
+    return 0;
+  }
+  if (message == WM_NCDESTROY) RemoveWindowSubclass(hwnd, StartupCoverProc, id);
+  return DefSubclassProc(hwnd, message, wparam, lparam);
+}
+
 }
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -21,6 +63,15 @@ bool FlutterWindow::OnCreate() {
   }
 
   RECT frame = GetClientArea();
+
+  // Paint an opaque native cover BEFORE creating the engine/registering plugins.
+  // It stays above the Flutter view until that engine presents its first frame.
+  startup_cover_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE,
+      0, 0, frame.right, frame.bottom, GetHandle(), nullptr,
+      GetModuleHandle(nullptr), nullptr);
+  if (startup_cover_) SetWindowSubclass(startup_cover_, StartupCoverProc, 1, 0);
+  Show();
+  if (startup_cover_) UpdateWindow(startup_cover_);
 
   // The size here must match the window dimensions to avoid unnecessary surface
   // creation / destruction in the startup path.
@@ -51,7 +102,10 @@ bool FlutterWindow::OnCreate() {
   AttachChildViewResizeSubclass(child_hwnd);
   RegisterWindowControls(flutter_controller_->engine(), GetHandle(), flutter_controller_.get());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
+  if (startup_cover_) SetWindowPos(startup_cover_, HWND_TOP, 0, 0, 0, 0,
+      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  flutter_controller_->engine()->SetNextFrameCallback([this]() {
+    if (startup_cover_) { DestroyWindow(startup_cover_); startup_cover_ = nullptr; }
     this->Show();
     PostMessage(GetHandle(), kRedrawAfterShow, 0, 0);
   });
@@ -76,6 +130,22 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_NCHITTEST && startup_cover_) {
+    RECT bounds{};
+    GetWindowRect(hwnd, &bounds);
+    const int x = static_cast<short>(LOWORD(lparam));
+    const int y = static_cast<short>(HIWORD(lparam));
+    const int edge = MulDiv(8, GetDpiForWindow(hwnd), 96);
+    if (!IsZoomed(hwnd) && x > bounds.left + edge && x < bounds.right - edge &&
+        y > bounds.top + edge && y < bounds.top + MulDiv(38, GetDpiForWindow(hwnd), 96)) {
+      return HTCAPTION;
+    }
+  }
+  if (message == WM_SIZE && startup_cover_) {
+    RECT client{};
+    GetClientRect(hwnd, &client);
+    MoveWindow(startup_cover_, 0, 0, client.right, client.bottom, TRUE);
+  }
   // Present a fresh frame only after ShowWindow and its size/visibility messages
   // have returned to the platform message loop.
   if (message == kRedrawAfterShow && flutter_controller_) {

@@ -70,6 +70,7 @@ class _Controller extends PlatformInAppWebViewController {
 }
 
 class _NativePlatform extends InAppWebViewPlatform {
+  bool autoCommit = true;
   final mounted = <String, _SurfaceState>{};
   final created = <String>[];
   final disposed = <String>[];
@@ -117,6 +118,12 @@ class _SurfaceState extends State<_Surface> {
         widget.params.onWebViewCreated?.call(
           InAppWebViewController.fromPlatform(platform: controller),
         );
+        if (widget.owner.autoCommit) {
+          widget.params.onPageCommitVisible?.call(
+            InAppWebViewController.fromPlatform(platform: controller),
+            WebUri(url),
+          );
+        }
       }
     });
   }
@@ -161,7 +168,7 @@ void main() {
     if (original != null) InAppWebViewPlatform.instance = original;
   });
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(WidgetTester tester, {bool settle = true}) async {
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -178,8 +185,32 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+    }
   }
+
+  testWidgets(
+    'first paint replaces loading feedback without recreating the page',
+    (tester) async {
+      platform.autoCommit = false;
+      await open(tester, settle: false);
+      await tester.pump();
+      expect(find.text('正在打开网页…'), findsOneWidget);
+      final surface = platform.mounted['https://a.test']!;
+      surface.widget.params.onPageCommitVisible?.call(
+        InAppWebViewController.fromPlatform(platform: surface.controller),
+        WebUri(surface.url),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('正在打开网页…'), findsNothing);
+      expect(platform.created, ['https://a.test']);
+      expect(platform.disposed, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('readiness acknowledges a mounted host without another frame', (
     tester,

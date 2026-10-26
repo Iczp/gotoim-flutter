@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -43,8 +44,10 @@ Future<void> bootstrap() async {
   ensureSessionInvalidatorRegistered();
 
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  if (DesktopWindowAdapter.isWindows) {
-    runApp(const DesktopStartupScene());
+  final startupStatus = ValueNotifier<String>('正在准备启动环境…');
+  if (DesktopWindowAdapter.isDesktop) {
+    runApp(DesktopStartupScene(status: startupStatus));
+    widgetsBinding.scheduleWarmUpFrame();
     await widgetsBinding.endOfFrame;
   } else {
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
@@ -81,6 +84,7 @@ Future<void> bootstrap() async {
       debugPrint('Warning: Environment validation: $validationError');
     }
     final platformFacade = createPlatformFacade();
+    startupStatus.value = '正在准备设备信息…';
     final deviceContext = await ClientDeviceContextFactory().create(
       environment: environment,
       platformFacade: platformFacade,
@@ -88,28 +92,22 @@ Future<void> bootstrap() async {
     final localNotificationService = createLocalNotificationService(
       platformFacade: platformFacade,
     );
-    try {
-      await localNotificationService.initialize();
-    } catch (e) {
-      debugPrint('Warning: Notification service initialization failed: $e');
-    }
+    final notificationReady =
+        (() async {
+          try {
+            await localNotificationService.initialize();
+          } catch (e) {
+            debugPrint(
+              'Warning: Notification service initialization failed: $e',
+            );
+          }
+        })();
+    startupStatus.value = '正在打开本地消息…';
     final database = UnifiedDatabase.openDefault();
     try {
       await database.initialize();
     } catch (e) {
       debugPrint('Warning: Database initialization failed: $e');
-    }
-    try {
-      await StatisticService.instance.initialize(
-        database: database,
-        tokenStorage: SecureTokenStorage(),
-        config: StatisticConfig(
-          baseUrl: environment.statisticBaseUrl,
-          appId: environment.appId,
-        ),
-      );
-    } catch (e) {
-      debugPrint('Warning: Statistic service initialization failed: $e');
     }
     final mediaService = DefaultMediaService(platformFacade: platformFacade);
     final fileUploadService = DioFileUploadService(
@@ -160,6 +158,8 @@ Future<void> bootstrap() async {
       debugPrint('Warning: Deep link service initialization failed: $e');
     }
 
+    await notificationReady;
+    startupStatus.value = '正在进入工作区…';
     final container = ProviderContainer(
       overrides: [
         appEnvironmentProvider.overrideWithValue(environment),
@@ -184,6 +184,21 @@ Future<void> bootstrap() async {
     runApp(
       UncontrolledProviderScope(container: container, child: const GotoImApp()),
     );
+    // Telemetry does not gate the first usable application page.
+    unawaited(() async {
+      try {
+        await StatisticService.instance.initialize(
+          database: database,
+          tokenStorage: SecureTokenStorage(),
+          config: StatisticConfig(
+            baseUrl: environment.statisticBaseUrl,
+            appId: environment.appId,
+          ),
+        );
+      } catch (e) {
+        debugPrint('Warning: Statistic service initialization failed: $e');
+      }
+    }());
   } catch (error, stackTrace) {
     AppLogger.instance.fatal(
       'Application bootstrap error',

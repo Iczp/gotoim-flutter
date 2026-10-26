@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_environment.dart';
 import '../../../core/widgets/gotoim_logo.dart';
+import '../../../core/widgets/desktop_startup_scene.dart';
+import '../../../core/platform/desktop_window_adapter.dart';
 
 /// 沉浸式科技感 Splash 启动/鉴权检查页面
 ///
@@ -64,18 +66,25 @@ class _AuthLoadingPageState extends ConsumerState<AuthLoadingPage>
       parent: _entranceController,
       curve: Curves.easeIn,
     );
-    _entranceController.forward();
+    if (!DesktopWindowAdapter.isDesktop) {
+      _entranceController.forward();
+    } else {
+      _entranceController.value = 1;
+    }
 
     _pulseProgressController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
-    )..repeat();
+    );
+    if (!DesktopWindowAdapter.isDesktop) _pulseProgressController.repeat();
 
-    _stepTimer = Timer.periodic(const Duration(milliseconds: 1100), (timer) {
-      if (mounted && _currentStepIndex < _loadingSteps.length - 1) {
-        setState(() => _currentStepIndex++);
-      }
-    });
+    if (!DesktopWindowAdapter.isDesktop) {
+      _stepTimer = Timer.periodic(const Duration(milliseconds: 1100), (timer) {
+        if (mounted && _currentStepIndex < _loadingSteps.length - 1) {
+          setState(() => _currentStepIndex++);
+        }
+      });
+    }
 
     _escapeTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) {
@@ -95,6 +104,36 @@ class _AuthLoadingPageState extends ConsumerState<AuthLoadingPage>
 
   @override
   Widget build(BuildContext context) {
+    if (DesktopWindowAdapter.isDesktop) {
+      return DesktopStartupScene(
+        message: '正在恢复登录状态…',
+        actions:
+            !_showEscapeOptions
+                ? null
+                : Wrap(
+                  alignment: WrapAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        if (widget.isDiagnosticsPreview) {
+                          Navigator.of(context).pop();
+                        } else {
+                          context.go('/login');
+                        }
+                      },
+                      child: Text(
+                        widget.isDiagnosticsPreview ? '返回诊断中心' : '前往登录页',
+                      ),
+                    ),
+                    if (!widget.isDiagnosticsPreview)
+                      TextButton(
+                        onPressed: () => context.go('/diagnostics'),
+                        child: const Text('运行诊断'),
+                      ),
+                  ],
+                ),
+      );
+    }
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;

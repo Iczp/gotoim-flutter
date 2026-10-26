@@ -882,7 +882,7 @@ class DefaultWindowService implements WindowService {
   Future<void> ensureBrowserHost({String? url, String? title}) async {
     if (url == null && isWindowOpen('tool:browser')) return;
     await openWebBrowser(
-      url: url ?? 'https://www.bing.com',
+      url: url ?? 'about:blank',
       title: title,
       showImmediately: false,
     );

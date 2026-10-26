@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../platform/desktop_window_adapter.dart';
 import '../services/window_service.dart';
 import 'browser_thumbnail.dart';
+import 'browser_home_page.dart';
 import '../security/url_security_level.dart';
 import '../security/url_security_service.dart';
 import '../native_window/desktop_window_loading.dart';
@@ -53,6 +54,8 @@ class BrowserTabItem {
   UrlSecurityCheckResult? securityCheckResult;
   bool isUrlExpanded = false;
   InAppWebViewController? controller;
+  bool get isHome => url.isEmpty || url == 'about:blank';
+  bool hasRenderedContent = false;
   bool hasWebView = false;
   int navigationRevision = 0;
   int webViewCreationCount = 0;
@@ -330,6 +333,14 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     String? title,
     String? fallbackContent,
   }) {
+    if (rawUrl.trim().isEmpty || rawUrl == 'about:blank') {
+      return BrowserTabItem(
+        id: 'home_${DateTime.now().microsecondsSinceEpoch}',
+        url: 'about:blank',
+        title: '新标签页',
+        isLoading: false,
+      );
+    }
     final validUrl = DesktopBrowserWindow.validateAndNormalizeUrl(rawUrl);
     final tabId =
         'tab_${DateTime.now().millisecondsSinceEpoch}_${_tabs.length}';
@@ -467,7 +478,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     );
     _tabs.add(firstTab);
 
-    if (!firstTab.isInvalidUrl) {
+    if (!firstTab.isInvalidUrl && !firstTab.isHome) {
       Future.microtask(() {
         if (mounted) {
           _verifyTabSecurity(firstTab, firstTab.url, isInitialOpen: true);
@@ -476,7 +487,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     }
 
     if (widget.isSubWindow) {
-      if (firstTab.isInvalidUrl) {
+      if (firstTab.isInvalidUrl || firstTab.isHome) {
         Future.microtask(() {
           if (mounted) {
             _reportLoadComplete(firstTab.url, firstTab.title, force: true);
@@ -569,7 +580,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     if (call.method == 'browser_add_tab') {
       final args = call.arguments;
       if (args is Map && mounted) {
-        final url = args['url'] as String? ?? 'https://www.bing.com';
+        final url = args['url'] as String? ?? 'about:blank';
         final title = args['title'] as String?;
         addTab(url: url, title: title, activate: true);
       }
@@ -657,7 +668,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
       }
     });
 
-    if (newTab.isInvalidUrl) {
+    if (newTab.isInvalidUrl || newTab.isHome) {
       _reportLoadComplete(newTab.url, newTab.title, force: true);
     } else {
       _startWaitingForTabLoad(newTab.url, newTab.title);
@@ -774,6 +785,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
 
   Future<void> _refresh() async {
     final tab = _currentTab;
+    if (tab.isHome) return;
     if (tab.isInvalidUrl) {
       showToast('网址格式无效，无法重新加载', type: ToastType.error);
       return;
@@ -964,7 +976,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         _closeRightTabs(index);
         break;
       case 'new_tab':
-        addTab(url: 'https://www.bing.com', title: '新标签页', activate: true);
+        addTab(url: 'about:blank', title: '新标签页', activate: true);
         break;
     }
   }
@@ -1110,6 +1122,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
     BrowserTabItem tab,
     bool isDark,
   ) {
+    if (tab.isHome) {
+      return BrowserHomePage(
+        onNavigate: (url) => addTab(url: url, activate: true),
+      );
+    }
     final securityService = ref.watch(urlSecurityServiceProvider);
     final canMountNativeWebView =
         !tab.isInvalidUrl &&
@@ -1133,6 +1150,11 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                 javaScriptEnabled: true,
                 isInspectable: true,
               ),
+              onPageCommitVisible: (controller, url) {
+                if (mounted && _tabs.contains(tab)) {
+                  setState(() => tab.hasRenderedContent = true);
+                }
+              },
               onWebViewCreated: (controller) {
                 tab.controller = controller;
                 tab.webViewCreationCount++;
@@ -1152,6 +1174,10 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
               },
               onProgressChanged: (controller, progress) {
                 if (!mounted || tab.isBlocked || tab.isWarningGateActive) {
+                  return;
+                }
+                if (progress < 100 &&
+                    (progress / 100.0 - tab.progress).abs() < .05) {
                   return;
                 }
                 setState(() {
@@ -1186,10 +1212,12 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                     tab.faviconUrl ??= _defaultFaviconUrl(currentUrl);
                   }
                   tab.errorMessage = null;
+                  tab.progress = 0;
                   tab.isLoading = true;
                 });
               },
               onLoadStop: (controller, url) async {
+                tab.hasRenderedContent = true;
                 if (!mounted ||
                     !_tabs.contains(tab) ||
                     tab.isBlocked ||
@@ -1305,6 +1333,15 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
         else if (canMountNativeWebView)
           _buildWebPreviewPlaceholder(context, tab, isDark),
 
+        if (canMountNativeWebView &&
+            tab.hasWebView &&
+            tab.isLoading &&
+            !tab.hasRenderedContent &&
+            tab.errorMessage == null)
+          DesktopWindowLoading(
+            message: '正在打开网页…',
+            detail: Uri.tryParse(tab.url)?.host,
+          ),
         if (tab.isSecurityChecking)
           _buildSecurityCheckingView(context, tab, isDark)
         else if (tab.isWarningGateActive || tab.isBlocked)
@@ -1764,7 +1801,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
                           visualDensity: VisualDensity.compact,
                           onPressed: () {
                             addTab(
-                              url: 'https://www.bing.com',
+                              url: 'about:blank',
                               title: '新标签页',
                               activate: true,
                             );
@@ -2131,7 +2168,7 @@ class _DesktopBrowserWindowState extends ConsumerState<DesktopBrowserWindow> {
             }
             break;
           case 'new_tab':
-            addTab(url: 'https://www.bing.com', title: '新标签页', activate: true);
+            addTab(url: 'about:blank', title: '新标签页', activate: true);
             break;
         }
       },

@@ -106,6 +106,11 @@ static bool PositionDockedWindow(HWND hwnd, const WindowStateSnapshot& snapshot)
     ShowWindow(hwnd, SW_HIDE);
     return true;
   }
+  RECT existing{};
+  if (IsWindowVisible(hwnd) && GetWindowRect(hwnd, &existing) &&
+      existing.left == origin.x && existing.top == origin.y &&
+      existing.right - existing.left == effective_width &&
+      existing.bottom - existing.top == effective_height) return true;
   return SetWindowPos(hwnd, nullptr, origin.x, origin.y, effective_width, effective_height,
       SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW) != FALSE;
 }
@@ -424,6 +429,8 @@ namespace {
 constexpr UINT kTrayCallback = WM_APP + 0x48;
 constexpr UINT kShowTrayMenu = WM_APP + 0x49;
 constexpr UINT kStartWindowDrag = WM_APP + 0x4A;
+constexpr UINT kUpdateWindowDrag = WM_APP + 0x4B;
+constexpr UINT kRebaseWindowDrag = WM_APP + 0x4C;
 
 std::string Narrow(const std::wstring& value) {
   if (value.empty()) return {};
@@ -458,10 +465,79 @@ class WindowControls : public flutter::Plugin {
         [this](HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
             -> std::optional<LRESULT> {
           if (hwnd == Window() && message == kStartWindowDrag) {
-            // Bypass Flutter/plugin mouse handling. Enter the system move loop
-            // only after the MethodChannel handler has replied to Dart.
+            if (native_drag_active_ || !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) return 0;
+            if (!GetCursorPos(&drag_cursor_) || !GetWindowRect(hwnd, &drag_bounds_)) return 0;
+            if (IsZoomed(hwnd)) {
+              const int grab_y = drag_cursor_.y - drag_bounds_.top;
+              const double ratio = static_cast<double>(drag_cursor_.x - drag_bounds_.left) /
+                  (std::max)(1L, drag_bounds_.right - drag_bounds_.left);
+              ShowWindow(hwnd, SW_RESTORE);
+              GetWindowRect(hwnd, &drag_bounds_);
+              const int width = drag_bounds_.right - drag_bounds_.left;
+              SetWindowPos(hwnd, nullptr, drag_cursor_.x - static_cast<int>(width * ratio),
+                  drag_cursor_.y - grab_y, 0, 0,
+                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+              GetWindowRect(hwnd, &drag_bounds_);
+            }
             ReleaseCapture();
-            return DefWindowProc(hwnd, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, lparam);
+            SetCapture(hwnd);
+            native_drag_active_ = GetCapture() == hwnd;
+            return 0;
+          }
+          if (hwnd == Window() && native_drag_active_) {
+            if (message == WM_MOUSEMOVE) {
+              // Coalesce high-frequency mouse input; consume the latest screen
+              // point on the platform loop without a modal SC_MOVE loop or Dart.
+              if (!drag_update_pending_) {
+                drag_update_pending_ = true;
+                PostMessage(hwnd, kUpdateWindowDrag, 0, 0);
+              }
+              return 0;
+            }
+            if (message == kUpdateWindowDrag || message == WM_LBUTTONUP) {
+              drag_update_pending_ = false;
+              POINT cursor{};
+              bool has_point = false;
+              if (message == WM_LBUTTONUP) {
+                cursor = {static_cast<short>(LOWORD(lparam)), static_cast<short>(HIWORD(lparam))};
+                has_point = ClientToScreen(hwnd, &cursor) != FALSE;
+              } else if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
+                has_point = GetCursorPos(&cursor) != FALSE;
+              }
+              if (has_point) {
+                const int x = drag_bounds_.left + cursor.x - drag_cursor_.x;
+                const int y = drag_bounds_.top + cursor.y - drag_cursor_.y;
+                RECT current{};
+                if (GetWindowRect(hwnd, &current) && (current.left != x || current.top != y)) {
+                  SetWindowPos(hwnd, nullptr, x, y, 0, 0,
+                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                }
+              }
+              if (message == WM_LBUTTONUP || !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                native_drag_active_ = false;
+                if (GetCapture() == hwnd) ReleaseCapture();
+              }
+              return 0;
+            }
+            if (message == WM_CAPTURECHANGED || message == WM_CANCELMODE ||
+                (message == WM_KEYDOWN && wparam == VK_ESCAPE)) {
+              native_drag_active_ = false;
+              drag_update_pending_ = false;
+              if (GetCapture() == hwnd) ReleaseCapture();
+            }
+            if (message == WM_DPICHANGED) {
+              // Rebase after the suggested DPI rectangle has been applied.
+              PostMessage(hwnd, kRebaseWindowDrag, 0, 0);
+            }
+            if (message == kRebaseWindowDrag) {
+              GetCursorPos(&drag_cursor_);
+              GetWindowRect(hwnd, &drag_bounds_);
+              return 0;
+            }
+          }
+          if (hwnd == Window() && (message == kUpdateWindowDrag || message == kRebaseWindowDrag)) {
+            drag_update_pending_ = false;
+            return 0;
           }
           if (hwnd == Window() && hwnd == g_main_window &&
               (message == WM_WINDOWPOSCHANGED || message == WM_SIZE ||
@@ -666,12 +742,10 @@ class WindowControls : public flutter::Plugin {
         HWND target_hwnd = (IsWindowDocked(hwnd) && g_main_window && IsWindow(g_main_window))
                                ? g_main_window
                                : hwnd;
-        POINT cursor;
-        GetCursorPos(&cursor);
-        ReleaseCapture();
-        // Reply before entering the native move loop; never block Dart's UI.
-        PostMessage(target_hwnd, kStartWindowDrag, 0,
-                    MAKELPARAM(cursor.x, cursor.y));
+        // The receiving window validates the button and reads the cursor at
+        // dispatch time. Releasing capture here would cancel Flutter's gesture
+        // before the queued native move actually starts.
+        PostMessage(target_hwnd, kStartWindowDrag, 0, 0);
       } else if (method == "minimize") {
         HWND target_hwnd = (IsWindowDocked(hwnd) && g_main_window && IsWindow(g_main_window))
                                ? g_main_window
@@ -1080,6 +1154,8 @@ class WindowControls : public flutter::Plugin {
         return;
       } else if (method == "browserDockDiagnostics") {
         flutter::EncodableMap data;
+        data[flutter::EncodableValue("nativeDragActive")] = flutter::EncodableValue(native_drag_active_);
+        data[flutter::EncodableValue("nativeDragUpdatePending")] = flutter::EncodableValue(drag_update_pending_);
         const auto encode_rect = [](RECT rect) {
           return flutter::EncodableValue(flutter::EncodableMap{
             {flutter::EncodableValue("left"), flutter::EncodableValue(static_cast<int32_t>(rect.left))},
@@ -1241,6 +1317,10 @@ class WindowControls : public flutter::Plugin {
   flutter::PluginRegistrarWindows* registrar_;
   HWND explicit_hwnd_ = nullptr;
   flutter::FlutterViewController* view_controller_ = nullptr;
+  bool native_drag_active_ = false;
+  bool drag_update_pending_ = false;
+  POINT drag_cursor_{};
+  RECT drag_bounds_{};
   struct FrameState {
     std::vector<std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>> waiters;
     int prepared_frames = 0;
