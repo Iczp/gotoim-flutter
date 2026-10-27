@@ -62,6 +62,29 @@ final deviceRegistrationApiProvider = Provider<DeviceRegistrationApi>((ref) {
   );
 });
 
+/// Social has its own Dio instance, endpoint, interceptors and cancellation state.
+final socialDioProvider = Provider<Dio>((ref) {
+  final dio = Dio(BaseOptions(
+    baseUrl: ref.watch(appEnvironmentProvider).socialApiBaseUrl,
+    connectTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(seconds: 20),
+    contentType: Headers.jsonContentType,
+  ));
+  ref.onDispose(() => dio.close(force: true));
+  return dio;
+});
+
+final socialApiClientProvider = Provider<ApiClient>((ref) {
+  final invalidator = ref.watch(sessionInvalidatorProvider);
+  return DioApiClient(
+    dio: ref.watch(socialDioProvider),
+    tokenStorage: ref.watch(tokenStorageProvider),
+    tokenRefresher: ref.watch(authRepositoryProvider) as OpenIdConnectAuthRepository,
+    deviceContext: ref.watch(clientDeviceContextProvider),
+    onSessionInvalidated: () => invalidator.invalidate(),
+  );
+});
+
 /// 由 bootstrap 创建并覆写，未覆写时回退至系统对应轻量默认实现。
 final localNotificationServiceProvider = Provider<LocalNotificationService>(
   (ref) {

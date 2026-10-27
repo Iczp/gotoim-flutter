@@ -1277,7 +1277,7 @@ class ChatComposerState extends ConsumerState<ChatComposer>
             decoration: InputDecoration(
               isDense: true,
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.only(top: 2, bottom: 4),
+              contentPadding: const EdgeInsets.fromLTRB(2, 8, 10, 8),
               hintText:
                   widget.controller.isMuted
                       ? '全员禁言中'

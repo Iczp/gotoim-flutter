@@ -19,6 +19,9 @@ import '../features/session/application/presence_heartbeat_coordinator.dart';
 import '../features/session/application/friend_presence_store.dart';
 import '../features/session/application/active_chat_registry.dart';
 import '../features/session/application/message_alert_settings.dart';
+import '../features/social/application/social_notifications_controller.dart';
+import '../features/social/application/social_identity_controller.dart';
+import '../core/services/window_service.dart';
 import 'application_providers.dart';
 import 'app_navigation.dart';
 import 'router/app_router.dart';
@@ -72,6 +75,29 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(socialIdentityProvider.select((state) => (state.chatObjectId, state.actor?.id)), (previous, next) {
+      if (previous == null || previous == next) return;
+      final windows = ref.read(windowServiceProvider);
+      if (windows is DefaultWindowService) {
+        unawaited(windows.broadcastToAllSubWindows('social_identity_changed', {'chatObjectId': next.$1}));
+      }
+    });
+    ref.listen<int>(
+      socialNotificationsProvider.select((state) => state.newMessageVersion),
+      (previous, next) {
+        if (previous == null || next <= previous ||
+            !ref.read(messageAlertSettingsProvider).notificationsEnabled) {
+          return;
+        }
+        rootScaffoldMessengerKey.currentState?.showSnackBar(SnackBar(
+          content: const Text('Social 有新的社交通知'),
+          action: SnackBarAction(
+            label: '查看',
+            onPressed: () => ref.read(appRouterProvider).push('/social/notifications'),
+          ),
+        ));
+      },
+    );
     final themeMode = ref.watch(themeModeProvider);
     final overscrollStyle = ref.watch(overscrollStyleProvider);
     final fontScale = ref.watch(fontScaleProvider);

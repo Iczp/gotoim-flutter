@@ -7,6 +7,7 @@ import '../../session/presentation/chat_object_avatar.dart';
 import '../data/models/profile_subject.dart';
 import 'widgets/profile_action_sheets.dart';
 import 'widgets/profile_gender_badge.dart';
+import 'widgets/profile_social_preview.dart';
 import 'widgets/profile_media_thumbnails.dart';
 
 /// 真正的资料卡详情页（ProfileDetailPage）
@@ -152,8 +153,9 @@ class ProfileDetailPage extends StatelessWidget {
                         '地区: ${data.region.isEmpty ? '中国' : data.region}',
                         style: TextStyle(
                           fontSize: 13.0,
-                          color: theme.colorScheme.onSurfaceVariant
-                              .withValues(alpha: 0.75),
+                          color: theme.colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.75,
+                          ),
                           height: 1.25,
                         ),
                         maxLines: 1,
@@ -226,51 +228,8 @@ class ProfileDetailPage extends StatelessWidget {
                   ],
                 ),
 
-                // ── 3. 朋友圈动态分组（与本项目统一风格的缩略矩阵） ──
-                CellGroup(
-                  margin: EdgeInsets.only(bottom: tokens.pagePaddingVertical),
-                  borderRadius: BorderRadius.circular(tokens.cardRadius),
-                  children: <Widget>[
-                    Cell(
-                      title: '朋友圈',
-                      showArrow: true,
-                      valueWidget: SizedBox(
-                        height: 38,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            ProfileMomentThumbnail(
-                              color: theme.colorScheme.primaryContainer,
-                              icon: Icons.image_rounded,
-                              tokens: tokens,
-                            ),
-                            const SizedBox(width: 5),
-                            ProfileMomentThumbnail(
-                              color: theme.colorScheme.secondaryContainer,
-                              icon: Icons.play_arrow_rounded,
-                              isVideo: true,
-                              tokens: tokens,
-                            ),
-                            const SizedBox(width: 5),
-                            ProfileMomentThumbnail(
-                              color: theme.colorScheme.tertiaryContainer,
-                              icon: Icons.camera_alt_outlined,
-                              tokens: tokens,
-                            ),
-                          ],
-                        ),
-                      ),
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('查看朋友圈'),
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                // Recent Social posts use the profile target, not the current viewer.
+                ProfileSocialPreview(subject: subject),
 
                 // ── 4. 视频号分组（与本项目统一多媒体封面风格） ──
                 CellGroup(

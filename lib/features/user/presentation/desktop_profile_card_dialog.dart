@@ -10,6 +10,7 @@ import '../../session/presentation/desktop_session_split_view.dart';
 import '../data/models/profile_subject.dart';
 import 'widgets/profile_action_sheets.dart';
 import 'widgets/profile_gender_badge.dart';
+import 'widgets/profile_social_preview.dart';
 
 /// 桌面端微信 4.0 规范个人资料卡弹窗 (DesktopProfileCardDialog)
 ///
@@ -38,14 +39,19 @@ class DesktopProfileCardDialog extends ConsumerWidget {
       context: context,
       barrierDismissible: true,
       barrierColor: Colors.black.withValues(alpha: 0.45),
-      builder: (ctx) => DesktopProfileCardDialog(
-        subject: subject,
-        onSendMessage: onSendMessage,
-      ),
+      builder:
+          (ctx) => DesktopProfileCardDialog(
+            subject: subject,
+            onSendMessage: onSendMessage,
+          ),
     );
   }
 
-  void _handleSendMessage(BuildContext context, WidgetRef ref, ProfileData data) {
+  void _handleSendMessage(
+    BuildContext context,
+    WidgetRef ref,
+    ProfileData data,
+  ) {
     Navigator.of(context).pop();
 
     if (onSendMessage != null) {
@@ -54,9 +60,13 @@ class DesktopProfileCardDialog extends ConsumerWidget {
     }
 
     // 默认桌面端联动：切换至消息 Tab，并根据目标 ID 激活会话
-    ref.read(currentHomeSectionProvider.notifier).setSection(HomeSection.messages);
+    ref
+        .read(currentHomeSectionProvider.notifier)
+        .setSection(HomeSection.messages);
     if (subject.id.isNotEmpty) {
-      ref.read(selectedDesktopSessionUnitIdProvider.notifier).select(subject.id);
+      ref
+          .read(selectedDesktopSessionUnitIdProvider.notifier)
+          .select(subject.id);
     }
   }
 
@@ -82,14 +92,21 @@ class DesktopProfileCardDialog extends ConsumerWidget {
           color: Colors.transparent,
           child: Container(
             width: 380,
-            constraints: const BoxConstraints(maxWidth: 380),
+            constraints: BoxConstraints(
+              maxWidth: 380,
+              maxHeight: (MediaQuery.sizeOf(context).height - 32).clamp(
+                0,
+                double.infinity,
+              ),
+            ),
             decoration: BoxDecoration(
               color: colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.10)
-                    : colorScheme.outlineVariant.withValues(alpha: 0.45),
+                color:
+                    isDark
+                        ? Colors.white.withValues(alpha: 0.10)
+                        : colorScheme.outlineVariant.withValues(alpha: 0.45),
                 width: 0.8,
               ),
               boxShadow: [
@@ -101,238 +118,279 @@ class DesktopProfileCardDialog extends ConsumerWidget {
               ],
             ),
             clipBehavior: Clip.antiAlias,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── 顶部操作栏（右侧更多操作与关闭按钮） ──
-                Container(
-                  height: 40,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      PopupMenuButton<String>(
-                        tooltip: '更多选项',
-                        icon: Icon(
-                          Icons.more_horiz_rounded,
-                          size: 20,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        offset: const Offset(0, 32),
-                        onSelected: (val) {
-                          if (val == 'more_action') {
-                            showMoreProfileActionSheet(
-                              context,
-                              userId: subject.id,
-                              userName: subject.name,
-                            );
-                          }
-                        },
-                        itemBuilder: (ctx) => [
-                          const PopupMenuItem(
-                            value: 'more_action',
-                            child: Row(
-                              children: [
-                                Icon(Icons.settings_suggest_rounded, size: 16),
-                                SizedBox(width: 8),
-                                Text('资料与权限设置', style: TextStyle(fontSize: 13)),
-                              ],
-                            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── 顶部操作栏（右侧更多操作与关闭按钮） ──
+                  Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        PopupMenuButton<String>(
+                          tooltip: '更多选项',
+                          icon: Icon(
+                            Icons.more_horiz_rounded,
+                            size: 20,
+                            color: colorScheme.onSurfaceVariant,
                           ),
-                        ],
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        tooltip: '关闭 (Esc)',
-                        icon: Icon(
-                          Icons.close_rounded,
-                          size: 18,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // ── 个人基本信息区（头像 + 昵称 + 账号） ──
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 头像
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: SizedBox(
-                          width: 64,
-                          height: 64,
-                          child: ChatObjectAvatar(
-                            name: data.displayName,
-                            imageUrl: subject.avatarUrl.isEmpty
-                                ? null
-                                : subject.avatarUrl,
-                            radius: 32,
-                            chatObjectId: data.chatObjectId,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // 昵称与账号
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    data.displayName,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      height: 1.25,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                          offset: const Offset(0, 32),
+                          onSelected: (val) {
+                            if (val == 'more_action') {
+                              showMoreProfileActionSheet(
+                                context,
+                                userId: subject.id,
+                                userName: subject.name,
+                              );
+                            }
+                          },
+                          itemBuilder:
+                              (ctx) => [
+                                const PopupMenuItem(
+                                  value: 'more_action',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.settings_suggest_rounded,
+                                        size: 16,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        '资料与权限设置',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                if (data.gender > 0) ...[
-                                  const SizedBox(width: 6),
-                                  ProfileGenderBadge(gender: data.gender),
-                                ],
                               ],
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: '关闭 (Esc)',
+                          icon: Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── 个人基本信息区（头像 + 昵称 + 账号） ──
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 头像
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            width: 64,
+                            height: 64,
+                            child: ChatObjectAvatar(
+                              name: data.displayName,
+                              imageUrl:
+                                  subject.avatarUrl.isEmpty
+                                      ? null
+                                      : subject.avatarUrl,
+                              radius: 32,
+                              chatObjectId: data.chatObjectId,
                             ),
-                            if (data.showNickname) ...[
-                              const SizedBox(height: 3),
-                              Text(
-                                '昵称: ${data.originalNickname}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        // 昵称与账号
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      data.displayName,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.25,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (data.gender > 0) ...[
+                                    const SizedBox(width: 6),
+                                    ProfileGenderBadge(gender: data.gender),
+                                  ],
+                                ],
+                              ),
+                              if (data.showNickname) ...[
+                                const SizedBox(height: 3),
+                                Text(
+                                  '昵称: ${data.originalNickname}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              ],
+                              const SizedBox(height: 4),
+                              InkWell(
+                                borderRadius: BorderRadius.circular(4),
+                                onTap: () {
+                                  Clipboard.setData(
+                                    ClipboardData(text: data.accountCode),
+                                  );
+                                  showToast('账号已复制到剪贴板');
+                                },
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Goto号: ${data.accountCode}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.copy_rounded,
+                                      size: 13,
+                                      color: colorScheme.onSurfaceVariant
+                                          .withValues(alpha: 0.7),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
-                            const SizedBox(height: 4),
-                            InkWell(
-                              borderRadius: BorderRadius.circular(4),
-                              onTap: () {
-                                Clipboard.setData(
-                                  ClipboardData(text: data.accountCode),
-                                );
-                                showToast('账号已复制到剪贴板');
-                              },
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Goto号: ${data.accountCode}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    Icons.copy_rounded,
-                                    size: 13,
-                                    color: colorScheme.onSurfaceVariant
-                                        .withValues(alpha: 0.7),
-                                  ),
-                                ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    indent: 24,
+                    endIndent: 24,
+                  ),
+
+                  // ── 详细信息区（地区、电话、签名） ──
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
+                    child: Column(
+                      children: [
+                        if (subject.subtitle.isNotEmpty)
+                          _buildInfoRow(
+                            context,
+                            label: '身份',
+                            value: subject.subtitle,
+                          ),
+                        if (data.region.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          _buildInfoRow(
+                            context,
+                            label: '地区',
+                            value: data.region,
+                          ),
+                        ],
+                        if (data.description.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          _buildInfoRow(
+                            context,
+                            label: '个性签名',
+                            value: data.description,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const Divider(height: 1, thickness: 0.5),
+
+                  // ── 底部快捷操作栏（发消息与音视频通话） ──
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: ProfileSocialPreview(subject: subject),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          isDark
+                              ? colorScheme.surfaceContainerHighest.withValues(
+                                alpha: 0.25,
+                              )
+                              : colorScheme.surfaceContainerLowest,
+                    ),
+                    child: Row(
+                      children: [
+                        // 发消息按钮（主要操作）
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed:
+                                () => _handleSendMessage(context, ref, data),
+                            icon: const Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 17,
+                            ),
+                            label: const Text(
+                              '发消息',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 11),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const Divider(height: 1, thickness: 0.5, indent: 24, endIndent: 24),
-
-                // ── 详细信息区（地区、电话、签名） ──
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  child: Column(
-                    children: [
-                      if (subject.subtitle.isNotEmpty)
-                        _buildInfoRow(
-                          context,
-                          label: '身份',
-                          value: subject.subtitle,
-                        ),
-                      if (data.region.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _buildInfoRow(
-                          context,
-                          label: '地区',
-                          value: data.region,
-                        ),
-                      ],
-                      if (data.description.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _buildInfoRow(
-                          context,
-                          label: '个性签名',
-                          value: data.description,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                const Divider(height: 1, thickness: 0.5),
-
-                // ── 底部快捷操作栏（发消息与音视频通话） ──
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.25)
-                        : colorScheme.surfaceContainerLowest,
-                  ),
-                  child: Row(
-                    children: [
-                      // 发消息按钮（主要操作）
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () => _handleSendMessage(context, ref, data),
-                          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17),
-                          label: const Text('发消息', style: TextStyle(fontWeight: FontWeight.w600)),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 11),
+                        const SizedBox(width: 12),
+                        // 音视频通话按钮
+                        OutlinedButton(
+                          onPressed:
+                              () => showMediaCallActionSheet(
+                                context,
+                                data.displayName,
+                              ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 11,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
+                            side: BorderSide(
+                              color: colorScheme.outlineVariant.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
                           ),
+                          child: const Icon(Icons.videocam_outlined, size: 19),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      // 音视频通话按钮
-                      OutlinedButton(
-                        onPressed: () => showMediaCallActionSheet(
-                          context,
-                          data.displayName,
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          side: BorderSide(
-                            color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-                          ),
-                        ),
-                        child: const Icon(Icons.videocam_outlined, size: 19),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -362,10 +420,7 @@ class DesktopProfileCardDialog extends ConsumerWidget {
         Expanded(
           child: Text(
             value,
-            style: TextStyle(
-              fontSize: 13,
-              color: theme.colorScheme.onSurface,
-            ),
+            style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),

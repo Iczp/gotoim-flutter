@@ -4,8 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/browser/app_webview_page.dart';
+import '../../features/social/presentation/social_page.dart';
+import '../../features/social/presentation/social_identity_gate.dart';
+import '../../features/diagnostics/presentation/social_profile_diagnostics_page.dart';
+import '../../features/social/presentation/social_notifications_page.dart';
+import '../../features/social/presentation/social_publish_page.dart';
 import '../../core/native_window/desktop_window_dock_controller.dart';
 import '../../core/platform/desktop_window_adapter.dart';
+import '../../core/platform/platform_facade.dart';
 import '../../core/compliance/agreement_viewer_page.dart';
 import '../../core/compliance/privacy_service.dart';
 import '../../core/statistic/statistic_route_observer.dart';
@@ -240,6 +246,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final title = state.uri.queryParameters['title'];
           return AppWebViewPage(initialUrl: url, title: title);
         },
+      ),
+      _buildAppRoute(
+        path: '/social',
+        builder: (context, state) => const SocialIdentityGate(child: SocialPage()),
+      ),
+      _buildAppRoute(path: '/diagnostics/social-profile', builder: (context, state) => const SocialProfileDiagnosticsPage()),
+      _buildAppRoute(path: '/social/notifications', builder: (context, state) => const SocialIdentityGate(child: SocialNotificationsPage())),
+      _buildAppRoute(path: '/social/publish', builder: (context, state) => const SocialIdentityGate(child: SocialPublishPage())),
+      _buildAppRoute(
+        path: '/diagnostics/social',
+        builder: (context, state) => const SocialPage(diagnostics: true),
       ),
       _buildAppRoute(
         path: '/',
@@ -547,6 +564,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/chat/:sessionUnitId',
         builder:
             (context, state) => ChatPage(
+              isDesktop: ref.read(platformFacadeProvider).isDesktop,
               ownerId:
                   int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
               sessionUnitId: state.pathParameters['sessionUnitId']!,

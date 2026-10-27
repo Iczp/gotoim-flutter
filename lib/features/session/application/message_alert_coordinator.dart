@@ -8,6 +8,8 @@ import '../../../app/app_navigation.dart';
 import '../../../app/application_providers.dart';
 import '../../../core/native/native.dart';
 import '../../../core/notifications/local_notification_contract.dart';
+import '../../../core/services/window_service.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../chat/data/models/chat_message.dart';
 import '../data/models/session_summary.dart';
 import 'active_chat_registry.dart';
@@ -20,15 +22,18 @@ class MessageAlertCoordinator {
     required ActiveChatRegistry activeChat,
     required MessageAlertSettings settings,
     required LocalNotificationService notifications,
+    required WindowService windowService,
   }) : _activeChat = activeChat,
        _settings = settings,
-       _notifications = notifications {
+       _notifications = notifications,
+       _windowService = windowService {
     _tapSubscription = _notifications.tapEvents.listen(_openNotificationTarget);
   }
 
   final ActiveChatRegistry _activeChat;
   final MessageAlertSettings _settings;
   final LocalNotificationService _notifications;
+  final WindowService _windowService;
   late final StreamSubscription<LocalNotificationTapEvent> _tapSubscription;
   OverlayEntry? _foregroundBanner;
   Timer? _foregroundBannerTimer;
@@ -213,11 +218,18 @@ class MessageAlertCoordinator {
       );
       return;
     }
-    final context = rootNavigatorKey.currentContext;
-    if (context?.mounted != true) return;
-    SafeChatNavigator.pushChat(
-      context!,
-      '/chat/${Uri.encodeComponent(sessionUnitId)}?ownerId=$ownerId&title=${Uri.encodeQueryComponent(title)}',
+    _dismissForegroundBanner();
+    unawaited(
+      _windowService
+          .openChat(
+            sessionUnitId: sessionUnitId,
+            ownerId: ownerId,
+            title: title,
+          )
+          .catchError((Object error) {
+            debugPrint('[MessageAlert] Open chat failed: ${error.runtimeType}');
+            showToast('聊天窗口打开失败，请重试', type: ToastType.warning);
+          }),
     );
   }
 
@@ -234,6 +246,7 @@ final messageAlertCoordinatorProvider = Provider<MessageAlertCoordinator>((
     activeChat: ref.watch(activeChatRegistryProvider),
     settings: ref.watch(messageAlertSettingsProvider),
     notifications: ref.watch(localNotificationServiceProvider),
+    windowService: ref.watch(windowServiceProvider),
   );
   ref.onDispose(coordinator.dispose);
   return coordinator;

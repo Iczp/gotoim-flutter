@@ -19,6 +19,7 @@ import '../../home/presentation/home_sections.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/presentation/login_devices_page.dart';
 import '../../settings/presentation/theme_settings_page.dart';
+import '../../social/application/social_notifications_controller.dart';
 import 'my_qr_code_dialog.dart';
 
 /// 「我的」页面（由 HomeSectionPage 调用）。
@@ -40,6 +41,7 @@ class MinePage extends ConsumerWidget {
     final currentOwner = sessionController.currentOwner;
     final appUpdateService = ref.watch(appUpdateServiceProvider);
     final deviceContext = ref.watch(clientDeviceContextProvider);
+    final socialUnread = ref.watch(socialNotificationsProvider.select((state) => state.unreadCount));
     final headerOffset = TabHeaderHeightScope.of(context);
     final topPadding = headerOffset > 0 ? headerOffset + 8.0 : 16.0;
 
@@ -145,6 +147,14 @@ class MinePage extends ConsumerWidget {
         CellGroup(
           title: '常用服务',
           children: [
+            Cell(
+              icon: const Icon(Icons.dynamic_feed_outlined),
+              title: 'Social 社交',
+              valueWidget: socialUnread > 0 ? Badge(label: Text(socialUnread > 99 ? '99+' : '$socialUnread')) : null,
+              subtitle: '查看推荐与关注动态',
+              showArrow: true,
+              onTap: () => context.push('/social'),
+            ),
             Cell(
               icon: const Icon(Icons.qr_code_scanner_rounded),
               title: '扫一扫',

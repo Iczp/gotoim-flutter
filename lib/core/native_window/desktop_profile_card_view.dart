@@ -7,6 +7,8 @@ import '../../features/session/presentation/chat_object_avatar.dart';
 import '../../features/user/data/models/profile_subject.dart';
 import '../../features/user/presentation/widgets/profile_action_sheets.dart';
 import '../../features/user/presentation/widgets/profile_gender_badge.dart';
+import '../../features/social/data/social_repository.dart';
+import '../../features/social/presentation/social_page.dart';
 import '../platform/desktop_window_adapter.dart';
 import '../widgets/app_toast.dart';
 
@@ -23,13 +25,16 @@ class DesktopProfileCardView extends ConsumerStatefulWidget {
     this.initialSubject,
     this.onClose,
     this.onRegisterMethodHandler,
+    this.readSocialPreview,
     super.key,
   });
 
   final ProfileSubject? initialSubject;
+  final Future<Map<String, dynamic>> Function(ProfileSubject subject)?
+  readSocialPreview;
   final VoidCallback? onClose;
   final void Function(Future<dynamic> Function(MethodCall call) handler)?
-      onRegisterMethodHandler;
+  onRegisterMethodHandler;
 
   @override
   ConsumerState<DesktopProfileCardView> createState() =>
@@ -39,6 +44,7 @@ class DesktopProfileCardView extends ConsumerStatefulWidget {
 class _DesktopProfileCardViewState
     extends ConsumerState<DesktopProfileCardView> {
   ProfileSubject? _subject;
+  Future<Map<String, dynamic>>? _recentPosts;
   late final WindowMethodChannel _mainIpcChannel;
 
   @override
@@ -49,9 +55,15 @@ class _DesktopProfileCardViewState
       'gotoim/ipc_to_main',
       mode: ChannelMode.unidirectional,
     );
+    if (_subject != null) _recentPosts = _readRecent(_subject!);
 
     Future<dynamic> handleMethodCall(MethodCall call) async {
       switch (call.method) {
+        case 'social_identity_changed':
+          if (mounted && _subject != null) {
+            setState(() => _recentPosts = _readRecent(_subject!));
+          }
+          return true;
         case 'update_profile':
           final args = call.arguments;
           if (args is Map && mounted) {
@@ -59,6 +71,7 @@ class _DesktopProfileCardViewState
               _subject = ProfileSubject.fromMap(
                 Map<String, dynamic>.from(args),
               );
+              _recentPosts = _readRecent(_subject!);
             });
           }
           return true;
@@ -73,9 +86,11 @@ class _DesktopProfileCardViewState
     if (widget.onRegisterMethodHandler != null) {
       widget.onRegisterMethodHandler!(handleMethodCall);
     } else {
-      WindowController.fromCurrentEngine().then((controller) {
-        controller.setWindowMethodHandler(handleMethodCall);
-      }).catchError((_) {});
+      WindowController.fromCurrentEngine()
+          .then((controller) {
+            controller.setWindowMethodHandler(handleMethodCall);
+          })
+          .catchError((_) {});
     }
   }
 
@@ -85,6 +100,142 @@ class _DesktopProfileCardViewState
     } else {
       await DesktopWindowAdapter.hide();
     }
+  }
+
+  Future<Map<String, dynamic>> _readRecent(ProfileSubject subject) async {
+    if (subject.kind == ProfileKind.group) return {'hidden': true};
+    if (widget.readSocialPreview != null) {
+      return widget.readSocialPreview!(subject);
+    }
+    final result = await _mainIpcChannel.invokeMethod(
+      'social_profile_preview',
+      subject.toMap(),
+    );
+    if (result is! Map) throw StateError('动态加载失败');
+    return Map<String, dynamic>.from(result);
+  }
+
+  Future<void> _openSocialPost(SocialPost post) async {
+    dynamic result;
+    try {
+      result = await _mainIpcChannel.invokeMethod('social_profile_post', {
+        'postId': post.id,
+      });
+    } catch (_) {
+      if (mounted) showToast('动态加载失败，请重试');
+      return;
+    }
+    if (!mounted) return;
+    if (result is! Map || result['error'] != null) {
+      showToast('动态已不可用或无权查看');
+      return;
+    }
+    final current = SocialPost.fromJson(Map<String, dynamic>.from(result));
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder:
+          (context) => SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .75,
+              child: SingleChildScrollView(
+                child: SocialPostCard(post: current),
+              ),
+            ),
+          ),
+    );
+  }
+
+  Widget _buildRecentPosts(ProfileSubject subject) {
+    if (subject.kind == ProfileKind.group) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  '动态 · 最近三条',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: '刷新动态',
+                  icon: const Icon(Icons.refresh, size: 18),
+                  onPressed:
+                      () => setState(() => _recentPosts = _readRecent(subject)),
+                ),
+              ],
+            ),
+            FutureBuilder<Map<String, dynamic>>(
+              future: _recentPosts,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const LinearProgressIndicator();
+                }
+                if (snapshot.hasError || snapshot.data?['error'] != null) {
+                  return const Text('动态加载失败，请刷新重试');
+                }
+                final data = snapshot.data;
+                if (data?['actorLinked'] != true) {
+                  return const Text('尚未关联 Social 身份');
+                }
+                final posts =
+                    (data?['posts'] as List? ?? [])
+                        .take(3)
+                        .map(
+                          (item) => SocialPost.fromJson(
+                            Map<String, dynamic>.from(item as Map),
+                          ),
+                        )
+                        .toList();
+                return Column(
+                  children: [
+                    Wrap(
+                      spacing: 12,
+                      children: [
+                        Text('关注 ${data?['followingCount'] ?? 0}'),
+                        Text('粉丝 ${data?['followersCount'] ?? 0}'),
+                        Text(
+                          data?['isSelf'] == true
+                              ? '当前社区身份'
+                              : data?['isFollowing'] == true
+                              ? '已关注'
+                              : data?['isFollowing'] == false
+                              ? '未关注'
+                              : '尚未选择社区身份',
+                        ),
+                      ],
+                    ),
+                    if (posts.isEmpty) const Text('暂无可见动态'),
+                    for (final post in posts)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        title: Text(
+                          post.content.isNotEmpty ? post.content : '动态',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '赞 ${post.likes} · 回复 ${post.replies}${post.publishedAt != null ? ' · ${post.publishedAt!.toLocal().toString().split('.').first}' : ''}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _openSocialPost(post),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _handleSendMessage() {
@@ -126,16 +277,18 @@ class _DesktopProfileCardViewState
           child: Container(
             decoration: BoxDecoration(
               border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.12)
-                    : colorScheme.outlineVariant.withValues(alpha: 0.45),
+                color:
+                    isDark
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : colorScheme.outlineVariant.withValues(alpha: 0.45),
                 width: 0.8,
               ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                   // ── 顶部操作栏（右侧更多操作与关闭按钮） ──
                   Container(
                     height: 40,
@@ -160,18 +313,25 @@ class _DesktopProfileCardViewState
                               );
                             }
                           },
-                          itemBuilder: (ctx) => [
-                            const PopupMenuItem(
-                              value: 'more_action',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.settings_suggest_rounded, size: 16),
-                                  SizedBox(width: 8),
-                                  Text('资料与权限设置', style: TextStyle(fontSize: 13)),
-                                ],
-                              ),
-                            ),
-                          ],
+                          itemBuilder:
+                              (ctx) => [
+                                const PopupMenuItem(
+                                  value: 'more_action',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.settings_suggest_rounded,
+                                        size: 16,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        '资料与权限设置',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                         ),
                         const SizedBox(width: 4),
                         IconButton(
@@ -200,9 +360,10 @@ class _DesktopProfileCardViewState
                             height: 64,
                             child: ChatObjectAvatar(
                               name: data.displayName,
-                              imageUrl: subject.avatarUrl.isEmpty
-                                  ? null
-                                  : subject.avatarUrl,
+                              imageUrl:
+                                  subject.avatarUrl.isEmpty
+                                      ? null
+                                      : subject.avatarUrl,
                               radius: 32,
                               chatObjectId: data.chatObjectId,
                             ),
@@ -289,7 +450,10 @@ class _DesktopProfileCardViewState
 
                   // ── 附加详细信息（地区、个性签名、身份来源等） ──
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -329,14 +493,21 @@ class _DesktopProfileCardViewState
                   ),
 
                   // ── 底部快捷操作区（发消息 / 语音视频） ──
+                  _buildRecentPosts(subject),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: _handleSendMessage,
-                            icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                            icon: const Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 16,
+                            ),
                             label: const Text('发消息'),
                             style: FilledButton.styleFrom(
                               backgroundColor: const Color(0xFF07C160),
@@ -371,7 +542,8 @@ class _DesktopProfileCardViewState
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildDetailRow(
@@ -387,19 +559,13 @@ class _DesktopProfileCardViewState
           width: 52,
           child: Text(
             label,
-            style: TextStyle(
-              fontSize: 13,
-              color: colorScheme.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: TextStyle(
-              fontSize: 13,
-              color: colorScheme.onSurface,
-            ),
+            style: TextStyle(fontSize: 13, color: colorScheme.onSurface),
           ),
         ),
       ],

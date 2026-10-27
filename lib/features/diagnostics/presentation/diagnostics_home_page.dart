@@ -31,6 +31,14 @@ class DiagnosticsHomePage extends StatelessWidget {
           CellGroup(
             title: '基础设施与网络',
             children: [
+              Cell(icon: const Icon(Icons.person_outline), title: '资料卡最近动态', subtitle: '按账号验证最近三条、未关联及权限状态', showArrow: true, onTap: () => context.push('/diagnostics/social-profile')),
+              Cell(
+                icon: const Icon(Icons.dynamic_feed_outlined),
+                title: 'Social 接口诊断',
+                subtitle: '当前身份、推荐/关注游标分页与耗时',
+                showArrow: true,
+                onTap: () => context.push('/diagnostics/social'),
+              ),
               Cell(
                 icon: const Icon(Icons.lan_outlined),
                 title: 'Remote DevTools / AI 日志',

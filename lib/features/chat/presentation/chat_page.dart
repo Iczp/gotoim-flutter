@@ -443,37 +443,55 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 tokens.chatComposerHeight +
                 tokens.chatGlassContentPadding;
 
+    final messageList = ChatMessageList(
+      messages: controller.messages,
+      transientItems: controller.aiStreamReplies
+          .map((reply) => _buildAiStreamReply(reply))
+          .toList(growable: false),
+      scrollController: _scrollController,
+      isLoading: controller.isLoading,
+      hasMore: controller.hasMore,
+      error: controller.error,
+      onViewingLatestChanged: controller.setViewingLatest,
+      onLoadMore: controller.loadMore,
+      onTapOutside: _closeInputArea,
+      shouldAnimateMessage: controller.shouldAnimateMessage,
+      onMessageAnimated: controller.markMessageAnimated,
+      padding: EdgeInsets.fromLTRB(
+        12,
+        (widget.isDesktop ? 0 : safeArea.top + ChatTitleBar.toolbarHeight) +
+            tokens.chatGlassContentPadding,
+        12,
+        widget.isDesktop
+            ? tokens.chatGlassContentPadding
+            : effectiveBottomPadding,
+      ),
+      itemBuilder:
+          (context, message, index) =>
+              _buildMessageItem(context, message, index, mediaItems),
+    );
+    final inputArea = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        if (controller.hasActiveAiStream)
+          _buildActiveAiStreamStopBar(Theme.of(context)),
+        composer,
+      ],
+    );
+
+    if (widget.isDesktop) {
+      return Padding(
+        padding: EdgeInsets.only(
+          top: safeArea.top + ChatTitleBar.toolbarHeight,
+        ),
+        child: Column(children: [Expanded(child: messageList), inputArea]),
+      );
+    }
+
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        Positioned.fill(
-          child: ChatMessageList(
-            messages: controller.messages,
-            transientItems: controller.aiStreamReplies
-                .map((reply) => _buildAiStreamReply(reply))
-                .toList(growable: false),
-            scrollController: _scrollController,
-            isLoading: controller.isLoading,
-            hasMore: controller.hasMore,
-            error: controller.error,
-            onViewingLatestChanged: controller.setViewingLatest,
-            onLoadMore: controller.loadMore,
-            onTapOutside: _closeInputArea,
-            shouldAnimateMessage: controller.shouldAnimateMessage,
-            onMessageAnimated: controller.markMessageAnimated,
-            padding: EdgeInsets.fromLTRB(
-              12,
-              safeArea.top +
-                  ChatTitleBar.toolbarHeight +
-                  tokens.chatGlassContentPadding,
-              12,
-              effectiveBottomPadding,
-            ),
-            itemBuilder:
-                (context, message, index) =>
-                    _buildMessageItem(context, message, index, mediaItems),
-          ),
-        ),
+        Positioned.fill(child: messageList),
         Positioned(
           left: 0,
           right: 0,
@@ -484,14 +502,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 setState(() => _bottomBarHeight = size.height);
               }
             },
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                if (controller.hasActiveAiStream)
-                  _buildActiveAiStreamStopBar(Theme.of(context)),
-                composer,
-              ],
-            ),
+            child: inputArea,
           ),
         ),
       ],

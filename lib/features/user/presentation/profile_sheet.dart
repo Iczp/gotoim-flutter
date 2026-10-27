@@ -9,6 +9,7 @@ import '../data/models/profile_subject.dart';
 import 'profile_detail_page.dart';
 import 'widgets/profile_action_sheets.dart';
 import 'widgets/profile_gender_badge.dart';
+import 'widgets/profile_social_preview.dart';
 
 /// 半屏轻量资料卡（ProfileSheet）
 /// 只显示核心概览信息，头部主信息卡片采用通栏设计，与标题栏浑然一体，点击平滑进入详细资料卡。
@@ -76,6 +77,7 @@ class ProfileSheet extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 _ProfileSheetContactSection(data: data, tokens: tokens),
+                ProfileSocialPreview(subject: subject),
                 _ProfileSheetActions(
                   tokens: tokens,
                   onSendMessage: () {
@@ -145,9 +147,7 @@ class _ProfileSheetHeader extends StatelessWidget {
               ),
               SizedBox(width: tokens.pagePaddingHorizontal),
               // 中间信息列
-              Expanded(
-                child: _ProfileSheetHeaderInfo(data: data),
-              ),
+              Expanded(child: _ProfileSheetHeaderInfo(data: data)),
               // 右侧箭头
               Icon(
                 Icons.chevron_right_rounded,
@@ -232,10 +232,7 @@ class _ProfileSheetHeaderInfo extends StatelessWidget {
 
 /// 电话与签名联系资料组件
 class _ProfileSheetContactSection extends StatelessWidget {
-  const _ProfileSheetContactSection({
-    required this.data,
-    required this.tokens,
-  });
+  const _ProfileSheetContactSection({required this.data, required this.tokens});
 
   final ProfileData data;
   final AppThemeTokens tokens;

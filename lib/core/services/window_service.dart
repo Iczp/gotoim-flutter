@@ -8,6 +8,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/app_navigation.dart';
 import '../../features/auth/application/auth_controller.dart';
+import '../../features/social/application/social_profile_preview.dart';
+import '../../features/social/application/social_identity_controller.dart';
+import '../../features/social/data/social_repository.dart';
+import '../../features/user/data/models/profile_subject.dart';
 import '../../features/chat/application/chat_controller.dart';
 import '../../features/chat/data/models/chat_message.dart';
 import '../../features/session/application/session_list_controller.dart';
@@ -507,6 +511,41 @@ class DefaultWindowService implements WindowService {
             if (trayCommand == null) throw StateError('Tray unavailable');
             await trayCommand!(call.arguments as Map);
             return true;
+          case 'social_profile_preview':
+            final container = rootProviderContainer;
+            if (container == null || container.read(authControllerProvider).status != AuthStatus.authenticated) {
+              return {'error': '请先登录'};
+            }
+            final args = call.arguments;
+            if (args is! Map) return {'error': '无效资料卡'};
+            final subject = ProfileSubject.fromMap(Map<String, dynamic>.from(args));
+            if (subject.kind == ProfileKind.group) return {'actorLinked': false, 'posts': <Object>[]};
+            final provider = socialProfilePreviewProvider(socialTargetForProfile(subject));
+            final subscription = container.listen(provider, (_, next) {});
+            try {
+              final preview = await container.read(provider.future);
+              return {'actorLinked': preview.actor != null, 'followingCount': preview.actor?.followingCount, 'followersCount': preview.actor?.followersCount,
+                'isFollowing': preview.actor?.isFollowing, 'isSelf': preview.actor != null && preview.actor!.id == preview.viewerActorId,
+                'posts': preview.posts.map((post) => post.toWindowPayload()).toList()};
+            } catch (_) {
+              return {'error': '动态加载失败，请刷新重试'};
+            } finally {
+              subscription.close();
+            }
+
+          case 'social_profile_post':
+            final container = rootProviderContainer;
+            if (container == null || container.read(authControllerProvider).status != AuthStatus.authenticated) return {'error': '请先登录'};
+            final id = (call.arguments as Map?)?['postId']?.toString() ?? '';
+            if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(id)) return {'error': '无效动态编号'};
+            try {
+              final repository = container.read(socialRepositoryProvider);
+              final viewer = container.read(socialIdentityProvider).actor;
+              return (await repository.getPost(id, viewer?.id)).toWindowPayload();
+            } catch (_) {
+              return {'error': '动态已不可用或无权查看'};
+            }
+
           case 'tray_snapshot':
             return traySnapshotProvider?.call().toJson() ??
                 TrayGroupedUnreadState.empty.toJson();
@@ -660,21 +699,19 @@ class DefaultWindowService implements WindowService {
       // 监听全局子窗口销毁/关闭事件
       onWindowsChanged.listen((_) async {
         try {
+          final activeControllers = Map.of(_nativeControllers);
+          final cachedControllers = Map.of(_reusableControllers);
           final liveWindows = await WindowController.getAll();
           final liveWindowIds = liveWindows.map((w) => w.windowId).toSet();
-          final deadKeys = <String>[];
-          for (final entry in _nativeControllers.entries) {
+          for (final entry in activeControllers.entries) {
             if (!liveWindowIds.contains(entry.value.windowId)) {
-              deadKeys.add(entry.key);
+              _forgetNativeWindow(entry.key, entry.value);
             }
           }
-          for (final key in deadKeys) {
-            _nativeControllers.remove(key);
-            _registry.remove(key);
-            _reusableControllers.remove(key);
-          }
-          if (deadKeys.isNotEmpty) {
-            _notify();
+          for (final entry in cachedControllers.entries) {
+            if (!liveWindowIds.contains(entry.value.windowId)) {
+              _forgetNativeWindow(entry.key, entry.value);
+            }
           }
         } catch (_) {}
       });
@@ -756,6 +793,10 @@ class DefaultWindowService implements WindowService {
         return;
       } catch (e) {
         debugPrint('[WindowService] Error bringing window to front: $e');
+        if (await _nativeWindowAlive(controller) == false) {
+          _forgetNativeWindow(targetId, controller);
+          return;
+        }
       }
     }
     final record = _registry[targetId];
@@ -770,6 +811,33 @@ class DefaultWindowService implements WindowService {
   bool get hasWarmBrowserWindow =>
       _nativeControllers.containsKey('tool:browser') ||
       _reusableControllers.containsKey('tool:browser');
+
+  // An unregistered channel can also mean a live engine is still starting.
+  // Only discard its state after the native window inventory confirms closure.
+  Future<bool?> _nativeWindowAlive(WindowController controller) async {
+    try {
+      final windows = await WindowController.getAll().timeout(
+        const Duration(seconds: 1),
+      );
+      return windows.any((window) => window.windowId == controller.windowId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _forgetNativeWindow(String targetId, WindowController controller) {
+    final active = identical(_nativeControllers[targetId], controller);
+    final cached = identical(_reusableControllers[targetId], controller);
+    if (!active && !cached) return;
+    if (cached) _reusableControllers.remove(targetId);
+    if (active) {
+      _nativeControllers.remove(targetId);
+      _registry.remove(targetId);
+      onWindowClosed?.call(targetId);
+      if (targetId == 'tool:browser') onBrowserClosed?.call();
+    }
+    _notify();
+  }
 
   @override
   DesktopWindowCapabilities get desktopCapabilities =>
@@ -1542,7 +1610,11 @@ class DefaultWindowService implements WindowService {
       };
       final effectivePayload = payload.copyWith(extra: updatedExtra);
 
-      final cachedController = _reusableControllers.remove(targetId);
+      var cachedController = _reusableControllers.remove(targetId);
+      if (cachedController != null &&
+          await _nativeWindowAlive(cachedController) == false) {
+        cachedController = null;
+      }
       if (cachedController != null) {
         // 必须第一时间放回 _nativeControllers，避免 update_payload 内部同步触发
         // browser_load_completed IPC 回调时，因找不到活跃 controller 导致首次挂载失败。
@@ -1556,15 +1628,14 @@ class DefaultWindowService implements WindowService {
           extra: effectivePayload.toJson(),
         );
         _notify();
-        try {
-          await cachedController.invokeMethod(
-            'update_payload',
-            effectivePayload.toJson(),
-          );
-          if (type == WindowType.chat) {
-            await cachedController.invokeMethod('chat_refresh');
-          }
-        } catch (_) {}
+        await _waitWindowReady(cachedController, 'window_ping');
+        await cachedController.invokeMethod(
+          'update_payload',
+          effectivePayload.toJson(),
+        );
+        if (type == WindowType.chat) {
+          await cachedController.invokeMethod('chat_refresh');
+        }
         if (showImmediately) {
           if (type == WindowType.settings) {
             try {
@@ -1622,13 +1693,19 @@ class DefaultWindowService implements WindowService {
         '[WindowService] Failed to create native sub-window for $targetId: $e\n$stackTrace',
       );
       _registry.remove(targetId);
-      final failedController = _nativeControllers.remove(targetId);
+      final failedController = _nativeControllers[targetId];
       if (failedController != null) {
-        try {
-          await failedController.hide();
-        } catch (_) {}
-        // A slow renderer can be retried without leaking a second engine.
-        _reusableControllers[targetId] = failedController;
+        final alive = await _nativeWindowAlive(failedController);
+        if (alive == false) {
+          _forgetNativeWindow(targetId, failedController);
+        } else {
+          _nativeControllers.remove(targetId);
+          try {
+            await failedController.hide();
+          } catch (_) {}
+          // A slow renderer can be retried without leaking a second engine.
+          _reusableControllers[targetId] = failedController;
+        }
       }
       _notify();
       completer.completeError(e, stackTrace);
@@ -1825,38 +1902,47 @@ class DefaultWindowService implements WindowService {
       },
     );
 
-    if (isWindowOpen(targetId)) {
-      final controller = _nativeControllers[targetId];
-      if (controller != null) {
-        await _waitBrowserReady(controller).timeout(const Duration(seconds: 7));
-        await controller.invokeMethod('browser_add_tab', {
-          'url': url,
-          'title': title,
-        });
-        if (showImmediately) {
-          await bringToFront(targetId);
-        }
-        return;
-      }
-    }
-
     if (platformFacade.supportsMultipleWindows) {
-      try {
-        await _openNativeSubWindow(
-          targetId: targetId,
-          type: WindowType.browser,
-          title: title ?? '网页浏览',
-          payload: payload,
-          showImmediately: showImmediately,
-        );
-        await _waitBrowserReady(
-          _nativeControllers[targetId]!,
-        ).timeout(const Duration(seconds: 7));
-        return;
-      } catch (e) {
-        debugPrint('[WindowService] Native browser error: $e');
-        // Do not silently replace a live native browser with a second host.
-        rethrow;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          final existing = _nativeControllers[targetId];
+          if (existing != null) {
+            if (await _nativeWindowAlive(existing) == false) {
+              _forgetNativeWindow(targetId, existing);
+            } else {
+              await _waitBrowserReady(
+                existing,
+              ).timeout(const Duration(seconds: 7));
+              await existing.invokeMethod('browser_add_tab', {
+                'url': url,
+                'title': title,
+              });
+              if (showImmediately) await bringToFront(targetId);
+              return;
+            }
+          }
+          await _openNativeSubWindow(
+            targetId: targetId,
+            type: WindowType.browser,
+            title: title ?? '网页浏览',
+            payload: payload,
+            showImmediately: showImmediately,
+          );
+          await _waitBrowserReady(
+            _nativeControllers[targetId]!,
+          ).timeout(const Duration(seconds: 7));
+          return;
+        } catch (e) {
+          debugPrint('[WindowService] Native browser error: $e');
+          final failed =
+              _nativeControllers[targetId] ?? _reusableControllers[targetId];
+          if (failed != null && await _nativeWindowAlive(failed) == false) {
+            _forgetNativeWindow(targetId, failed);
+            if (attempt == 0) continue;
+          }
+          // A timeout alone must never recreate a live WebView or lose its state.
+          rethrow;
+        }
       }
     }
 

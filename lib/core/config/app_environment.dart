@@ -10,6 +10,7 @@ enum AppFlavor { development, staging, production }
 /// `.env`, `String.fromEnvironment`, or platform APIs themselves.
 class AppEnvironment {
   const AppEnvironment._({
+    required this.socialApiBaseUrl,
     required this.flavor,
     required this.apiBaseUrl,
     required this.deviceRegistrationApiPath,
@@ -48,6 +49,9 @@ class AppEnvironment {
     required this.deepLinkAllowedHosts,
     required this.statisticBaseUrl,
   });
+
+  /// Independent Social endpoint; an unset value uses the current API gateway.
+  final String socialApiBaseUrl;
 
   final AppFlavor flavor;
   final String apiBaseUrl;
@@ -113,6 +117,10 @@ class AppEnvironment {
 
   factory AppEnvironment.fromDotEnv(AppFlavor flavor) {
     return AppEnvironment._(
+      socialApiBaseUrl: _nonEmpty(
+        dotenv.get('SOCIAL_API_BASE_URL', fallback: ''),
+        fallback: dotenv.get('API_BASE_URL', fallback: ''),
+      ),
       flavor: flavor,
       apiBaseUrl: dotenv.get('API_BASE_URL', fallback: ''),
       deviceRegistrationApiPath: dotenv.get(
@@ -314,6 +322,7 @@ class AppEnvironment {
   }
 
   static const AppEnvironment defaultEnvironment = AppEnvironment._(
+    socialApiBaseUrl: 'http://10.0.5.20:8044',
     flavor: AppFlavor.development,
     apiBaseUrl: 'http://10.0.5.20:8044',
     deviceRegistrationApiPath: '/api/chat/device/register',
@@ -324,7 +333,8 @@ class AppEnvironment {
     authTokenPath: '/connect/token',
     authClientId: 'IM_Mobile',
     authClientSecret: '',
-    authScope: 'IM offline_access roles profile phone email address',
+    authScope:
+        'IM Chat Cms Social AppStatistic AppDevice offline_access roles profile phone email address',
     authLoginGrantType: 'password',
     authUserInfoPath: '/connect/userinfo',
     authIntrospectionPath: '/connect/introspect',
