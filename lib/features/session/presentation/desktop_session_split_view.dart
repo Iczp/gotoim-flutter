@@ -169,11 +169,13 @@ class _DesktopSessionSplitViewState
     if (oldWidget.controller.currentOwner?.id !=
         widget.controller.currentOwner?.id) {
       _cachedChats.clear();
-      setState(() {
-        _selectedSessionUnitId = null;
-        _selectedTitle = null;
+      _selectedSessionUnitId = null;
+      _selectedTitle = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(selectedDesktopSessionUnitIdProvider) != null) {
+          ref.read(selectedDesktopSessionUnitIdProvider.notifier).select(null);
+        }
       });
-      ref.read(selectedDesktopSessionUnitIdProvider.notifier).select(null);
     }
   }
 
