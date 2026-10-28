@@ -269,7 +269,7 @@ class SignalRNetcoreGateway implements SignalRGateway {
       event: 'connecting',
     );
     try {
-      await conn.start().timeout(const Duration(seconds: 15));
+      await conn.start()?.timeout(const Duration(seconds: 15));
       _lastError = null;
       _lastErrorDescription = null;
       _emitConnection(SignalRConnectionState.connected);
@@ -341,7 +341,7 @@ class SignalRNetcoreGateway implements SignalRGateway {
     final conn = _connection;
     if (conn != null) {
       try {
-        await conn.stop().timeout(
+        await conn.stop()?.timeout(
           const Duration(milliseconds: 1500),
           onTimeout: () {
             AppLogger.instance.info(
@@ -375,7 +375,7 @@ class SignalRNetcoreGateway implements SignalRGateway {
       final oldConn = _connection;
       if (oldConn != null) {
         try {
-          await oldConn.stop().timeout(
+          await oldConn.stop()?.timeout(
             const Duration(milliseconds: 600),
             onTimeout: () {
               AppLogger.instance.info(
