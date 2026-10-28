@@ -198,6 +198,51 @@ class SignalRNetcoreGateway implements SignalRGateway {
   @override
   Future<void> connect() => _connectInternal();
 
+  Future<String?> _ensureValidTokenBeforeConnect() async {
+    var token = await _readAccessToken();
+    if (token == null || token.isEmpty) {
+      AppLogger.instance.info(
+        'SignalR connect check: no access token available',
+        category: 'signalr',
+        event: 'no_access_token',
+      );
+      return null;
+    }
+    if (shouldRefreshJwt(token)) {
+      AppLogger.instance.info(
+        'SignalR validating token before connect: token expired or expiring soon, refreshing...',
+        category: 'signalr',
+        event: 'proactive_token_refresh_before_connect',
+      );
+      final refresh = _refreshToken;
+      if (refresh != null) {
+        try {
+          final refreshed = await refresh();
+          if (refreshed != null && refreshed.isNotEmpty) {
+            token = refreshed;
+          }
+        } on TokenRefreshRejectedException catch (rejection) {
+          AppLogger.instance.error(
+            'SignalR proactive token refresh rejected definitively before connect',
+            category: 'signalr',
+            event: 'token_refresh_rejected',
+            error: rejection,
+          );
+          await _onSessionInvalidated?.call();
+          rethrow;
+        } catch (e) {
+          AppLogger.instance.error(
+            'SignalR proactive token refresh failed before connect',
+            category: 'signalr',
+            event: 'token_refresh_failed',
+            error: e,
+          );
+        }
+      }
+    }
+    return token;
+  }
+
   Future<void> _connectInternal({bool isRetryAfter401 = false}) async {
     final conn = _connection;
     if (conn == null) return;
@@ -206,6 +251,17 @@ class SignalRNetcoreGateway implements SignalRGateway {
         connectionState == SignalRConnectionState.reconnecting) {
       return;
     }
+
+    // 连接前验证 Token：如果已经过期或即将过期（5分钟内），必须先 refreshtoken 再连接
+    final validToken = await _ensureValidTokenBeforeConnect();
+    if (validToken == null || validToken.isEmpty) {
+      _emitConnection(
+        SignalRConnectionState.disconnected,
+        error: '未获取到有效登录 Token，无法连接实时通道。',
+      );
+      return;
+    }
+
     _emitConnection(SignalRConnectionState.connecting);
     AppLogger.instance.info(
       'SignalR connecting (retryAfter401: $isRetryAfter401)',
@@ -213,7 +269,7 @@ class SignalRNetcoreGateway implements SignalRGateway {
       event: 'connecting',
     );
     try {
-      await conn.start();
+      await conn.start().timeout(const Duration(seconds: 15));
       _lastError = null;
       _lastErrorDescription = null;
       _emitConnection(SignalRConnectionState.connected);
@@ -284,8 +340,26 @@ class SignalRNetcoreGateway implements SignalRGateway {
   Future<void> disconnect() async {
     final conn = _connection;
     if (conn != null) {
-      await conn.stop();
+      try {
+        await conn.stop().timeout(
+          const Duration(milliseconds: 1500),
+          onTimeout: () {
+            AppLogger.instance.info(
+              'SignalR connection stop timed out during disconnect',
+              category: 'signalr',
+              event: 'disconnect_timeout',
+            );
+          },
+        );
+      } catch (e) {
+        AppLogger.instance.error(
+          'SignalR disconnect error ignored',
+          category: 'signalr',
+          error: e,
+        );
+      }
     }
+    _emitConnection(SignalRConnectionState.disconnected);
   }
 
   @override

@@ -34,6 +34,9 @@ class SettingsPage extends ConsumerWidget {
     );
     if (confirmed && context.mounted) {
       await ref.read(authControllerProvider).logout();
+      if (context.mounted) {
+        context.go('/login');
+      }
     }
   }
 

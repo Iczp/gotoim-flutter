@@ -260,8 +260,6 @@ class DioApiClient implements ApiClient {
       }
       if (retryOnUnauthorized &&
           usesStoredAccessToken &&
-          accessToken != null &&
-          accessToken.isNotEmpty &&
           hasRetriedAfterRefresh &&
           error.response?.statusCode == 401) {
         await _invalidateSession();

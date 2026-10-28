@@ -263,7 +263,7 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
             contentType: Headers.jsonContentType,
             headers: {'Authorization': 'Bearer $access'},
           ),
-        );
+        ).timeout(const Duration(seconds: 2));
       }
     } catch (_) {
       /* Offline logout still clears local credentials below. */
@@ -272,7 +272,7 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
       await Future.wait<void>(<Future<void>>[
         revoke(RevocationTokenType.accessToken),
         revoke(RevocationTokenType.refreshToken),
-      ]);
+      ]).timeout(const Duration(seconds: 2));
     } catch (_) {
       // Follow UniApp semantics: local logout must still complete.
     } finally {
@@ -383,12 +383,7 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
         code: code,
       );
       if (fields['grant_type'] == 'refresh_token' &&
-          (statusCode == 400 || statusCode == 401) &&
-          const <String>{
-            'invalid_grant',
-            'invalid_token',
-            'unauthorized_client',
-          }.contains(code)) {
+          (statusCode == 400 || statusCode == 401)) {
         throw TokenRefreshRejectedException(message, code: code);
       }
       throw exception;

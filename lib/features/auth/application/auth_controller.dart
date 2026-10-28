@@ -151,20 +151,43 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await _signalRGateway.disconnect();
-    await _repository.logout();
-    await _abpConfigurationRepository?.clearCache();
-    await StatisticService.instance.track(StatisticEventNames.logout);
-    StatisticService.instance.clearUser();
-    _status = AuthStatus.unauthenticated;
-    _errorMessage = null;
-    _accountName = null;
-    _userInfo = null;
-    _currentUser = null;
-    _applicationConfiguration = null;
-    _lastTokenRefreshedAt = null;
-    _onAccountChanged?.call();
-    notifyListeners();
+    try {
+      try {
+        await _signalRGateway.disconnect().timeout(
+          const Duration(milliseconds: 1500),
+          onTimeout: () {},
+        );
+      } catch (_) {}
+      try {
+        await _repository.logout().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () async {
+            if (_clearLocalSession != null) await _clearLocalSession();
+          },
+        );
+      } catch (_) {}
+      try {
+        await _abpConfigurationRepository?.clearCache();
+      } catch (_) {}
+      try {
+        await StatisticService.instance
+            .track(StatisticEventNames.logout)
+            .timeout(const Duration(milliseconds: 1000), onTimeout: () {});
+      } catch (_) {}
+      StatisticService.instance.clearUser();
+    } finally {
+      _status = AuthStatus.unauthenticated;
+      _errorMessage = null;
+      _accountName = null;
+      _userInfo = null;
+      _currentUser = null;
+      _applicationConfiguration = null;
+      _lastTokenRefreshedAt = null;
+      try {
+        _onAccountChanged?.call();
+      } catch (_) {}
+      notifyListeners();
+    }
   }
 
   Future<void> sessionInvalidated({String? reason}) =>
@@ -173,18 +196,34 @@ class AuthController extends ChangeNotifier {
       ).whenComplete(() => _invalidating = null);
 
   Future<void> _invalidateSession(String? reason) async {
-    if (_clearLocalSession != null) await _clearLocalSession();
-    await _signalRGateway.disconnect();
-    await _abpConfigurationRepository?.clearCache();
-    _status = AuthStatus.unauthenticated;
-    _errorMessage = reason?.trim().isNotEmpty == true ? reason : '登录已失效，请重新登录。';
-    _accountName = null;
-    _userInfo = null;
-    _currentUser = null;
-    _applicationConfiguration = null;
-    _lastTokenRefreshedAt = null;
-    _onAccountChanged?.call();
-    notifyListeners();
+    try {
+      if (_clearLocalSession != null) {
+        try {
+          await _clearLocalSession();
+        } catch (_) {}
+      }
+      try {
+        await _signalRGateway.disconnect().timeout(
+          const Duration(milliseconds: 1500),
+          onTimeout: () {},
+        );
+      } catch (_) {}
+      try {
+        await _abpConfigurationRepository?.clearCache();
+      } catch (_) {}
+    } finally {
+      _status = AuthStatus.unauthenticated;
+      _errorMessage = reason?.trim().isNotEmpty == true ? reason : '登录已失效，请重新登录。';
+      _accountName = null;
+      _userInfo = null;
+      _currentUser = null;
+      _applicationConfiguration = null;
+      _lastTokenRefreshedAt = null;
+      try {
+        _onAccountChanged?.call();
+      } catch (_) {}
+      notifyListeners();
+    }
   }
 
   /// 账号切换回调：退出、会话失效、新账号登录成功时触发，由 Provider 层注入。
