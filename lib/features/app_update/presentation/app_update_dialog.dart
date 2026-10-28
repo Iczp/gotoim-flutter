@@ -23,10 +23,9 @@ class AppUpdateDialog extends StatefulWidget {
       context: context,
       barrierDismissible: !version.isForce,
       useRootNavigator: true,
-      builder: (dialogContext) => AppUpdateDialog(
-        version: version,
-        updateService: updateService,
-      ),
+      builder:
+          (dialogContext) =>
+              AppUpdateDialog(version: version, updateService: updateService),
     );
   }
 
@@ -41,20 +40,6 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
   String? _errorMessage;
 
   Future<void> _startUpdate() async {
-    final pkgUrl = widget.version.pkgUrl;
-    final pageUrl = widget.version.pageUrl;
-
-    // If there is no APK package direct link, open landing/store page directly
-    if (pkgUrl == null || pkgUrl.isEmpty) {
-      if (pageUrl != null && pageUrl.isNotEmpty) {
-        await widget.updateService.openPageUrl(pageUrl);
-      }
-      if (mounted && !widget.version.isForce) {
-        Navigator.of(context).pop();
-      }
-      return;
-    }
-
     setState(() {
       _isDownloading = true;
       _errorMessage = null;
@@ -73,7 +58,8 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
             final mbTotal = (total / (1024 * 1024)).toStringAsFixed(1);
             setState(() {
               _progress = percentage;
-              _progressText = '${(percentage * 100).toStringAsFixed(0)}% ($mbReceived MB / $mbTotal MB)';
+              _progressText =
+                  '${(percentage * 100).toStringAsFixed(0)}% ($mbReceived MB / $mbTotal MB)';
             });
           } else {
             final mbReceived = (received / (1024 * 1024)).toStringAsFixed(1);
@@ -84,12 +70,15 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
           }
         },
       );
+      if (mounted && !widget.version.isForce) Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _isDownloading = false;
-        _errorMessage = '下载失败，请点击重试';
+        _errorMessage = '无法打开或下载更新，请检查地址后重试';
       });
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
     }
   }
 
@@ -157,17 +146,19 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: version.isForce
-                                    ? colorScheme.errorContainer
-                                    : colorScheme.secondaryContainer,
+                                color:
+                                    version.isForce
+                                        ? colorScheme.errorContainer
+                                        : colorScheme.secondaryContainer,
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 version.isForce ? '重要更新' : '推荐',
                                 style: theme.textTheme.labelSmall?.copyWith(
-                                  color: version.isForce
-                                      ? colorScheme.onErrorContainer
-                                      : colorScheme.onSecondaryContainer,
+                                  color:
+                                      version.isForce
+                                          ? colorScheme.onErrorContainer
+                                          : colorScheme.onSecondaryContainer,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -206,7 +197,9 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                    color: colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.35,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: SingleChildScrollView(

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:gotoim_flutter/core/config/app_environment.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/device/client_device_context.dart';
 import 'package:gotoim_flutter/core/network/dio_api_client.dart';
@@ -111,7 +112,7 @@ void main() {
         InterceptorsWrapper(
           onRequest: (options, handler) {
             expect(options.method, 'POST');
-            expect(options.path, '/api/chat/device/logout');
+            expect(options.path, '${AppEnvironment.defaultEnvironment.appDeviceBaseUrl}/api/app-device/public/device-public/logout');
             expect(options.data['deviceId'], 'offline-device');
             expect(options.data['appId'], 'other-app');
             expect(options.data['allUsers'], false);

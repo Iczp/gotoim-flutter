@@ -13,6 +13,7 @@ class AppEnvironment {
     required this.socialApiBaseUrl,
     required this.flavor,
     required this.apiBaseUrl,
+    required this.appDeviceBaseUrl,
     required this.deviceRegistrationApiPath,
     required this.appId,
     required this.appName,
@@ -55,6 +56,11 @@ class AppEnvironment {
 
   final AppFlavor flavor;
   final String apiBaseUrl;
+  final String appDeviceBaseUrl;
+
+  String appDeviceUrl(String path) =>
+      '${appDeviceBaseUrl.replaceAll(RegExp(r'/+$'), '')}/${path.replaceAll(RegExp(r'^/+'), '')}';
+
   final String deviceRegistrationApiPath;
   final String appId;
   final String appName;
@@ -123,9 +129,13 @@ class AppEnvironment {
       ),
       flavor: flavor,
       apiBaseUrl: dotenv.get('API_BASE_URL', fallback: ''),
+      appDeviceBaseUrl: _nonEmpty(
+        dotenv.get('APP_DEVICE_BASE_URL', fallback: ''),
+        fallback: dotenv.get('API_BASE_URL', fallback: ''),
+      ),
       deviceRegistrationApiPath: dotenv.get(
         'DEVICE_REGISTRATION_API_PATH',
-        fallback: '/api/chat/device/register',
+        fallback: '/api/app-device/public/device-public/register',
       ),
       appId: dotenv.get('APP_ID', fallback: '__UNI__39F095D'),
       appName: dotenv.get('APP_NAME', fallback: 'Goto IM'),
@@ -158,7 +168,7 @@ class AppEnvironment {
       ),
       scanLoginHubPath: dotenv.get(
         'SCAN_LOGIN_HUB_PATH',
-        fallback: '/signalr-hubs/scan-login',
+        fallback: '/scan-login/hub',
       ),
       scanLoginSignalRBaseUrl: _nonEmpty(
         dotenv.get('SCAN_LOGIN_SIGNALR_BASE_URL', fallback: ''),
@@ -325,7 +335,8 @@ class AppEnvironment {
     socialApiBaseUrl: 'http://10.0.5.20:8044',
     flavor: AppFlavor.development,
     apiBaseUrl: 'http://10.0.5.20:8044',
-    deviceRegistrationApiPath: '/api/chat/device/register',
+    appDeviceBaseUrl: 'http://10.0.5.20:8044',
+    deviceRegistrationApiPath: '/api/app-device/public/device-public/register',
     appId: '__UNI__39F095D',
     appName: 'Goto IM',
     appVersion: '1.0.0',
@@ -341,7 +352,7 @@ class AppEnvironment {
     authRevocationPath: '/connect/revocation',
     signalRBaseUrl: 'http://10.0.5.20:8044',
     signalRHubPath: '/signalr-hubs/chat',
-    scanLoginHubPath: '/signalr-hubs/scan-login',
+    scanLoginHubPath: '/scan-login/hub',
     scanLoginSignalRBaseUrl: 'http://10.0.5.20:8044',
     scanLoginTemplate: 'gotoim://scan-login?code={code}',
     scanLoginFallbackExpires: Duration(seconds: 90),
@@ -365,23 +376,23 @@ class AppEnvironment {
 }
 
 final Provider<AppEnvironment> appEnvironmentProvider =
-    Provider<AppEnvironment>(
-      (ref) {
-        try {
-          if (dotenv.isInitialized) {
-            const flavorName = String.fromEnvironment(
-              'APP_ENV',
-              defaultValue: 'development',
-            );
-            final flavor = AppEnvironment.parseFlavor(flavorName);
-            return AppEnvironment.fromDotEnv(flavor);
-          }
-        } catch (e) {
-          if (kReleaseMode) {
-            debugPrint('[AppEnvironment] Critical: Failed to load environment: $e');
-            rethrow;
-          }
+    Provider<AppEnvironment>((ref) {
+      try {
+        if (dotenv.isInitialized) {
+          const flavorName = String.fromEnvironment(
+            'APP_ENV',
+            defaultValue: 'development',
+          );
+          final flavor = AppEnvironment.parseFlavor(flavorName);
+          return AppEnvironment.fromDotEnv(flavor);
         }
-        return AppEnvironment.defaultEnvironment;
-      },
-    );
+      } catch (e) {
+        if (kReleaseMode) {
+          debugPrint(
+            '[AppEnvironment] Critical: Failed to load environment: $e',
+          );
+          rethrow;
+        }
+      }
+      return AppEnvironment.defaultEnvironment;
+    });

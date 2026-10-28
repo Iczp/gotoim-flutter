@@ -117,7 +117,7 @@ void main() {
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
 
   test(
-    'legacy registrations retain client identity and never send a credential',
+    'AppDevice registrations retain client identity and never send a credential',
     () async {
       final api =
           FakeApi()
@@ -129,13 +129,14 @@ void main() {
       await client.register();
       await client.register();
       expect(api.paths, [
-        '/api/chat/device/register',
-        '/api/chat/device/register',
+        'https://api.example.test/api/app-device/public/device-public/register',
+        'https://api.example.test/api/app-device/public/device-public/register',
       ]);
       for (final body in api.requests) {
         expect(body['deviceId'], device.deviceId);
-        expect(body['screenWidth'], 1080);
-        expect(body['pixelRatio'], 2.5);
+        final profile = body['profile'] as Map;
+        expect(profile['screenWidth'], 1080);
+        expect(profile['pixelRatio'], 2.5);
         expect(body.containsKey('registrationProof'), isFalse);
       }
     },
@@ -151,7 +152,7 @@ void main() {
       await registration(api, independent: true).register();
       final body = api.requests.single;
       final profile = body['profile'] as Map;
-      expect(api.paths.single, '/api/app-device/public/device-public/register');
+      expect(api.paths.single, 'https://api.example.test/api/app-device/public/device-public/register');
       expect(body['deviceId'], device.deviceId);
       expect(profile.length, 61);
       expect(profile['browserName'], 'browser');

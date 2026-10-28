@@ -139,7 +139,7 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     );
   }
 
-  /// Token for `/api/chat/device/register`; it never shares user-token state.
+  /// Token for AppDevice registration; it never shares user-token state.
   Future<String> getDeviceRegistrationAccessToken() =>
       _getClientCredentialsToken(
         cacheKey: 'device-register',
@@ -251,7 +251,9 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
       final access = await _tokenStorage.readAccessToken();
       if (access?.isNotEmpty == true) {
         await _dio.post<dynamic>(
-          '${_environment.apiBaseUrl}/api/chat/device/logout',
+          _environment.appDeviceUrl(
+            '/api/app-device/public/device-public/logout',
+          ),
           data: <String, Object?>{
             'appId': _deviceContext.appId,
             'deviceId': _deviceContext.deviceId,

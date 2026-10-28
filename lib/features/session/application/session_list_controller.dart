@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/device/client_device_context.dart';
+import '../../../core/config/app_environment.dart';
 import '../../../core/realtime/signalr_gateway.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../chat/application/ai_stream_change_bus.dart';
@@ -31,7 +32,10 @@ void sessionScrollTrace(String message) {
 
 final sessionRepositoryProvider = Provider<SessionRepository>(
   (ref) => SessionRepository(
-    api: SessionUnitApi(ref.watch(apiClientProvider)),
+    api: SessionUnitApi(
+      ref.watch(apiClientProvider),
+      environment: ref.watch(appEnvironmentProvider),
+    ),
     aiApi: AiApi(ref.watch(apiClientProvider)),
     dao: SessionDao(ref.watch(unifiedDatabaseProvider)),
     changeBus: ref.watch(sessionChangeBusProvider),
@@ -667,7 +671,9 @@ class SessionListController extends ChangeNotifier {
     try {
       await _loadNextPageInternal(reset: cached.isEmpty);
     } catch (error) {
-      debugPrint('[selectOwner][remote-failed] ownerId=${owner.id} error=$error');
+      debugPrint(
+        '[selectOwner][remote-failed] ownerId=${owner.id} error=$error',
+      );
       if (cached.isEmpty) {
         _error = error;
       }

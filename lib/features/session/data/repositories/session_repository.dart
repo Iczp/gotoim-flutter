@@ -46,8 +46,20 @@ class SessionRepository {
   Future<void> saveCurrentOwnerId(int ownerId) =>
       _dao.writeCurrentOwnerId(ownerId);
 
-  Future<List<LoggedInDevice>> loadDevices() async =>
-      (await _api.getDevices()).items;
+  Future<List<LoggedInDevice>> loadDevices() async {
+    final devices = <LoggedInDevice>[];
+    final cursors = <String>{};
+    String? cursor;
+    for (var batch = 0; batch < 5; batch++) {
+      final page = await _api.getDevices(afterId: cursor);
+      devices.addAll(page.items);
+      final next = page.nextCursorId;
+      if (next == null || next.isEmpty) return devices;
+      if (!cursors.add(next)) throw StateError('设备列表游标无效，请重试。');
+      cursor = next;
+    }
+    throw StateError('设备数量超过当前列表上限，请联系管理员。');
+  }
 
   Future<List<LoggedInDevice>> loadOnlineDevices() async =>
       (await _api.getOnlineDevices()).items;

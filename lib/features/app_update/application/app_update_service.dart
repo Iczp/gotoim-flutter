@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../../app/application_providers.dart';
@@ -14,6 +13,11 @@ import '../../../../core/logging/app_logger.dart';
 import '../data/datasources/app_update_api.dart';
 import '../data/models/app_version_dto.dart';
 import '../presentation/app_update_dialog.dart';
+import 'app_update_target.dart';
+import 'update_url_launcher_stub.dart'
+    if (dart.library.io) 'update_url_launcher_io.dart'
+    if (dart.library.js_interop) 'update_url_launcher_web.dart'
+    as launcher;
 
 /// Service managing app version checks, upgrades, and download installations.
 class AppUpdateService extends ChangeNotifier {
@@ -27,13 +31,15 @@ class AppUpdateService extends ChangeNotifier {
        _dio = dio ?? Dio(),
        _environment = environment,
        _deviceContext = deviceContext,
-       _currentVersionCode = currentVersionCode ?? 1;
+       _currentVersionCode = currentVersionCode ?? 0,
+       _hasExplicitVersionCode = currentVersionCode != null;
 
   final AppUpdateApi _api;
   final Dio _dio;
   final AppEnvironment _environment;
   final ClientDeviceContext _deviceContext;
-  final int _currentVersionCode;
+  int _currentVersionCode;
+  final bool _hasExplicitVersionCode;
 
   bool _isChecking = false;
   bool _isDownloading = false;
@@ -53,12 +59,14 @@ class AppUpdateService extends ChangeNotifier {
 
   String get platformName {
     if (kIsWeb) return 'web';
-    if (Platform.isAndroid) return 'android';
-    if (Platform.isIOS) return 'ios';
-    if (Platform.isWindows) return 'windows';
-    if (Platform.isMacOS) return 'macos';
-    if (Platform.isLinux) return 'linux';
-    return 'unknown';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      TargetPlatform.windows => 'windows',
+      TargetPlatform.macOS => 'macos',
+      TargetPlatform.linux => 'linux',
+      _ => 'unknown',
+    };
   }
 
   /// Checks whether an update is required according to version code.
@@ -78,6 +86,14 @@ class AppUpdateService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (!_hasExplicitVersionCode) {
+        final package = await PackageInfo.fromPlatform();
+        final code = int.tryParse(package.buildNumber);
+        if (code == null || code < 0) {
+          throw const FormatException('无法读取当前应用版本编码');
+        }
+        _currentVersionCode = code;
+      }
       final latest = await _api.getLatestVersion(
         appId: appId,
         platform: platformName,
@@ -128,30 +144,35 @@ class AppUpdateService extends ChangeNotifier {
     }
   }
 
-  /// Downloads package and invokes native installation.
+  /// Downloads supported installers or opens the configured update page.
   Future<void> downloadAndInstall(
     AppVersionDto version, {
     void Function(int received, int total)? onProgress,
   }) async {
-    final pkgUrl = version.pkgUrl;
-    if (pkgUrl == null || pkgUrl.isEmpty) {
-      if (version.pageUrl != null && version.pageUrl!.isNotEmpty) {
-        await openPageUrl(version.pageUrl!);
-      }
+    final target = planAppUpdate(version, platform: platformName);
+    if (target.action == UpdateAction.openUrl) {
+      await launcher.openUpdateUrl(target.url);
       return;
     }
-
+    final url = target.url;
+    if (_isDownloading) {
+      throw StateError('已有更新下载任务');
+    }
     _isDownloading = true;
     _downloadProgress = 0.0;
     notifyListeners();
-
     try {
       final tempDir = await getTemporaryDirectory();
-      final fileName = 'gotoim_v${version.version}_${version.versionCode}.apk';
-      final savePath = '${tempDir.path}/$fileName';
-
+      final extension = switch (target.action) {
+        UpdateAction.installAndroidApk => 'apk',
+        UpdateAction.installWindowsExe => 'exe',
+        UpdateAction.installWindowsMsi => 'msi',
+        UpdateAction.openUrl => throw StateError('不支持的安装包'),
+      };
+      final savePath =
+          '${tempDir.path}/gotoim_update_${version.versionCode}.$extension';
       await _dio.download(
-        pkgUrl,
+        url.toString(),
         savePath,
         onReceiveProgress: (received, total) {
           if (total > 0) {
@@ -161,38 +182,39 @@ class AppUpdateService extends ChangeNotifier {
           onProgress?.call(received, total);
         },
       );
-
-      final openResult = await OpenFilex.open(
-        savePath,
-        type: 'application/vnd.android.package-archive',
-      );
-      debugPrint('[AppUpdateService] OpenFilex result: ${openResult.message}');
-    } catch (error) {
-      debugPrint('[AppUpdateService] downloadAndInstall failed: $error');
-      rethrow;
+      if (target.action == UpdateAction.installAndroidApk) {
+        final result = await OpenFilex.open(
+          savePath,
+          type: 'application/vnd.android.package-archive',
+        );
+        if (result.type != ResultType.done) {
+          throw StateError('系统无法打开安装包：${result.message}');
+        }
+      } else {
+        await launcher.launchWindowsInstaller(
+          savePath,
+          msi: extension == 'msi',
+        );
+      }
     } finally {
       _isDownloading = false;
       notifyListeners();
     }
   }
 
-  /// Opens the store / landing page.
-  Future<void> openPageUrl(String pageUrl) async {
-    try {
-      await OpenFilex.open(pageUrl);
-    } catch (error) {
-      debugPrint('[AppUpdateService] openPageUrl failed: $error');
-    }
-  }
+  Future<void> openPageUrl(String pageUrl) =>
+      launcher.openUpdateUrl(checkedUpdateUrl(pageUrl));
 }
 
-final appUpdateServiceProvider = ChangeNotifierProvider<AppUpdateService>((ref) {
+final appUpdateServiceProvider = ChangeNotifierProvider<AppUpdateService>((
+  ref,
+) {
   final apiClient = ref.watch(apiClientProvider);
   final env = ref.watch(appEnvironmentProvider);
   final deviceContext = ref.watch(clientDeviceContextProvider);
 
   return AppUpdateService(
-    api: AppUpdateApi(apiClient),
+    api: AppUpdateApi(apiClient, environment: env),
     environment: env,
     deviceContext: deviceContext,
   );

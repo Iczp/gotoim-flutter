@@ -16,39 +16,43 @@ class LoggedInDevice {
     this.chatObjectIdList = const <int>[],
   });
 
-  factory LoggedInDevice.fromJson(Map<String, dynamic> json) => LoggedInDevice(
-    appId: json['appId']?.toString() ?? '',
-    connectionId: json['connectionId']?.toString() ?? '',
-    deviceId: json['deviceId']?.toString() ?? '',
-    deviceType: json['deviceType']?.toString() ?? '',
-    brand: (json['deviceBrand'] ?? json['brand'] ?? '').toString(),
-    model: (json['deviceModel'] ?? json['model'] ?? '').toString(),
-    updatedAt:
-        DateTime.tryParse(
-          (json['activeTime'] ??
-                  json['lastModificationTime'] ??
-                  json['creationTime'] ??
-                  '')
-              .toString(),
-        )?.toLocal(),
-    groups: (json['groups'] is List ? json['groups'] as List : const [])
-        .whereType<Map>()
-        .map((group) => group['name']?.toString() ?? '')
-        .where((name) => name.isNotEmpty)
-        .toList(growable: false),
-    ipAddress: json['ipAddress']?.toString() ?? '',
-    host: json['host']?.toString() ?? '',
-    browser: json['browser']?.toString() ?? '',
-    browserInfo: json['browserInfo']?.toString() ?? '',
-    platform: json['platform']?.toString() ?? '',
-    chatObjectIdList:
-        (json['chatObjectIdList'] is List
-            ? (json['chatObjectIdList'] as List)
-                .map((e) => e is num ? e.toInt() : int.tryParse('$e'))
-                .whereType<int>()
-                .toList(growable: false)
-            : const <int>[]),
-  );
+  factory LoggedInDevice.fromJson(Map<String, dynamic> json) {
+    final profile = json['profile'];
+    if (profile is Map) json = {...profile.cast<String, dynamic>(), ...json};
+    return LoggedInDevice(
+      appId: json['appId']?.toString() ?? '',
+      connectionId: json['connectionId']?.toString() ?? '',
+      deviceId: json['deviceId']?.toString() ?? '',
+      deviceType: json['deviceType']?.toString() ?? '',
+      brand: (json['deviceBrand'] ?? json['brand'] ?? '').toString(),
+      model: (json['deviceModel'] ?? json['model'] ?? '').toString(),
+      updatedAt:
+          DateTime.tryParse(
+            (json['activeTime'] ??
+                    json['lastModificationTime'] ??
+                    json['creationTime'] ??
+                    '')
+                .toString(),
+          )?.toLocal(),
+      groups: (json['groups'] is List ? json['groups'] as List : const [])
+          .whereType<Map>()
+          .map((group) => group['name']?.toString() ?? '')
+          .where((name) => name.isNotEmpty)
+          .toList(growable: false),
+      ipAddress: json['ipAddress']?.toString() ?? '',
+      host: json['host']?.toString() ?? '',
+      browser: json['browser']?.toString() ?? '',
+      browserInfo: json['browserInfo']?.toString() ?? '',
+      platform: json['platform']?.toString() ?? '',
+      chatObjectIdList:
+          (json['chatObjectIdList'] is List
+              ? (json['chatObjectIdList'] as List)
+                  .map((e) => e is num ? e.toInt() : int.tryParse('$e'))
+                  .whereType<int>()
+                  .toList(growable: false)
+              : const <int>[]),
+    );
+  }
 
   final String appId;
   final String deviceId;

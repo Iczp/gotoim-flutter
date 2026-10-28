@@ -14,7 +14,7 @@ class HttpScanLoginRepository implements ScanLoginRepository {
   @override
   Future<ScanLoginRequest> inspect(String scanText) async {
     final response = await _apiClient.get<Map<String, dynamic>>(
-      '/api/chat/scan-login/scan',
+      '/scan-login/api/scan',
       query: <String, Object?>{'scanText': scanText},
     );
     return ScanLoginRequest.fromJson(response);
@@ -22,7 +22,7 @@ class HttpScanLoginRepository implements ScanLoginRepository {
 
   @override
   Future<void> grant(String scanText) => _apiClient.get<Object?>(
-    '/api/chat/scan-login/grant',
+    '/scan-login/api/grant',
     query: <String, Object?>{'scanText': scanText},
     retryOnUnauthorized: false,
   );
@@ -30,7 +30,7 @@ class HttpScanLoginRepository implements ScanLoginRepository {
   @override
   Future<void> reject(String scanText, {String? reason}) =>
       _apiClient.get<Object?>(
-        '/api/chat/scan-login/reject',
+        '/scan-login/api/reject',
         query: <String, Object?>{
           'scanText': scanText,
           if (reason != null) 'reason': reason,
@@ -41,7 +41,7 @@ class HttpScanLoginRepository implements ScanLoginRepository {
   @override
   Future<void> cancel(String connectionId, {String? reason}) =>
       _apiClient.get<Object?>(
-        '/api/chat/scan-login/cancel',
+        '/scan-login/api/cancel',
         query: <String, Object?>{
           'connectionId': connectionId,
           if (reason != null) 'reason': reason,

@@ -1,13 +1,16 @@
 import 'dart:convert';
 
 import '../../../../core/logging/app_logger.dart';
+import '../../../../core/config/app_environment.dart';
 import '../../../../core/network/api_client.dart';
 import '../models/app_version_dto.dart';
 
 class AppUpdateApi {
-  AppUpdateApi(this._apiClient);
+  AppUpdateApi(this._apiClient, {AppEnvironment? environment})
+    : _environment = environment ?? AppEnvironment.defaultEnvironment;
 
   final ApiClient _apiClient;
+  final AppEnvironment _environment;
 
   Future<AppVersionDto?> getLatestVersion({
     required String appId,
@@ -17,7 +20,7 @@ class AppUpdateApi {
   }) async {
     try {
       final response = await _apiClient.get<dynamic>(
-        '/api/chat/app-version/latest',
+        _environment.appDeviceUrl('/api/app-device/public/app-version/latest'),
         query: <String, Object?>{
           'appId': appId,
           'platform': platform,

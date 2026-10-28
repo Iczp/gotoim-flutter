@@ -144,24 +144,22 @@ class DeviceRegistrationApi {
   /// Exact request shape for the configured registration API.
   Future<Map<String, Object?>> collectRequestPayload({String? name}) async {
     final payload = await collectPayload(name: name);
-    final useAppDevice =
-        _environment.deviceRegistrationApiPath != '/api/chat/device/register';
-    return useAppDevice
-        ? <String, Object?>{
-          'appId': payload['appId'],
-          'deviceId': payload['deviceId'],
-          'profile': Map<String, Object?>.from(payload)..removeWhere(
-            (key, _) => const {'appId', 'deviceId', 'isEnabled'}.contains(key),
-          ),
-        }
-        : payload;
+    return <String, Object?>{
+      'appId': payload['appId'],
+      'deviceId': payload['deviceId'],
+      'profile': Map<String, Object?>.from(payload)..removeWhere(
+        (key, _) => const {'appId', 'deviceId', 'isEnabled'}.contains(key),
+      ),
+    };
   }
 
   Future<Object?> _register({String? name}) async {
     final body = await collectRequestPayload(name: name);
     final accessToken = await _readClientCredentialsToken();
     final response = await _apiClient.post<Object?>(
-      _environment.deviceRegistrationApiPath,
+      _environment.deviceRegistrationApiPath.startsWith('http')
+          ? _environment.deviceRegistrationApiPath
+          : _environment.appDeviceUrl(_environment.deviceRegistrationApiPath),
       data: body,
       headers: <String, String>{'Authorization': 'Bearer $accessToken'},
       retryOnUnauthorized: false,

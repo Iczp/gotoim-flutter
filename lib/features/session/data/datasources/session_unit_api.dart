@@ -1,4 +1,5 @@
 import '../../../../core/network/api_client.dart';
+import '../../../../core/config/app_environment.dart';
 import '../models/paged_result_dto.dart';
 import '../models/chat_owner.dart';
 import '../models/session_summary.dart';
@@ -6,9 +7,11 @@ import '../models/logged_in_device.dart';
 
 /// ABP session-unit cache endpoints used by the conversation list.
 class SessionUnitApi {
-  SessionUnitApi(this._apiClient);
+  SessionUnitApi(this._apiClient, {AppEnvironment? environment})
+    : _environment = environment ?? AppEnvironment.defaultEnvironment;
 
   final ApiClient _apiClient;
+  final AppEnvironment _environment;
 
   Future<List<ChatOwner>> getOwners() async {
     final response = await _apiClient.get<Map<String, dynamic>>(
@@ -114,13 +117,22 @@ class SessionUnitApi {
     );
   }
 
-  Future<PagedResultDto<LoggedInDevice>> getDevices() async {
+  Future<PagedResultDto<LoggedInDevice>> getDevices({String? afterId}) async {
     final response = await _apiClient.get<Map<String, dynamic>>(
-      '/api/chat/device/by-current-user',
+      _environment.appDeviceUrl(
+        '/api/app-device/public/device-public/my-devices',
+      ),
+      query: {'appId': _environment.appId, 'take': 200, if (afterId != null) 'afterId': afterId},
     );
-    return PagedResultDto<LoggedInDevice>.fromJson(
+    final page = PagedResultDto<LoggedInDevice>.fromJson(
       response,
       LoggedInDevice.fromJson,
+    );
+    return PagedResultDto<LoggedInDevice>(
+      items: page.items,
+      totalCount: page.items.length,
+      hasMore: response['nextId'] != null,
+      nextCursorId: response['nextId']?.toString(),
     );
   }
 
@@ -139,7 +151,7 @@ class SessionUnitApi {
     required String deviceId,
   }) async {
     await _apiClient.post<Map<String, dynamic>>(
-      '/api/chat/device/logout',
+      _environment.appDeviceUrl('/api/app-device/public/device-public/logout'),
       data: <String, Object?>{
         'appId': appId,
         'deviceId': deviceId,

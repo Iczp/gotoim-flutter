@@ -11,6 +11,22 @@ import 'package:gotoim_flutter/features/session/data/models/session_summary.dart
 import 'package:gotoim_flutter/features/session/data/repositories/session_repository.dart';
 
 void main() {
+  test('AppDevice device lists follow cursors and map nested profiles', () async {
+    final database = UnifiedDatabase(DatabaseConnection(NativeDatabase.memory()));
+    addTearDown(database.close);
+    final client = _FakeApiClient(getResponse: (query) {
+      if (query['afterId'] == null) {
+        return {'items': [{'appId': 'app', 'deviceId': 'first', 'profile': {'name': 'phone', 'brand': 'brand'}}], 'nextId': 'cursor'};
+      }
+      return {'items': [{'appId': 'app', 'deviceId': 'second', 'profile': {'model': 'model'}}], 'nextId': null};
+    });
+    final repository = SessionRepository(api: SessionUnitApi(client), aiApi: AiApi(client), dao: SessionDao(database));
+    final devices = await repository.loadDevices();
+    expect(devices.map((d) => d.deviceId), ['first', 'second']);
+    expect(devices.first.brand, 'brand');
+    expect(devices.last.model, 'model');
+    expect(client.getQueries.last['afterId'], 'cursor');
+  });
   test(
     'owner avatar falls back to portrait and survives local persistence',
     () async {
