@@ -57,6 +57,29 @@ void main() {
     },
   );
 
+  test(
+    'revalidating the same identity keeps actor until result arrives',
+    () async {
+      final repo = _Social();
+      final identity = SocialIdentityController(
+        repo,
+        chatObjectId: 1,
+        name: 'First',
+      );
+      addTearDown(identity.dispose);
+      await identity.enter(create: true);
+      expect(identity.actor?.id, 'chat-1');
+      repo.pending = Completer<SocialActor?>();
+      final pending = identity.enter();
+      expect(identity.actor?.id, 'chat-1');
+      repo.pending!.complete(
+        const SocialActor(id: 'chat-1', name: 'First', handle: 'first'),
+      );
+      await pending;
+      expect(identity.actor?.id, 'chat-1');
+    },
+  );
+
   for (final accept in [false, true]) {
     testWidgets('entry asks before creating; consent=$accept', (tester) async {
       final repo = _Social();

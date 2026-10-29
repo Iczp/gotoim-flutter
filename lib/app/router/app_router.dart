@@ -9,6 +9,9 @@ import '../../features/social/presentation/social_identity_gate.dart';
 import '../../features/diagnostics/presentation/social_profile_diagnostics_page.dart';
 import '../../features/social/presentation/social_notifications_page.dart';
 import '../../features/social/presentation/social_publish_page.dart';
+import '../../features/social/presentation/social_detail_page.dart';
+import '../../features/social/presentation/social_media_viewer_page.dart';
+import '../../features/social/data/social_repository.dart';
 import '../../core/native_window/desktop_window_dock_controller.dart';
 import '../../core/platform/desktop_window_adapter.dart';
 import '../../core/platform/platform_facade.dart';
@@ -254,6 +257,37 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       _buildAppRoute(path: '/diagnostics/social-profile', builder: (context, state) => const SocialProfileDiagnosticsPage()),
       _buildAppRoute(path: '/social/notifications', builder: (context, state) => const SocialIdentityGate(child: SocialNotificationsPage())),
       _buildAppRoute(path: '/social/publish', builder: (context, state) => const SocialIdentityGate(child: SocialPublishPage())),
+      _buildAppRoute(
+        path: '/social/detail/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final focusReply = state.uri.queryParameters['focusReply'] == 'true';
+          final extra = state.extra;
+          final post = extra is SocialPost ? extra : null;
+          return SocialIdentityGate(
+            useExistingActor: true,
+            child: SocialDetailPage(
+              postId: id,
+              initialPost: post,
+              focusReply: focusReply,
+            ),
+          );
+        },
+      ),
+      _buildAppRoute(
+        path: '/social/media-viewer',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final post = extra['post'] as SocialPost;
+          final initialIndex = (extra['initialIndex'] as num?)?.toInt() ?? 0;
+          final medias = (extra['medias'] as List?)?.cast<SocialPostMedia>() ?? post.medias;
+          return SocialMediaViewerPage(
+            post: post,
+            initialIndex: initialIndex,
+            medias: medias,
+          );
+        },
+      ),
       _buildAppRoute(
         path: '/diagnostics/social',
         builder: (context, state) => const SocialPage(diagnostics: true),

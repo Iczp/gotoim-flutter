@@ -365,6 +365,14 @@ class _ExploreFeature {
 const _features = <_ExploreFeature>[
   // ── 连接 ─────────────────────────────────────────────────────────────────
   _ExploreFeature(
+    title: '动态广场 (Social)',
+    description: '探索新鲜事、热门话题、关注好友与即时互动',
+    icon: Icons.tag_rounded,
+    route: '/social',
+    category: _ExploreCategory.connect,
+    keywords: <String>['动态', '朋友圈', '广场', 'social', '推文', '社交', '新鲜事'],
+  ),
+  _ExploreFeature(
     title: '扫一扫',
     description: '扫描二维码添加好友或扫码登录',
     icon: Icons.qr_code_scanner_rounded,

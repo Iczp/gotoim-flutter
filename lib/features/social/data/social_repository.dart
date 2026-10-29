@@ -17,17 +17,30 @@ class SocialActor {
     this.followersCount = 0,
     this.postsCount = 0,
     this.isFollowing,
+    this.isVerified = false,
   });
   factory SocialActor.fromJson(Map<String, dynamic> json) => SocialActor(
     id: json['id'] as String,
-    name: json['displayName'] as String? ?? '',
+    name: json['displayName'] as String? ?? json['name'] as String? ?? '',
     handle: json['handle'] as String? ?? '',
     avatarUrl: json['avatarUrl'] as String?,
     followingCount: (json['followingCount'] as num?)?.toInt() ?? 0,
     followersCount: (json['followersCount'] as num?)?.toInt() ?? 0,
     postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,
     isFollowing: json['isFollowing'] as bool?,
+    isVerified: json['isVerified'] == true || (json['isOfficial'] == true),
   );
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'displayName': name,
+    'handle': handle,
+    'avatarUrl': avatarUrl,
+    'followingCount': followingCount,
+    'followersCount': followersCount,
+    'postsCount': postsCount,
+    'isFollowing': isFollowing,
+    'isVerified': isVerified,
+  };
   final String id;
   final String name;
   final String handle;
@@ -36,6 +49,58 @@ class SocialActor {
   final int followersCount;
   final int postsCount;
   final bool? isFollowing;
+  final bool isVerified;
+}
+
+class SocialPostMedia {
+  const SocialPostMedia({
+    required this.id,
+    required this.url,
+    this.thumbnailUrl,
+    this.mediaType = 0, // 0: Image, 1: Video, 2: Audio
+    this.width,
+    this.height,
+    this.durationSeconds,
+    this.altText,
+    this.sortOrder = 0,
+  });
+
+  factory SocialPostMedia.fromJson(Map<String, dynamic> json) =>
+      SocialPostMedia(
+        id: json['id']?.toString() ?? '',
+        url: json['url'] as String? ?? '',
+        thumbnailUrl: json['thumbnailUrl'] as String?,
+        mediaType: (json['mediaType'] as num?)?.toInt() ?? 0,
+        width: (json['width'] as num?)?.toInt(),
+        height: (json['height'] as num?)?.toInt(),
+        durationSeconds: (json['durationSeconds'] as num?)?.toInt(),
+        altText: json['altText'] as String?,
+        sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'url': url,
+    'thumbnailUrl': thumbnailUrl,
+    'mediaType': mediaType,
+    'width': width,
+    'height': height,
+    'durationSeconds': durationSeconds,
+    'altText': altText,
+    'sortOrder': sortOrder,
+  };
+
+  final String id;
+  final String url;
+  final String? thumbnailUrl;
+  final int mediaType;
+  final int? width;
+  final int? height;
+  final int? durationSeconds;
+  final String? altText;
+  final int sortOrder;
+
+  bool get isVideo => mediaType == 1;
 }
 
 class SocialPost {
@@ -46,32 +111,129 @@ class SocialPost {
     this.publishedAt,
     this.likes = 0,
     this.replies = 0,
+    this.reposts = 0,
+    this.views = 0,
     this.mediaCount = 0,
+    this.medias = const [],
+    this.isLiked = false,
+    this.isBookmarked = false,
+    this.parentId,
+    this.rootPostId,
+    this.replyToActorId,
+    this.replyToAuthorName,
+    this.visibility = 0,
   });
-  factory SocialPost.fromJson(Map<String, dynamic> json) => SocialPost(
-    id: json['id'] as String,
-    content: json['content'] as String? ?? '',
-    author:
-        json['author'] is Map<String, dynamic>
-            ? SocialActor.fromJson(json['author'] as Map<String, dynamic>)
-            : null,
-    publishedAt: DateTime.tryParse(
-      (json['publishedTime'] ?? json['creationTime'] ?? '').toString(),
-    ),
-    likes: (json['likesCount'] as num?)?.toInt() ?? 0,
-    replies: (json['repliesCount'] as num?)?.toInt() ?? 0,
-    mediaCount:
-        (json['medias'] as List?)?.length ??
-        (json['mediaCount'] as num?)?.toInt() ??
-        0,
-  );
+
+  factory SocialPost.fromJson(Map<String, dynamic> json) {
+    final mediaList =
+        (json['medias'] as List?)
+            ?.map((m) => SocialPostMedia.fromJson(m as Map<String, dynamic>))
+            .toList() ??
+        const [];
+    return SocialPost(
+      id: json['id'] as String,
+      content: json['content'] as String? ?? '',
+      author:
+          json['author'] is Map<String, dynamic>
+              ? SocialActor.fromJson(json['author'] as Map<String, dynamic>)
+              : null,
+      publishedAt: DateTime.tryParse(
+        (json['publishedTime'] ?? json['creationTime'] ?? '').toString(),
+      ),
+      likes: (json['likesCount'] as num?)?.toInt() ?? 0,
+      replies: (json['repliesCount'] as num?)?.toInt() ?? 0,
+      reposts: (json['repostsCount'] as num?)?.toInt() ?? 0,
+      views: (json['viewsCount'] as num?)?.toInt() ?? 0,
+      mediaCount:
+          mediaList.isNotEmpty
+              ? mediaList.length
+              : (json['mediaCount'] as num?)?.toInt() ?? 0,
+      medias: mediaList,
+      isLiked: json['isLiked'] == true,
+      isBookmarked: json['isBookmarked'] == true,
+      parentId: json['parentId'] as String?,
+      rootPostId: json['rootPostId'] as String?,
+      replyToActorId: json['replyToActorId'] as String?,
+      replyToAuthorName: json['replyToAuthorName'] as String?,
+      visibility: (json['visibility'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   final String id;
   final String content;
   final SocialActor? author;
   final DateTime? publishedAt;
   final int likes;
   final int replies;
+  final int reposts;
+  final int views;
   final int mediaCount;
+  final List<SocialPostMedia> medias;
+  final bool isLiked;
+  final bool isBookmarked;
+  final String? parentId;
+  final String? rootPostId;
+  final String? replyToActorId;
+  final String? replyToAuthorName;
+  final int visibility;
+
+  SocialPost copyWith({
+    String? id,
+    String? content,
+    SocialActor? author,
+    DateTime? publishedAt,
+    int? likes,
+    int? replies,
+    int? reposts,
+    int? views,
+    int? mediaCount,
+    List<SocialPostMedia>? medias,
+    bool? isLiked,
+    bool? isBookmarked,
+    String? parentId,
+    String? rootPostId,
+    String? replyToActorId,
+    String? replyToAuthorName,
+    int? visibility,
+  }) => SocialPost(
+    id: id ?? this.id,
+    content: content ?? this.content,
+    author: author ?? this.author,
+    publishedAt: publishedAt ?? this.publishedAt,
+    likes: likes ?? this.likes,
+    replies: replies ?? this.replies,
+    reposts: reposts ?? this.reposts,
+    views: views ?? this.views,
+    mediaCount: mediaCount ?? this.mediaCount,
+    medias: medias ?? this.medias,
+    isLiked: isLiked ?? this.isLiked,
+    isBookmarked: isBookmarked ?? this.isBookmarked,
+    parentId: parentId ?? this.parentId,
+    rootPostId: rootPostId ?? this.rootPostId,
+    replyToActorId: replyToActorId ?? this.replyToActorId,
+    replyToAuthorName: replyToAuthorName ?? this.replyToAuthorName,
+    visibility: visibility ?? this.visibility,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'content': content,
+    'publishedTime': publishedAt?.toIso8601String(),
+    'likesCount': likes,
+    'repliesCount': replies,
+    'repostsCount': reposts,
+    'viewsCount': views,
+    'mediaCount': mediaCount,
+    'medias': medias.map((m) => m.toJson()).toList(),
+    'isLiked': isLiked,
+    'isBookmarked': isBookmarked,
+    'parentId': parentId,
+    'rootPostId': rootPostId,
+    'replyToActorId': replyToActorId,
+    'replyToAuthorName': replyToAuthorName,
+    'visibility': visibility,
+    if (author != null) 'author': author!.toJson(),
+  };
 
   /// Small display-only payload for native-window IPC; never carries credentials.
   Map<String, dynamic> toWindowPayload() => {
@@ -80,13 +242,19 @@ class SocialPost {
     'publishedTime': publishedAt?.toIso8601String(),
     'likesCount': likes,
     'repliesCount': replies,
+    'repostsCount': reposts,
+    'viewsCount': views,
     'mediaCount': mediaCount,
+    'medias': medias.map((m) => m.toJson()).toList(),
+    'isLiked': isLiked,
+    'isBookmarked': isBookmarked,
     if (author != null)
       'author': {
         'id': author!.id,
         'displayName': author!.name,
         'handle': author!.handle,
         'avatarUrl': author!.avatarUrl,
+        'isVerified': author!.isVerified,
       },
   };
 }
@@ -132,7 +300,7 @@ class SocialRepository {
         if (viewerActorId != null) 'viewerActorId': viewerActorId,
       },
     );
-    return json == null
+    return json == null || json == ''
         ? null
         : SocialActor.fromJson(json as Map<String, dynamic>);
   }
@@ -145,7 +313,7 @@ class SocialRepository {
       '/api/social/actor/resolve-chat-object',
       data: {'chatObjectId': chatObjectId, 'createIfMissing': create},
     );
-    return json == null
+    return json == null || json == ''
         ? null
         : SocialActor.fromJson(json as Map<String, dynamic>);
   }
@@ -211,6 +379,34 @@ class SocialRepository {
     required String content,
     required String clientRequestId,
     int visibility = 0,
+    List<Map<String, dynamic>>? medias,
+  }) => createPost(
+    actorId: actorId,
+    content: content,
+    clientRequestId: clientRequestId,
+    visibility: visibility,
+    medias: medias,
+  );
+
+  Future<Map<String, dynamic>> uploadMedia(
+    String actorId,
+    MultipartUploadFile file, {
+    void Function(int sent, int total)? onProgress,
+  }) => _api.postMultipart<Map<String, dynamic>>(
+    "/api/social/media-assets/upload",
+    file: file,
+    onProgress: onProgress,
+    extraFields: {"ownerActorId": actorId, "mediaType": 0},
+  );
+
+  Future<SocialPost> createPost({
+    required String actorId,
+    required String content,
+    required String clientRequestId,
+    int visibility = 0,
+    List<Map<String, dynamic>>? medias,
+    String? parentId,
+    String? replyToActorId,
   }) async => SocialPost.fromJson(
     await _api.post<Map<String, dynamic>>(
       '/api/social/post',
@@ -218,9 +414,57 @@ class SocialRepository {
         'actorId': actorId,
         'content': content,
         'clientRequestId': clientRequestId,
-        'postType': 0,
+        'postType': parentId != null ? 3 : 0,
         'visibility': visibility,
         'replyPolicy': 0,
+        if (parentId != null) 'parentId': parentId,
+        if (replyToActorId != null) 'replyToActorId': replyToActorId,
+        if (medias != null && medias.isNotEmpty) 'medias': medias,
+      },
+    ),
+  );
+
+  Future<void> likePost(String actorId, String postId) async {
+    await _api.post<dynamic>(
+      '/api/social/post/$postId/like',
+      query: {'actorId': actorId},
+    );
+  }
+
+  Future<void> unlikePost(String actorId, String postId) async {
+    await _api.post<dynamic>(
+      '/api/social/post/$postId/unlike',
+      query: {'actorId': actorId},
+    );
+  }
+
+  Future<void> bookmarkPost(String actorId, String postId) async {
+    await _api.post<dynamic>(
+      '/api/social/post/$postId/bookmark',
+      query: {'actorId': actorId},
+    );
+  }
+
+  Future<void> unbookmarkPost(String actorId, String postId) async {
+    await _api.post<dynamic>(
+      '/api/social/post/$postId/unbookmark',
+      query: {'actorId': actorId},
+    );
+  }
+
+  Future<SocialFeedPage> getReplies({
+    required String postId,
+    String? viewerActorId,
+    int pageSize = 20,
+    String? cursor,
+  }) async => SocialFeedPage.fromJson(
+    await _api.get<Map<String, dynamic>>(
+      '/api/social/post/replies',
+      query: {
+        'PostId': postId,
+        if (viewerActorId != null) 'ViewerActorId': viewerActorId,
+        'PageSize': pageSize,
+        if (cursor != null) 'Cursor': cursor,
       },
     ),
   );

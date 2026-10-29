@@ -64,7 +64,8 @@ class SocialIdentityController extends ChangeNotifier {
   Future<SocialActor?> _run(bool? create) async {
     if (_disposed || chatObjectId == null) return null;
     final generation = ++_generation;
-    actor = null;
+    // Keep the current actor while revalidating the same ChatObject.
+    // Replacing it with null destroys the retained feed and its session.
     loading = true;
     error = null;
     notifyListeners();
@@ -81,6 +82,7 @@ class SocialIdentityController extends ChangeNotifier {
       return result;
     } catch (failure) {
       if (!_disposed && generation == _generation) {
+        actor = null;
         error =
             failure is ApiException ? failure.message : 'Social 身份加载失败，请稍后重试。';
       }

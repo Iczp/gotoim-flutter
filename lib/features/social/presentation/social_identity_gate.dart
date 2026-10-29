@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/social_identity_controller.dart';
 
 class SocialIdentityGate extends ConsumerStatefulWidget {
-  const SocialIdentityGate({required this.child, super.key});
+  const SocialIdentityGate({required this.child, this.useExistingActor = false, super.key});
   final Widget child;
+  final bool useExistingActor;
   @override
   ConsumerState<SocialIdentityGate> createState() => _SocialIdentityGateState();
 }
@@ -85,6 +86,12 @@ class _SocialIdentityGateState extends ConsumerState<SocialIdentityGate> {
   @override
   Widget build(BuildContext context) {
     final identity = ref.watch(socialIdentityProvider);
+    if (widget.useExistingActor && identity.actor != null) {
+      return KeyedSubtree(
+        key: ValueKey('${identity.chatObjectId}:${identity.actor!.id}'),
+        child: widget.child,
+      );
+    }
     if (identity.chatObjectId != null && !identical(_requested, identity)) {
       _requested = identity;
       Future.microtask(() {
