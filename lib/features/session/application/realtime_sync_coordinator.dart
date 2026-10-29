@@ -45,9 +45,11 @@ class RealtimeSyncCoordinator {
   StreamSubscription<SignalRAppEvent>? _subscription;
   Timer? _syncTimer;
   final Set<int> _pendingOwnerIds = <int>{};
+  final Set<int> _pendingMessageOwnerIds = <int>{};
   final Map<int, Future<void>> _syncInFlightByOwner = <int, Future<void>>{};
   final Map<String, Future<void>> _unitSyncInFlight = <String, Future<void>>{};
   final Set<int> _ownerResyncRequested = {};
+  final Set<int> _ownerMessageResyncRequested = {};
   bool _disposed = false;
   bool _kicked = false;
 
@@ -58,7 +60,7 @@ class RealtimeSyncCoordinator {
 
   Future<void> syncCurrentOwner() async {
     final owner = await _sessionRepository.readCurrentOwnerId();
-    if (owner != null && owner > 0) await _syncOwner(owner);
+    if (owner != null && owner > 0) await _syncOwner(owner, messageChanges: true);
   }
 
   void _onEvent(SignalRAppEvent event) {
@@ -190,6 +192,12 @@ class RealtimeSyncCoordinator {
             );
         if (message != null) {
           changedOwnerIds.add(message.ownerId);
+          if (event.command == SignalRCommand.messageRollbacked) {
+            await _messageRepository.loadChanges(
+              ownerId: message.ownerId,
+              sessionUnitId: sessionUnitId,
+            );
+          }
           if (event.command == SignalRCommand.messageCreated ||
               event.command == SignalRCommand.messageForwarded) {
             final session = await _sessionRepository.loadLocalFriendDetail(
@@ -211,6 +219,7 @@ class RealtimeSyncCoordinator {
       }
     } catch (error) {
       debugPrint('[realtimeSync][message-failed] error=$error');
+      _scheduleCurrentOwnerSync();
     }
   }
 
@@ -230,13 +239,13 @@ class RealtimeSyncCoordinator {
         return;
       }
     }
-    _scheduleCurrentOwnerSync();
+    _scheduleCurrentOwnerSync(messageChanges: false);
   }
 
   Future<void> _syncChangedSessionUnit(SignalRCommandEvent event) async {
     final sessionUnitId = _extractSessionUnitId(event.payload);
     if (sessionUnitId == null || sessionUnitId.isEmpty) {
-      _scheduleCurrentOwnerSync();
+      _scheduleCurrentOwnerSync(messageChanges: false);
       return;
     }
 
@@ -248,7 +257,7 @@ class RealtimeSyncCoordinator {
           ))?.ownerId;
     }
     if (ownerId == null || ownerId <= 0) {
-      _scheduleCurrentOwnerSync();
+      _scheduleCurrentOwnerSync(messageChanges: false);
       return;
     }
 
@@ -329,38 +338,42 @@ class RealtimeSyncCoordinator {
     return null;
   }
 
-  void _scheduleCurrentOwnerSync() {
+  void _scheduleCurrentOwnerSync({bool messageChanges = true}) {
     unawaited(() async {
       final currentOwnerId = await _sessionRepository.readCurrentOwnerId();
       if (currentOwnerId != null && currentOwnerId > 0) {
-        _scheduleOwnerSync(currentOwnerId);
+        _scheduleOwnerSync(currentOwnerId, messageChanges: messageChanges);
       }
     }());
   }
 
-  void _scheduleOwnerSync(int ownerId) {
+  void _scheduleOwnerSync(int ownerId, {bool messageChanges = false}) {
     if (_disposed || ownerId <= 0) return;
     _pendingOwnerIds.add(ownerId);
+    if (messageChanges) _pendingMessageOwnerIds.add(ownerId);
     _syncTimer?.cancel();
     _syncTimer = Timer(const Duration(milliseconds: 300), () {
       final ids = Set<int>.from(_pendingOwnerIds);
+      final messageIds = Set<int>.from(_pendingMessageOwnerIds);
       _pendingOwnerIds.clear();
+      _pendingMessageOwnerIds.clear();
       for (final id in ids) {
-        unawaited(_syncOwner(id));
+        unawaited(_syncOwner(id, messageChanges: messageIds.contains(id)));
       }
     });
   }
 
-  Future<void> _syncOwner(int ownerId) {
+  Future<void> _syncOwner(int ownerId, {bool messageChanges = false}) {
     final existing = _syncInFlightByOwner[ownerId];
     if (existing != null) {
       _ownerResyncRequested.add(ownerId);
+      if (messageChanges) _ownerMessageResyncRequested.add(ownerId);
       return existing;
     }
     final sync = () async {
       try {
         await _sessionRepository.loadChanges(ownerId: ownerId);
-        await _messageRepository.loadChanges(ownerId: ownerId);
+        if (messageChanges) await _messageRepository.loadChanges(ownerId: ownerId);
       } catch (error) {
         debugPrint(
           '[realtimeSync][changes-failed] owner=$ownerId error=$error',
@@ -371,7 +384,9 @@ class RealtimeSyncCoordinator {
     return sync.whenComplete(() {
       if (identical(_syncInFlightByOwner[ownerId], sync)) {
         _syncInFlightByOwner.remove(ownerId);
-        if (_ownerResyncRequested.remove(ownerId)) _scheduleOwnerSync(ownerId);
+        if (_ownerResyncRequested.remove(ownerId)) {
+          _scheduleOwnerSync(ownerId, messageChanges: _ownerMessageResyncRequested.remove(ownerId));
+        }
       }
     });
   }

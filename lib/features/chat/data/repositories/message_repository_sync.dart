@@ -4,7 +4,11 @@ extension MessageRepositorySync on MessageRepository {
   /// One job per account/scope; UI and reconnect triggers share the same work.
   Future<void> loadChanges({required int ownerId, String? sessionUnitId}) {
     if (sessionUnitId != null && _changeSyncInFlight['$ownerId:*'] != null) {
-      return _changeSyncInFlight['$ownerId:*']!;
+      // The owner scan may already have passed this unit when the event arrives.
+      // Recheck it after the scan instead of treating that scan as the event.
+      return _changeSyncInFlight['$ownerId:*']!.then(
+        (_) => loadChanges(ownerId: ownerId, sessionUnitId: sessionUnitId),
+      );
     }
     final key = '$ownerId:${sessionUnitId ?? '*'}';
     final existing = _changeSyncInFlight[key];
