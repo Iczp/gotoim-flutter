@@ -136,6 +136,7 @@ class DioApiClient implements ApiClient {
     if (lower.endsWith('.webp')) return DioMediaType('image', 'webp');
     if (lower.endsWith('.bmp')) return DioMediaType('image', 'bmp');
     if (lower.endsWith('.mp4')) return DioMediaType('video', 'mp4');
+    if (lower.endsWith('.webm')) return DioMediaType('video', 'webm');
     if (lower.endsWith('.mov')) return DioMediaType('video', 'quicktime');
     if (lower.endsWith('.mp3')) return DioMediaType('audio', 'mpeg');
     if (lower.endsWith('.amr')) return DioMediaType('audio', 'amr');

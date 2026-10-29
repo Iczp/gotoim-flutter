@@ -6,6 +6,7 @@ import '../../../core/widgets/app_avatar.dart';
 import '../data/social_repository.dart';
 import 'widgets/social_action_bar.dart';
 import 'widgets/social_media_image.dart';
+import 'widgets/social_video_player.dart';
 
 /// Fullscreen Immersive Dark Media Viewer (1:1 replica of X.com media lightbox - Screenshot 2).
 class SocialMediaViewerPage extends StatefulWidget {
@@ -70,6 +71,12 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                 onPageChanged: (index) => setState(() => _currentIndex = index),
                 itemBuilder: (context, index) {
                   final media = widget.medias[index];
+                  if (media.isVideo) {
+                    return SocialVideoPlayer(
+                      url: media.url,
+                      active: index == _currentIndex,
+                    );
+                  }
                   return InteractiveViewer(
                     minScale: 0.8,
                     maxScale: 3.5,
@@ -129,9 +136,10 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                       margin: const EdgeInsets.symmetric(horizontal: 3),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _currentIndex == i
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.4),
+                        color:
+                            _currentIndex == i
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.4),
                       ),
                     ),
                   ),
@@ -170,7 +178,10 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                       Row(
                         children: [
                           AppAvatar(
-                            name: author?.name.isNotEmpty == true ? author!.name : 'User',
+                            name:
+                                author?.name.isNotEmpty == true
+                                    ? author!.name
+                                    : 'User',
                             imageUrl: author?.avatarUrl,
                             radius: 18,
                           ),
@@ -183,7 +194,9 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                                   children: [
                                     Flexible(
                                       child: Text(
-                                        author?.name.isNotEmpty == true ? author!.name : '社交用户',
+                                        author?.name.isNotEmpty == true
+                                            ? author!.name
+                                            : '社交用户',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
@@ -215,12 +228,20 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                           // Follow / Following capsule
                           FilledButton(
                             style: FilledButton.styleFrom(
-                              backgroundColor: _isFollowing ? Colors.transparent : Colors.white,
-                              foregroundColor: _isFollowing ? Colors.white : Colors.black,
-                              side: _isFollowing
-                                  ? const BorderSide(color: Colors.white70)
-                                  : BorderSide.none,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                              backgroundColor:
+                                  _isFollowing
+                                      ? Colors.transparent
+                                      : Colors.white,
+                              foregroundColor:
+                                  _isFollowing ? Colors.white : Colors.black,
+                              side:
+                                  _isFollowing
+                                      ? const BorderSide(color: Colors.white70)
+                                      : BorderSide.none,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 0,
+                              ),
                               visualDensity: VisualDensity.compact,
                               shape: const StadiumBorder(),
                             ),
@@ -229,7 +250,10 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                             },
                             child: Text(
                               _isFollowing ? '已关注' : '关注',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
@@ -259,17 +283,21 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                         viewCount: widget.post.views,
                         isLiked: widget.post.isLiked,
                         isBookmarked: widget.post.isBookmarked,
-                        onReply: () => context.push(
-                          '/social/detail/${widget.post.id}?focusReply=true',
-                          extra: widget.post,
-                        ),
+                        onReply:
+                            () => context.push(
+                              '/social/detail/${widget.post.id}?focusReply=true',
+                              extra: widget.post,
+                            ),
                       ),
 
                       const SizedBox(height: 8),
 
                       // Bottom Reply Input Field (Floating reply bar in screenshot 2)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1E2732),
                           borderRadius: BorderRadius.circular(24),
@@ -279,16 +307,26 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                             CircleAvatar(
                               radius: 12,
                               backgroundColor: Colors.grey.shade800,
-                              child: const Icon(Icons.person, size: 16, color: Colors.white70),
+                              child: const Icon(
+                                Icons.person,
+                                size: 16,
+                                color: Colors.white70,
+                              ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: TextField(
                                 controller: _replyTextController,
-                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                ),
                                 decoration: const InputDecoration(
                                   hintText: '发布你的回复',
-                                  hintStyle: TextStyle(color: Colors.white54, fontSize: 13),
+                                  hintStyle: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 13,
+                                  ),
                                   border: InputBorder.none,
                                   isDense: true,
                                 ),
@@ -296,24 +334,46 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                             ),
                             IconButton(
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                              icon: const Icon(Icons.image_outlined, size: 20, color: Color(0xFF1D9BF0)),
-                              onPressed: () {},
-                            ),
-                            IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                              icon: const Icon(Icons.gif_box_outlined, size: 20, color: Color(0xFF1D9BF0)),
-                              onPressed: () {},
-                            ),
-                            IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                              icon: const Icon(Icons.open_in_full_rounded, size: 16, color: Color(0xFF1D9BF0)),
-                              onPressed: () => context.push(
-                                '/social/detail/${widget.post.id}?focusReply=true',
-                                extra: widget.post,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
                               ),
+                              icon: const Icon(
+                                Icons.image_outlined,
+                                size: 20,
+                                color: Color(0xFF1D9BF0),
+                              ),
+                              onPressed: () {},
+                            ),
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                              icon: const Icon(
+                                Icons.gif_box_outlined,
+                                size: 20,
+                                color: Color(0xFF1D9BF0),
+                              ),
+                              onPressed: () {},
+                            ),
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                              icon: const Icon(
+                                Icons.open_in_full_rounded,
+                                size: 16,
+                                color: Color(0xFF1D9BF0),
+                              ),
+                              onPressed:
+                                  () => context.push(
+                                    '/social/detail/${widget.post.id}?focusReply=true',
+                                    extra: widget.post,
+                                  ),
                             ),
                           ],
                         ),
@@ -335,28 +395,41 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.download_rounded, color: Colors.white),
-              title: const Text('保存图片', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已保存至系统相册')),
-                );
-              },
+      builder:
+          (ctx) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.download_rounded,
+                    color: Colors.white,
+                  ),
+                  title: const Text(
+                    '保存图片',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('已保存至系统相册')));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.share_outlined,
+                    color: Colors.white,
+                  ),
+                  title: const Text(
+                    '分享此媒体',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () => Navigator.of(ctx).pop(),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.share_outlined, color: Colors.white),
-              title: const Text('分享此媒体', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.of(ctx).pop(),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 }

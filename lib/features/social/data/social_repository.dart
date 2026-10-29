@@ -11,14 +11,17 @@ final socialRepositoryProvider = Provider<SocialRepository>(
 
 final socialMediaBytesProvider = FutureProvider.autoDispose
     .family<Uint8List, ({String path, String? actorId})>((ref, request) async {
-  // Dispose authenticated images when the selected social identity changes.
-  ref.watch(socialIdentityProvider.select((value) => value.actor?.id));
-  final uri = Uri.parse(request.path);
-  final query = <String, String>{...uri.queryParameters};
-  if (request.actorId != null) query['viewerActorId'] = request.actorId!;
-  final path = uri.replace(queryParameters: query.isEmpty ? null : query).toString();
-  return Uint8List.fromList(await ref.watch(socialApiClientProvider).getBytes(path));
-});
+      // Dispose authenticated images when the selected social identity changes.
+      ref.watch(socialIdentityProvider.select((value) => value.actor?.id));
+      final uri = Uri.parse(request.path);
+      final query = <String, String>{...uri.queryParameters};
+      if (request.actorId != null) query['viewerActorId'] = request.actorId!;
+      final path =
+          uri.replace(queryParameters: query.isEmpty ? null : query).toString();
+      return Uint8List.fromList(
+        await ref.watch(socialApiClientProvider).getBytes(path),
+      );
+    });
 
 class SocialActor {
   const SocialActor({
@@ -404,12 +407,13 @@ class SocialRepository {
   Future<Map<String, dynamic>> uploadMedia(
     String actorId,
     MultipartUploadFile file, {
+    int mediaType = 0,
     void Function(int sent, int total)? onProgress,
   }) => _api.postMultipart<Map<String, dynamic>>(
     "/api/social/media-assets/upload",
     file: file,
     onProgress: onProgress,
-    extraFields: {"ownerActorId": actorId, "mediaType": 0},
+    extraFields: {"ownerActorId": actorId, "mediaType": mediaType},
   );
 
   Future<SocialPost> createPost({

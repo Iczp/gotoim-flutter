@@ -64,10 +64,7 @@ class SocialMediaGrid extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              flex: 1,
-              child: _buildSingleItem(context, medias[0], 0),
-            ),
+            Expanded(flex: 1, child: _buildSingleItem(context, medias[0], 0)),
             const SizedBox(width: 2),
             Expanded(
               flex: 1,
@@ -147,10 +144,18 @@ class SocialMediaGrid extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          SocialMediaImage(
-            url: media.thumbnailUrl?.isNotEmpty == true ? media.thumbnailUrl! : media.url,
-            fit: BoxFit.cover,
-          ),
+          if (!media.isVideo || (media.thumbnailUrl?.isNotEmpty == true))
+            SocialMediaImage(
+              url:
+                  media.thumbnailUrl?.isNotEmpty == true
+                      ? media.thumbnailUrl!
+                      : media.url,
+              fit: BoxFit.cover,
+            ),
+          if (media.isVideo && media.thumbnailUrl?.isNotEmpty != true)
+            ColoredBox(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            ),
           if (media.isVideo)
             Center(
               child: Container(

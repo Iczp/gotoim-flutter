@@ -5,6 +5,8 @@ import 'dart:io';
 
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/services/file/file_picker_service.dart';
+import '../../../core/services/media/media_service.dart';
 import '../application/social_identity_controller.dart';
 import '../application/social_publish_controller.dart';
 import '../data/social_repository.dart';
@@ -25,6 +27,7 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
   String? _selectedLocation;
   final List<String> _selectedMentionUsers = [];
   final List<XFile> _selectedImages = [];
+  SelectedFile? _selectedVideo;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -51,6 +54,7 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
   }
 
   Future<void> _pickImage() async {
+    if (_selectedVideo != null) return;
     if (_selectedImages.length >= 4) {
       ScaffoldMessenger.of(
         context,
@@ -60,6 +64,36 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
     final image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       setState(() => _selectedImages.add(image));
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    if (_selectedImages.isNotEmpty || _selectedVideo != null) return;
+    try {
+      final video = await ref
+          .read(mediaServiceProvider)
+          .chooseVideo(const MediaPickRequest());
+      if (!mounted || video == null) return;
+      if (video.size <= 0 || video.size > 100 * 1024 * 1024) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('视频大小必须在 100 MB 以内')));
+        return;
+      }
+      if (!video.name.toLowerCase().endsWith('.mp4') &&
+          !video.name.toLowerCase().endsWith('.webm')) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('目前仅支持 MP4 或 WebM 视频')));
+        return;
+      }
+      setState(() => _selectedVideo = video);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('无法选择视频，请重试')));
+      }
     }
   }
 
@@ -124,7 +158,9 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
 
   Future<void> _publish() async {
     final text = _textController.text.trim();
-    if (text.isEmpty && _selectedImages.isEmpty) return;
+    if (text.isEmpty && _selectedImages.isEmpty && _selectedVideo == null) {
+      return;
+    }
 
     if (_preparing || _controller.submitting) return;
     setState(() => _preparing = true);
@@ -144,13 +180,26 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
         text,
         visibility: _visibility,
         images: images,
+        videoSelectionId: _selectedVideo?.id,
+        video:
+            _selectedVideo == null
+                ? null
+                : MultipartUploadFile(
+                  name: _selectedVideo!.name,
+                  length: _selectedVideo!.size,
+                  openRead: _selectedVideo!.readAsByteStream,
+                  contentType:
+                      _selectedVideo!.name.toLowerCase().endsWith('.webm')
+                          ? 'video/webm'
+                          : 'video/mp4',
+                ),
       );
       if (result != null && mounted) Navigator.of(context).pop(true);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('无法读取图片，请重新选择后重试')));
+        ).showSnackBar(const SnackBar(content: Text('无法读取媒体文件，请重新选择后重试')));
       }
     } finally {
       if (mounted) setState(() => _preparing = false);
@@ -170,7 +219,9 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
     final actor = ref.watch(socialIdentityProvider).actor;
     final charCount = _textController.text.length;
     final canPublish =
-        (charCount > 0 || _selectedImages.isNotEmpty) &&
+        (charCount > 0 ||
+            _selectedImages.isNotEmpty ||
+            _selectedVideo != null) &&
         !_controller.submitting &&
         !_preparing;
 
@@ -236,10 +287,10 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
                   const SizedBox(height: 12),
                   Text(
                     _controller.uploading
-                        ? '正在上传图片 ${_controller.uploadIndex}/${_controller.uploadCount}${_controller.uploadProgress == null ? '' : ' · ${(_controller.uploadProgress! * 100).round()}%'}'
+                        ? '正在上传${_selectedVideo == null ? '图片' : '视频'} ${_controller.uploadIndex}/${_controller.uploadCount}${_controller.uploadProgress == null ? '' : ' · ${(_controller.uploadProgress! * 100).round()}%'}'
                         : _controller.submitting
                         ? '正在发表动态…'
-                        : '正在准备图片…',
+                        : '正在准备媒体…',
                   ),
                   const SizedBox(height: 8),
                   LinearProgressIndicator(
@@ -443,6 +494,49 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
       spacing: 10,
       runSpacing: 10,
       children: [
+        if (_selectedVideo != null)
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child:
+                      _controller.uploading
+                          ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(
+                                value: _controller.uploadProgress,
+                              ),
+                              if (_controller.uploadProgress != null)
+                                Text(
+                                  '${(_controller.uploadProgress! * 100).round()}%',
+                                ),
+                            ],
+                          )
+                          : const Icon(Icons.videocam, size: 36),
+                ),
+              ),
+              Positioned(
+                top: -6,
+                right: -6,
+                child: IconButton(
+                  onPressed:
+                      _preparing || _controller.submitting
+                          ? null
+                          : () => setState(() => _selectedVideo = null),
+                  icon: const Icon(Icons.cancel),
+                  tooltip: '移除视频',
+                ),
+              ),
+            ],
+          ),
         ...List.generate(_selectedImages.length, (index) {
           final file = _selectedImages[index];
           return Stack(
@@ -469,30 +563,36 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(
-                      child: index + 1 < _controller.uploadIndex ||
-                              !_controller.uploading
-                          ? const Icon(Icons.check_circle, color: Colors.white)
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 28,
-                                  height: 28,
-                                  child: CircularProgressIndicator(
-                                    value: _controller.uploadProgress,
-                                    color: Colors.white,
-                                    strokeWidth: 3,
+                      child:
+                          index + 1 < _controller.uploadIndex ||
+                                  !_controller.uploading
+                              ? const Icon(
+                                Icons.check_circle,
+                                color: Colors.white,
+                              )
+                              : Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 28,
+                                    height: 28,
+                                    child: CircularProgressIndicator(
+                                      value: _controller.uploadProgress,
+                                      color: Colors.white,
+                                      strokeWidth: 3,
+                                    ),
                                   ),
-                                ),
-                                if (_controller.uploadProgress != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${(_controller.uploadProgress! * 100).round()}%',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
+                                  if (_controller.uploadProgress != null) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${(_controller.uploadProgress! * 100).round()}%',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
+                              ),
                     ),
                   ),
                 ),
@@ -521,7 +621,7 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
             ],
           );
         }),
-        if (_selectedImages.length < 4)
+        if (_selectedVideo == null && _selectedImages.length < 4)
           GestureDetector(
             onTap: _preparing || _controller.submitting ? null : _pickImage,
             child: Container(
@@ -534,6 +634,27 @@ class _SocialPublishPageState extends ConsumerState<SocialPublishPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.add, size: 38, color: Colors.black38),
+            ),
+          ),
+        if (_selectedImages.isEmpty && _selectedVideo == null)
+          GestureDetector(
+            onTap: _preparing || _controller.submitting ? null : _pickVideo,
+            child: Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.4,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.video_call_outlined, size: 32),
+                  Text('选择视频'),
+                ],
+              ),
             ),
           ),
       ],

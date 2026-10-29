@@ -24,16 +24,39 @@ class SocialPublishController extends ChangeNotifier {
     String text, {
     int visibility = 0,
     List<MultipartUploadFile> images = const [],
+    MultipartUploadFile? video,
+    String? videoSelectionId,
   }) async {
     if (_disposed || submitting) return null;
     final content = text.trim();
-    if ((content.isEmpty && images.isEmpty) || content.length > 2000) {
+    if ((content.isEmpty && images.isEmpty && video == null) ||
+        content.length > 2000) {
       error = '请输入 1–2000 字的动态内容。';
       notifyListeners();
       return null;
     }
+    if ((video != null && images.isNotEmpty) || images.length > 4) {
+      error = '请选择最多四张图片或一个视频。';
+      notifyListeners();
+      return null;
+    }
+    if (video != null &&
+        (video.length <= 0 || video.length > 100 * 1024 * 1024)) {
+      error = '视频大小必须在 100 MB 以内。';
+      notifyListeners();
+      return null;
+    }
+    if (video != null &&
+        !video.name.toLowerCase().endsWith('.mp4') &&
+        !video.name.toLowerCase().endsWith('.webm')) {
+      error = '目前仅支持 MP4 或 WebM 视频。';
+      notifyListeners();
+      return null;
+    }
+    final files = video == null ? images : [video];
+    final mediaType = video == null ? 0 : 1;
     final fingerprint =
-        '$visibility|$content|${images.map((i) => '${i.name}:${i.length}').join(',')}';
+        '$visibility|$content|$mediaType|${videoSelectionId ?? ''}|${files.map((i) => '${i.name}:${i.length}').join(',')}';
     if (_fingerprint != fingerprint) {
       _uploaded.clear();
       _fingerprint = fingerprint;
@@ -48,15 +71,16 @@ class SocialPublishController extends ChangeNotifier {
         throw const ApiException('请先创建当前 ChatObject 的 Social 身份。');
       }
       if (_disposed) return null;
-      uploadCount = images.length;
-      for (var index = _uploaded.length; index < images.length; index++) {
+      uploadCount = files.length;
+      for (var index = _uploaded.length; index < files.length; index++) {
         uploading = true;
         uploadIndex = index + 1;
         uploadProgress = null;
         notifyListeners();
         final asset = await _repository.uploadMedia(
           actor.id,
-          images[index],
+          files[index],
+          mediaType: mediaType,
           onProgress: (sent, total) {
             if (_disposed) return;
             uploadProgress = total > 0 ? (sent / total).clamp(0.0, 1.0) : null;
@@ -65,7 +89,7 @@ class SocialPublishController extends ChangeNotifier {
         );
         _uploaded.add({
           "mediaAssetId": asset["id"],
-          "mediaType": 0,
+          "mediaType": mediaType,
           "sortOrder": _uploaded.length,
         });
       }
