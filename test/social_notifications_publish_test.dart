@@ -273,6 +273,7 @@ class _Repository implements SocialRepository {
     required String content,
     required String clientRequestId,
     int visibility = 0,
+    List<Map<String, dynamic>>? medias,
   }) async {
     commands.add(clientRequestId);
     publishedContents.add(content);
