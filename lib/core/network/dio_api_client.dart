@@ -10,6 +10,7 @@ import 'jwt_token_expiry.dart';
 import '../device/client_device_context.dart';
 import '../logging/app_logger.dart';
 import '../logging/diagnostic_trace.dart';
+import '../logging/log_sanitizer.dart';
 
 /// The single authenticated HTTP transport for repositories.
 class DioApiClient implements ApiClient {
@@ -95,28 +96,26 @@ class DioApiClient implements ApiClient {
     bool retryOnUnauthorized = true,
   }) {
     final mediaType = _resolveMediaType(file.contentType, file.name);
-    final effectiveFilename = file.name.trim().isNotEmpty
-        ? file.name.trim()
-        : 'upload_${DateTime.now().millisecondsSinceEpoch}.${mediaType?.subtype ?? 'bin'}';
+    final effectiveFilename =
+        file.name.trim().isNotEmpty
+            ? file.name.trim()
+            : 'upload_${DateTime.now().millisecondsSinceEpoch}.${mediaType?.subtype ?? 'bin'}';
     return _request<T>(
       path: path,
       method: 'POST',
       query: query,
       dataFactory:
-          () => FormData.fromMap(
-            <String, Object>{
-              fieldName: MultipartFile.fromStream(
-                file.openRead,
-                file.length,
-                filename: effectiveFilename,
-                contentType: mediaType,
-              ),
-              if (extraFields != null)
-                for (final entry in extraFields.entries)
-                  if (entry.value != null) entry.key: entry.value!,
-            },
-            ListFormat.multi,
-          ),
+          () => FormData.fromMap(<String, Object>{
+            fieldName: MultipartFile.fromStream(
+              file.openRead,
+              file.length,
+              filename: effectiveFilename,
+              contentType: mediaType,
+            ),
+            if (extraFields != null)
+              for (final entry in extraFields.entries)
+                if (entry.value != null) entry.key: entry.value!,
+          }, ListFormat.multi),
       retryOnUnauthorized: retryOnUnauthorized,
       onSendProgress: onProgress,
     );
@@ -206,13 +205,13 @@ class DioApiClient implements ApiClient {
       );
       if (cancelTag != null) _cancelTokens.remove(cancelTag);
       AppLogger.instance.info(
-        '$method $path ${response.statusCode}',
+        '$method ${_logUri(response.realUri)} ${response.statusCode}',
         category: 'http',
         event: 'http_response',
         traceId: traceId,
         context: <String, Object?>{
           'method': method,
-          'url': response.realUri.toString(),
+          'url': _logUri(response.realUri),
           'query': query,
           'statusCode': response.statusCode,
           'durationMs': stopwatch.elapsedMilliseconds,
@@ -265,7 +264,7 @@ class DioApiClient implements ApiClient {
         await _invalidateSession();
       }
       AppLogger.instance.error(
-        '$method $path failed (${error.response?.statusCode ?? 'network'})',
+        '$method ${_logUri(error.requestOptions.uri)} failed (${error.response?.statusCode ?? 'network'})',
         category: 'http',
         event: 'http_error',
         traceId: traceId,
@@ -273,7 +272,7 @@ class DioApiClient implements ApiClient {
         stackTrace: error.stackTrace,
         context: <String, Object?>{
           'method': method,
-          'url': error.requestOptions.uri.toString(),
+          'url': _logUri(error.requestOptions.uri),
           'query': query,
           'statusCode': error.response?.statusCode,
           'durationMs': stopwatch.elapsedMilliseconds,
@@ -284,6 +283,23 @@ class DioApiClient implements ApiClient {
       );
       throw _toApiException(error);
     }
+  }
+
+  static String _logUri(Uri uri) {
+    final parameters = <String, dynamic>{};
+    for (final entry in uri.queryParametersAll.entries) {
+      parameters[entry.key] = LogSanitizer.sanitize(
+        entry.value,
+        key: entry.key,
+      );
+    }
+    return uri
+        .replace(
+          userInfo: '',
+          queryParameters: parameters.isEmpty ? null : parameters,
+          query: parameters.isEmpty ? '' : null,
+        )
+        .toString();
   }
 
   Future<void> _refreshOnce() {
@@ -351,10 +367,14 @@ class DioApiClient implements ApiClient {
             : data is Map && data['error_description'] != null
             ? data['error_description'].toString()
             : error.message ?? 'Network request failed';
+    final retrySeconds = int.tryParse(
+      error.response?.headers.value("retry-after") ?? "",
+    );
     return ApiException(
       message,
       statusCode: error.response?.statusCode,
       code: responseError is Map ? responseError['code']?.toString() : null,
+      retryAfter: retrySeconds == null ? null : Duration(seconds: retrySeconds),
     );
   }
 }
