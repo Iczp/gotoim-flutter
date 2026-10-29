@@ -10,6 +10,7 @@ import '../../features/diagnostics/presentation/social_profile_diagnostics_page.
 import '../../features/social/presentation/social_notifications_page.dart';
 import '../../features/social/presentation/social_publish_page.dart';
 import '../../features/social/presentation/social_detail_page.dart';
+import '../../features/social/presentation/social_my_posts_page.dart';
 import '../../features/social/presentation/social_media_viewer_page.dart';
 import '../../features/social/data/social_repository.dart';
 import '../../core/native_window/desktop_window_dock_controller.dart';
@@ -257,6 +258,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       _buildAppRoute(path: '/diagnostics/social-profile', builder: (context, state) => const SocialProfileDiagnosticsPage()),
       _buildAppRoute(path: '/social/notifications', builder: (context, state) => const SocialIdentityGate(child: SocialNotificationsPage())),
       _buildAppRoute(path: '/social/publish', builder: (context, state) => const SocialIdentityGate(child: SocialPublishPage())),
+      _buildAppRoute(path: '/social/my-posts', builder: (context, state) => const SocialIdentityGate(useExistingActor: true, child: SocialMyPostsPage())),
       _buildAppRoute(
         path: '/social/detail/:id',
         builder: (context, state) {

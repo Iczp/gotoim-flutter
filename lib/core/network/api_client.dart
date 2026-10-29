@@ -15,6 +15,9 @@ abstract class ApiClient {
     bool retryOnUnauthorized = true,
   });
 
+  Future<T> delete<T>(String path, {Map<String, Object?>? query}) =>
+      throw UnsupportedError('DELETE is not supported.');
+
   Future<T> postMultipart<T>(
     String path, {
     Map<String, Object?>? query,

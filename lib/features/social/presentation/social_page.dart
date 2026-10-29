@@ -103,6 +103,11 @@ class _SocialPageState extends ConsumerState<SocialPage>
         ),
         actions: [
           IconButton(
+            tooltip: '我的动态与回复',
+            icon: const Icon(Icons.article_outlined),
+            onPressed: () => context.push('/social/my-posts'),
+          ),
+          IconButton(
             tooltip: '社交通知',
             icon: Badge(
               isLabelVisible: unread > 0,

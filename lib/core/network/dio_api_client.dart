@@ -68,6 +68,10 @@ class DioApiClient implements ApiClient {
   );
 
   @override
+  Future<T> delete<T>(String path, {Map<String, Object?>? query}) =>
+      _request<T>(path: path, method: 'DELETE', query: query);
+
+  @override
   Future<T> post<T>(
     String path, {
     Map<String, Object?>? query,

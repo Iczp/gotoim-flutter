@@ -355,6 +355,13 @@ class SocialRepository {
   Future<int> getUnreadCount(String actorId) =>
       _api.get<int>('/api/social/notification/unread-count/$actorId');
 
+  Future<void> deletePost(String actorId, String postId) async {
+    await _api.delete<dynamic>(
+      '/api/social/post',
+      query: {'actorId': actorId, 'postId': postId},
+    );
+  }
+
   Future<SocialNotificationPage> getNotifications(
     String actorId, {
     String? cursor,
