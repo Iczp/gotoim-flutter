@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../data/social_repository.dart';
 import 'widgets/social_action_bar.dart';
+import 'widgets/social_media_image.dart';
 
 /// Fullscreen Immersive Dark Media Viewer (1:1 replica of X.com media lightbox - Screenshot 2).
 class SocialMediaViewerPage extends StatefulWidget {
@@ -74,15 +74,9 @@ class _SocialMediaViewerPageState extends State<SocialMediaViewerPage> {
                     minScale: 0.8,
                     maxScale: 3.5,
                     child: Center(
-                      child: CachedNetworkImage(
-                        imageUrl: media.url,
+                      child: SocialMediaImage(
+                        url: media.url,
                         fit: BoxFit.contain,
-                        placeholder: (context, _) => const Center(
-                          child: CircularProgressIndicator(color: Colors.white70),
-                        ),
-                        errorWidget: (context, _, error) => const Center(
-                          child: Icon(Icons.broken_image, color: Colors.white54, size: 64),
-                        ),
                       ),
                     ),
                   );

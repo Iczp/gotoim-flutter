@@ -1,7 +1,7 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../data/social_repository.dart';
+import 'social_media_image.dart';
 
 /// Renders 1 to 4 media items in authentic X.com adaptive grid layout.
 class SocialMediaGrid extends StatelessWidget {
@@ -147,23 +147,9 @@ class SocialMediaGrid extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CachedNetworkImage(
-            imageUrl: media.thumbnailUrl ?? media.url,
+          SocialMediaImage(
+            url: media.thumbnailUrl?.isNotEmpty == true ? media.thumbnailUrl! : media.url,
             fit: BoxFit.cover,
-            placeholder: (context, _) => Container(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: const Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            ),
-            errorWidget: (context, _, error) => Container(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
-            ),
           ),
           if (media.isVideo)
             Center(

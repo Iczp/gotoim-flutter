@@ -1,11 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:typed_data';
 
 import '../../../app/application_providers.dart';
 import '../../../core/network/api_client.dart';
+import '../application/social_identity_controller.dart';
 
 final socialRepositoryProvider = Provider<SocialRepository>(
   (ref) => SocialRepository(ref.watch(socialApiClientProvider)),
 );
+
+final socialMediaBytesProvider = FutureProvider.autoDispose
+    .family<Uint8List, ({String path, String? actorId})>((ref, request) async {
+  // Dispose authenticated images when the selected social identity changes.
+  ref.watch(socialIdentityProvider.select((value) => value.actor?.id));
+  final uri = Uri.parse(request.path);
+  final query = <String, String>{...uri.queryParameters};
+  if (request.actorId != null) query['viewerActorId'] = request.actorId!;
+  final path = uri.replace(queryParameters: query.isEmpty ? null : query).toString();
+  return Uint8List.fromList(await ref.watch(socialApiClientProvider).getBytes(path));
+});
 
 class SocialActor {
   const SocialActor({
