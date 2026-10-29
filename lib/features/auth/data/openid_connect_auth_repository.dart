@@ -142,11 +142,11 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
   /// Token for AppDevice registration; it never shares user-token state.
   Future<String> getDeviceRegistrationAccessToken() =>
       _getClientCredentialsToken(
-        cacheKey: 'device-register',
+        cacheKey: 'device-register-app-device',
         tokenUrl: _environment.authTokenUrl,
         clientId: _environment.authClientId,
         clientSecret: _environment.authClientSecret,
-        scope: 'Chat',
+        scope: 'AppDevice',
       );
 
   Future<String> _getClientCredentialsToken({

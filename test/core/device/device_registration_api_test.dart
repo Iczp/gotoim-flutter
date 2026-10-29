@@ -210,7 +210,7 @@ void main() {
       await auth.getDeviceRegistrationAccessToken().timeout(
         const Duration(seconds: 2),
       );
-      expect(requests.last.data['scope'], 'Chat');
+      expect(requests.last.data['scope'], 'AppDevice');
       expect(
         requests.last.headers.containsKey('AppDevice-Registration-Proof'),
         isFalse,
