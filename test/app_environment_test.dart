@@ -5,6 +5,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/config/app_environment.dart';
 
 void main() {
+  test('AppDevice uses its configured service address and falls back to the API gateway', () {
+    dotenv.loadFromString(envString: 'API_BASE_URL=http://gateway\nAPP_DEVICE_BASE_URL=http://device:51631/');
+    var environment = AppEnvironment.fromDotEnv(AppFlavor.development);
+    expect(environment.appDeviceUrl('/api/app-device/public/app-version/latest'),
+        'http://device:51631/api/app-device/public/app-version/latest');
+
+    dotenv.loadFromString(envString: 'API_BASE_URL=http://gateway\nAPP_DEVICE_BASE_URL=');
+    environment = AppEnvironment.fromDotEnv(AppFlavor.development);
+    expect(environment.appDeviceUrl('/api/app-device/public/app-version/latest'),
+        'http://gateway/api/app-device/public/app-version/latest');
+  });
+
   for (final file in [
     '.env.development',
     '.env.staging',
