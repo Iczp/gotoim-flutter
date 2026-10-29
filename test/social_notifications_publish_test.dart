@@ -193,7 +193,8 @@ void main() {
         ),
       );
       await tester.enterText(find.byType(TextField), 'my post');
-      await tester.tap(find.text('发布'));
+      await tester.pump();
+      await tester.tap(find.text('发表'));
       await tester.pump();
       expect(repo.publishedContents, ['my post']);
       expect(tester.takeException(), isNull);
