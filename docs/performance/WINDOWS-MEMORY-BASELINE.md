@@ -21,3 +21,7 @@ Repeat with the same machine, DPI, data and settle time for S0, S1, S2 and S3 (1
 | profile, browser, media and 30 close/reopen cycles | — | — | not measured |
 
 The actual sample is in `windows-baseline-s0-summary.csv` and `windows-baseline-s0-processes.csv`; root PID 39500, one attributed process. No WebView2 descendant was attributed at sampling time; that is not proof of zero WebView memory. The process tree may omit detached processes. Do not calculate savings, per-window averages or leak conclusions until matched measurements exist. The test account, display/DPI, GPU, device memory and actual hidden and visible window counts must be recorded for a full baseline.
+
+## Existing user window state (2026-11-03)
+
+The same Release root was sampled after the user opened their usual windows. The visible and hidden window counts and content were not enumerated, so this is **not** S1/S2/S3 and is not comparable to a controlled experiment. Three samples give median process-tree private commit 2,070.76 MiB and summed working set 1,580.39 MiB, including six attributed WebView2 descendants with median private commit 197.81 MiB. The root process private commit at the first sample was 1,871.95 MiB. A summed working set includes shared pages and can double-count them; it must not be added to private commit. Attribution is limited to the observed parent tree. See `windows-existing-windows-processes.csv` and `windows-existing-windows-summary.csv`.

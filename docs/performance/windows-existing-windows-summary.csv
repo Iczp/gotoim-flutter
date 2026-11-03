@@ -1,0 +1,4 @@
+"scenario","iteration","timestamp","root_pid","window_count","process_count","private_mb","working_set_mb","webview_private_mb","dart_heap_mb","notes"
+"existing_windows","1","2026-11-03T09:44:15.5845729Z","39500","","7","2069.4","1579.41","197.45","","User existing window state; counts unverified; missing_processes=0; WebView blank means no attributed process, not proof of zero"
+"existing_windows","1","2026-11-03T09:44:21.5216333Z","39500","","7","2070.76","1580.39","197.81","","User existing window state; counts unverified; missing_processes=0; WebView blank means no attributed process, not proof of zero"
+"existing_windows","1","2026-11-03T09:44:27.3024659Z","39500","","7","2071.22","1580.87","198.27000000000004","","User existing window state; counts unverified; missing_processes=0; WebView blank means no attributed process, not proof of zero"
