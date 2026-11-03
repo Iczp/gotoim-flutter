@@ -335,7 +335,7 @@ class DefaultWindowService implements WindowService {
       <String, WindowController>{};
   final Map<String, WindowController> _reusableControllers =
       <String, WindowController>{};
-  static const int _maxReusableControllers = 3;
+  static const int _maxReusableControllers = 6;
   final Map<String, Future<void>> _pendingCreations = <String, Future<void>>{};
   Completer<Uint8List?>? _screenCaptureCompleter;
 
@@ -361,7 +361,7 @@ class DefaultWindowService implements WindowService {
           case 'sub_window_closed':
             final args = call.arguments as Map?;
             final targetId = args?['targetId'] as String?;
-            final windowId = args?['windowId'] as String?;
+            final windowId = args?['windowId']?.toString();
             if (targetId != null) {
               await closeWindow(targetId, windowId: windowId);
             }
@@ -1139,7 +1139,7 @@ class DefaultWindowService implements WindowService {
     final currentController = _nativeControllers[targetId];
     if (windowId != null &&
         currentController != null &&
-        currentController.windowId != windowId) {
+        currentController.windowId.toString() != windowId) {
       return;
     }
     final controller = _nativeControllers.remove(targetId);
@@ -1166,24 +1166,15 @@ class DefaultWindowService implements WindowService {
             await controller.invokeMethod('browser_clear_tabs');
           } catch (_) {}
         }
-        final shouldKeepAlive = targetId == 'flyout:profile_card' ||
-            targetId == 'flyout:tray' ||
-            targetId == 'tool:screen_capture';
-        if (shouldKeepAlive) {
-          _reusableControllers[targetId] = controller;
-          if (_reusableControllers.length > _maxReusableControllers) {
-            final oldestKey = _reusableControllers.keys.first;
-            final evicted = _reusableControllers.remove(oldestKey);
-            if (evicted != null) {
-              try {
-                await evicted.invokeMethod('disposeWindow');
-              } catch (_) {}
-            }
+        _reusableControllers[targetId] = controller;
+        if (_reusableControllers.length > _maxReusableControllers) {
+          final oldestKey = _reusableControllers.keys.first;
+          final evicted = _reusableControllers.remove(oldestKey);
+          if (evicted != null) {
+            try {
+              await evicted.invokeMethod('disposeWindow');
+            } catch (_) {}
           }
-        } else {
-          try {
-            await controller.invokeMethod('disposeWindow');
-          } catch (_) {}
         }
       } catch (_) {}
     }
