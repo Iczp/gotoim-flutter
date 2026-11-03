@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_navigation.dart';
@@ -38,6 +39,17 @@ import '../../features/local_file_server/pages/local_file_server_page.dart';
 import '../../features/local_file_server/pages/shared_file_manager_page.dart';
 import '../../features/media/presentation/desktop_media_viewer_window.dart';
 import '../../features/settings/presentation/desktop_settings_window.dart';
+import '../../features/auth/application/auth_controller.dart';
+import '../../features/diagnostics/presentation/social_profile_diagnostics_page.dart';
+import '../../features/social/application/social_identity_controller.dart';
+import '../../features/social/data/social_repository.dart';
+import '../../features/social/presentation/social_detail_page.dart';
+import '../../features/social/presentation/social_identity_gate.dart';
+import '../../features/social/presentation/social_media_viewer_page.dart';
+import '../../features/social/presentation/social_my_posts_page.dart';
+import '../../features/social/presentation/social_notifications_page.dart';
+import '../../features/social/presentation/social_page.dart';
+import '../../features/social/presentation/social_publish_page.dart';
 import '../../features/user/data/models/profile_subject.dart';
 import 'desktop_profile_card_view.dart';
 import 'desktop_window_loading.dart';
@@ -124,6 +136,15 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
   final environment = AppEnvironment.fromDotEnv(flavor);
   final platformFacade = createPlatformFacade();
 
+  final initialChatObject = (
+    id: payload.ownerId,
+    name: payload.extra?['ownerName'] as String?,
+  );
+  final initialAccount = (
+    status: AuthStatus.authenticated,
+    userId: payload.extra?['userId'] as String?,
+  );
+
   final container = ProviderContainer(
     overrides: [
       appEnvironmentProvider.overrideWithValue(environment),
@@ -134,6 +155,16 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
           platformFacade: platformFacade,
           isSubWindow: true,
         ),
+      ),
+      subWindowSocialChatObjectProvider.overrideWith(
+        (ref) => initialChatObject,
+      ),
+      subWindowSocialAccountProvider.overrideWith((ref) => initialAccount),
+      socialCurrentChatObjectProvider.overrideWith(
+        (ref) => ref.watch(subWindowSocialChatObjectProvider),
+      ),
+      socialCurrentAccountProvider.overrideWith(
+        (ref) => ref.watch(subWindowSocialAccountProvider),
       ),
     ],
   );
@@ -154,6 +185,18 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
   // 主动触发一次 warm-up frame 以确保 NativeSubWindowApp 与子视图的 initState 立即执行。
   binding.scheduleWarmUpFrame();
 }
+
+final subWindowSocialChatObjectProvider =
+    StateProvider<({int? id, String? name})>((ref) => (id: null, name: null));
+
+final subWindowSocialAccountProvider =
+    StateProvider<({AuthStatus status, String? userId})>(
+      (ref) => (status: AuthStatus.authenticated, userId: null),
+    );
+
+/// 桌面端 Social 独立子窗口默认尺寸（模拟手机竖屏视口比例）
+const int kDesktopSocialWindowWidth = 420;
+const int kDesktopSocialWindowHeight = 780;
 
 class NativeSubWindowApp extends ConsumerStatefulWidget {
   const NativeSubWindowApp({
@@ -217,6 +260,80 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
     ],
   );
 
+  late final GoRouter _socialRouter = GoRouter(
+    initialLocation:
+        (widget.payload.extra?['initialPath'] as String?) ?? '/social',
+    routes: [
+      GoRoute(
+        path: '/social',
+        builder:
+            (context, state) => const SocialIdentityGate(child: SocialPage()),
+      ),
+      GoRoute(
+        path: '/social/notifications',
+        builder:
+            (context, state) =>
+                const SocialIdentityGate(child: SocialNotificationsPage()),
+      ),
+      GoRoute(
+        path: '/social/publish',
+        builder:
+            (context, state) =>
+                const SocialIdentityGate(child: SocialPublishPage()),
+      ),
+      GoRoute(
+        path: '/social/my-posts',
+        builder:
+            (context, state) => const SocialIdentityGate(
+              useExistingActor: true,
+              child: SocialMyPostsPage(),
+            ),
+      ),
+      GoRoute(
+        path: '/social/detail/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final focusReply = state.uri.queryParameters['focusReply'] == 'true';
+          final extra = state.extra;
+          final post = extra is SocialPost ? extra : null;
+          return SocialIdentityGate(
+            useExistingActor: true,
+            child: SocialDetailPage(
+              postId: id,
+              initialPost: post,
+              focusReply: focusReply,
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/social/media-viewer',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final post = extra['post'] as SocialPost;
+          final initialIndex = (extra['initialIndex'] as num?)?.toInt() ?? 0;
+          final medias =
+              (extra['medias'] as List?)?.cast<SocialPostMedia>() ??
+              post.medias;
+          return SocialMediaViewerPage(
+            post: post,
+            initialIndex: initialIndex,
+            medias: medias,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/diagnostics/social',
+        builder: (context, state) => const SocialPage(diagnostics: true),
+      ),
+      GoRoute(
+        path: '/diagnostics/social-profile',
+        builder: (context, state) => const SocialProfileDiagnosticsPage(),
+      ),
+      GoRoute(path: '/', redirect: (_, _) => '/social'),
+    ],
+  );
+
   Widget _buildDiagnosticSubPage(String section) {
     switch (section) {
       case 'desktop-windows':
@@ -253,6 +370,10 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         return const SearchAndGroupDiagnosticsPage();
       case 'url-security':
         return const UrlSecurityDiagnosticsPage();
+      case 'social':
+        return const SocialPage(diagnostics: true);
+      case 'social-profile':
+        return const SocialProfileDiagnosticsPage();
       default:
         return Scaffold(
           appBar: AppBar(title: Text('诊断模块: $section')),
@@ -294,6 +415,12 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
             break;
           case SubWindowType.localFileServer:
             DesktopWindowAdapter.center(width: 860, height: 620);
+            break;
+          case SubWindowType.social:
+            DesktopWindowAdapter.center(
+              width: kDesktopSocialWindowWidth,
+              height: kDesktopSocialWindowHeight,
+            );
             break;
           case SubWindowType.browser:
             if (!_isDockedSubWindow) {
@@ -338,7 +465,11 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           await prepareDesktopWindowFrame();
           return true;
         case 'window_ping':
-          return mounted && _childMethodHandler != null;
+          return mounted &&
+              (_childMethodHandler != null ||
+                  _currentPayload.type == SubWindowType.social ||
+                  _currentPayload.type == SubWindowType.diagnostics ||
+                  _currentPayload.type == SubWindowType.localFileServer);
         case 'window_release_content':
           nativeWindowDocked.value = false;
           if (mounted) {
@@ -391,6 +522,38 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
                 );
               }
             });
+            if (_currentPayload.type == SubWindowType.social) {
+              ref.read(subWindowSocialChatObjectProvider.notifier).state = (
+                id: _currentPayload.ownerId,
+                name: _currentPayload.extra?['ownerName'] as String?,
+              );
+              final userId = _currentPayload.extra?['userId'] as String?;
+              if (userId != null) {
+                ref.read(subWindowSocialAccountProvider.notifier).state = (
+                  status: AuthStatus.authenticated,
+                  userId: userId,
+                );
+              }
+              final targetPath =
+                  _currentPayload.extra?['initialPath'] as String?;
+              if (targetPath != null && targetPath.isNotEmpty) {
+                _socialRouter.go(targetPath);
+              }
+            }
+          }
+          if (_childMethodHandler != null) {
+            await _childMethodHandler!(call);
+          }
+          return true;
+        case 'social_identity_changed':
+          final args = call.arguments as Map?;
+          if (args != null && mounted) {
+            final id = (args['chatObjectId'] as num?)?.toInt();
+            final name = args['chatObjectName'] as String?;
+            ref.read(subWindowSocialChatObjectProvider.notifier).state = (
+              id: id,
+              name: name,
+            );
           }
           if (_childMethodHandler != null) {
             await _childMethodHandler!(call);
@@ -554,8 +717,14 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         case 'center':
           if (_isDockedSubWindow) return false;
           final args = call.arguments as Map?;
-          final w = args?['width'] as int?;
-          final h = args?['height'] as int?;
+          var w = (args?['width'] as num?)?.toInt();
+          var h = (args?['height'] as num?)?.toInt();
+          if (w == null &&
+              h == null &&
+              _currentPayload.type == SubWindowType.social) {
+            w = kDesktopSocialWindowWidth;
+            h = kDesktopSocialWindowHeight;
+          }
           await DesktopWindowAdapter.center(width: w, height: h);
           return true;
         case 'close':
@@ -592,6 +761,7 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
     DesktopWindowAdapter.onCloseRequested = null;
     _diagnosticRouter.dispose();
     _fileServerRouter.dispose();
+    _socialRouter.dispose();
     super.dispose();
   }
 
@@ -663,6 +833,21 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
         darkTheme: darkTheme,
         builder: _buildToolFrame,
         routerConfig: _fileServerRouter,
+      );
+    }
+
+    if (_currentPayload.type == SubWindowType.social) {
+      return MaterialApp.router(
+        locale: AppLocalization.locale,
+        supportedLocales: AppLocalization.supportedLocales,
+        localizationsDelegates: AppLocalization.delegates,
+        title: _currentPayload.title,
+        debugShowCheckedModeBanner: false,
+        themeMode: _themeMode,
+        theme: lightTheme,
+        darkTheme: darkTheme,
+        builder: _buildToolFrame,
+        routerConfig: _socialRouter,
       );
     }
 
@@ -813,6 +998,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
 
       case SubWindowType.localFileServer:
         return const LocalFileServerPage();
+
+      case SubWindowType.social:
+        return const SocialIdentityGate(child: SocialPage());
     }
   }
 }

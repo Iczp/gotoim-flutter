@@ -412,6 +412,31 @@ class _DesktopWindowsDiagnosticsPageState
     }
   }
 
+  Future<void> _testOpenSocial() async {
+    final sw = Stopwatch()..start();
+    setState(() {
+      _status = '执行中...';
+      _error = null;
+    });
+    try {
+      final windowService = ref.read(windowServiceProvider);
+      await windowService.openSocial();
+      sw.stop();
+      setState(() {
+        _status = '成功';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _lastResult = '已成功调起独立 Social 动态广场窗口 (模拟手机尺寸 420x780，复用原生多窗口架构)';
+      });
+    } catch (e, st) {
+      sw.stop();
+      setState(() {
+        _status = '失败';
+        _elapsedMs = sw.elapsedMilliseconds;
+        _error = '$e\n$st';
+      });
+    }
+  }
+
   Future<void> _testOpenStandaloneChat() async {
     final sw = Stopwatch()..start();
     setState(() {
@@ -1253,6 +1278,7 @@ class _DesktopWindowsDiagnosticsPageState
                       final isTrayReady = ws.isWindowOpen('tool:tray');
                       final isBrowserOpen = ws.isWindowOpen('tool:browser');
                       final isSettingsOpen = ws.isWindowOpen('tool:settings');
+                      final isSocialOpen = ws.isWindowOpen('tool:social');
 
                       return Wrap(
                         spacing: 12,
@@ -1277,6 +1303,11 @@ class _DesktopWindowsDiagnosticsPageState
                             '独立设置 (settings)',
                             isSettingsOpen,
                             '桌面居中模态独立视窗',
+                          ),
+                          _buildWindowStatusChip(
+                            '动态广场 (social)',
+                            isSocialOpen,
+                            '模拟手机尺寸独立视窗 (420x780)',
                           ),
                         ],
                       );
@@ -1676,6 +1707,11 @@ class _DesktopWindowsDiagnosticsPageState
                         icon: const Icon(Icons.settings_outlined, size: 16),
                         label: const Text('独立设置窗口'),
                         onPressed: _testOpenSettings,
+                      ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.dynamic_feed_outlined, size: 16),
+                        label: const Text('独立 Social 窗口 (手机尺寸)'),
+                        onPressed: _testOpenSocial,
                       ),
                       FilledButton.icon(
                         style: FilledButton.styleFrom(

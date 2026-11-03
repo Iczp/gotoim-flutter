@@ -9,6 +9,15 @@ import '../../auth/application/auth_controller.dart';
 import '../../session/application/session_list_controller.dart';
 import '../data/social_repository.dart';
 
+final socialCurrentAccountProvider =
+    Provider<({AuthStatus status, String? userId})>(
+      (ref) => ref.watch(
+        authControllerProvider.select(
+          (state) => (status: state.status, userId: state.currentUser?.id),
+        ),
+      ),
+    );
+
 final socialCurrentChatObjectProvider = Provider<({int? id, String? name})>(
   (ref) => ref.watch(
     sessionListControllerProvider.select(
@@ -19,18 +28,14 @@ final socialCurrentChatObjectProvider = Provider<({int? id, String? name})>(
 
 final socialIdentityProvider = ChangeNotifierProvider<SocialIdentityController>(
   (ref) {
-    final account = ref.watch(
-      authControllerProvider.select(
-        (state) => (state.status, state.currentUser?.id),
-      ),
-    );
+    final account = ref.watch(socialCurrentAccountProvider);
     final chat = ref.watch(socialCurrentChatObjectProvider);
     final controller = SocialIdentityController(
       ref.watch(socialRepositoryProvider),
       chatObjectId: chat.id,
       name: chat.name ?? '当前聊天身份',
     );
-    if (account.$1 == AuthStatus.authenticated && chat.id != null) {
+    if (account.status == AuthStatus.authenticated && chat.id != null) {
       Future.microtask(controller.load);
     }
     return controller;

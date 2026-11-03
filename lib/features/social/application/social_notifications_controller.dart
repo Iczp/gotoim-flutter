@@ -11,11 +11,7 @@ import '../data/social_repository.dart';
 
 final socialNotificationsProvider =
     ChangeNotifierProvider<SocialNotificationsController>((ref) {
-      final account = ref.watch(
-        authControllerProvider.select(
-          (auth) => (auth.status, auth.currentUser?.id),
-        ),
-      );
+      final account = ref.watch(socialCurrentAccountProvider);
       final actor = ref.watch(
         socialIdentityProvider.select((state) => state.actor),
       );
@@ -23,7 +19,7 @@ final socialNotificationsProvider =
         ref.watch(socialRepositoryProvider),
         actor: actor,
       );
-      if (account.$1 == AuthStatus.authenticated && actor != null) {
+      if (account.status == AuthStatus.authenticated && actor != null) {
         Future.microtask(controller.start);
       }
       return controller;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
+import '../../../core/services/window_service.dart';
 import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../session/application/session_list_controller.dart';
@@ -134,6 +135,8 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
                         ref
                             .read(unifiedScanDispatcherProvider)
                             .openAndDispatch(context, ref);
+                      } else if (item.route == '/social') {
+                        ref.read(windowServiceProvider).openSocial();
                       } else {
                         context.push(item.route);
                       }

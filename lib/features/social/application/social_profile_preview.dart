@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../auth/application/auth_controller.dart';
 import 'social_identity_controller.dart';
 import '../../user/data/models/profile_subject.dart';
 import '../data/social_repository.dart';
@@ -41,11 +40,7 @@ class SocialProfilePreview {
 
 final socialProfilePreviewProvider = FutureProvider.autoDispose
     .family<SocialProfilePreview, SocialProfileTarget>((ref, target) async {
-      ref.watch(
-        authControllerProvider.select(
-          (auth) => (auth.status, auth.currentUser?.id),
-        ),
-      );
+      ref.watch(socialCurrentAccountProvider);
       final repository = ref.watch(socialRepositoryProvider);
       final viewer = ref.watch(
         socialIdentityProvider.select(

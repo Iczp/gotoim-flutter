@@ -9,6 +9,7 @@ import '../../features/home/presentation/home_sections.dart';
 import '../../features/session/application/session_list_controller.dart';
 import '../../features/session/presentation/desktop_chat_owner_popover.dart';
 import '../../features/session/presentation/login_devices_page.dart';
+import '../../features/social/application/social_notifications_controller.dart';
 
 /// 桌面端左侧微信 4.0 风格导航 Dock Rail (DesktopDockRail)
 ///
@@ -40,6 +41,9 @@ class DesktopDockRail extends ConsumerWidget {
     final otherUnread = sessionController.otherUnreadCount;
     final otherImmersed = sessionController.otherImmersedCount;
     final totalUnread = sessionController.totalUnreadCount;
+    final socialUnread = ref.watch(
+      socialNotificationsProvider.select((s) => s.unreadCount),
+    );
     final themeMode = ref.watch(themeModeProvider);
 
     // 微信桌面端经典色：深灰黑背景 #1E1E1E，浅色模式为 #ECECEC
@@ -102,6 +106,18 @@ class DesktopDockRail extends ConsumerWidget {
                         isSelected: false,
                         onTap: () {
                           ref.read(windowServiceProvider).openLocalFileServer();
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      // Social 动态广场独立窗口入口（模拟手机尺寸）
+                      _DockNavItem(
+                        icon: Icons.dynamic_feed_outlined,
+                        activeIcon: Icons.dynamic_feed_rounded,
+                        label: 'Social',
+                        isSelected: false,
+                        badgeCount: socialUnread,
+                        onTap: () {
+                          ref.read(windowServiceProvider).openSocial();
                         },
                       ),
                       const SizedBox(height: 10),

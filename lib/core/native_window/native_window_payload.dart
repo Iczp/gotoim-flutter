@@ -8,6 +8,7 @@ enum SubWindowType {
   media,
   diagnostics,
   localFileServer,
+  social,
   tray,
   profileCard,
   screenCapture,

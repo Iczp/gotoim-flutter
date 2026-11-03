@@ -7,7 +7,6 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/logging/app_logger.dart';
-import '../../auth/application/auth_controller.dart';
 import 'social_identity_controller.dart';
 import '../data/social_repository.dart';
 
@@ -16,11 +15,7 @@ final socialFeedControllerProvider = ChangeNotifierProvider.family<
   bool
 >((ref, diagnostics) {
   // Dispose account-bound actor/cursor state when the user changes or logs out.
-  ref.watch(
-    authControllerProvider.select(
-      (auth) => (auth.status, auth.currentUser?.id),
-    ),
-  );
+  ref.watch(socialCurrentAccountProvider);
   final actorId = ref.watch(
     socialIdentityProvider.select((state) => state.actor?.id),
   );

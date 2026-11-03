@@ -37,6 +37,7 @@ enum WindowType {
   chat,
   miniApp,
   fileServer,
+  social,
   media,
   diagnostics,
   settings,
@@ -160,6 +161,9 @@ abstract class WindowService {
 
   /// 打开或激活局域网快传独立控制台
   Future<void> openLocalFileServer();
+
+  /// 打开或激活独立 Social 动态广场窗口（桌面端模拟手机大小）
+  Future<void> openSocial({String initialPath = '/social'});
 
   /// 打开或激活独立开发诊断中心窗口
   Future<void> openDiagnostics();
@@ -513,20 +517,38 @@ class DefaultWindowService implements WindowService {
             return true;
           case 'social_profile_preview':
             final container = rootProviderContainer;
-            if (container == null || container.read(authControllerProvider).status != AuthStatus.authenticated) {
+            if (container == null ||
+                container.read(authControllerProvider).status !=
+                    AuthStatus.authenticated) {
               return {'error': '请先登录'};
             }
             final args = call.arguments;
             if (args is! Map) return {'error': '无效资料卡'};
-            final subject = ProfileSubject.fromMap(Map<String, dynamic>.from(args));
-            if (subject.kind == ProfileKind.group) return {'actorLinked': false, 'posts': <Object>[]};
-            final provider = socialProfilePreviewProvider(socialTargetForProfile(subject));
+            final subject = ProfileSubject.fromMap(
+              Map<String, dynamic>.from(args),
+            );
+            if (subject.kind == ProfileKind.group) {
+              return {'actorLinked': false, 'posts': <Object>[]};
+            }
+            final provider = socialProfilePreviewProvider(
+              socialTargetForProfile(subject),
+            );
             final subscription = container.listen(provider, (_, next) {});
             try {
               final preview = await container.read(provider.future);
-              return {'actorLinked': preview.actor != null, 'followingCount': preview.actor?.followingCount, 'followersCount': preview.actor?.followersCount,
-                'isFollowing': preview.actor?.isFollowing, 'isSelf': preview.actor != null && preview.actor!.id == preview.viewerActorId,
-                'posts': preview.posts.map((post) => post.toWindowPayload()).toList()};
+              return {
+                'actorLinked': preview.actor != null,
+                'followingCount': preview.actor?.followingCount,
+                'followersCount': preview.actor?.followersCount,
+                'isFollowing': preview.actor?.isFollowing,
+                'isSelf':
+                    preview.actor != null &&
+                    preview.actor!.id == preview.viewerActorId,
+                'posts':
+                    preview.posts
+                        .map((post) => post.toWindowPayload())
+                        .toList(),
+              };
             } catch (_) {
               return {'error': '动态加载失败，请刷新重试'};
             } finally {
@@ -535,13 +557,22 @@ class DefaultWindowService implements WindowService {
 
           case 'social_profile_post':
             final container = rootProviderContainer;
-            if (container == null || container.read(authControllerProvider).status != AuthStatus.authenticated) return {'error': '请先登录'};
+            if (container == null ||
+                container.read(authControllerProvider).status !=
+                    AuthStatus.authenticated) {
+              return {'error': '请先登录'};
+            }
             final id = (call.arguments as Map?)?['postId']?.toString() ?? '';
-            if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(id)) return {'error': '无效动态编号'};
+            if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(id)) {
+              return {'error': '无效动态编号'};
+            }
             try {
               final repository = container.read(socialRepositoryProvider);
               final viewer = container.read(socialIdentityProvider).actor;
-              return (await repository.getPost(id, viewer?.id)).toWindowPayload();
+              return (await repository.getPost(
+                id,
+                viewer?.id,
+              )).toWindowPayload();
             } catch (_) {
               return {'error': '动态已不可用或无权查看'};
             }
@@ -686,6 +717,10 @@ class DefaultWindowService implements WindowService {
               await openSettings();
             } else if (type == 'localFileServer') {
               await openLocalFileServer();
+            } else if (type == 'social') {
+              await openSocial(
+                initialPath: args?['initialPath'] as String? ?? '/social',
+              );
             } else if (type == 'diagnostics') {
               await openDiagnostics();
             }
@@ -2251,6 +2286,88 @@ class DefaultWindowService implements WindowService {
         await closeWindow(targetId);
       }
     }
+  }
+
+  @override
+  Future<void> openSocial({String initialPath = '/social'}) async {
+    if (isSubWindow) {
+      return _requestMain({'type': 'social', 'initialPath': initialPath});
+    }
+    const targetId = 'tool:social';
+    final currentTheme = themeModeProvider?.call() ?? 'system';
+    ChatOwner? currentOwner;
+    String? currentUserId;
+    try {
+      final container = rootProviderContainer;
+      if (container != null) {
+        currentOwner =
+            container.read(sessionListControllerProvider).currentOwner;
+        currentUserId = container.read(authControllerProvider).currentUser?.id;
+      }
+    } catch (_) {}
+
+    final payload = NativeWindowPayload(
+      type: SubWindowType.social,
+      title: 'Social 动态广场',
+      targetId: targetId,
+      ownerId: currentOwner?.id,
+      extra: {
+        'themeMode': currentTheme,
+        'initialPath': initialPath,
+        if (currentOwner?.name != null) 'ownerName': currentOwner!.name,
+        if (currentUserId != null) 'userId': currentUserId,
+      },
+    );
+
+    if (isWindowOpen(targetId) || _pendingCreations.containsKey(targetId)) {
+      final pending = _pendingCreations[targetId];
+      if (pending != null) await pending;
+      final controller = _nativeControllers[targetId];
+      if (controller != null) {
+        try {
+          await controller.invokeMethod('update_payload', payload.toJson());
+        } catch (_) {}
+      }
+      await bringToFront(targetId);
+      return;
+    }
+
+    if (platformFacade.supportsMultipleWindows) {
+      try {
+        await _openNativeSubWindow(
+          targetId: targetId,
+          type: WindowType.social,
+          title: 'Social 动态广场',
+          payload: payload,
+        );
+        return;
+      } catch (e) {
+        debugPrint('[WindowService] Native social window error: $e');
+      }
+    }
+
+    final context = rootNavigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      _registerWindow(
+        targetId: targetId,
+        type: WindowType.social,
+        title: 'Social 动态广场',
+        extra: payload.toJson(),
+      );
+      try {
+        await context.push(initialPath);
+      } finally {
+        await closeWindow(targetId);
+      }
+      return;
+    }
+
+    _registerWindow(
+      targetId: targetId,
+      type: WindowType.social,
+      title: 'Social 动态广场',
+      extra: payload.toJson(),
+    );
   }
 
   void _registerWindow({

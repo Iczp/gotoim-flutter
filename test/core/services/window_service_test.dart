@@ -126,7 +126,7 @@ void main() {
     });
 
     test(
-      'openMiniApp, openLocalFileServer and openDiagnostics register correctly',
+      'openMiniApp, openLocalFileServer, openSocial and openDiagnostics register correctly',
       () async {
         await windowService.openMiniApp(
           appId: 'crm',
@@ -138,10 +138,18 @@ void main() {
         await windowService.openLocalFileServer();
         expect(windowService.isWindowOpen('tool:localFileServer'), isTrue);
 
+        await windowService.openSocial();
+        expect(windowService.isWindowOpen('tool:social'), isTrue);
+        final socialRecord = windowService.openWindows.firstWhere(
+          (r) => r.targetId == 'tool:social',
+        );
+        expect(socialRecord.type, WindowType.social);
+        expect(socialRecord.title, 'Social 动态广场');
+
         await windowService.openDiagnostics();
         expect(windowService.isWindowOpen('tool:diagnostics'), isTrue);
 
-        expect(windowService.openWindows.length, 3);
+        expect(windowService.openWindows.length, 4);
       },
     );
 

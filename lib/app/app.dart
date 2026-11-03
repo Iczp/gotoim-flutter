@@ -75,27 +75,44 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(socialIdentityProvider.select((state) => (state.chatObjectId, state.actor?.id)), (previous, next) {
-      if (previous == null || previous == next) return;
-      final windows = ref.read(windowServiceProvider);
-      if (windows is DefaultWindowService) {
-        unawaited(windows.broadcastToAllSubWindows('social_identity_changed', {'chatObjectId': next.$1}));
-      }
-    });
+    ref.listen(
+      socialIdentityProvider.select(
+        (state) => (state.chatObjectId, state.name, state.actor?.id),
+      ),
+      (previous, next) {
+        if (previous == null || previous == next) return;
+        final windows = ref.read(windowServiceProvider);
+        if (windows is DefaultWindowService) {
+          unawaited(
+            windows.broadcastToAllSubWindows('social_identity_changed', {
+              'chatObjectId': next.$1,
+              'chatObjectName': next.$2,
+              'actorId': next.$3,
+            }),
+          );
+        }
+      },
+    );
     ref.listen<int>(
       socialNotificationsProvider.select((state) => state.newMessageVersion),
       (previous, next) {
-        if (previous == null || next <= previous ||
+        if (previous == null ||
+            next <= previous ||
             !ref.read(messageAlertSettingsProvider).notificationsEnabled) {
           return;
         }
-        rootScaffoldMessengerKey.currentState?.showSnackBar(SnackBar(
-          content: const Text('Social 有新的社交通知'),
-          action: SnackBarAction(
-            label: '查看',
-            onPressed: () => ref.read(appRouterProvider).push('/social/notifications'),
+        rootScaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: const Text('Social 有新的社交通知'),
+            action: SnackBarAction(
+              label: '查看',
+              onPressed:
+                  () => ref
+                      .read(windowServiceProvider)
+                      .openSocial(initialPath: '/social/notifications'),
+            ),
           ),
-        ));
+        );
       },
     );
     final themeMode = ref.watch(themeModeProvider);

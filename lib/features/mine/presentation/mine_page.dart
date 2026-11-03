@@ -41,11 +41,14 @@ class MinePage extends ConsumerWidget {
     final currentOwner = sessionController.currentOwner;
     final appUpdateService = ref.watch(appUpdateServiceProvider);
     final deviceContext = ref.watch(clientDeviceContextProvider);
-    final socialUnread = ref.watch(socialNotificationsProvider.select((state) => state.unreadCount));
+    final socialUnread = ref.watch(
+      socialNotificationsProvider.select((state) => state.unreadCount),
+    );
     final headerOffset = TabHeaderHeightScope.of(context);
     final topPadding = headerOffset > 0 ? headerOffset + 8.0 : 16.0;
 
-    final isDesktop = (!kIsWeb &&
+    final isDesktop =
+        (!kIsWeb &&
             (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) ||
         MediaQuery.sizeOf(context).width >= 720;
 
@@ -150,10 +153,17 @@ class MinePage extends ConsumerWidget {
             Cell(
               icon: const Icon(Icons.dynamic_feed_outlined),
               title: 'Social 社交',
-              valueWidget: socialUnread > 0 ? Badge(label: Text(socialUnread > 99 ? '99+' : '$socialUnread')) : null,
+              valueWidget:
+                  socialUnread > 0
+                      ? Badge(
+                        label: Text(
+                          socialUnread > 99 ? '99+' : '$socialUnread',
+                        ),
+                      )
+                      : null,
               subtitle: '查看推荐与关注动态',
               showArrow: true,
-              onTap: () => context.push('/social'),
+              onTap: () => ref.read(windowServiceProvider).openSocial(),
             ),
             Cell(
               icon: const Icon(Icons.qr_code_scanner_rounded),
@@ -183,9 +193,10 @@ class MinePage extends ConsumerWidget {
               icon: const Icon(Icons.devices_other_rounded),
               title: '登录设备管理',
               subtitle: '查看当前在线终端及历史登录设备',
-              value: sessionController.onlineDevices.isNotEmpty
-                  ? '${sessionController.onlineDevices.length} 台在线'
-                  : null,
+              value:
+                  sessionController.onlineDevices.isNotEmpty
+                      ? '${sessionController.onlineDevices.length} 台在线'
+                      : null,
               showArrow: true,
               onTap: () {
                 if (isDesktop) {
