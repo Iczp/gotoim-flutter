@@ -1580,28 +1580,27 @@ class DefaultWindowService implements WindowService {
     const targetId = 'tool:tray';
     final snapshot =
         traySnapshotProvider?.call() ?? TrayGroupedUnreadState.empty;
-    if (isWindowOpen(targetId)) {
-      await _nativeControllers[targetId]?.invokeMethod(
-        'tray_update',
-        snapshot.toJson(),
-      );
-      await _nativeControllers[targetId]?.invokeMethod('tray_flyout');
-      await bringToFront(targetId);
-      return;
-    }
     if (platformFacade.supportsMultipleWindows) {
       try {
-        await _openNativeSubWindow(
-          targetId: targetId,
-          type: WindowType.tray,
-          title: '未读消息',
-          payload: NativeWindowPayload(
-            type: SubWindowType.tray,
-            title: '未读消息',
+        if (!isWindowOpen(targetId)) {
+          await _openNativeSubWindow(
             targetId: targetId,
-            extra: {'traySnapshot': snapshot.toJson()},
-          ),
-        );
+            type: WindowType.tray,
+            title: '未读消息',
+            payload: NativeWindowPayload(
+              type: SubWindowType.tray,
+              title: '未读消息',
+              targetId: targetId,
+              extra: {'traySnapshot': snapshot.toJson()},
+            ),
+            showImmediately: false,
+          );
+        }
+        final controller = _nativeControllers[targetId];
+        if (controller == null) throw StateError('托盘窗口未创建');
+        await _waitWindowReady(controller, 'window_ping');
+        await controller.invokeMethod('tray_update', snapshot.toJson());
+        await controller.invokeMethod('bringToFront');
         return;
       } catch (e) {
         debugPrint('[WindowService] openTrayFlyout native error: $e');

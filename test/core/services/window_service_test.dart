@@ -1,4 +1,7 @@
 import 'package:flutter/services.dart';
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/platform/platform_facade.dart';
 import 'package:gotoim_flutter/core/services/window_service.dart';
@@ -93,6 +96,29 @@ void main() {
       expect(windowService.openWindows, isEmpty);
       expect(windowService.isWindowOpen('chat:s1'), isFalse);
     });
+
+    test(
+      'new tray flyout is explicitly shown after its handler is ready',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        invokedMethods.clear();
+        await windowService.openTrayFlyout();
+        expect(
+          invokedMethods,
+          containsAllInOrder(['window_ping', 'tray_update', 'bringToFront']),
+        );
+        expect(windowService.isWindowOpen('tool:tray'), isTrue);
+        invokedMethods.clear();
+        await windowService.openTrayFlyout();
+        expect(
+          invokedMethods,
+          containsAllInOrder(['window_ping', 'tray_update', 'bringToFront']),
+        );
+        expect(windowService.openWindows.length, 1);
+      },
+      skip: !Platform.isWindows,
+    );
 
     test('openChat registers a window and emits to stream', () async {
       final recordsHistory = <List<WindowRecord>>[];
