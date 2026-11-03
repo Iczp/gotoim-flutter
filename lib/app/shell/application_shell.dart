@@ -91,24 +91,7 @@ class _ApplicationShellState extends ConsumerState<ApplicationShell> {
       // Both services start only after the existing privacy agreement check.
       if (mounted) {
         unawaited(ref.read(trayServiceProvider).initialize());
-        if (!kIsWeb &&
-            (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
-          Future.delayed(const Duration(milliseconds: 1500), () async {
-            if (!mounted) return;
-            final windowService = ref.read(windowServiceProvider);
-            for (final warm in [
-              windowService.prewarmMediaViewer,
-              windowService.prewarmProfileCard,
-              windowService.prewarmTrayFlyout,
-              windowService.prewarmScreenCapture,
-            ]) {
-              if (!mounted) return;
-              await warm();
-              if (!mounted) return;
-              await WidgetsBinding.instance.endOfFrame;
-            }
-          });
-        }
+        // 子窗口采用按需延迟拉起（Lazy Creation），不在启动时预热独立引擎
       }
       await ref
           .read(appUpdateServiceProvider)

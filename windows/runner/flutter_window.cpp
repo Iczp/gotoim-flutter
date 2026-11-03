@@ -7,6 +7,45 @@
 #include "flutter/generated_plugin_registrant.h"
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
 
+#include <app_links/app_links_plugin_c_api.h>
+#include <audioplayers_windows/audioplayers_windows_plugin.h>
+#include <connectivity_plus/connectivity_plus_windows_plugin.h>
+#include <file_selector_windows/file_selector_windows.h>
+#include <flutter_secure_storage_windows/flutter_secure_storage_windows_plugin.h>
+#include <gal/gal_plugin_c_api.h>
+#include <pasteboard/pasteboard_plugin.h>
+#include <permission_handler_windows/permission_handler_windows_plugin.h>
+#include <record_windows/record_windows_plugin_c_api.h>
+#include <video_player_win/video_player_win_plugin_c_api.h>
+
+// 子窗口专用轻量级插件注册。
+// 严禁在此注册 flutter_inappwebview_windows：该插件在 Windows 上持有全局 WebView2/COM/WinRT 单例与
+// DispatcherQueue 线程状态，在多 FlutterEngine 并发注册时会引发 0xc0000005 越界闪退并派生大量渲染进程。
+static void RegisterSubWindowPlugins(flutter::PluginRegistry* registry) {
+  AppLinksPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("AppLinksPluginCApi"));
+  AudioplayersWindowsPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("AudioplayersWindowsPlugin"));
+  ConnectivityPlusWindowsPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("ConnectivityPlusWindowsPlugin"));
+  DesktopMultiWindowPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("DesktopMultiWindowPlugin"));
+  FileSelectorWindowsRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FileSelectorWindows"));
+  FlutterSecureStorageWindowsPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FlutterSecureStorageWindowsPlugin"));
+  GalPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("GalPluginCApi"));
+  PasteboardPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("PasteboardPlugin"));
+  PermissionHandlerWindowsPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("PermissionHandlerWindowsPlugin"));
+  RecordWindowsPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("RecordWindowsPluginCApi"));
+  VideoPlayerWinPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("VideoPlayerWinPluginCApi"));
+}
+
 namespace {
 constexpr UINT kRedrawAfterShow = WM_APP + 0x47;
 LRESULT CALLBACK StartupCoverProc(HWND hwnd, UINT message, WPARAM wparam,
@@ -86,7 +125,7 @@ bool FlutterWindow::OnCreate() {
     auto *flutter_view_controller =
         reinterpret_cast<flutter::FlutterViewController *>(controller);
     auto *registry = flutter_view_controller->engine();
-    RegisterPlugins(registry);
+    RegisterSubWindowPlugins(registry);
 
     HWND child_hwnd = flutter_view_controller->view()->GetNativeWindow();
     HWND top_hwnd = GetAncestor(child_hwnd, GA_ROOT);
