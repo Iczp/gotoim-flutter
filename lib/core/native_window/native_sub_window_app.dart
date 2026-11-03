@@ -468,11 +468,9 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           await prepareDesktopWindowFrame();
           return true;
         case 'window_ping':
-          return mounted &&
-              (_childMethodHandler != null ||
-                  _currentPayload.type == SubWindowType.social ||
-                  _currentPayload.type == SubWindowType.diagnostics ||
-                  _currentPayload.type == SubWindowType.localFileServer);
+          return mounted;
+        case 'browser_ping':
+          return mounted && _childMethodHandler != null;
         case 'window_release_content':
           nativeWindowDocked.value = false;
           if (mounted) {

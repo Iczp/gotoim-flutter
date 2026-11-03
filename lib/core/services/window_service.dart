@@ -1118,7 +1118,7 @@ class DefaultWindowService implements WindowService {
       }
       await Future<void>.delayed(const Duration(milliseconds: 40));
     }
-    throw TimeoutException('浏览器窗口未就绪');
+    throw TimeoutException('子窗口未就绪 ($method)');
   }
 
   @override
