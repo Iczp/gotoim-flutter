@@ -24,12 +24,16 @@ class _FakePlatformFacade implements PlatformFacade {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final invokedMethods = <String>[];
 
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('mixin.one/desktop_multi_window/channels'),
           (call) async {
+            if (call.method == 'invokeMethod') {
+              invokedMethods.add((call.arguments as Map)['method'] as String);
+            }
             if (call.method == 'invokeMethod' &&
                 const [
                   'browser_ping',
@@ -118,7 +122,10 @@ void main() {
       expect(windowService.openWindows.length, 1);
 
       // Close window
+      invokedMethods.clear();
       await windowService.closeWindow('chat:s1');
+      expect(invokedMethods, contains('window_release_content'));
+      expect(invokedMethods, contains('disposeWindow'));
       expect(windowService.isWindowOpen('chat:s1'), isFalse);
       expect(windowService.openWindows, isEmpty);
 

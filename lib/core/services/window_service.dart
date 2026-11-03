@@ -1191,16 +1191,10 @@ class DefaultWindowService implements WindowService {
           if (c != null) {
             try {
               await c.hide();
-              _reusableControllers[k] = c;
-              if (_reusableControllers.length > _maxReusableControllers) {
-                final oldestKey = _reusableControllers.keys.first;
-                final evicted = _reusableControllers.remove(oldestKey);
-                if (evicted != null) {
-                  try {
-                    await evicted.invokeMethod('disposeWindow');
-                  } catch (_) {}
-                }
-              }
+              await c.invokeMethod('window_release_content');
+            } catch (_) {}
+            try {
+              await c.invokeMethod('disposeWindow');
             } catch (_) {}
           }
           removed = true;
