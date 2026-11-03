@@ -14,6 +14,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   pasteboard
   permission_handler_windows
   record_windows
+  tray_manager
   video_player_win
 )
 

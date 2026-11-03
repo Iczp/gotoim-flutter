@@ -11,6 +11,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   gtk
   pasteboard
   record_linux
+  tray_manager
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

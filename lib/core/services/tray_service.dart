@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore_for_file: deprecated_member_use
-import 'package:tray_manager/legacy.dart';
+import 'package:tray_manager/tray_manager.dart';
 
 import '../../app/app_navigation.dart';
 import '../widgets/desktop_tray_message_box.dart';
