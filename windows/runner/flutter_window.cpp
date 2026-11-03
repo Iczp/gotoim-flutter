@@ -17,10 +17,10 @@
 #include <permission_handler_windows/permission_handler_windows_plugin.h>
 #include <record_windows/record_windows_plugin_c_api.h>
 #include <video_player_win/video_player_win_plugin_c_api.h>
+#include <flutter_inappwebview_windows/flutter_inappwebview_windows_plugin_c_api.h>
 
 // 子窗口专用轻量级插件注册。
-// 严禁在此注册 flutter_inappwebview_windows：该插件在 Windows 上持有全局 WebView2/COM/WinRT 单例与
-// DispatcherQueue 线程状态，在多 FlutterEngine 并发注册时会引发 0xc0000005 越界闪退并派生大量渲染进程。
+// 注册子窗口基础插件，包括浏览器所需的 InAppWebView。
 static void RegisterSubWindowPlugins(flutter::PluginRegistry* registry) {
   AppLinksPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("AppLinksPluginCApi"));
@@ -44,6 +44,8 @@ static void RegisterSubWindowPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("RecordWindowsPluginCApi"));
   VideoPlayerWinPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("VideoPlayerWinPluginCApi"));
+  FlutterInappwebviewWindowsPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FlutterInappwebviewWindowsPluginCApi"));
 }
 
 namespace {

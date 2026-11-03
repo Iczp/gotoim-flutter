@@ -335,7 +335,7 @@ class DefaultWindowService implements WindowService {
       <String, WindowController>{};
   final Map<String, WindowController> _reusableControllers =
       <String, WindowController>{};
-  static const int _maxReusableControllers = 10;
+  static const int _maxReusableControllers = 3;
   final Map<String, Future<void>> _pendingCreations = <String, Future<void>>{};
   Completer<Uint8List?>? _screenCaptureCompleter;
 
@@ -1166,15 +1166,24 @@ class DefaultWindowService implements WindowService {
             await controller.invokeMethod('browser_clear_tabs');
           } catch (_) {}
         }
-        _reusableControllers[targetId] = controller;
-        if (_reusableControllers.length > _maxReusableControllers) {
-          final oldestKey = _reusableControllers.keys.first;
-          final evicted = _reusableControllers.remove(oldestKey);
-          if (evicted != null) {
-            try {
-              await evicted.invokeMethod('disposeWindow');
-            } catch (_) {}
+        final shouldKeepAlive = targetId == 'flyout:profile_card' ||
+            targetId == 'flyout:tray' ||
+            targetId == 'tool:screen_capture';
+        if (shouldKeepAlive) {
+          _reusableControllers[targetId] = controller;
+          if (_reusableControllers.length > _maxReusableControllers) {
+            final oldestKey = _reusableControllers.keys.first;
+            final evicted = _reusableControllers.remove(oldestKey);
+            if (evicted != null) {
+              try {
+                await evicted.invokeMethod('disposeWindow');
+              } catch (_) {}
+            }
           }
+        } else {
+          try {
+            await controller.invokeMethod('disposeWindow');
+          } catch (_) {}
         }
       } catch (_) {}
     }

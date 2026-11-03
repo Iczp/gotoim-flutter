@@ -89,6 +89,9 @@ Future<WindowController?> _obtainCurrentWindowController(
 /// 3. 通过 WindowMethodChannel 与主引擎进行双向 IPC 通信。
 Future<void> runNativeSubWindowApp(List<String> args) async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
+  // 严格限制子引擎图片与渲染缓存配额，防止多窗口叠加占用内存
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 15 * 1024 * 1024;
+  PaintingBinding.instance.imageCache.maximumSize = 50;
 
   final handlerCompleter =
       Completer<Future<dynamic> Function(MethodCall call)>();
