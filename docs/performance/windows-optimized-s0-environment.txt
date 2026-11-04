@@ -1,0 +1,7 @@
+﻿timestamp=2026-11-03T10:28:49.8560533Z
+root_pid=48668
+root_start_utc=2026-11-03T10:28:44.0813897Z
+root_path=F:\Dev\GotoIM\gotoim-flutter\build\windows\x64\runner\Release\gotoim_flutter.exe
+os=Microsoft Windows NT 10.0.26300.0
+architecture=AMD64
+Attribution uses live parent PID relationships; reparented or detached processes are not included. Initial system process mapping permits separate investigation. No command lines or window titles are recorded.

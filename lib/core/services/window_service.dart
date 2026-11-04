@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_navigation.dart';
+import '../config/app_environment.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/social/application/social_profile_preview.dart';
 import '../../features/social/application/social_identity_controller.dart';
@@ -281,11 +282,15 @@ class DefaultWindowService implements WindowService {
     this.trayCommand,
     this.switchOwnerHandler,
     this.isSubWindow = false,
+    this.standaloneSettingsWindow = false,
+    this.standaloneFileServerWindow = false,
   }) {
     _ensureIpcInitialized();
   }
 
   final PlatformFacade platformFacade;
+  final bool standaloneSettingsWindow;
+  final bool standaloneFileServerWindow;
   Future<void> Function(Map arguments)? trayCommand;
   void Function(Map? arguments)? onBrowserLoadCompleted;
   Future<void> Function(String url, String? title)? onBrowserDockRequested;
@@ -335,7 +340,9 @@ class DefaultWindowService implements WindowService {
       <String, WindowController>{};
   final Map<String, WindowController> _reusableControllers =
       <String, WindowController>{};
-  static const int _maxReusableControllers = 6;
+  // A hidden Flutter engine still retains its Dart heap and native resources.
+  // Release closed windows instead of keeping an idle engine indefinitely.
+  static const int _maxReusableControllers = 0;
   final Map<String, Future<void>> _pendingCreations = <String, Future<void>>{};
   Completer<Uint8List?>? _screenCaptureCompleter;
 
@@ -1639,6 +1646,15 @@ class DefaultWindowService implements WindowService {
       final effectivePayload = payload.copyWith(extra: updatedExtra);
 
       var cachedController = _reusableControllers.remove(targetId);
+      if (cachedController == null && type == WindowType.chat) {
+        final reusableChatKey = _reusableControllers.keys.firstWhere(
+          (k) => k.startsWith('chat:'),
+          orElse: () => '',
+        );
+        if (reusableChatKey.isNotEmpty) {
+          cachedController = _reusableControllers.remove(reusableChatKey);
+        }
+      }
       if (cachedController != null &&
           await _nativeWindowAlive(cachedController) == false) {
         cachedController = null;
@@ -2144,7 +2160,7 @@ class DefaultWindowService implements WindowService {
       return;
     }
 
-    if (platformFacade.supportsMultipleWindows) {
+    if (platformFacade.supportsMultipleWindows && standaloneSettingsWindow) {
       try {
         final currentTheme = themeModeProvider?.call() ?? 'system';
         final payload = NativeWindowPayload(
@@ -2245,7 +2261,7 @@ class DefaultWindowService implements WindowService {
       return;
     }
 
-    if (platformFacade.supportsMultipleWindows) {
+    if (platformFacade.supportsMultipleWindows && standaloneFileServerWindow) {
       try {
         final currentTheme = themeModeProvider?.call() ?? 'system';
         final payload = NativeWindowPayload(
@@ -2278,7 +2294,14 @@ class DefaultWindowService implements WindowService {
       } finally {
         await closeWindow(targetId);
       }
+      return;
     }
+
+    _registerWindow(
+      targetId: targetId,
+      type: WindowType.fileServer,
+      title: '局域网快传',
+    );
   }
 
   @override
@@ -2392,6 +2415,7 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
 ) {
   final platformFacade = ref.watch(platformFacadeProvider);
   final sessionChangeBus = ref.watch(sessionChangeBusProvider);
+  final environment = ref.watch(appEnvironmentProvider);
 
   late final DefaultWindowService service;
   ref.listen(trayGroupedUnreadProvider, (previous, next) {
@@ -2408,6 +2432,8 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
   });
   service = DefaultWindowService(
     platformFacade: platformFacade,
+    standaloneSettingsWindow: environment.standaloneSettingsWindow,
+    standaloneFileServerWindow: environment.standaloneFileServerWindow,
     traySnapshotProvider: () => ref.read(trayGroupedUnreadProvider),
     switchOwnerHandler: (ownerId) async {
       try {

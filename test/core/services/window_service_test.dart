@@ -97,6 +97,19 @@ void main() {
       expect(windowService.isWindowOpen('chat:s1'), isFalse);
     });
 
+    test('closing an exact chat target disposes the idle engine', () async {
+      await windowService.openChat(sessionUnitId: 's1', ownerId: 100);
+      invokedMethods.clear();
+
+      await windowService.closeWindow('chat:100:s1');
+
+      expect(
+        invokedMethods,
+        containsAllInOrder(['window_release_content', 'disposeWindow']),
+      );
+      expect(windowService.isWindowOpen('chat:100:s1'), isFalse);
+    });
+
     test(
       'new tray flyout is explicitly shown after its handler is ready',
       () async {

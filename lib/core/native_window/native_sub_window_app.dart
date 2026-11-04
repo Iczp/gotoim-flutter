@@ -157,6 +157,8 @@ Future<void> runNativeSubWindowApp(List<String> args) async {
         (ref) => DefaultWindowService(
           platformFacade: platformFacade,
           isSubWindow: true,
+          standaloneSettingsWindow: environment.standaloneSettingsWindow,
+          standaloneFileServerWindow: environment.standaloneFileServerWindow,
         ),
       ),
       subWindowSocialChatObjectProvider.overrideWith(
@@ -473,6 +475,13 @@ class _NativeSubWindowAppState extends ConsumerState<NativeSubWindowApp> {
           return mounted && _childMethodHandler != null;
         case 'window_release_content':
           nativeWindowDocked.value = false;
+          if (_childMethodHandler != null) {
+            try {
+              await _childMethodHandler!(call);
+            } catch (_) {}
+          }
+          PaintingBinding.instance.imageCache.clear();
+          PaintingBinding.instance.imageCache.clearLiveImages();
           if (mounted) {
             setState(() {
               _isDockedSubWindow = false;

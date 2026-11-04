@@ -60,24 +60,8 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   late final WindowMethodChannel _mainIpcChannel;
   late final SubWindowChatController _subWindowChatController;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await DesktopWindowAdapter.setupCustomTitleBar();
-      if (mounted) {
-        setState(() {
-          _isMaximized = DesktopWindowAdapter.isMaximized();
-        });
-      }
-    });
-
-    _mainIpcChannel = const WindowMethodChannel(
-      'gotoim/ipc_to_main',
-      mode: ChannelMode.unidirectional,
-    );
-
-    _subWindowChatController = SubWindowChatController(
+  SubWindowChatController _createChatController() {
+    return SubWindowChatController(
       sessionUnitId: widget.payload.sessionUnitId ?? '',
       ownerId: widget.payload.ownerId ?? 0,
       mainIpcChannel: _mainIpcChannel,
@@ -159,6 +143,26 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
         } catch (_) {}
       },
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await DesktopWindowAdapter.setupCustomTitleBar();
+      if (mounted) {
+        setState(() {
+          _isMaximized = DesktopWindowAdapter.isMaximized();
+        });
+      }
+    });
+
+    _mainIpcChannel = const WindowMethodChannel(
+      'gotoim/ipc_to_main',
+      mode: ChannelMode.unidirectional,
+    );
+
+    _subWindowChatController = _createChatController();
 
     Future<dynamic> handler(MethodCall call) async {
       switch (call.method) {
@@ -205,6 +209,18 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
         case 'chat_refresh':
         case 'bringToFront':
           await _loadHistory();
+          return true;
+        case 'window_release_content':
+          if (mounted) {
+            setState(() {
+              _messages.clear();
+              _attachments.clear();
+              _inputController.clear();
+              _isLoading = false;
+              _loadingHistory = false;
+              _refreshPending = false;
+            });
+          }
           return true;
         case 'account_logout':
           if (mounted) {
@@ -278,17 +294,23 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
           }
         }
         setState(() {
-          final merged = <String, _ChatMessage>{};
-          for (final m in [..._messages, ...list]) {
-            merged[m.clientMessageId ??
-                    m.serverId?.toString() ??
-                    m.id ??
-                    '${m.time.microsecondsSinceEpoch}'] =
-                m;
+          if (!older) {
+            _messages
+              ..clear()
+              ..addAll(list);
+          } else {
+            final merged = <String, _ChatMessage>{};
+            for (final m in [..._messages, ...list]) {
+              merged[m.clientMessageId ??
+                      m.serverId?.toString() ??
+                      m.id ??
+                      '${m.time.microsecondsSinceEpoch}'] =
+                  m;
+            }
+            _messages
+              ..clear()
+              ..addAll(merged.values);
           }
-          _messages
-            ..clear()
-            ..addAll(merged.values);
           _messages.sort((a, b) => a.time.compareTo(b.time));
           if (older) _hasMore = list.isNotEmpty;
           _isLoading = false;
@@ -318,6 +340,17 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.payload.sessionUnitId != widget.payload.sessionUnitId ||
         oldWidget.payload.ownerId != widget.payload.ownerId) {
+      _subWindowChatController.dispose();
+      _subWindowChatController = _createChatController();
+      if (mounted) {
+        setState(() {
+          _messages.clear();
+          _attachments.clear();
+          _inputController.clear();
+          _hasMore = true;
+          _isLoading = true;
+        });
+      }
       _loadHistory();
     }
   }

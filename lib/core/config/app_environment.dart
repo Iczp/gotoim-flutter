@@ -49,6 +49,9 @@ class AppEnvironment {
     required this.deepLinkCustomSchemes,
     required this.deepLinkAllowedHosts,
     required this.statisticBaseUrl,
+    this.standaloneToolWindows = false,
+    this.standaloneSettingsWindow = false,
+    this.standaloneFileServerWindow = false,
   });
 
   /// Independent Social endpoint; an unset value uses the current API gateway.
@@ -113,6 +116,11 @@ class AppEnvironment {
 
   /// Base URL for AppStatistic API.
   final String statisticBaseUrl;
+
+  /// Whether desktop tool windows default to opening in standalone native sub-windows.
+  final bool standaloneToolWindows;
+  final bool standaloneSettingsWindow;
+  final bool standaloneFileServerWindow;
 
   static AppFlavor parseFlavor(String value) {
     return AppFlavor.values.firstWhere(
@@ -242,6 +250,24 @@ class AppEnvironment {
         dotenv.get('STATISTIC_BASE_URL', fallback: ''),
         fallback: 'http://10.0.5.20:51621',
       ),
+      standaloneToolWindows: _parseBool(
+        dotenv.get('STANDALONE_TOOL_WINDOWS', fallback: 'false'),
+        fallback: false,
+      ),
+      standaloneSettingsWindow: _parseBool(
+        dotenv.get('STANDALONE_SETTINGS_WINDOW', fallback: ''),
+        fallback: _parseBool(
+          dotenv.get('STANDALONE_TOOL_WINDOWS', fallback: 'false'),
+          fallback: false,
+        ),
+      ),
+      standaloneFileServerWindow: _parseBool(
+        dotenv.get('STANDALONE_FILE_SERVER_WINDOW', fallback: ''),
+        fallback: _parseBool(
+          dotenv.get('STANDALONE_TOOL_WINDOWS', fallback: 'false'),
+          fallback: false,
+        ),
+      ),
     );
   }
 
@@ -262,6 +288,13 @@ class AppEnvironment {
   static int _positiveInt(String value, {required int fallback}) {
     final parsed = int.tryParse(value.trim());
     return parsed != null && parsed > 0 ? parsed : fallback;
+  }
+
+  static bool _parseBool(String value, {required bool fallback}) {
+    final trimmed = value.trim().toLowerCase();
+    if (trimmed == 'true' || trimmed == '1') return true;
+    if (trimmed == 'false' || trimmed == '0') return false;
+    return fallback;
   }
 
   static String _nonEmpty(String value, {required String fallback}) {
@@ -372,6 +405,9 @@ class AppEnvironment {
     deepLinkCustomSchemes: ['gotoim-dev', 'gotoim'],
     deepLinkAllowedHosts: ['gotoim.com'],
     statisticBaseUrl: 'http://10.0.5.20:51621',
+    standaloneToolWindows: false,
+    standaloneSettingsWindow: false,
+    standaloneFileServerWindow: false,
   );
 }
 

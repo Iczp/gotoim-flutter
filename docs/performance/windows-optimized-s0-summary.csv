@@ -1,0 +1,4 @@
+﻿"scenario","iteration","timestamp","root_pid","window_count","process_count","private_mb","working_set_mb","webview_private_mb","dart_heap_mb","notes"
+"OptimizedProd-S0","1","2026-11-03T10:28:49.9092048Z","48668","1","1","412.27","201.94",,"","; missing_processes=0; WebView blank means no attributed process, not proof of zero"
+"OptimizedProd-S0","1","2026-11-03T10:28:53.5805999Z","48668","1","1","402.5","193.13",,"","; missing_processes=0; WebView blank means no attributed process, not proof of zero"
+"OptimizedProd-S0","1","2026-11-03T10:28:57.0738520Z","48668","1","1","392.41","192.97",,"","; missing_processes=0; WebView blank means no attributed process, not proof of zero"
