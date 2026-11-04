@@ -340,9 +340,9 @@ class DefaultWindowService implements WindowService {
       <String, WindowController>{};
   final Map<String, WindowController> _reusableControllers =
       <String, WindowController>{};
-  // A hidden Flutter engine still retains its Dart heap and native resources.
-  // Release closed windows instead of keeping an idle engine indefinitely.
-  static const int _maxReusableControllers = 0;
+  // Retain the previous bounded pool while native engine teardown is being
+  // investigated: destroying an engine on every close can crash Windows.
+  static const int _maxReusableControllers = 6;
   final Map<String, Future<void>> _pendingCreations = <String, Future<void>>{};
   Completer<Uint8List?>? _screenCaptureCompleter;
 

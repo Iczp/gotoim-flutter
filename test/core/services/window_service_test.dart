@@ -28,6 +28,7 @@ class _FakePlatformFacade implements PlatformFacade {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final invokedMethods = <String>[];
+  var createdWindows = 0;
 
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -54,7 +55,12 @@ void main() {
           (call) async {
             switch (call.method) {
               case 'createWindow':
+                createdWindows++;
                 return '101';
+              case 'getAllWindows':
+                return [
+                  {'windowId': '101', 'windowArgument': ''},
+                ];
               case 'show':
               case 'hide':
               case 'close':
@@ -97,17 +103,28 @@ void main() {
       expect(windowService.isWindowOpen('chat:s1'), isFalse);
     });
 
-    test('closing an exact chat target disposes the idle engine', () async {
+    test('closing an exact chat target retains its reusable engine', () async {
       await windowService.openChat(sessionUnitId: 's1', ownerId: 100);
       invokedMethods.clear();
 
       await windowService.closeWindow('chat:100:s1');
 
-      expect(
-        invokedMethods,
-        containsAllInOrder(['window_release_content', 'disposeWindow']),
-      );
+      expect(invokedMethods, contains('window_release_content'));
+      expect(invokedMethods, isNot(contains('disposeWindow')));
       expect(windowService.isWindowOpen('chat:100:s1'), isFalse);
+    });
+
+    test('reopening a closed chat reuses the same window', () async {
+      final before = createdWindows;
+      await windowService.openChat(sessionUnitId: 's1', ownerId: 100);
+      await windowService.closeWindow('chat:100:s1');
+      invokedMethods.clear();
+      await windowService.openChat(sessionUnitId: 's1', ownerId: 100);
+
+      expect(createdWindows - before, 1);
+      expect(invokedMethods, contains('update_payload'));
+      expect(invokedMethods, isNot(contains('disposeWindow')));
+      expect(windowService.isWindowOpen('chat:100:s1'), isTrue);
     });
 
     test(
