@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+// Platform import removed
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -563,7 +563,7 @@ class _HomeNavigationBar extends ConsumerWidget {
           child: SizedBox(
             height: kHomeBottomBarHeight,
             child: Row(
-              children: HomeSection.values
+              children: HomeSectionInfo.mobileSections
                   .map((section) {
                     final isSelected = section == selected;
                     final unreadCount =

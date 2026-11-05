@@ -10,6 +10,8 @@ import '../../session/presentation/session_list_page.dart';
 import '../../explore/presentation/explore_page.dart';
 import '../../contact/presentation/contacts_page.dart';
 import '../../contact/presentation/desktop_contacts_split_view.dart';
+import '../../local_file_server/pages/local_file_server_page.dart';
+import '../../local_file_server/presentation/desktop_local_file_server_split_view.dart';
 import '../../workbench/presentation/workbench_page.dart';
 import '../../mine/presentation/mine_page.dart';
 
@@ -48,6 +50,12 @@ class HomeSectionPage extends ConsumerWidget {
       // 工作台内容直接作为 Tab 页面渲染，不再经过“打开工作台”的中转页。
       return const WorkbenchPage();
     }
+    if (section == HomeSection.fileServer) {
+      if (isDesktop) {
+        return const DesktopLocalFileServerSplitView();
+      }
+      return const LocalFileServerPage();
+    }
     if (section == HomeSection.explore) {
       return _HomeSectionWithTitle(
         title: section.label,
@@ -65,13 +73,21 @@ class HomeSectionPage extends ConsumerWidget {
   }
 }
 
-enum HomeSection { messages, contacts, workbench, explore, profile }
+enum HomeSection { messages, contacts, workbench, fileServer, explore, profile }
 
 extension HomeSectionInfo on HomeSection {
+  static const mobileSections = [
+    HomeSection.messages,
+    HomeSection.contacts,
+    HomeSection.workbench,
+    HomeSection.explore,
+    HomeSection.profile,
+  ];
   String get label {
     if (this == HomeSection.messages) return '消息';
     if (this == HomeSection.contacts) return '通讯录';
     if (this == HomeSection.workbench) return '工作台';
+    if (this == HomeSection.fileServer) return '快传';
     if (this == HomeSection.explore) return '探索';
     return '我的';
   }
@@ -80,6 +96,7 @@ extension HomeSectionInfo on HomeSection {
     if (this == HomeSection.messages) return Icons.forum_outlined;
     if (this == HomeSection.contacts) return Icons.contacts_outlined;
     if (this == HomeSection.workbench) return Icons.grid_view_rounded;
+    if (this == HomeSection.fileServer) return Icons.wifi_tethering_rounded;
     if (this == HomeSection.explore) return Icons.explore_outlined;
     return Icons.person_outline_rounded;
   }
@@ -88,6 +105,7 @@ extension HomeSectionInfo on HomeSection {
     if (this == HomeSection.messages) return Icons.forum_rounded;
     if (this == HomeSection.contacts) return Icons.contacts_rounded;
     if (this == HomeSection.workbench) return Icons.grid_view;
+    if (this == HomeSection.fileServer) return Icons.wifi_tethering_rounded;
     if (this == HomeSection.explore) return Icons.explore_rounded;
     return Icons.person_rounded;
   }

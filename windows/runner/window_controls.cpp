@@ -1384,8 +1384,12 @@ class WindowControls : public flutter::Plugin {
       waiter->Error("WINDOW_CLOSED", "Window closed before its frame was ready");
     }
     frame_state_->waiters.clear();
-    if (Window()) KillTimer(Window(), kProfileHoverTimer);
-    if (Window() == g_main_window && g_main_window) {
+    // The Flutter view may already be destroyed when plugins are released.
+    // Teardown must use only the captured native handle, never GetView().
+    const HWND teardown_hwnd = explicit_hwnd_;
+    if (teardown_hwnd && IsWindow(teardown_hwnd))
+      KillTimer(teardown_hwnd, kProfileHoverTimer);
+    if (teardown_hwnd && teardown_hwnd == g_main_window) {
       UnregisterHotKey(g_main_window, 9001);
       UnregisterHotKey(g_main_window, 9002);
     }

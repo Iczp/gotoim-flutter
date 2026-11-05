@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/shell/application_shell.dart';
 import '../../../core/device/client_device_context.dart';
 import '../../../core/services/scan/unified_scan_dispatcher.dart';
 import '../../../core/services/window_service.dart';
@@ -219,7 +220,9 @@ class MinePage extends ConsumerWidget {
               showArrow: true,
               onTap: () {
                 if (isDesktop) {
-                  ref.read(windowServiceProvider).openLocalFileServer();
+                  ref
+                      .read(currentHomeSectionProvider.notifier)
+                      .setSection(HomeSection.fileServer);
                 } else {
                   context.push('/local-file-server');
                 }
