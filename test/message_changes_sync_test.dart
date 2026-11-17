@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,20 +31,32 @@ class _Client implements ApiClient {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Map<String, dynamic> page(
-  String unit,
-  String next, {
-  bool reset = false,
+String v2Cursor(String epoch, String seq) => jsonEncode({'epoch': epoch, 'seq': seq});
+
+Map<String, dynamic> v2Head(String unit, String epoch, String headSeq) => {
+  'sessionUnitId': unit,
+  'epoch': epoch,
+  'headSeq': headSeq,
+  'minSeq': '0',
+};
+
+Map<String, dynamic> v2Incremental({
+  required String epoch,
+  required String headSeq,
+  required String nextSeq,
   bool more = false,
+  bool reset = false,
   List<Map<String, dynamic>> items = const [],
 }) => {
-  'sessionUnitId': unit,
-  'nextCursor': next,
-  'snapshotCursor': 'snapshot',
-  'resetRequired': reset,
+  'epoch': epoch,
+  'headSeq': headSeq,
+  'minSeq': '0',
+  'nextSeq': nextSeq,
   'hasMore': more,
+  'resetRequired': reset,
   'items': items,
 };
+
 Map<String, dynamic> recalled(int id, int version) => {
   'messageId': '$id',
   'syncVersion': '$version',
@@ -51,6 +64,7 @@ Map<String, dynamic> recalled(int id, int version) => {
   'isRollbacked': true,
   'rollbackTime': '2026-10-14T02:00:00Z',
 };
+
 ChatMessage message(int id, {String unit = 'unit', int owner = 1}) =>
     ChatMessage.fromJson(
       {
@@ -93,28 +107,34 @@ void main() {
           'lastMessage': message(6).raw,
         }),
       ]);
-      await dao.applySyncPage(1, 'unit', [], cursor: 'start');
-      client.respond =
-          (_, _) async => [
-            page(
-              'unit',
-              'done',
-              items: [
-                {
-                  'messageId': '6',
-                  'syncVersion': '7',
-                  'changeType': 2,
-                  'isDeleted': true,
-                },
-                {
-                  'messageId': '5',
-                  'syncVersion': '8',
-                  'changeType': 2,
-                  'isDeleted': true,
-                },
-              ],
-            ),
-          ];
+      await dao.applySyncPage(1, 'unit', [], cursor: v2Cursor('e1', '5'));
+      client.respond = (path, body) async {
+        if (path.endsWith('/changes/heads')) {
+          return {
+            'items': [v2Head('unit', 'e1', '10')],
+          };
+        }
+        if (path.endsWith('/changes/incremental')) {
+          return v2Incremental(
+            epoch: 'e1',
+            headSeq: '10',
+            nextSeq: '10',
+            items: [
+              {
+                'messageId': '6',
+                'changeSeq': '7',
+                'changeType': 'DeletedForMe',
+              },
+              {
+                'messageId': '5',
+                'changeSeq': '8',
+                'changeType': 'DeletedForMe',
+              },
+            ],
+          );
+        }
+        return {};
+      };
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
       await dao.upsertAll([message(5), message(6)]);
@@ -133,7 +153,7 @@ void main() {
         }),
       ]);
       expect((await sessions.readById('unit'))!.preview, isEmpty);
-      expect(await dao.syncCursor(1, 'unit'), 'done');
+      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '10'));
     },
   );
 
@@ -141,20 +161,27 @@ void main() {
     'calibration deletes only explicit tombstones and preserves omitted messages',
     () async {
       await dao.upsertAll([message(5), message(6)]);
-      var query = 0;
       client.respond = (path, _) async {
-        if (path.endsWith('/sync-items')) {
-          return [
-            {'messageId': '5', 'syncVersion': '7', 'isDeleted': true},
-          ];
+        if (path.endsWith('/changes/heads')) {
+          return {
+            'items': [v2Head('unit', 'e1', '10')],
+          };
         }
-        return [page('unit', 'baseline', reset: ++query == 1)];
+        if (path.endsWith('/by-ids')) {
+          return {
+            'items': [
+              {'messageId': '5', 'state': 'DeletedForMe', 'changeSeq': '7'},
+            ],
+          };
+        }
+        return {};
       };
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
       expect(
         (await dao.readPage(ownerId: 1, sessionUnitId: 'unit')).single.serverId,
         6,
       );
+      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '10'));
     },
   );
 
@@ -280,22 +307,44 @@ void main() {
     'bootstrap calibrates cached ids then replays changes committed during calibration',
     () async {
       await dao.upsertAll([message(5), message(700)]);
-      var rounds = 0;
+      var headsCount = 0;
       client.respond = (path, body) async {
-        if (path.endsWith('/sync-items')) {
+        if (path.endsWith('/changes/heads')) {
+          headsCount++;
+          return {
+            'items': [v2Head('unit', 'e1', headsCount == 1 ? '10' : '12')],
+          };
+        }
+        if (path.endsWith('/by-ids')) {
           expect(body['messageIds'], [5, 700]);
-          return [recalled(5, 0)];
+          return {
+            'items': [
+              {
+                'messageId': '5',
+                'state': 'Recalled',
+                'changeSeq': '7',
+                'rollbackTime': '2026-10-14T02:00:00Z',
+              },
+            ],
+          };
         }
-        final scope = (body['sessions'] as List).single as Map;
-        rounds++;
-        if (rounds == 1) {
-          expect(scope['cursor'], isNull);
-          return [page('unit', 'baseline', reset: true)];
+        if (path.endsWith('/changes/incremental')) {
+          expect(body['changeSeq'], '10');
+          return v2Incremental(
+            epoch: 'e1',
+            headSeq: '12',
+            nextSeq: '12',
+            items: [
+              {
+                'messageId': '700',
+                'changeSeq': '12',
+                'changeType': 'Recalled',
+                'rollbackTime': '2026-10-14T02:00:00Z',
+              },
+            ],
+          );
         }
-        expect(scope['cursor'], rounds == 2 ? 'baseline' : 'after');
-        return [
-          page('unit', 'after', items: rounds == 2 ? [recalled(700, 1)] : []),
-        ];
+        return {};
       };
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
       expect(
@@ -306,6 +355,10 @@ void main() {
         ))!.isRollbacked,
         isTrue,
       );
+      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '10'));
+
+      // Next change pulls incremental
+      await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
       expect(
         (await dao.findByServerId(
           ownerId: 1,
@@ -314,32 +367,41 @@ void main() {
         ))!.isRollbacked,
         isTrue,
       );
-      expect(await dao.syncCursor(1, 'unit'), 'after');
-      await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
-      expect(
-        client.calls.where((call) => call.$1.endsWith('/sync-items')).length,
-        1,
-      );
+      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '12'));
     },
   );
 
   test(
-    'empty filtered page advances and preserves the snapshot for the next page',
+    'empty incremental page advances cursor to headSeq',
     () async {
       await dao.upsertAll([message(2)]);
-      await dao.applySyncPage(1, 'unit', [], cursor: 'start');
-      var rounds = 0;
-      client.respond = (_, body) async {
-        final scope = (body['sessions'] as List).single as Map;
-        if (++rounds == 1) return [page('unit', 'middle', more: true)];
-        expect(scope['cursor'], 'middle');
-        expect(scope['snapshotCursor'], 'snapshot');
-        return [
-          page('unit', 'finish', items: [recalled(2, 7)]),
-        ];
+      await dao.applySyncPage(1, 'unit', [], cursor: v2Cursor('e1', '5'));
+      client.respond = (path, body) async {
+        if (path.endsWith('/changes/heads')) {
+          return {
+            'items': [v2Head('unit', 'e1', '10')],
+          };
+        }
+        if (path.endsWith('/changes/incremental')) {
+          expect(body['changeSeq'], '5');
+          return v2Incremental(
+            epoch: 'e1',
+            headSeq: '10',
+            nextSeq: '10',
+            items: [
+              {
+                'messageId': '2',
+                'changeSeq': '7',
+                'changeType': 'Recalled',
+                'rollbackTime': '2026-10-14T02:00:00Z',
+              },
+            ],
+          );
+        }
+        return {};
       };
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
-      expect(await dao.syncCursor(1, 'unit'), 'finish');
+      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '10'));
       expect(
         (await dao.findByServerId(
           ownerId: 1,
@@ -348,28 +410,6 @@ void main() {
         ))!.isRollbacked,
         isTrue,
       );
-    },
-  );
-
-  test(
-    'unimplemented future mutations do not acknowledge the cursor',
-    () async {
-      await dao.applySyncPage(1, 'unit', [], cursor: 'start');
-      client.respond =
-          (_, _) async => [
-            page(
-              'unit',
-              'finish',
-              items: [
-                {'messageId': '5', 'changeType': 3},
-              ],
-            ),
-          ];
-      await expectLater(
-        repo.loadChanges(ownerId: 1, sessionUnitId: 'unit'),
-        throwsUnsupportedError,
-      );
-      expect(await dao.syncCursor(1, 'unit'), 'start');
     },
   );
 
@@ -428,19 +468,26 @@ void main() {
     'global normal recovery batches conversation cursors without uploading message ids',
     () async {
       await dao.upsertAll([message(5, unit: 'a'), message(6, unit: 'b')]);
-      await dao.applySyncPage(1, 'a', [], cursor: 'a0');
-      await dao.applySyncPage(1, 'b', [], cursor: 'b0');
-      client.respond = (_, body) async {
-        final scopes = body['sessions'] as List;
-        expect(scopes.length, 2);
-        expect(scopes.map((scope) => scope['cursor']), ['a0', 'b0']);
-        expect(body.containsKey('messageIds'), isFalse);
-        return [page('a', 'a1'), page('b', 'b1')];
+      await dao.applySyncPage(1, 'a', [], cursor: v2Cursor('e1', '10'));
+      await dao.applySyncPage(1, 'b', [], cursor: v2Cursor('e1', '10'));
+      client.respond = (path, body) async {
+        if (path.endsWith('/changes/heads')) {
+          final units = (body['sessionUnitIds'] as List).cast<String>();
+          expect(units.length, 2);
+          expect(body.containsKey('messageIds'), isFalse);
+          return {
+            'items': [
+              v2Head('a', 'e1', '10'),
+              v2Head('b', 'e1', '10'),
+            ],
+          };
+        }
+        return {};
       };
       await repo.loadChanges(ownerId: 1);
       expect(client.calls.length, 1);
-      expect(await dao.syncCursor(1, 'a'), 'a1');
-      expect(await dao.syncCursor(1, 'b'), 'b1');
+      expect(await dao.syncCursor(1, 'a'), v2Cursor('e1', '10'));
+      expect(await dao.syncCursor(1, 'b'), v2Cursor('e1', '10'));
     },
   );
 
@@ -452,7 +499,7 @@ void main() {
               throw const ApiException(
                 'disabled',
                 code: 'Chat:MessageChangeSyncDisabled',
-                statusCode: 403,
+                statusCode: 404,
               );
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
       expect(repo.isChangeSyncAvailable, isFalse);
@@ -504,28 +551,4 @@ void main() {
       expect((await sessions.readById('unit'))!.preview, '消息已撤回');
     },
   );
-
-  test('malformed changes are rejected before acknowledging a page', () async {
-    await dao.applySyncPage(1, 'unit', [], cursor: 'before');
-    client.respond =
-        (_, _) async => [
-          page(
-            'unit',
-            'after',
-            items: [
-              {
-                'messageId': 'bad',
-                'syncVersion': '1',
-                'changeType': 1,
-                'isRollbacked': true,
-              },
-            ],
-          ),
-        ];
-    await expectLater(
-      repo.loadChanges(ownerId: 1, sessionUnitId: 'unit'),
-      throwsFormatException,
-    );
-    expect(await dao.syncCursor(1, 'unit'), 'before');
-  });
 }

@@ -45,6 +45,31 @@ class _Client extends Fake implements ApiClient {
     bool retryOnUnauthorized = true,
   }) async {
     calls++;
+    if (path.endsWith('/changes/heads')) {
+      final unitIds = ((data as Map)['sessionUnitIds'] as List?) ?? [];
+      return {
+        'items': unitIds.map((id) => {
+          'sessionUnitId': id,
+          'epoch': 'e1',
+          'headSeq': '1',
+          'minSeq': '0',
+        }).toList()
+      } as T;
+    }
+    if (path.endsWith('/by-ids')) {
+      return {'items': []} as T;
+    }
+    if (path.endsWith('/changes/incremental')) {
+      return {
+        'epoch': 'e1',
+        'headSeq': '1',
+        'minSeq': '0',
+        'nextSeq': '1',
+        'hasMore': false,
+        'resetRequired': false,
+        'items': [],
+      } as T;
+    }
     final sessions = (data as Map)['sessions'] as List;
     return sessions
             .map(
@@ -84,7 +109,7 @@ void main() {
     );
     coordinator.start();
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    expect(client.calls, 1);
+    expect(client.calls, 2);
     gateway.controller.add(
       SignalRCommandEvent(
         command: SignalRCommand.messageBadgeUpdated,
@@ -95,7 +120,7 @@ void main() {
       ),
     );
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    expect(client.calls, 1);
+    expect(client.calls, 2);
     expect(sessions.syncs, greaterThanOrEqualTo(2));
     gateway.controller.add(
       SignalRConnectionEvent(
@@ -104,7 +129,7 @@ void main() {
       ),
     );
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    expect(client.calls, 2);
+    expect(client.calls, 3);
     await coordinator.dispose();
     await gateway.controller.close();
     await db.close();

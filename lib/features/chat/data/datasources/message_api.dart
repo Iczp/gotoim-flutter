@@ -6,14 +6,63 @@ class MessageApi {
   MessageApi(this._client);
   final ApiClient _client;
 
+  Future<List<Map<String, dynamic>>> changeHeads({
+    required int chatObjectId,
+    required List<String> sessionUnitIds,
+  }) async {
+    final result = await _client.post<Map<String, dynamic>>(
+      '/api/chat/message/changes/heads',
+      data: {
+        'chatObjectId': chatObjectId,
+        'sessionUnitIds': sessionUnitIds,
+      },
+    );
+    final items = result['items'] as List<dynamic>? ?? const [];
+    return items.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> incrementalChanges({
+    required int chatObjectId,
+    required String sessionUnitId,
+    required String epoch,
+    required String changeSeq,
+    int maxResultCount = 100,
+  }) async {
+    final result = await _client.post<Map<String, dynamic>>(
+      '/api/chat/message/changes/incremental',
+      data: {
+        'chatObjectId': chatObjectId,
+        'sessionUnitId': sessionUnitId,
+        'epoch': epoch,
+        'changeSeq': changeSeq,
+        'maxResultCount': maxResultCount,
+      },
+    );
+    return Map<String, dynamic>.from(result);
+  }
+
+  Future<List<Map<String, dynamic>>> messageStates({
+    required int chatObjectId,
+    required String sessionUnitId,
+    required List<int> messageIds,
+  }) async {
+    final result = await _client.post<Map<String, dynamic>>(
+      '/api/chat/message/by-ids',
+      data: {
+        'chatObjectId': chatObjectId,
+        'sessionUnitId': sessionUnitId,
+        'messageIds': messageIds,
+      },
+    );
+    final items = result['items'] as List<dynamic>? ?? const [];
+    return items.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+  }
+
+  @Deprecated('Use changeHeads/incrementalChanges instead. /api/chat/message/changes/query is disabled.')
   Future<List<Map<String, dynamic>>> changes(
     List<Map<String, Object?>> sessions,
   ) async {
-    final result = await _client.post<List<dynamic>>(
-      '/api/chat/message/changes/query',
-      data: {'sessions': sessions, 'maxResultCount': 200},
-    );
-    return result.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+    throw UnsupportedError('Message Change Sync V1 (/api/chat/message/changes/query) is disabled.');
   }
 
   Future<List<Map<String, dynamic>>> syncItems(

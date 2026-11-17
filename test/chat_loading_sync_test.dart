@@ -50,6 +50,34 @@ class _Client implements ApiClient {
     Map<String, String>? headers,
     bool retryOnUnauthorized = true,
   }) async {
+    if (path.endsWith('/changes/heads')) {
+      if (failChanges) throw StateError('sync temporarily unavailable');
+      return {
+        'items': [
+          {
+            'sessionUnitId': 'unit',
+            'epoch': 'epoch-1',
+            'headSeq': '1',
+            'minSeq': '0',
+          }
+        ]
+      } as T;
+    }
+    if (path.endsWith('/changes/incremental')) {
+      if (failChanges) throw StateError('sync temporarily unavailable');
+      return {
+        'epoch': 'epoch-1',
+        'headSeq': '1',
+        'minSeq': '0',
+        'nextSeq': '1',
+        'hasMore': false,
+        'resetRequired': false,
+        'items': [],
+      } as T;
+    }
+    if (path.endsWith('/by-ids')) {
+      return {'items': []} as T;
+    }
     if (path.endsWith('/sync-items')) return <Object>[] as T;
     if (path.endsWith('/changes/query')) {
       if (failChanges) throw StateError('sync temporarily unavailable');

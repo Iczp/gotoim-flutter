@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'dart:convert';
 import '../../../../core/network/api_exception.dart';
 
 import '../../../../core/services/file/file_picker_service.dart';

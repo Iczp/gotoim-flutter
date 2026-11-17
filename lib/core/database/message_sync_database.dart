@@ -283,6 +283,15 @@ extension MessageSyncDatabase on UnifiedDatabase {
     await tx.ensureOpen(_UnifiedDatabaseUser());
     try {
       for (final item in items) {
+        if (item['clearTime'] != null) {
+          final clearMs = int.tryParse('${item['clearTime']}');
+          if (clearMs != null && clearMs > 0) {
+            await tx.runDelete(
+              'DELETE FROM Messages WHERE (ownerId = ? OR ownerId = 0) AND sessionUnitId = ? COLLATE NOCASE AND creationTime <= ?',
+              [owner, unit, clearMs],
+            );
+          }
+        }
         final id = int.tryParse('${item['messageId']}');
         final version = int.tryParse('${item['syncVersion'] ?? 0}') ?? 0;
         final isDeleted = item['isDeleted'] == true;
