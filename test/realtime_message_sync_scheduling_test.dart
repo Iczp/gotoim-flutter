@@ -45,26 +45,31 @@ class _Client extends Fake implements ApiClient {
     bool retryOnUnauthorized = true,
   }) async {
     calls++;
-    if (path.endsWith('/changes/heads')) {
-      final unitIds = ((data as Map)['sessionUnitIds'] as List?) ?? [];
+    if (path.endsWith('/changes/head')) {
       return {
-        'items': unitIds.map((id) => {
-          'sessionUnitId': id,
-          'epoch': 'e1',
-          'headSeq': '1',
-          'minSeq': '0',
-        }).toList()
+        'epoch': 'e1',
+        'headChangeId': '1',
+        'lastAppliedChangeId': '0',
+        'initialized': false,
       } as T;
     }
     if (path.endsWith('/by-ids')) {
       return {'items': []} as T;
     }
-    if (path.endsWith('/changes/incremental')) {
+    if (path.endsWith('/changes/ack')) {
       return {
         'epoch': 'e1',
-        'headSeq': '1',
-        'minSeq': '0',
-        'nextSeq': '1',
+        'headChangeId': '1',
+        'lastAppliedChangeId': '1',
+        'initialized': true,
+        'resetRequired': false,
+      } as T;
+    }
+    if (path.endsWith('/changes/pull')) {
+      return {
+        'epoch': 'e1',
+        'headChangeId': '1',
+        'nextCursor': '1',
         'hasMore': false,
         'resetRequired': false,
         'items': [],
@@ -109,7 +114,7 @@ void main() {
     );
     coordinator.start();
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    expect(client.calls, 2);
+    expect(client.calls, 3);
     gateway.controller.add(
       SignalRCommandEvent(
         command: SignalRCommand.messageBadgeUpdated,
@@ -120,7 +125,7 @@ void main() {
       ),
     );
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    expect(client.calls, 2);
+    expect(client.calls, 3);
     expect(sessions.syncs, greaterThanOrEqualTo(2));
     gateway.controller.add(
       SignalRConnectionEvent(
@@ -129,7 +134,7 @@ void main() {
       ),
     );
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    expect(client.calls, 3);
+    expect(client.calls, 4);
     await coordinator.dispose();
     await gateway.controller.close();
     await db.close();

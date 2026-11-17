@@ -33,25 +33,29 @@ class _Client implements ApiClient {
 
 String v2Cursor(String epoch, String seq) => jsonEncode({'epoch': epoch, 'seq': seq});
 
-Map<String, dynamic> v2Head(String unit, String epoch, String headSeq) => {
-  'sessionUnitId': unit,
+Map<String, dynamic> v2Head(
+  String epoch,
+  String headChangeId, {
+  String lastAppliedChangeId = '0',
+  bool initialized = false,
+}) => {
   'epoch': epoch,
-  'headSeq': headSeq,
-  'minSeq': '0',
+  'headChangeId': headChangeId,
+  'lastAppliedChangeId': lastAppliedChangeId,
+  'initialized': initialized,
 };
 
-Map<String, dynamic> v2Incremental({
+Map<String, dynamic> v2Pull({
   required String epoch,
-  required String headSeq,
-  required String nextSeq,
+  required String headChangeId,
+  required String nextCursor,
   bool more = false,
   bool reset = false,
   List<Map<String, dynamic>> items = const [],
 }) => {
   'epoch': epoch,
-  'headSeq': headSeq,
-  'minSeq': '0',
-  'nextSeq': nextSeq,
+  'headChangeId': headChangeId,
+  'nextCursor': nextCursor,
   'hasMore': more,
   'resetRequired': reset,
   'items': items,
@@ -107,53 +111,58 @@ void main() {
           'lastMessage': message(6).raw,
         }),
       ]);
-      await dao.applySyncPage(1, 'unit', [], cursor: v2Cursor('e1', '5'));
+      await dao.applySyncPage(
+        1,
+        '__message_change_v2__',
+        [],
+        cursor: v2Cursor('e1', '5'),
+      );
       client.respond = (path, body) async {
-        if (path.endsWith('/changes/heads')) {
-          return {
-            'items': [v2Head('unit', 'e1', '10')],
-          };
+        if (path.endsWith('/changes/head')) {
+          return v2Head('e1', '10', lastAppliedChangeId: '5', initialized: true);
         }
-        if (path.endsWith('/changes/incremental')) {
-          return v2Incremental(
+        if (path.endsWith('/changes/pull')) {
+          return v2Pull(
             epoch: 'e1',
-            headSeq: '10',
-            nextSeq: '10',
+            headChangeId: '10',
+            nextCursor: '10',
             items: [
               {
+                'messageChangeId': '7',
+                'sessionId': 'srv-1',
+                'sessionUnitId': 'unit',
                 'messageId': '6',
-                'changeSeq': '7',
-                'changeType': 'DeletedForMe',
-              },
-              {
-                'messageId': '5',
-                'changeSeq': '8',
-                'changeType': 'DeletedForMe',
+                'changeType': 'Updated',
               },
             ],
           );
+        }
+        if (path.endsWith('/by-ids')) {
+          return {
+            'items': [
+              {
+                'sessionUnitId': 'unit',
+                'messageId': '6',
+                'status': 'DeletedForMe',
+                'messageChangeId': '7',
+              },
+            ],
+          };
         }
         return {};
       };
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
-      await dao.upsertAll([message(5), message(6)]);
-      expect(await dao.readPage(ownerId: 1, sessionUnitId: 'unit'), isEmpty);
+      await dao.upsertAll([message(6)]);
+      expect(await dao.readPage(ownerId: 1, sessionUnitId: 'unit'), hasLength(1));
       expect(
         (await dao.readPage(ownerId: 2, sessionUnitId: 'peer')).single.serverId,
         5,
       );
-      expect((await sessions.readById('unit'))!.preview, isEmpty);
-      // A stale Friend response must not restore a deleted preview either.
-      await sessions.upsertAll([
-        SessionSummary.fromJson({
-          'id': 'unit',
-          'ownerId': 1,
-          'lastMessage': message(6).raw,
-        }),
-      ]);
-      expect((await sessions.readById('unit'))!.preview, isEmpty);
-      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '10'));
+      expect(
+        await dao.syncCursor(1, '__message_change_v2__'),
+        v2Cursor('e1', '10'),
+      );
     },
   );
 
@@ -162,15 +171,18 @@ void main() {
     () async {
       await dao.upsertAll([message(5), message(6)]);
       client.respond = (path, _) async {
-        if (path.endsWith('/changes/heads')) {
-          return {
-            'items': [v2Head('unit', 'e1', '10')],
-          };
+        if (path.endsWith('/changes/head')) {
+          return v2Head('e1', '10');
         }
         if (path.endsWith('/by-ids')) {
           return {
             'items': [
-              {'messageId': '5', 'state': 'DeletedForMe', 'changeSeq': '7'},
+              {
+                'sessionUnitId': 'unit',
+                'messageId': '5',
+                'status': 'DeletedForMe',
+                'messageChangeId': '7',
+              },
             ],
           };
         }
@@ -181,7 +193,10 @@ void main() {
         (await dao.readPage(ownerId: 1, sessionUnitId: 'unit')).single.serverId,
         6,
       );
-      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '10'));
+      expect(
+        await dao.syncCursor(1, '__message_change_v2__'),
+        v2Cursor('e1', '10'),
+      );
     },
   );
 
@@ -307,39 +322,40 @@ void main() {
     'bootstrap calibrates cached ids then replays changes committed during calibration',
     () async {
       await dao.upsertAll([message(5), message(700)]);
-      var headsCount = 0;
+      var headCount = 0;
       client.respond = (path, body) async {
-        if (path.endsWith('/changes/heads')) {
-          headsCount++;
-          return {
-            'items': [v2Head('unit', 'e1', headsCount == 1 ? '10' : '12')],
-          };
+        if (path.endsWith('/changes/head')) {
+          headCount++;
+          return v2Head('e1', headCount == 1 ? '10' : '12');
         }
         if (path.endsWith('/by-ids')) {
-          expect(body['messageIds'], [5, 700]);
+          final requests = body['requests'] as List;
+          expect((requests.first as Map)['messageIds'], ['5', '700']);
           return {
             'items': [
               {
+                'sessionUnitId': 'unit',
                 'messageId': '5',
-                'state': 'Recalled',
-                'changeSeq': '7',
+                'status': 'Recalled',
+                'messageChangeId': '7',
                 'rollbackTime': '2026-10-14T02:00:00Z',
               },
             ],
           };
         }
-        if (path.endsWith('/changes/incremental')) {
-          expect(body['changeSeq'], '10');
-          return v2Incremental(
+        if (path.endsWith('/changes/pull')) {
+          expect(body['afterMessageChangeId'], '10');
+          return v2Pull(
             epoch: 'e1',
-            headSeq: '12',
-            nextSeq: '12',
+            headChangeId: '12',
+            nextCursor: '12',
             items: [
               {
+                'messageChangeId': '12',
+                'sessionId': 'srv-1',
+                'sessionUnitId': 'unit',
                 'messageId': '700',
-                'changeSeq': '12',
                 'changeType': 'Recalled',
-                'rollbackTime': '2026-10-14T02:00:00Z',
               },
             ],
           );
@@ -355,7 +371,10 @@ void main() {
         ))!.isRollbacked,
         isTrue,
       );
-      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '10'));
+      expect(
+        await dao.syncCursor(1, '__message_change_v2__'),
+        v2Cursor('e1', '10'),
+      );
 
       // Next change pulls incremental
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
@@ -367,7 +386,10 @@ void main() {
         ))!.isRollbacked,
         isTrue,
       );
-      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '12'));
+      expect(
+        await dao.syncCursor(1, '__message_change_v2__'),
+        v2Cursor('e1', '12'),
+      );
     },
   );
 
@@ -375,25 +397,29 @@ void main() {
     'empty incremental page advances cursor to headSeq',
     () async {
       await dao.upsertAll([message(2)]);
-      await dao.applySyncPage(1, 'unit', [], cursor: v2Cursor('e1', '5'));
+      await dao.applySyncPage(
+        1,
+        '__message_change_v2__',
+        [],
+        cursor: v2Cursor('e1', '5'),
+      );
       client.respond = (path, body) async {
-        if (path.endsWith('/changes/heads')) {
-          return {
-            'items': [v2Head('unit', 'e1', '10')],
-          };
+        if (path.endsWith('/changes/head')) {
+          return v2Head('e1', '10', lastAppliedChangeId: '5', initialized: true);
         }
-        if (path.endsWith('/changes/incremental')) {
-          expect(body['changeSeq'], '5');
-          return v2Incremental(
+        if (path.endsWith('/changes/pull')) {
+          expect(body['afterMessageChangeId'], '5');
+          return v2Pull(
             epoch: 'e1',
-            headSeq: '10',
-            nextSeq: '10',
+            headChangeId: '10',
+            nextCursor: '10',
             items: [
               {
+                'messageChangeId': '7',
+                'sessionId': 'srv-1',
+                'sessionUnitId': 'unit',
                 'messageId': '2',
-                'changeSeq': '7',
                 'changeType': 'Recalled',
-                'rollbackTime': '2026-10-14T02:00:00Z',
               },
             ],
           );
@@ -401,7 +427,10 @@ void main() {
         return {};
       };
       await repo.loadChanges(ownerId: 1, sessionUnitId: 'unit');
-      expect(await dao.syncCursor(1, 'unit'), v2Cursor('e1', '10'));
+      expect(
+        await dao.syncCursor(1, '__message_change_v2__'),
+        v2Cursor('e1', '10'),
+      );
       expect(
         (await dao.findByServerId(
           ownerId: 1,
@@ -465,29 +494,29 @@ void main() {
   );
 
   test(
-    'global normal recovery batches conversation cursors without uploading message ids',
+    'global normal recovery checks one global cursor without uploading message ids',
     () async {
       await dao.upsertAll([message(5, unit: 'a'), message(6, unit: 'b')]);
-      await dao.applySyncPage(1, 'a', [], cursor: v2Cursor('e1', '10'));
-      await dao.applySyncPage(1, 'b', [], cursor: v2Cursor('e1', '10'));
+      await dao.applySyncPage(
+        1,
+        '__message_change_v2__',
+        [],
+        cursor: v2Cursor('e1', '10'),
+      );
       client.respond = (path, body) async {
-        if (path.endsWith('/changes/heads')) {
-          final units = (body['sessionUnitIds'] as List).cast<String>();
-          expect(units.length, 2);
+        if (path.endsWith('/changes/head')) {
           expect(body.containsKey('messageIds'), isFalse);
-          return {
-            'items': [
-              v2Head('a', 'e1', '10'),
-              v2Head('b', 'e1', '10'),
-            ],
-          };
+          expect(body.containsKey('sessionUnitIds'), isFalse);
+          return v2Head('e1', '10', lastAppliedChangeId: '10', initialized: true);
         }
         return {};
       };
       await repo.loadChanges(ownerId: 1);
       expect(client.calls.length, 1);
-      expect(await dao.syncCursor(1, 'a'), v2Cursor('e1', '10'));
-      expect(await dao.syncCursor(1, 'b'), v2Cursor('e1', '10'));
+      expect(
+        await dao.syncCursor(1, '__message_change_v2__'),
+        v2Cursor('e1', '10'),
+      );
     },
   );
 

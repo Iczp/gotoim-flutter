@@ -3,39 +3,59 @@ import '../../../session/data/models/paged_result_dto.dart';
 import '../models/chat_message.dart';
 
 class MessageApi {
-  MessageApi(this._client);
+  MessageApi(this._client, {this.deviceId = 'flutter-device'});
   final ApiClient _client;
+  final String deviceId;
 
-  Future<List<Map<String, dynamic>>> changeHeads({
+  Future<Map<String, dynamic>> changeHead({
     required int chatObjectId,
-    required List<String> sessionUnitIds,
+    String? deviceId,
   }) async {
     final result = await _client.post<Map<String, dynamic>>(
-      '/api/chat/message/changes/heads',
+      '/api/chat/message/changes/head',
       data: {
         'chatObjectId': chatObjectId,
-        'sessionUnitIds': sessionUnitIds,
+        'deviceId': deviceId ?? this.deviceId,
       },
     );
-    final items = result['items'] as List<dynamic>? ?? const [];
-    return items.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+    return Map<String, dynamic>.from(result);
   }
 
-  Future<Map<String, dynamic>> incrementalChanges({
+  Future<Map<String, dynamic>> pullChanges({
     required int chatObjectId,
-    required String sessionUnitId,
     required String epoch,
-    required String changeSeq,
+    required String afterMessageChangeId,
     int maxResultCount = 100,
+    String? deviceId,
   }) async {
     final result = await _client.post<Map<String, dynamic>>(
-      '/api/chat/message/changes/incremental',
+      '/api/chat/message/changes/pull',
       data: {
         'chatObjectId': chatObjectId,
-        'sessionUnitId': sessionUnitId,
+        'deviceId': deviceId ?? this.deviceId,
         'epoch': epoch,
-        'changeSeq': changeSeq,
+        'afterMessageChangeId': afterMessageChangeId,
         'maxResultCount': maxResultCount,
+      },
+    );
+    return Map<String, dynamic>.from(result);
+  }
+
+  Future<Map<String, dynamic>> ackChanges({
+    required int chatObjectId,
+    required String epoch,
+    required String lastAppliedMessageChangeId,
+    bool reset = false,
+    String? deviceId,
+  }) async {
+    final result = await _client.post<Map<String, dynamic>>(
+      '/api/chat/message/changes/ack',
+      data: {
+        'chatObjectId': chatObjectId,
+        'deviceId': deviceId ?? this.deviceId,
+        'epoch': epoch,
+        'lastAppliedMessageChangeId': lastAppliedMessageChangeId,
+        'reset': reset,
       },
     );
     return Map<String, dynamic>.from(result);
@@ -45,13 +65,19 @@ class MessageApi {
     required int chatObjectId,
     required String sessionUnitId,
     required List<int> messageIds,
+    String? deviceId,
   }) async {
     final result = await _client.post<Map<String, dynamic>>(
       '/api/chat/message/by-ids',
       data: {
         'chatObjectId': chatObjectId,
-        'sessionUnitId': sessionUnitId,
-        'messageIds': messageIds,
+        'deviceId': deviceId ?? this.deviceId,
+        'requests': [
+          {
+            'sessionUnitId': sessionUnitId,
+            'messageIds': messageIds.map((id) => id.toString()).toList(),
+          },
+        ],
       },
     );
     final items = result['items'] as List<dynamic>? ?? const [];
