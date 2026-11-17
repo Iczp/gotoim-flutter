@@ -135,48 +135,30 @@ extension MessageRepositorySync on MessageRepository {
   }
 
   Future<void> _loadChanges(int owner) async {
-    final head = await _api.changeHead(chatObjectId: owner);
-    final epoch = head['epoch']?.toString();
-    final headChangeIdStr = head['headChangeId']?.toString();
-    if (epoch == null || epoch.isEmpty || headChangeIdStr == null) return;
-
     final cursorRaw = await _dao.syncCursor(owner, _globalV2CursorUnit);
     final cursor = _parseV2Cursor(cursorRaw);
 
-    final headChangeId = BigInt.tryParse(headChangeIdStr) ?? BigInt.zero;
-    final curSeqNum =
-        cursor != null ? (BigInt.tryParse(cursor['seq']!) ?? BigInt.zero) : null;
-
-    if (cursor == null ||
-        cursor['epoch'] != epoch ||
-        curSeqNum == null ||
-        curSeqNum > headChangeId) {
-      await _calibrateOwner(owner, epoch: epoch, headChangeId: headChangeIdStr);
-      return;
-    }
-
-    if (curSeqNum >= headChangeId) {
-      return;
-    }
-
-    var currentSeq = cursor['seq']!;
+    final currentEpoch = cursor?['epoch'] ?? '';
+    var currentSeq = cursor?['seq'] ?? '0';
     var resets = 0;
+
     while (true) {
       final page = await _api.pullChanges(
         chatObjectId: owner,
-        epoch: epoch,
-        afterMessageChangeId: currentSeq,
+        epoch: cursor == null ? '' : currentEpoch,
+        afterMessageChangeId: cursor == null ? '0' : currentSeq,
         maxResultCount: 100,
       );
 
-      if (page['resetRequired'] == true) {
+      final pageEpoch = page['epoch']?.toString() ?? currentEpoch;
+      final pageHead = page['headChangeId']?.toString() ?? '0';
+
+      if (cursor == null || page['resetRequired'] == true) {
         if (++resets > 2) throw StateError('消息同步基线反复变化，请重试');
-        final targetHead = page['headChangeId']?.toString() ?? headChangeIdStr;
-        final targetEpoch = page['epoch']?.toString() ?? epoch;
         await _calibrateOwner(
           owner,
-          epoch: targetEpoch,
-          headChangeId: targetHead,
+          epoch: pageEpoch,
+          headChangeId: pageHead,
         );
         return;
       }
@@ -188,6 +170,11 @@ extension MessageRepositorySync on MessageRepository {
       }
 
       final rawItems = page['items'] as List<dynamic>? ?? const [];
+      if (nextCursor == currentSeq &&
+          rawItems.isEmpty &&
+          page['hasMore'] != true) {
+        return;
+      }
       final itemsByUnit = <String, List<Map<String, dynamic>>>{};
       final updatedIdsByUnit = <String, List<int>>{};
 
@@ -271,7 +258,7 @@ extension MessageRepositorySync on MessageRepository {
         }
       }
 
-      final newCursor = _formatV2Cursor(epoch, nextCursor);
+      final newCursor = _formatV2Cursor(pageEpoch, nextCursor);
       await _dao.applySyncPage(
         owner,
         _globalV2CursorUnit,
@@ -282,7 +269,7 @@ extension MessageRepositorySync on MessageRepository {
       await _api
           .ackChanges(
             chatObjectId: owner,
-            epoch: epoch,
+            epoch: pageEpoch,
             lastAppliedMessageChangeId: nextCursor,
           )
           .catchError((_) => <String, dynamic>{});

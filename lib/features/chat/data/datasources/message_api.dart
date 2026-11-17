@@ -7,20 +7,6 @@ class MessageApi {
   final ApiClient _client;
   final String deviceId;
 
-  Future<Map<String, dynamic>> changeHead({
-    required int chatObjectId,
-    String? deviceId,
-  }) async {
-    final result = await _client.post<Map<String, dynamic>>(
-      '/api/chat/message/changes/head',
-      data: {
-        'chatObjectId': chatObjectId,
-        'deviceId': deviceId ?? this.deviceId,
-      },
-    );
-    return Map<String, dynamic>.from(result);
-  }
-
   Future<Map<String, dynamic>> pullChanges({
     required int chatObjectId,
     required String epoch,
@@ -82,24 +68,6 @@ class MessageApi {
     );
     final items = result['items'] as List<dynamic>? ?? const [];
     return items.map((row) => Map<String, dynamic>.from(row as Map)).toList();
-  }
-
-  @Deprecated('Use changeHeads/incrementalChanges instead. /api/chat/message/changes/query is disabled.')
-  Future<List<Map<String, dynamic>>> changes(
-    List<Map<String, Object?>> sessions,
-  ) async {
-    throw UnsupportedError('Message Change Sync V1 (/api/chat/message/changes/query) is disabled.');
-  }
-
-  Future<List<Map<String, dynamic>>> syncItems(
-    String unit,
-    List<int> ids,
-  ) async {
-    final result = await _client.post<List<dynamic>>(
-      '/api/chat/message/sync-items',
-      data: {'sessionUnitId': unit, 'messageIds': ids},
-    );
-    return result.map((row) => Map<String, dynamic>.from(row as Map)).toList();
   }
 
   Future<PagedResultDto<ChatMessage>> history({

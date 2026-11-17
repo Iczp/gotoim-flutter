@@ -45,14 +45,6 @@ class _Client extends Fake implements ApiClient {
     bool retryOnUnauthorized = true,
   }) async {
     calls++;
-    if (path.endsWith('/changes/head')) {
-      return {
-        'epoch': 'e1',
-        'headChangeId': '1',
-        'lastAppliedChangeId': '0',
-        'initialized': false,
-      } as T;
-    }
     if (path.endsWith('/by-ids')) {
       return {'items': []} as T;
     }
@@ -66,12 +58,13 @@ class _Client extends Fake implements ApiClient {
       } as T;
     }
     if (path.endsWith('/changes/pull')) {
+      final epoch = (data as Map)['epoch']?.toString() ?? '';
       return {
         'epoch': 'e1',
         'headChangeId': '1',
         'nextCursor': '1',
         'hasMore': false,
-        'resetRequired': false,
+        'resetRequired': epoch.isEmpty,
         'items': [],
       } as T;
     }
