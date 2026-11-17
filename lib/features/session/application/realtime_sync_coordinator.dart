@@ -192,7 +192,8 @@ class RealtimeSyncCoordinator {
             );
         if (message != null) {
           changedOwnerIds.add(message.ownerId);
-          if (event.command == SignalRCommand.messageRollbacked) {
+          if (event.command == SignalRCommand.messageRollbacked ||
+              event.command == SignalRCommand.messageUpdated) {
             await _messageRepository.loadChanges(
               ownerId: message.ownerId,
               sessionUnitId: sessionUnitId,

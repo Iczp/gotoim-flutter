@@ -118,7 +118,7 @@ void main() {
         cursor: v2Cursor('e1', '5'),
       );
       client.respond = (path, body) async {
-        if (path.endsWith('/changes/pull')) {
+        if (path.endsWith('/message-change/pull')) {
           return v2Pull(
             epoch: 'e1',
             headChangeId: '10',
@@ -168,7 +168,7 @@ void main() {
     () async {
       await dao.upsertAll([message(5), message(6)]);
       client.respond = (path, _) async {
-        if (path.endsWith('/changes/pull')) {
+        if (path.endsWith('/message-change/pull')) {
           return v2Pull(
             epoch: 'e1',
             headChangeId: '10',
@@ -340,7 +340,7 @@ void main() {
             ],
           };
         }
-        if (path.endsWith('/changes/pull')) {
+        if (path.endsWith('/message-change/pull')) {
           final epoch = body['epoch']?.toString() ?? '';
           if (epoch.isEmpty) {
             return v2Pull(
@@ -410,7 +410,7 @@ void main() {
         cursor: v2Cursor('e1', '5'),
       );
       client.respond = (path, body) async {
-        if (path.endsWith('/changes/pull')) {
+        if (path.endsWith('/message-change/pull')) {
           expect(body['afterMessageChangeId'], '5');
           return v2Pull(
             epoch: 'e1',
@@ -507,7 +507,7 @@ void main() {
         cursor: v2Cursor('e1', '10'),
       );
       client.respond = (path, body) async {
-        if (path.endsWith('/changes/pull')) {
+        if (path.endsWith('/message-change/pull')) {
           expect(body.containsKey('messageIds'), isFalse);
           expect(body.containsKey('sessionUnitIds'), isFalse);
           return v2Pull(

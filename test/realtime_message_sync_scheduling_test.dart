@@ -48,7 +48,7 @@ class _Client extends Fake implements ApiClient {
     if (path.endsWith('/by-ids')) {
       return {'items': []} as T;
     }
-    if (path.endsWith('/changes/ack')) {
+    if (path.endsWith('/message-change/ack')) {
       return {
         'epoch': 'e1',
         'headChangeId': '1',
@@ -57,7 +57,7 @@ class _Client extends Fake implements ApiClient {
         'resetRequired': false,
       } as T;
     }
-    if (path.endsWith('/changes/pull')) {
+    if (path.endsWith('/message-change/pull')) {
       final epoch = (data as Map)['epoch']?.toString() ?? '';
       return {
         'epoch': 'e1',

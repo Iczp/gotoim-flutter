@@ -15,7 +15,7 @@ class MessageApi {
     String? deviceId,
   }) async {
     final result = await _client.post<Map<String, dynamic>>(
-      '/api/chat/message/changes/pull',
+      '/api/chat/message-change/pull',
       data: {
         'chatObjectId': chatObjectId,
         'deviceId': deviceId ?? this.deviceId,
@@ -35,7 +35,7 @@ class MessageApi {
     String? deviceId,
   }) async {
     final result = await _client.post<Map<String, dynamic>>(
-      '/api/chat/message/changes/ack',
+      '/api/chat/message-change/ack',
       data: {
         'chatObjectId': chatObjectId,
         'deviceId': deviceId ?? this.deviceId,
