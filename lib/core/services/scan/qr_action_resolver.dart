@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../deep_link/deep_link_service.dart';
 import '../../deep_link/deep_link_target.dart';
+import '../../../features/qr_code/data/qr_code_repository.dart';
+import '../../../features/qr_code/presentation/qr_code_card_modal.dart';
 import '../../../features/scan_login/application/scan_login_controller.dart';
+import '../../../features/session/application/session_list_controller.dart';
 import 'scan_code_models.dart';
 import 'unified_scan_dispatcher.dart';
 
@@ -54,6 +57,44 @@ class QrActionResolver {
   }) async {
     final text = rawText.trim();
     if (text.isEmpty) return null;
+
+    // 0. 优先通过服务端 /api/chat/qr-code/resolve 识别系统二维码（名片、群邀请、短链与历史协议）
+    if (QrCodeRepository.isPotentialSystemQr(text)) {
+      try {
+        final currentOwnerId = ref.read(sessionListControllerProvider).currentOwnerId;
+        final resolved = await ref.read(qrCodeRepositoryProvider).resolve(
+              text,
+              currentChatObjectId: currentOwnerId,
+            );
+        if (resolved != null && (resolved.isCardOrGroup || resolved.qrCodeId != null)) {
+          final labelName = resolved.ownerName?.isNotEmpty == true
+              ? resolved.ownerName!
+              : (resolved.isGroup ? '群聊' : '名片');
+          final actionTitle = !resolved.isValid
+              ? '查看失效${resolved.isGroup ? '群' : ''}名片'
+              : resolved.isGroup
+              ? '识别图中群聊：$labelName'
+              : '识别图中名片：$labelName';
+
+          return QrParsedAction(
+            type: resolved.isGroup ? QrActionType.group : QrActionType.user,
+            rawText: text,
+            title: actionTitle,
+            icon: resolved.isGroup
+                ? Icons.group_outlined
+                : Icons.contact_page_outlined,
+            onExecute: (context, ref) async {
+              if (!context.mounted) return;
+              await QrCodeCardModal.show(
+                context,
+                data: resolved,
+                rawContent: text,
+              );
+            },
+          );
+        }
+      } catch (_) {}
+    }
 
     final uri = Uri.tryParse(text);
 

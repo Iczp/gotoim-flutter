@@ -6,7 +6,10 @@ import 'package:go_router/go_router.dart';
 import '../../deep_link/deep_link_service.dart';
 import '../../widgets/app_modal.dart';
 import '../../widgets/app_toast.dart';
+import '../../../features/qr_code/data/qr_code_repository.dart';
+import '../../../features/qr_code/presentation/qr_code_card_modal.dart';
 import '../../../features/scan_login/application/scan_login_controller.dart';
+import '../../../features/session/application/session_list_controller.dart';
 import 'scan_code_service.dart';
 
 /// 统一扫码业务调度器
@@ -57,7 +60,49 @@ class UnifiedScanDispatcher {
       // 忽略登录解析非关键失败，继续向下分发
     }
 
-    // 2. 检查是否为 gotoim-dev:// 或 gotoim:// 深度链接
+    // 2. 尝试通过服务端 /api/chat/qr-code/resolve 或 /api/chat/scan-code/scan 识别系统名片/群码
+    final currentOwnerId = ref.read(sessionListControllerProvider).currentOwnerId;
+    final qrRepo = ref.read(qrCodeRepositoryProvider);
+    if (QrCodeRepository.isPotentialSystemQr(raw)) {
+      final resolved = await qrRepo.resolve(
+        raw,
+        currentChatObjectId: currentOwnerId,
+      );
+      if (resolved != null &&
+          (resolved.isCardOrGroup || resolved.qrCodeId != null) &&
+          context.mounted) {
+        await QrCodeCardModal.show(context, data: resolved, rawContent: raw);
+        return;
+      }
+    } else {
+      final scanRes = await qrRepo.scanCode(
+        type: result.format?.apiValue ?? 'QR_CODE',
+        content: raw,
+        currentChatObjectId: currentOwnerId,
+      );
+      if (scanRes != null && context.mounted) {
+        for (final handler in scanRes.scanHandlers) {
+          if (handler.success &&
+              (handler.action == 'chat_object_card' ||
+                  handler.action == 'group_invite')) {
+            final resolved = await qrRepo.resolve(
+              raw,
+              currentChatObjectId: currentOwnerId,
+            );
+            if (resolved != null && context.mounted) {
+              await QrCodeCardModal.show(
+                context,
+                data: resolved,
+                rawContent: raw,
+              );
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // 3. 检查是否为 gotoim-dev:// 或 gotoim:// 深度链接
     final uri = Uri.tryParse(raw);
     if (uri != null &&
         (uri.scheme == 'gotoim-dev' || uri.scheme == 'gotoim')) {

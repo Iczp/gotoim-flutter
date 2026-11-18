@@ -15,6 +15,8 @@ import '../../session/data/models/session_summary.dart';
 import '../../session/presentation/chat_object_avatar.dart';
 import '../../settings/presentation/message_alert_settings_page.dart';
 import '../../user/presentation/profile_page.dart';
+import '../../mine/presentation/my_qr_code_dialog.dart';
+import '../../mine/presentation/my_qr_code_page.dart';
 import '../../group_management/presentation/group_management_page.dart';
 import '../application/chat_settings_controller.dart';
 import 'chat_background_page.dart';
@@ -66,7 +68,38 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     super.dispose();
   }
 
-  @override
+  void _openGroupQrCode() {
+    final friend = controller.friend;
+    if (friend == null) return;
+    final groupOwnerId = friend.destinationId;
+    if (groupOwnerId == null || groupOwnerId <= 0) return;
+
+    final isDesktop = MediaQuery.sizeOf(context).width >= 720;
+    if (isDesktop) {
+      MyQrCodeDialog.show(
+        context,
+        isGroup: true,
+        groupOwnerId: groupOwnerId,
+        groupTitle: controller.title,
+        groupAvatar: _avatarFor(friend),
+        inviterId: widget.ownerId,
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MyQrCodePage(
+          isGroup: true,
+          groupOwnerId: groupOwnerId,
+          groupTitle: controller.title,
+          groupAvatar: _avatarFor(friend),
+          inviterId: widget.ownerId,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final horizontalPadding =
@@ -139,6 +172,13 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                         value: controller.title,
                         showArrow: true,
                         onTap: _editGroupName,
+                      ),
+                    if (controller.objectType == 2 && controller.friend != null)
+                      Cell(
+                        title: '群二维码',
+                        trailing: const Icon(Icons.qr_code_2_rounded, size: 20),
+                        showArrow: true,
+                        onTap: _openGroupQrCode,
                       ),
                     Cell(
                       title: controller.objectType == 2 ? '我在本群的昵称' : '设置备注',
