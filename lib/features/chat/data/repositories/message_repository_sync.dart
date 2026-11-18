@@ -52,8 +52,9 @@ extension MessageRepositorySync on MessageRepository {
     required String epoch,
     required String headChangeId,
   }) async {
-    var afterScope = '';
-    while (true) {
+    if (headChangeId != '0') {
+      var afterScope = '';
+      while (true) {
       final units = await _dao.syncScopes(owner, afterScope, 50);
       if (units.isEmpty) break;
       for (final unit in units) {
@@ -115,6 +116,7 @@ extension MessageRepositorySync on MessageRepository {
       }
       afterScope = units.last;
       if (units.length < 50) break;
+      }
     }
 
     final newCursor = _formatV2Cursor(epoch, headChangeId);
