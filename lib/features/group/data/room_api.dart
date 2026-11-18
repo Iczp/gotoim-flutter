@@ -42,11 +42,8 @@ class RoomApi {
     required int verificationMethod,
   }) async {
     return _client.post<Map<String, dynamic>>(
-      '/api/chat/room/set-verification-method',
-      query: <String, Object?>{
-        'sessionUnitId': sessionUnitId,
-        'verificationMethod': verificationMethod,
-      },
+      '/api/chat/room/set-verification-method/${Uri.encodeComponent(sessionUnitId)}',
+      query: <String, Object?>{'verificationMethod': verificationMethod},
     );
   }
 }
