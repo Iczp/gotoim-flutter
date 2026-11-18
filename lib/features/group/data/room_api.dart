@@ -35,4 +35,18 @@ class RoomApi {
       },
     );
   }
+
+  /// 设置群聊加群验证方式（0=无需验证，1=需要验证，2=拒绝加入）
+  Future<Map<String, dynamic>> setVerificationMethod({
+    required String sessionUnitId,
+    required int verificationMethod,
+  }) async {
+    return _client.post<Map<String, dynamic>>(
+      '/api/chat/room/set-verification-method',
+      query: <String, Object?>{
+        'sessionUnitId': sessionUnitId,
+        'verificationMethod': verificationMethod,
+      },
+    );
+  }
 }

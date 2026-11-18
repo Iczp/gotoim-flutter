@@ -17,12 +17,14 @@ import '../../settings/presentation/message_alert_settings_page.dart';
 import '../../user/presentation/profile_page.dart';
 import '../../mine/presentation/my_qr_code_dialog.dart';
 import '../../mine/presentation/my_qr_code_page.dart';
+import '../../group/data/room_api.dart';
 import '../../group_management/presentation/group_management_page.dart';
 import '../application/chat_settings_controller.dart';
 import 'chat_background_page.dart';
 import 'chat_background_preview_page.dart';
 import 'member_list_page.dart';
 import 'member_tile.dart';
+import 'room_join_requests_page.dart';
 import '../../../core/security/widgets/report_dialog.dart';
 
 enum ChatSettingsResult { messagesCleared, sessionLeft }
@@ -59,6 +61,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
       ref.read(sessionRepositoryProvider),
       ownerId: widget.ownerId,
       sessionUnitId: widget.sessionUnitId,
+      roomApi: ref.read(roomApiProvider),
     )..initialize();
   }
 
@@ -298,6 +301,73 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                         }
                       },
                     ),
+                    if (controller.objectType == 2 && controller.isCreator)
+                      Cell(
+                        icon: const Icon(Icons.verified_user_outlined),
+                        title: '入群需要验证',
+                        subtitle: '开启后新成员加群或扫码入群需管理员审批',
+                        switchValue: controller.isJoinVerificationRequired,
+                        disabled: controller.updating,
+                        onSwitchChanged:
+                            controller.updating
+                                ? null
+                                : (value) async {
+                                  await controller.setJoinVerificationRequired(
+                                    value,
+                                  );
+                                  if (!mounted) return;
+                                  if (controller.error != null) {
+                                    showToast(
+                                      '设置失败：${controller.error}',
+                                      type: ToastType.error,
+                                    );
+                                  } else {
+                                    showToast(
+                                      value ? '已开启入群验证' : '已关闭入群验证',
+                                      type: ToastType.success,
+                                    );
+                                  }
+                                },
+                      ),
+                    if (controller.objectType == 2 &&
+                        controller.destinationId != null)
+                      Cell(
+                        icon: const Icon(Icons.person_add_alt_1_outlined),
+                        title: '入群申请',
+                        subtitle: '查看并审批入群验证请求',
+                        showArrow: true,
+                        onTap: () {
+                          final destinationId = controller.destinationId!;
+                          final isDesktop =
+                              widget.isDrawer ||
+                              MediaQuery.sizeOf(context).width >= 720;
+                          if (isDesktop) {
+                            showDesktopModalDialog<void>(
+                              context: context,
+                              title: '入群申请',
+                              subtitle: controller.title,
+                              width: 560,
+                              height: 580,
+                              child: RoomJoinRequestsPage(
+                                destinationId: destinationId,
+                                handlerSessionUnitId: controller.sessionUnitId,
+                                isDialog: true,
+                              ),
+                            );
+                          } else {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder:
+                                    (_) => RoomJoinRequestsPage(
+                                      destinationId: destinationId,
+                                      handlerSessionUnitId:
+                                          controller.sessionUnitId,
+                                    ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
                     if (controller.objectType == 2)
                       Cell(
                         icon: const Icon(Icons.admin_panel_settings_outlined),

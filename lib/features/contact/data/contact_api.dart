@@ -78,4 +78,48 @@ class ContactApi {
       query: <String, Object?>{'code': code},
     );
   }
+
+  /// 查询会话/加好友/加群申请详情
+  Future<Map<String, dynamic>> getSessionRequestDetail(String id) async {
+    return _client.get<Map<String, dynamic>>('/api/chat/session-request/$id');
+  }
+
+  /// 查询会话/加好友/加群申请列表
+  Future<Map<String, dynamic>> listSessionRequests({
+    int? ownerId,
+    int? destinationId,
+    bool? isHandled,
+    int maxResultCount = 50,
+  }) async {
+    return _client.get<Map<String, dynamic>>(
+      '/api/chat/session-request',
+      query: <String, Object?>{
+        if (ownerId != null) 'OwnerId': ownerId,
+        if (destinationId != null) 'DestinationId': destinationId,
+        if (isHandled != null) 'IsHandled': isHandled,
+        'MaxResultCount': maxResultCount,
+      },
+    );
+  }
+
+  /// 审批会话/加好友/加群申请（支持传入群管理员的 handlerSessionUnitId）
+  Future<Map<String, dynamic>> handleSessionRequest({
+    required String sessionRequestId,
+    required bool isAgreed,
+    String? handleMessage,
+    String? handlerSessionUnitId,
+  }) async {
+    return _client.post<Map<String, dynamic>>(
+      '/api/chat/session-request/handle-request',
+      query: <String, Object?>{
+        'SessionRequestId': sessionRequestId,
+        'IsAgreed': isAgreed,
+        if (handleMessage != null && handleMessage.trim().isNotEmpty)
+          'HandleMessage': handleMessage.trim(),
+        if (handlerSessionUnitId != null &&
+            handlerSessionUnitId.trim().isNotEmpty)
+          'HandlerSessionUnitId': handlerSessionUnitId.trim(),
+      },
+    );
+  }
 }

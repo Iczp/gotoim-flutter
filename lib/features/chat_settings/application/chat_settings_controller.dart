@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/network/api_client.dart';
+import '../../group/data/room_api.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/data/models/session_summary_helpers.dart';
 import '../../session/data/repositories/session_repository.dart';
@@ -28,10 +29,12 @@ class ChatSettingsController extends ChangeNotifier {
     this._sessionRepository, {
     required this.ownerId,
     required this.sessionUnitId,
-  });
+    RoomApi? roomApi,
+  }) : _roomApi = roomApi;
 
   final ChatSettingsRepository _repository;
   final SessionRepository _sessionRepository;
+  final RoomApi? _roomApi;
   final int ownerId;
   final String sessionUnitId;
   final List<ChatMember> members = <ChatMember>[];
@@ -51,6 +54,13 @@ class ChatSettingsController extends ChangeNotifier {
   String? get backgroundImage => setting['backgroundImage']?.toString();
   int get objectType =>
       asInt(asMap(friend?.raw['destination'])['objectType']) ?? -1;
+  int? get destinationId =>
+      friend?.destinationId ?? asInt(asMap(friend?.raw['destination'])['id']);
+  bool get isCreator =>
+      setting['isCreator'] == true || friend?.raw['isCreator'] == true;
+  int get verificationMethod =>
+      asInt(asMap(friend?.raw['destination'])['verificationMethod']) ?? 0;
+  bool get isJoinVerificationRequired => verificationMethod == 1;
   bool get isGroup => objectType == 2;
   bool get isOfficial => objectType == 3 || objectType == 4;
   String get objectTypeLabel => switch (objectType) {
@@ -178,5 +188,16 @@ class ChatSettingsController extends ChangeNotifier {
   Future<void> setGroupName(String name) {
     if (sessionId == null) return Future.value();
     return _updateSetting(() => _repository.setRoomTitle(sessionId!, name));
+  }
+
+  Future<void> setJoinVerificationRequired(bool required) {
+    final roomApi = _roomApi;
+    if (roomApi == null) return Future.value();
+    return _updateSetting(
+      () => roomApi.setVerificationMethod(
+        sessionUnitId: sessionUnitId,
+        verificationMethod: required ? 1 : 0,
+      ),
+    );
   }
 }

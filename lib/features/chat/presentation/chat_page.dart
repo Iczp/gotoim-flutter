@@ -7,6 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../session/application/active_chat_registry.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../contact/data/models/session_request_models.dart';
+import '../../contact/presentation/session_request_detail_sheet.dart';
+
 import '../../../core/floating_window/floating_window.dart';
 import '../../../core/security/url_security_service.dart';
 import '../../../core/security/widgets/report_dialog.dart';
@@ -1299,6 +1302,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _openLink(ChatMessage message) async {
     if (message.linkUrl.isEmpty) return;
+    final requestId = parseSessionRequestDetailId(message.linkUrl);
+    if (requestId != null) {
+      await showSessionRequestDetailModal(context, requestId: requestId);
+      return;
+    }
     await UrlSecurityService.instance.openUrl(
       context,
       url: message.linkUrl,
