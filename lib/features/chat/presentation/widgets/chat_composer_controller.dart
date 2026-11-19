@@ -41,6 +41,7 @@ abstract class ChatComposerController with ChangeNotifier {
   Future<void> chooseAndSendImages();
   Future<void> takeAndSendPhoto();
   Future<void> chooseAndSendVideo();
+  Future<void> recordAndSendVideo() async {}
   Future<void> chooseAndSendFile();
 
   Future<void> sendImageBytes(

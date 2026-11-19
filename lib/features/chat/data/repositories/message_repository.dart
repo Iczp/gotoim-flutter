@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_exception.dart';
 
 import '../../../../core/services/file/file_picker_service.dart';
@@ -25,6 +26,7 @@ class MessageRepository {
        _sessionDao = sessionDao,
        _sessionChangeBus = sessionChangeBus;
   final MessageApi _api;
+  MessageApi get api => _api;
   final MessageDao _dao;
   final SessionDao? _sessionDao;
   final SessionChangeBus? _sessionChangeBus;
@@ -43,6 +45,22 @@ class MessageRepository {
   Future<void> markOpened(String localId) => _dao.markOpened(localId);
   Future<void> deleteLocal(Iterable<String> localIds) =>
       _dao.deleteAll(localIds);
+
+  Future<void> sendTyping({
+    required String sessionUnitId,
+    required String sessionId,
+    String? senderName,
+    required bool isTyping,
+    String action = 'typing',
+    String? actionText,
+  }) => _api.sendTyping(
+    sessionUnitId: sessionUnitId,
+    sessionId: sessionId,
+    senderName: senderName,
+    isTyping: isTyping,
+    action: action,
+    actionText: actionText,
+  );
 
   Future<List<ChatMessage>> loadLocalLatest({
     required int ownerId,
@@ -63,6 +81,57 @@ class MessageRepository {
     sessionUnitId: sessionUnitId,
     serverId: serverId,
   );
+
+  Future<ChatMessage?> findAnyByServerId(int serverId) =>
+      _dao.findAnyByServerId(serverId);
+
+  Future<ChatMessage?> fetchAndApplyUpdatedMessage({
+    required int ownerId,
+    required String sessionUnitId,
+    required int messageId,
+  }) async {
+    try {
+      final json = await _api.getItem(
+        sessionUnitId: sessionUnitId,
+        messageId: messageId,
+      );
+      final remoteMessage = ChatMessage.fromJson(
+        json,
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+      );
+      final existing = await _dao.findByServerId(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        serverId: messageId,
+      );
+      final merged = existing != null
+          ? existing.copyWith(
+              serverId: remoteMessage.serverId,
+              score: remoteMessage.score,
+              raw: <String, dynamic>{
+                ...existing.raw,
+                ...remoteMessage.raw,
+                'content': <String, dynamic>{
+                  ...existing.content,
+                  ...remoteMessage.content,
+                },
+              },
+            )
+          : remoteMessage;
+      await _dao.upsertAll(<ChatMessage>[merged]);
+      await _updateSessionSummary(merged);
+      _sessionChangeBus?.publish(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        messageIds: <int>[messageId],
+      );
+      return merged;
+    } catch (e) {
+      debugPrint('[MessageRepository] fetchAndApplyUpdatedMessage failed: $e');
+      return null;
+    }
+  }
 
   Future<int> maxLocalServerId({
     required int ownerId,
@@ -653,6 +722,8 @@ class MessageRepository {
     required int ownerId,
     required String sessionUnitId,
     required SelectedFile file,
+    int? width,
+    int? height,
   }) async {
     final clientId = '${DateTime.now().microsecondsSinceEpoch}';
     final maxScore = await _dao.maxScore(ownerId, sessionUnitId);
@@ -677,6 +748,8 @@ class MessageRepository {
           'size': file.size,
           'suffix': file.extension == null ? '' : '.${file.extension}',
           if (file.originalPath != null) 'path': file.originalPath,
+          if (width != null && width > 0) 'width': width,
+          if (height != null && height > 0) 'height': height,
         },
       },
     );
@@ -689,6 +762,10 @@ class MessageRepository {
     required int ownerId,
     required String sessionUnitId,
     required SelectedFile file,
+    int? width,
+    int? height,
+    int? durationMs,
+    String? localThumbnailPath,
   }) async {
     final clientId = '${DateTime.now().microsecondsSinceEpoch}';
     final maxScore = await _dao.maxScore(ownerId, sessionUnitId);
@@ -714,6 +791,12 @@ class MessageRepository {
           'suffix': file.extension == null ? '' : '.${file.extension}',
           'url': file.originalUri.toString(),
           if (file.originalPath != null) 'path': file.originalPath,
+          if (width != null && width > 0) 'width': width,
+          if (height != null && height > 0) 'height': height,
+          if (durationMs != null && durationMs > 0) 'duration': durationMs / 1000.0,
+          if (durationMs != null && durationMs > 0) 'durationMs': durationMs,
+          if (localThumbnailPath != null && localThumbnailPath.isNotEmpty)
+            'localThumbnailPath': localThumbnailPath,
         },
       },
     );
@@ -725,22 +808,28 @@ class MessageRepository {
   Future<ChatMessage> sendLocalImage({
     required ChatMessage local,
     required SelectedFile file,
+    Map<String, Object?>? extraFields,
     void Function(int sent, int total)? onProgress,
   }) => _sendLocalUpload(
     local: local,
     file: file,
     messageType: 2,
+    extraFields: extraFields,
     onProgress: onProgress,
   );
 
   Future<ChatMessage> sendLocalVideo({
     required ChatMessage local,
     required SelectedFile file,
+    Map<String, Object?>? extraFields,
+    Map<String, MultipartUploadFile>? extraFiles,
     void Function(int sent, int total)? onProgress,
   }) => _sendLocalUpload(
     local: local,
     file: file,
     messageType: 4,
+    extraFields: extraFields,
+    extraFiles: extraFiles,
     onProgress: onProgress,
   );
 
@@ -748,6 +837,8 @@ class MessageRepository {
     required ChatMessage local,
     required SelectedFile file,
     required int messageType,
+    Map<String, Object?>? extraFields,
+    Map<String, MultipartUploadFile>? extraFiles,
     void Function(int sent, int total)? onProgress,
   }) async {
     var result = local;
@@ -758,6 +849,8 @@ class MessageRepository {
         fileLength: file.size,
         openRead: file.readAsByteStream,
         messageType: messageType,
+        extraFields: extraFields,
+        extraFiles: extraFiles,
         onProgress: onProgress,
       );
       final serverId = asInt(response['id']);
@@ -889,7 +982,9 @@ class MessageRepository {
         fileLength: file.size,
         openRead: file.readAsByteStream,
         messageType: 3,
-        extraFields: <String, Object?>{'duration': durationSeconds},
+        extraFields: <String, Object?>{
+          'durationMs': resolvedDuration.inMilliseconds,
+        },
       );
       final serverId =
           response['id'] is num

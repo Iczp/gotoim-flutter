@@ -175,7 +175,7 @@ class RealtimeSyncCoordinator {
 
   Future<void> _handleRealtimeMessage(SignalRCommandEvent event) async {
     try {
-      final sessionUnitIds =
+      var sessionUnitIds =
           event.scopes
               .whereType<Map>()
               .map((scope) => scope['sessionUnitId'] ?? scope['SessionUnitId'])
@@ -183,8 +183,60 @@ class RealtimeSyncCoordinator {
               .map((id) => '$id')
               .where((id) => id.isNotEmpty)
               .toSet();
+
+      final rawMsgId = (event.payload is Map)
+          ? (event.payload as Map)['messageId'] ??
+              (event.payload as Map)['MessageId'] ??
+              ((event.payload as Map)['message'] is Map
+                  ? (event.payload as Map)['message']['id']
+                  : null)
+          : null;
+      final msgId = rawMsgId != null ? int.tryParse('$rawMsgId') : null;
+
+      if (sessionUnitIds.isEmpty) {
+        final payload = event.payload;
+        if (payload is Map) {
+          final id = payload['sessionUnitId'] ??
+              payload['SessionUnitId'] ??
+              payload['senderSessionUnitId'] ??
+              payload['receiverSessionUnitId'] ??
+              (payload['message'] is Map
+                  ? (payload['message']['senderSessionUnitId'] ??
+                      payload['message']['receiverSessionUnitId'])
+                  : null);
+          if (id != null && '$id'.isNotEmpty) {
+            sessionUnitIds = {'$id'};
+          }
+        }
+        if (sessionUnitIds.isEmpty && msgId != null && msgId > 0) {
+          final localMsg = await _messageRepository.findAnyByServerId(msgId);
+          if (localMsg != null && localMsg.sessionUnitId.isNotEmpty) {
+            sessionUnitIds = {localMsg.sessionUnitId};
+          }
+        }
+      }
+
       final changedOwnerIds = <int>{};
       for (final sessionUnitId in sessionUnitIds) {
+        final session =
+            await _sessionRepository.loadLocalFriendDetail(sessionUnitId);
+        final ownerId = session?.ownerId;
+
+        if (event.command == SignalRCommand.messageUpdated &&
+            msgId != null &&
+            msgId > 0 &&
+            ownerId != null) {
+          final updated = await _messageRepository.fetchAndApplyUpdatedMessage(
+            ownerId: ownerId,
+            sessionUnitId: sessionUnitId,
+            messageId: msgId,
+          );
+          if (updated != null) {
+            changedOwnerIds.add(ownerId);
+            continue;
+          }
+        }
+
         final message = await _messageRepository
             .applyRealtimePayloadFromCachedSession(
               event.payload,

@@ -300,6 +300,12 @@ class SessionSummary {
       ) ??
       asInt(raw['destinationId'] ?? raw['DestinationId']);
 
+  String? get sessionId => (raw['sessionId'] ?? raw['SessionId'])?.toString();
+  bool get isGroup =>
+      (raw['isGroup'] ?? raw['IsGroup']) == true ||
+      asInt(raw['sessionType'] ?? raw['SessionType']) == 1 ||
+      asInt(raw['objectType'] ?? raw['ObjectType']) == 1;
+
   /// 会话目标对象的头像链接。
   String? get avatarUrl {
     final destination = asMap(raw['destination'] ?? raw['Destination']);

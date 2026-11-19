@@ -5,5 +5,8 @@ import 'video_controller_factory_stub.dart'
     as platform;
 
 /// 根据给定的媒体来源（本地文件绝对路径或远程网络 URL）创建对应的 [VideoPlayerController]。
-VideoPlayerController createVideoController(String source) =>
-    platform.createVideoController(source);
+VideoPlayerController createVideoController(
+  String source, {
+  Map<String, String> httpHeaders = const <String, String>{},
+}) =>
+    platform.createVideoController(source, httpHeaders: httpHeaders);

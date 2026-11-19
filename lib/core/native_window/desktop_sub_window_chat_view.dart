@@ -1093,4 +1093,9 @@ class SubWindowChatController extends ChangeNotifier
       }
     } catch (_) {}
   }
+
+  @override
+  Future<void> recordAndSendVideo() async {
+    await chooseAndSendVideo();
+  }
 }

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
+import 'media_auth_headers.dart';
 import 'media_preview.dart';
 import 'video_controller_factory.dart';
 
@@ -84,7 +85,15 @@ class VideoPlaybackSession extends ChangeNotifier {
         } catch (_) {}
       }
 
-      final controller = createVideoController(effectiveSource);
+      final httpHeaders =
+          (effectiveSource.startsWith('http://') ||
+                  effectiveSource.startsWith('https://'))
+              ? await MediaAuthHeaders.resolveForUrl(effectiveSource)
+              : const <String, String>{};
+      final controller = createVideoController(
+        effectiveSource,
+        httpHeaders: httpHeaders,
+      );
       await controller.initialize();
       if (_disposed) {
         await controller.dispose();

@@ -351,6 +351,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     : const SizedBox.shrink(),
             appBar: ChatTitleBar(
               title: controller.title,
+              typingText: controller.typingText,
               showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
               useGlass: true,
               hasBackground: hasChatBackground,

@@ -65,13 +65,19 @@ class _NativeVideoProcessingService implements VideoProcessingService {
     }
   }
 
-  VideoMetadata _metadata(MediaInfo info, String fallbackPath) => VideoMetadata(
-    durationMs: info.duration?.round(),
-    width: info.width,
-    height: info.height,
-    size: info.filesize,
-    path: info.path ?? fallbackPath,
-  );
+  VideoMetadata _metadata(MediaInfo info, String fallbackPath) {
+    final orientation = info.orientation ?? 0;
+    final rotated = orientation % 180 != 0;
+    final width = rotated ? info.height : info.width;
+    final height = rotated ? info.width : info.height;
+    return VideoMetadata(
+      durationMs: info.duration?.round(),
+      width: width,
+      height: height,
+      size: info.filesize,
+      path: info.path ?? fallbackPath,
+    );
+  }
 
   VideoQuality _quality(VideoCompressionQuality value) => switch (value) {
     VideoCompressionQuality.low => VideoQuality.LowQuality,

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../services/file/attachment_cache.dart';
 import '../services/file/attachment_transfer_service.dart';
 import 'app_image_cache_manager.dart';
+import 'media_auth_headers.dart';
 import 'media_preview.dart';
 
 /// 统一媒体下载器抽象，负责在全屏预览时探查本地缓存、执行下载与广播进度。
@@ -98,9 +99,13 @@ class DefaultMediaDownloader implements MediaDownloader {
     _cancelTokens[item.id] = cancelToken;
 
     try {
+      final authHeaders = await MediaAuthHeaders.resolveForUrl(item.source);
       final response = await _dio.get<List<int>>(
         item.source,
-        options: Options(responseType: ResponseType.bytes),
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: authHeaders.isEmpty ? null : authHeaders,
+        ),
         cancelToken: cancelToken,
         onReceiveProgress: (received, total) {
           onProgress?.call(received, total);

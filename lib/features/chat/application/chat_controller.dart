@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,8 +9,10 @@ import 'package:image_picker/image_picker.dart' show XFile;
 
 import '../../../app/application_providers.dart';
 import '../../../core/config/app_environment.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/realtime/signalr_gateway.dart';
+import '../../../core/realtime/typing_indicator_service.dart';
 import '../../../core/native/native.dart';
 import '../../../core/services/clipboard_service.dart';
 import '../../../core/services/file/attachment_cache.dart';
@@ -93,9 +96,12 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
        _chatSettingsRepository = chatSettingsRepository,
        _aiStreamChangeBus = aiStreamChangeBus,
        _signalRGateway = signalRGateway,
-       _title = initialTitle;
+       _title = initialTitle {
+    _typingService.addListener(notifyListeners);
+  }
   static const pageSize = 30;
   static const initialPageSize = 10;
+  final TypingIndicatorService _typingService = TypingIndicatorService();
   final MessageRepository _repository;
   final SessionRepository _sessionRepository;
   final FilePickerService _filePickerService;
@@ -233,6 +239,35 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
 
   List<AiRunRecord> get recentAiRuns => List.unmodifiable(_recentAiRuns);
   String get title => friend?.title ?? _title;
+  String? get typingText {
+    final sId = friend?.sessionId ?? sessionUnitId;
+    final text = _typingService.getTypingText(
+      sId,
+      isDirect: !(friend?.isGroup ?? false),
+    );
+    return text.isEmpty ? null : text;
+  }
+
+  void _reportTyping(
+    bool isTyping, {
+    String action = 'typing',
+    String? actionText,
+  }) {
+    final sId = friend?.sessionId ?? sessionUnitId;
+    if (sId.isEmpty) return;
+    unawaited(
+      _typingService.reportTyping(
+        messageApi: _repository.api,
+        gateway: _signalRGateway,
+        sessionId: sId,
+        senderSessionUnitId: sessionUnitId,
+        senderName: '我',
+        isTyping: isTyping,
+        action: action,
+        actionText: actionText,
+      ),
+    );
+  }
   String get peerDisplayName => firstNonEmpty(<Object?>[
     asMap(friend?.raw['destination'])['displayName'],
     asMap(friend?.raw['destination'])['name'],
@@ -725,6 +760,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   Future<void> send(String text) async {
     final value = text.trim();
     if (value.isEmpty || isSending) return;
+    _reportTyping(false);
     if (isMuted) {
       error = StateError('你已被禁言，暂时不能发言');
       notifyListeners();
@@ -788,6 +824,9 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
 
   @override
   void updateMentionInput(String text) {
+    if (text.trim().isNotEmpty) {
+      _reportTyping(true, action: 'typing');
+    }
     final match = RegExp(r'(?:^|\s)@([^\s@]*)$').firstMatch(text);
     if (match == null) {
       final wasVisible = mentionVisible;
@@ -934,42 +973,63 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
 
   @override
   Future<void> chooseAndSendFile() async {
+    _reportTyping(true, action: 'uploading_file');
     try {
       final files = await _filePickerService.chooseFile(
         const FilePickerRequest(dialogTitle: '选择要发送的文件'),
       );
-      if (files.isEmpty) return;
+      if (files.isEmpty) {
+        _reportTyping(false);
+        return;
+      }
       await _sendFile(files.first);
     } catch (exception) {
       error = exception;
       notifyListeners();
+    } finally {
+      _reportTyping(false);
     }
   }
 
   @override
   Future<void> chooseAndSendImages() async {
+    _reportTyping(true, action: 'uploading_image');
     try {
       final images = await _mediaService.chooseImage(
         const MediaPickRequest(allowMultiple: true, maxCount: 9),
       );
+      if (images.isEmpty) {
+        _reportTyping(false);
+        return;
+      }
       for (final image in images) {
+        final bytes = await image.readBytes();
+        final dims = await _decodeImageDimensions(bytes);
         final local = await _repository.createLocalImage(
           ownerId: ownerId,
           sessionUnitId: sessionUnitId,
           file: image,
+          width: dims?.width,
+          height: dims?.height,
         );
         _pendingFiles[local.localId] = image;
-        _imagePreviews[local.localId] = await image.readBytes();
+        _imagePreviews[local.localId] = bytes;
         _markLiveMessageForAnimation(local.localId);
         _replaceMessage(local);
         if (!_isDisposed) notifyListeners();
         uploadProgress[local.localId] = 0;
+
+        final extraFields = <String, Object?>{
+          if (dims != null) 'width': dims.width,
+          if (dims != null) 'height': dims.height,
+        };
 
         unawaited(() async {
           try {
             final sent = await _repository.sendLocalImage(
               local: local,
               file: image,
+              extraFields: extraFields.isNotEmpty ? extraFields : null,
               onProgress: (sent, total) {
                 if (_isDisposed) return;
                 uploadProgress[local.localId] = total <= 0 ? 0 : sent / total;
@@ -994,6 +1054,8 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         error = exception;
         notifyListeners();
       }
+    } finally {
+      _reportTyping(false);
     }
   }
 
@@ -1005,7 +1067,20 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
 
   @override
   Future<void> chooseAndSendVideo() async {
-    final video = await _mediaService.chooseVideo(
+    _reportTyping(true, action: 'uploading_video');
+    try {
+      final video = await _mediaService.chooseVideo(
+        const MediaPickRequest(maxDuration: Duration(minutes: 10)),
+      );
+      if (video != null) await _sendVideo(video);
+    } finally {
+      _reportTyping(false);
+    }
+  }
+
+  @override
+  Future<void> recordAndSendVideo() async {
+    final video = await _mediaService.recordVideo(
       const MediaPickRequest(maxDuration: Duration(minutes: 10)),
     );
     if (video != null) await _sendVideo(video);
@@ -1050,24 +1125,54 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
     await sendDirectImage(selected, caption: caption);
   }
 
+  Future<({int width, int height})?> _decodeImageDimensions(
+    Uint8List bytes,
+  ) async {
+    if (bytes.isEmpty) return null;
+    ui.Codec? codec;
+    ui.FrameInfo? frame;
+    try {
+      codec = await ui.instantiateImageCodec(bytes);
+      frame = await codec.getNextFrame();
+      final w = frame.image.width;
+      final h = frame.image.height;
+      if (w > 0 && h > 0) return (width: w, height: h);
+    } catch (_) {
+    } finally {
+      frame?.image.dispose();
+      codec?.dispose();
+    }
+    return null;
+  }
+
   Future<void> _sendImage(SelectedFile image) async {
+    final bytes = await image.readBytes();
+    final dims = await _decodeImageDimensions(bytes);
     final local = await _repository.createLocalImage(
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,
       file: image,
+      width: dims?.width,
+      height: dims?.height,
     );
     _pendingFiles[local.localId] = image;
-    _imagePreviews[local.localId] = await image.readBytes();
+    _imagePreviews[local.localId] = bytes;
     _markLiveMessageForAnimation(local.localId);
     _replaceMessage(local);
     if (!_isDisposed) notifyListeners();
     uploadProgress[local.localId] = 0;
+
+    final extraFields = <String, Object?>{
+      if (dims != null) 'width': dims.width,
+      if (dims != null) 'height': dims.height,
+    };
 
     unawaited(() async {
       try {
         final sent = await _repository.sendLocalImage(
           local: local,
           file: image,
+          extraFields: extraFields.isNotEmpty ? extraFields : null,
           onProgress: (sent, total) {
             if (_isDisposed) return;
             uploadProgress[local.localId] = total <= 0 ? 0 : sent / total;
@@ -1089,10 +1194,59 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   }
 
   Future<void> _sendVideo(SelectedFile video) async {
+    Uint8List? thumbBytes;
+    String? localThumbPath;
+    try {
+      final bytes = await _mediaService.createVideoThumbnail(video);
+      if (bytes.isNotEmpty) {
+        thumbBytes = bytes;
+        if (!kIsWeb) {
+          try {
+            final thumbFile = File(
+              '${Directory.systemTemp.path}${Platform.pathSeparator}gotoim_video_thumb_${DateTime.now().microsecondsSinceEpoch}.jpg',
+            );
+            await thumbFile.writeAsBytes(bytes, flush: true);
+            localThumbPath = thumbFile.path;
+          } catch (_) {
+            // Optional local preview file creation; memory bytes still upload as snapshotFile.
+          }
+        }
+      }
+    } catch (_) {
+      // Unsupported platform or thumbnail extraction failure falls back to backend generation.
+    }
+
+    int? width;
+    int? height;
+    int? durationMs;
+    try {
+      final meta = await _mediaService.getVideoMetadata(video);
+      width = meta.width != null && meta.width! > 0 ? meta.width : null;
+      height = meta.height != null && meta.height! > 0 ? meta.height : null;
+      durationMs = meta.durationMs != null && meta.durationMs! > 0
+          ? meta.durationMs
+          : null;
+    } catch (_) {
+      // Metadata extraction is optional on unsupported platforms.
+    }
+    if ((width == null || height == null) &&
+        thumbBytes != null &&
+        thumbBytes.isNotEmpty) {
+      final thumbDims = await _decodeImageDimensions(thumbBytes);
+      if (thumbDims != null) {
+        width ??= thumbDims.width;
+        height ??= thumbDims.height;
+      }
+    }
+
     final local = await _repository.createLocalVideo(
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,
       file: video,
+      width: width,
+      height: height,
+      durationMs: durationMs,
+      localThumbnailPath: localThumbPath,
     );
     _pendingFiles[local.localId] = video;
     _markLiveMessageForAnimation(local.localId);
@@ -1102,9 +1256,27 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
 
     unawaited(() async {
       try {
+        final extraFiles = thumbBytes != null && thumbBytes.isNotEmpty
+            ? <String, MultipartUploadFile>{
+                'snapshotFile': MultipartUploadFile(
+                  name: '${video.name}.jpg',
+                  length: thumbBytes.length,
+                  openRead: () => Stream<List<int>>.value(thumbBytes!),
+                  contentType: 'image/jpeg',
+                ),
+              }
+            : null;
+        final extraFields = <String, Object?>{
+          if (width != null) 'width': width,
+          if (height != null) 'height': height,
+          if (durationMs != null) 'durationMs': durationMs,
+        };
+
         final sent = await _repository.sendLocalVideo(
           local: local,
           file: video,
+          extraFields: extraFields.isNotEmpty ? extraFields : null,
+          extraFiles: extraFiles,
           onProgress: (sent, total) {
             if (_isDisposed) return;
             uploadProgress[local.localId] = total <= 0 ? 0 : sent / total;
@@ -1333,9 +1505,12 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   }
 
   @override
-  Future<void> startVoiceRecording() => _mediaService.startAudioRecording(
-    const AudioRecordingRequest(fileNamePrefix: 'gotoim_voice'),
-  );
+  Future<void> startVoiceRecording() {
+    _reportTyping(true, action: 'recording_voice');
+    return _mediaService.startAudioRecording(
+      const AudioRecordingRequest(fileNamePrefix: 'gotoim_voice'),
+    );
+  }
 
   @override
   Future<bool> hasVoiceRecordingPermission() =>
@@ -1348,10 +1523,14 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
       _mediaService.audioRecordingLevels(interval);
 
   @override
-  Future<void> cancelVoiceRecording() => _mediaService.cancelAudioRecording();
+  Future<void> cancelVoiceRecording() {
+    _reportTyping(false);
+    return _mediaService.cancelAudioRecording();
+  }
 
   @override
   Future<void> finishVoiceRecording(Duration duration) async {
+    _reportTyping(false);
     final file = await _mediaService.stopAudioRecording();
     if (file == null) return;
     final local = await _repository.createLocalVoice(
@@ -1428,9 +1607,18 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
             message.messageType == 3
                 ? await _repository.sendLocalVoice(local: sending, file: file!)
                 : message.messageType == 2
-                ? await _repository.sendLocalImage(local: sending, file: file!)
+                ? await _repository.sendLocalImage(
+                  local: sending,
+                  file: file!,
+                  onProgress: (sentBytes, totalBytes) {
+                    if (_isDisposed) return;
+                    uploadProgress[message.localId] =
+                        totalBytes <= 0 ? 0 : sentBytes / totalBytes;
+                    notifyListeners();
+                  },
+                )
                 : message.messageType == 4
-                ? await _repository.sendLocalVideo(local: sending, file: file!)
+                ? await _retryLocalVideo(sending, file!)
                 : await _repository.sendLocalFile(local: sending, file: file!);
         if (_isDisposed) return;
         _replaceMessage(sent);
@@ -1452,6 +1640,56 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         }
       }
     }());
+  }
+
+  Future<ChatMessage> _retryLocalVideo(ChatMessage sending, SelectedFile video) async {
+    Map<String, MultipartUploadFile>? extraFiles;
+    try {
+      Uint8List? thumbBytes;
+      final localThumb = sending.localThumbnailPath;
+      if (!kIsWeb && localThumb != null && localThumb.isNotEmpty) {
+        final thumbFile = File(localThumb);
+        if (thumbFile.existsSync()) {
+          thumbBytes = await thumbFile.readAsBytes();
+        }
+      }
+      thumbBytes ??= await _mediaService.createVideoThumbnail(video);
+      if (thumbBytes.isNotEmpty) {
+        final bytes = thumbBytes;
+        extraFiles = <String, MultipartUploadFile>{
+          'snapshotFile': MultipartUploadFile(
+            name: '${video.name}.jpg',
+            length: bytes.length,
+            openRead: () => Stream<List<int>>.value(bytes),
+            contentType: 'image/jpeg',
+          ),
+        };
+      }
+    } catch (_) {
+      // Fallback to backend snapshot generation.
+    }
+
+    final width = asInt(sending.content['width']);
+    final height = asInt(sending.content['height']);
+    final durationMs = asInt(sending.content['durationMs']);
+    final extraFields = <String, Object?>{
+      if (width != null && width > 0) 'width': width,
+      if (height != null && height > 0) 'height': height,
+      if (durationMs != null && durationMs > 0) 'durationMs': durationMs,
+    };
+
+    return _repository.sendLocalVideo(
+      local: sending,
+      file: video,
+      extraFields: extraFields.isNotEmpty ? extraFields : null,
+      extraFiles: extraFiles,
+      onProgress: (sentBytes, totalBytes) {
+        if (_isDisposed) return;
+        uploadProgress[sending.localId] =
+            totalBytes <= 0 ? 0 : sentBytes / totalBytes;
+        notifyListeners();
+      },
+    );
   }
 
   Future<void> retryMessage(ChatMessage message) async {
@@ -1663,6 +1901,9 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   @override
   void dispose() {
     _isDisposed = true;
+    _reportTyping(false);
+    _typingService.removeListener(notifyListeners);
+    _typingService.dispose();
     _attachmentTransferService.removeListener(_onAttachmentTransferChanged);
     unawaited(_sessionChangeSubscription?.cancel());
     unawaited(_aiStreamSubscription?.cancel());
@@ -1683,7 +1924,15 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   }
 
   void _onSignalREvent(SignalRAppEvent event) {
-    if (_isDisposed || event is! SignalRConnectionEvent) return;
+    if (_isDisposed) return;
+    if (event is SignalRTypingEvent) {
+      final sId = friend?.sessionId ?? sessionUnitId;
+      if (event.sessionId == sId || event.sessionId == sessionUnitId) {
+        _typingService.handleTypingEvent(event, mySessionUnitId: sessionUnitId);
+      }
+      return;
+    }
+    if (event is! SignalRConnectionEvent) return;
     if (event.state == SignalRConnectionState.connected) {
       _aiRunRecoveryTimer?.cancel();
       _aiRunRecoveryTimer = null;

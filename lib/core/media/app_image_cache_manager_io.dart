@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'media_auth_headers.dart';
+
 BaseCacheManager getAppImageCacheManager() => AppImageCacheManagerImpl.instance;
 
 Future<String?> getAppImageCachedPath(String url) =>
@@ -68,6 +70,10 @@ class _TimeoutHttpFileService extends FileService {
     Map<String, String>? headers,
   }) async {
     final req = http.Request('GET', Uri.parse(url));
+    final authHeaders = await MediaAuthHeaders.resolveForUrl(url);
+    if (authHeaders.isNotEmpty) {
+      req.headers.addAll(authHeaders);
+    }
     if (headers != null) {
       req.headers.addAll(headers);
     }

@@ -696,6 +696,15 @@ class UnifiedDatabase {
     return rows.isEmpty ? null : rows.single;
   }
 
+  Future<Map<String, Object?>?> readMessageRowAnyByServerId(int serverId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT * FROM Messages WHERE serverId = ? ORDER BY id DESC LIMIT 1',
+      <Object?>[serverId],
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   Future<int> readMaxMessageScore(int ownerId, String sessionUnitId) async {
     await initialize();
     final whereOwner = ownerId > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';

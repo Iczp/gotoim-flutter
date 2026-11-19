@@ -193,12 +193,24 @@ class ChatMessageRow extends StatelessWidget {
   /// 点击整行区域回调（多选模式下切换选中状态）
   final VoidCallback? onTap;
 
+  bool get _canFallbackToPeerDisplayName {
+    if (message.isMine) return false;
+    // 群聊场景下 peerDisplayName 是群名，绝不能当作某位群成员的发送人名称
+    if (message.senderChatObjectId != null &&
+        peerChatObjectId != null &&
+        message.senderChatObjectId != peerChatObjectId) {
+      return false;
+    }
+    final channel = message.raw['channel'];
+    if (channel == 2 || channel == 'Room' || channel == 'room') {
+      return false;
+    }
+    return peerDisplayName != null && peerDisplayName!.isNotEmpty;
+  }
+
   String get _senderLabel {
     var name = message.senderName;
-    if ((name == '未知用户' || name.isEmpty) &&
-        !message.isMine &&
-        peerDisplayName != null &&
-        peerDisplayName!.isNotEmpty) {
+    if ((name == '未知用户' || name.isEmpty) && _canFallbackToPeerDisplayName) {
       name = peerDisplayName!;
     }
     if (!kDebugMode) return name;

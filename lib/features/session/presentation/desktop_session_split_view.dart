@@ -621,13 +621,28 @@ class _DesktopSessionSplitViewState
           _rejectDockLayout();
         }
 
-        return Row(
-          children: [
-            // ── 会话列表栏 (左列，宽 effectivePaneWidth) ──────────────────────────
-            Container(
-              width: effectivePaneWidth,
-              color: listPaneBg,
-              child: Column(
+        final cardBorderColor =
+            isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.08);
+        final shellBg =
+            isDark ? const Color(0xFF141414) : const Color(0xFFEEF1F6);
+
+        return Container(
+          color: shellBg,
+          padding: const EdgeInsets.fromLTRB(0, 0, 12, 12),
+          child: Row(
+            children: [
+              // ── 会话列表卡片 (左列，宽 effectivePaneWidth) ──────────────────────────
+              Container(
+                width: effectivePaneWidth,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: listPaneBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: cardBorderColor),
+                ),
+                child: Column(
                 children: [
                   const SizedBox(height: 12),
 
@@ -995,19 +1010,33 @@ class _DesktopSessionSplitViewState
               child: MouseRegion(
                 cursor: SystemMouseCursors.resizeColumn,
                 child: Container(
-                  width: 5,
+                  width: 8,
                   color: Colors.transparent,
                   child: Center(
-                    child: Container(width: 0.5, color: dividerColor),
+                    child: Container(
+                      width: 2,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: dividerColor,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
 
-            // ── 聊天工作区 (右列，自适应，LRU 组件复用池) ──────────────────────
+            // ── 聊天工作区卡片 (右列，自适应，LRU 组件复用池) ──────────────────────
             Expanded(
-              child:
-                  _selectedSessionUnitId == null
+              child: Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: listPaneBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: cardBorderColor),
+                ),
+                child:
+                    _selectedSessionUnitId == null
                       ? const _DesktopEmptyChatCanvas()
                       : Stack(
                         fit: StackFit.expand,
@@ -1065,6 +1094,7 @@ class _DesktopSessionSplitViewState
                             ),
                         ],
                       ),
+              ),
             ),
 
             // ── 浏览器吸附占位与拖拽手柄 ─────────────────────────────────────
@@ -1122,6 +1152,7 @@ class _DesktopSessionSplitViewState
               ),
             ],
           ],
+          ),
         );
       },
     );

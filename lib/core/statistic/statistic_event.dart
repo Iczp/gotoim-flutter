@@ -72,6 +72,18 @@ class StatisticEvent {
     String? fallbackOsVersion,
     String? fallbackChannel,
   }) {
+    Map<String, dynamic>? sanitizedProps = properties;
+    final rawDuration = sanitizedProps?['durationSeconds'];
+    if (rawDuration is num) {
+      final clamped = rawDuration.toInt().clamp(0, 86400);
+      if (clamped != rawDuration) {
+        sanitizedProps = <String, dynamic>{
+          ...sanitizedProps!,
+          'durationSeconds': clamped,
+        };
+      }
+    }
+
     return <String, dynamic>{
       'eventId': eventId,
       'eventName': eventName,
@@ -82,7 +94,7 @@ class StatisticEvent {
       'appVersion': appVersion ?? fallbackAppVersion,
       'osVersion': osVersion ?? fallbackOsVersion,
       'channel': channel ?? fallbackChannel,
-      'properties': properties != null ? jsonEncode(properties) : null,
+      'properties': sanitizedProps != null ? jsonEncode(sanitizedProps) : null,
     };
   }
 

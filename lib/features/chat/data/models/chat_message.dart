@@ -231,18 +231,28 @@ class ChatMessage {
     return value.isEmpty ? null : value;
   }
 
+  String? get videoGifUrl {
+    final value = firstNonEmpty(<Object?>[content['gifUrl']]);
+    return value.isEmpty ? null : value;
+  }
+
+  static int? _positiveInt(Object? value) {
+    final parsed = asInt(value);
+    return parsed != null && parsed > 0 ? parsed : null;
+  }
+
   /// Original media dimensions supplied by the message contract. Both image
   /// and video messages have used the generic and image-prefixed forms.
   double? get mediaAspectRatio {
     final width =
-        asInt(content['imageWidth']) ??
-        asInt(content['width']) ??
-        asInt(content['videoWidth']);
+        _positiveInt(content['imageWidth']) ??
+        _positiveInt(content['width']) ??
+        _positiveInt(content['videoWidth']);
     final height =
-        asInt(content['imageHeight']) ??
-        asInt(content['height']) ??
-        asInt(content['videoHeight']);
-    if (width == null || height == null || width <= 0 || height <= 0) {
+        _positiveInt(content['imageHeight']) ??
+        _positiveInt(content['height']) ??
+        _positiveInt(content['videoHeight']);
+    if (width == null || height == null) {
       return null;
     }
     return width / height;
@@ -287,6 +297,11 @@ class ChatMessage {
   ]);
   String? get localFilePath {
     final value = content['path']?.toString();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  String? get localThumbnailPath {
+    final value = content['localThumbnailPath']?.toString();
     return value == null || value.isEmpty ? null : value;
   }
 

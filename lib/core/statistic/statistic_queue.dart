@@ -73,21 +73,23 @@ class StatisticQueue {
         );
 
         if (_config.debugLog) {
-          if (result.isSuccess) {
-            debugPrint(
-              '[Statistic] upload success: sent ${result.receivedCount}, new ${result.successCount}, dup ${result.duplicateCount}',
-            );
-          } else {
+          if (!result.isSuccess) {
             debugPrint(
               '[Statistic] upload failed (will retry): ${result.errorMessage}',
+            );
+          } else if (result.receivedCount > 0) {
+            debugPrint(
+              '[Statistic] upload success: sent ${result.receivedCount}, new ${result.successCount}, dup ${result.duplicateCount}',
             );
           }
         }
 
         _pendingCountCache = await _repository.getPendingCount();
 
-        // 如果还有剩余超过 batchSize 的事件，继续触发下一批上传
-        if (result.isSuccess && _pendingCountCache >= _config.batchSize) {
+        // 如果本批确实上传了事件，且剩余待上传事件仍达到 batchSize，继续触发下一批上传
+        if (result.isSuccess &&
+            result.receivedCount > 0 &&
+            _pendingCountCache >= _config.batchSize) {
           Future.microtask(scheduleFlush);
         }
       }

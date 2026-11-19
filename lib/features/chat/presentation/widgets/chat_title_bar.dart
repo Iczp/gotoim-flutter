@@ -10,6 +10,7 @@ import '../../../../core/widgets/glass_container.dart';
 class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   const ChatTitleBar({
     required this.title,
+    this.typingText,
     required this.showTransfer,
     required this.onTransfer,
     required this.onOpenSettings,
@@ -24,6 +25,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   final String title;
+  final String? typingText;
   final bool showTransfer;
   final VoidCallback onTransfer;
   final VoidCallback onOpenSettings;
@@ -103,10 +105,31 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
       color: foregroundColor,
     );
 
-    final titleWidget = Text(
-      title,
-      style: titleStyle,
-      overflow: TextOverflow.ellipsis,
+    final hasTyping = typingText != null && typingText!.trim().isNotEmpty;
+
+    final titleWidget = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          title,
+          style: titleStyle,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (hasTyping)
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Text(
+              typingText!.trim(),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF10B981),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
     );
 
     if (useGlass) {

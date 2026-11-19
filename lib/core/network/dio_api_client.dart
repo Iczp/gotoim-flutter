@@ -11,6 +11,7 @@ import '../device/client_device_context.dart';
 import '../logging/app_logger.dart';
 import '../logging/diagnostic_trace.dart';
 import '../logging/log_sanitizer.dart';
+import '../media/media_auth_headers.dart';
 
 /// The single authenticated HTTP transport for repositories.
 class DioApiClient implements ApiClient {
@@ -24,7 +25,13 @@ class DioApiClient implements ApiClient {
        _tokenStorage = tokenStorage,
        _tokenRefresher = tokenRefresher,
        _deviceContext = deviceContext,
-       _onSessionInvalidated = onSessionInvalidated;
+       _onSessionInvalidated = onSessionInvalidated {
+    MediaAuthHeaders.provider = () async {
+      final token = await _tokenStorage.readAccessToken();
+      if (token == null || token.isEmpty) return const <String, String>{};
+      return <String, String>{'Authorization': 'Bearer $token'};
+    };
+  }
 
   final Dio _dio;
   final TokenStorage _tokenStorage;
@@ -118,7 +125,19 @@ class DioApiClient implements ApiClient {
             ),
             if (extraFields != null)
               for (final entry in extraFields.entries)
-                if (entry.value != null) entry.key: entry.value!,
+                if (entry.value != null)
+                  entry.key:
+                      entry.value is MultipartUploadFile
+                          ? MultipartFile.fromStream(
+                            (entry.value as MultipartUploadFile).openRead,
+                            (entry.value as MultipartUploadFile).length,
+                            filename: (entry.value as MultipartUploadFile).name,
+                            contentType: _resolveMediaType(
+                              (entry.value as MultipartUploadFile).contentType,
+                              (entry.value as MultipartUploadFile).name,
+                            ),
+                          )
+                          : entry.value!,
           }, ListFormat.multi),
       retryOnUnauthorized: retryOnUnauthorized,
       onSendProgress: onProgress,

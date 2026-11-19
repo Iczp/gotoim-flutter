@@ -99,6 +99,7 @@ class ChatComposerState extends ConsumerState<ChatComposer>
   static const _functions = <ChatFunctionItem>[
     ChatFunctionItem('相册', Icons.photo_outlined),
     ChatFunctionItem('拍摄', Icons.camera_alt_outlined),
+    ChatFunctionItem('拍视频', Icons.video_camera_back_outlined),
     ChatFunctionItem('视频', Icons.videocam_outlined),
     ChatFunctionItem('文件', Icons.insert_drive_file_outlined, enabled: true),
     ChatFunctionItem('设置背景', Icons.wallpaper_rounded, enabled: true),
@@ -496,6 +497,10 @@ class ChatComposerState extends ConsumerState<ChatComposer>
     }
     if (item.label == '拍摄') {
       await widget.controller.takeAndSendPhoto();
+      return;
+    }
+    if (item.label == '拍视频') {
+      await widget.controller.recordAndSendVideo();
       return;
     }
     if (item.label == '视频') {

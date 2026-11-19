@@ -63,13 +63,13 @@ class StatisticRouteObserver extends NavigatorObserver {
     if (entry == null) return;
 
     final durationSeconds =
-        DateTime.now().difference(entry.enterTime).inSeconds;
+        DateTime.now().difference(entry.enterTime).inSeconds.clamp(0, 86400);
 
     StatisticService.instance.track(
       StatisticEventNames.pageLeave,
       page: entry.pageName,
       properties: <String, dynamic>{
-        'durationSeconds': durationSeconds < 0 ? 0 : durationSeconds,
+        'durationSeconds': durationSeconds,
       },
     );
   }

@@ -103,7 +103,8 @@ enum SignalRCommand {
   aiFailed('failed@ai'),
   kicked('kicked'),
   welcome('welcome'),
-  sessionUnitChanged('changed@session-unit');
+  sessionUnitChanged('changed@session-unit'),
+  sessionTyping('typing@session');
 
   const SignalRCommand(this.value);
   final String value;
@@ -134,6 +135,27 @@ class SignalRCommandEvent extends SignalRAppEvent {
   Object? get payload => envelope['payload'];
   List<Object?> get scopes =>
       (envelope['scopes'] as List?)?.cast<Object?>() ?? const [];
+}
+
+class SignalRTypingEvent extends SignalRAppEvent {
+  const SignalRTypingEvent({
+    required this.sessionId,
+    required this.senderSessionUnitId,
+    required this.senderName,
+    required this.isTyping,
+    this.action = 'typing',
+    this.actionText,
+    required DateTime receivedAt,
+    this.envelope = const {},
+  }) : super(receivedAt);
+
+  final String sessionId;
+  final String senderSessionUnitId;
+  final String senderName;
+  final bool isTyping;
+  final String action;
+  final String? actionText;
+  final Map<String, dynamic> envelope;
 }
 
 class SignalRUnknownCommandEvent extends SignalRAppEvent {

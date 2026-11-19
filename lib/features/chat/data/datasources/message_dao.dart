@@ -75,6 +75,11 @@ class MessageDao {
     return row == null ? null : ChatMessage.fromDatabaseRow(row);
   }
 
+  Future<ChatMessage?> findAnyByServerId(int serverId) async {
+    final row = await _database.readMessageRowAnyByServerId(serverId);
+    return row == null ? null : ChatMessage.fromDatabaseRow(row);
+  }
+
   Future<void> upsertAll(List<ChatMessage> messages) =>
       _database.upsertMessageRows(
         messages

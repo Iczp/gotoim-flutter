@@ -94,6 +94,20 @@ class MessageApi {
     );
   }
 
+  Future<Map<String, dynamic>> getItem({
+    required String sessionUnitId,
+    required int messageId,
+  }) async {
+    final json = await _client.get<Map<String, dynamic>>(
+      '/api/chat/message/item',
+      query: <String, Object?>{
+        'sessionUnitId': sessionUnitId,
+        'messageId': messageId,
+      },
+    );
+    return Map<String, dynamic>.from(json);
+  }
+
   Future<PagedResultDto<ChatMessage>> latest({
     required int ownerId,
     required String sessionUnitId,
@@ -159,20 +173,21 @@ class MessageApi {
     },
   );
 
-  Future<Map<String, dynamic>> sendUploadFile({
+  Future<Map<String, dynamic>> uploadAttachment({
     required String sessionUnitId,
     required String fileName,
     required int fileLength,
     required Stream<List<int>> Function() openRead,
     int messageType = 5,
     Map<String, Object?>? extraFields,
+    Map<String, MultipartUploadFile>? extraFiles,
     void Function(int sent, int total)? onProgress,
   }) {
     late final String path;
     String? mimeType;
     switch (messageType) {
       case 2:
-        path = '/api/chat/message-sender/send-upload-image/$sessionUnitId';
+        path = '/api/chat/attachments/upload-image/$sessionUnitId';
         final lower = fileName.toLowerCase();
         if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
           mimeType = 'image/jpeg';
@@ -185,17 +200,21 @@ class MessageApi {
         }
         break;
       case 3:
-        path = '/api/chat/message-sender/send-upload-sound/$sessionUnitId';
+        path = '/api/chat/attachments/upload-sound/$sessionUnitId';
         mimeType = 'audio/amr';
         break;
       case 4:
-        path = '/api/chat/message-sender/send-upload-video/$sessionUnitId';
+        path = '/api/chat/attachments/upload-video/$sessionUnitId';
         mimeType = 'video/mp4';
         break;
       default:
-        path = '/api/chat/message-sender/send-upload-file/$sessionUnitId';
+        path = '/api/chat/attachments/upload-file/$sessionUnitId';
         break;
     }
+    final mergedFields = <String, Object?>{
+      ...?extraFields,
+      ...?extraFiles,
+    };
     return _client.postMultipart<Map<String, dynamic>>(
       path,
       file: MultipartUploadFile(
@@ -204,8 +223,126 @@ class MessageApi {
         openRead: openRead,
         contentType: mimeType,
       ),
-      extraFields: extraFields,
+      extraFields: mergedFields.isEmpty ? null : mergedFields,
       onProgress: onProgress,
+    );
+  }
+
+  Future<Map<String, dynamic>> sendAttachmentMessage({
+    required String sessionUnitId,
+    required int messageType,
+    required Map<String, dynamic> uploadResult,
+    String? clientMessageId,
+    int? quoteMessageId,
+    Map<String, Object?>? extraContent,
+  }) {
+    final safeExtraContent = <String, Object?>{
+      if (extraContent != null)
+        for (final entry in extraContent.entries)
+          if (entry.value != null && entry.value is! MultipartUploadFile)
+            entry.key: entry.value,
+    };
+    double? resolvedVideoDurationSec;
+    if (messageType == 4) {
+      final rawDuration = uploadResult['duration'] ?? safeExtraContent['durationMs'];
+      final num? rawNum = rawDuration is num
+          ? rawDuration
+          : num.tryParse('${rawDuration ?? ''}');
+      if (rawNum != null && rawNum > 0) {
+        resolvedVideoDurationSec = double.parse((rawNum / 1000.0).toStringAsFixed(2));
+      }
+      safeExtraContent.remove('durationMs');
+    }
+    final content = <String, dynamic>{
+      'blobId': uploadResult['blobId'],
+      'url': uploadResult['url'],
+      'fileName': uploadResult['fileName'],
+      'contentType': uploadResult['contentType'],
+      'suffix': uploadResult['suffix'],
+      'size': uploadResult['size'],
+      if (uploadResult['thumbnailBlobId'] != null)
+        'thumbnailBlobId': uploadResult['thumbnailBlobId'],
+      if (uploadResult['thumbnailUrl'] != null)
+        'thumbnailUrl': uploadResult['thumbnailUrl'],
+      if (uploadResult['originalBlobId'] != null)
+        'originalBlobId': uploadResult['originalBlobId'],
+      if (uploadResult['originalUrl'] != null)
+        'originalUrl': uploadResult['originalUrl'],
+      if (uploadResult['snapshotBlobId'] != null)
+        'snapshotBlobId': uploadResult['snapshotBlobId'],
+      if (uploadResult['snapshotUrl'] != null)
+        'snapshotUrl': uploadResult['snapshotUrl'],
+      if (uploadResult['snapshotThumbnailBlobId'] != null)
+        'snapshotThumbnailBlobId': uploadResult['snapshotThumbnailBlobId'],
+      if (uploadResult['snapshotThumbnailUrl'] != null)
+        'snapshotThumbnailUrl': uploadResult['snapshotThumbnailUrl'],
+      if (uploadResult['gifBlobId'] != null)
+        'gifBlobId': uploadResult['gifBlobId'],
+      if (uploadResult['gifUrl'] != null) 'gifUrl': uploadResult['gifUrl'],
+      if (uploadResult['width'] != null) 'width': uploadResult['width'],
+      if (uploadResult['height'] != null) 'height': uploadResult['height'],
+      if (uploadResult['profile'] != null) 'profile': uploadResult['profile'],
+      if (messageType == 3)
+        'time': uploadResult['duration'] ?? safeExtraContent['durationMs'] ?? 0,
+      if (messageType == 4 && resolvedVideoDurationSec != null)
+        'duration': resolvedVideoDurationSec,
+      ...safeExtraContent,
+    };
+
+    late final String sendPath;
+    switch (messageType) {
+      case 2:
+        sendPath = '/api/chat/message-sender/send-image/$sessionUnitId';
+        break;
+      case 3:
+        sendPath = '/api/chat/message-sender/send-sound/$sessionUnitId';
+        break;
+      case 4:
+        sendPath = '/api/chat/message-sender/send-video/$sessionUnitId';
+        break;
+      default:
+        sendPath = '/api/chat/message-sender/send-file/$sessionUnitId';
+        break;
+    }
+
+    return _client.post<Map<String, dynamic>>(
+      sendPath,
+      data: <String, Object?>{
+        if (clientMessageId != null && clientMessageId.isNotEmpty)
+          'clientMessageId': clientMessageId,
+        if (quoteMessageId != null && quoteMessageId > 0)
+          'quoteMessageId': quoteMessageId,
+        'content': content,
+      },
+    );
+  }
+
+  /// 两段式先传后发：先调用 /api/chat/attachments/upload-* 拿到服务端凭证与 URL，再调用 send-* 发消息
+  Future<Map<String, dynamic>> sendUploadFile({
+    required String sessionUnitId,
+    required String fileName,
+    required int fileLength,
+    required Stream<List<int>> Function() openRead,
+    int messageType = 5,
+    Map<String, Object?>? extraFields,
+    Map<String, MultipartUploadFile>? extraFiles,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    final uploadResult = await uploadAttachment(
+      sessionUnitId: sessionUnitId,
+      fileName: fileName,
+      fileLength: fileLength,
+      openRead: openRead,
+      messageType: messageType,
+      extraFields: extraFields,
+      extraFiles: extraFiles,
+      onProgress: onProgress,
+    );
+    return sendAttachmentMessage(
+      sessionUnitId: sessionUnitId,
+      messageType: messageType,
+      uploadResult: uploadResult,
+      extraContent: extraFields,
     );
   }
 
@@ -265,4 +402,29 @@ class MessageApi {
       'content': <String, Object?>{'messageIdList': messageIds},
     },
   );
+
+  /// 上报瞬态输入状态: POST /api/chat/message-sender/send-typing/{sessionUnitId}
+  Future<void> sendTyping({
+    required String sessionUnitId,
+    required String sessionId,
+    String? senderName,
+    required bool isTyping,
+    String action = 'typing',
+    String? actionText,
+  }) async {
+    try {
+      await _client.post<void>(
+        '/api/chat/message-sender/send-typing/$sessionUnitId',
+        data: <String, Object?>{
+          'sessionId': sessionId,
+          'senderName': senderName ?? '我',
+          'isTyping': isTyping,
+          'action': action,
+          if (actionText != null) 'actionText': actionText,
+        },
+      );
+    } catch (_) {
+      // 瞬态状态上报忽略失败
+    }
+  }
 }

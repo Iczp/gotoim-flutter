@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
 import '../config/app_environment.dart';
@@ -112,6 +113,20 @@ class SignalRNetcoreGateway implements SignalRGateway {
     conn.serverTimeoutInMilliseconds = 15000;
 
     conn.on('ReceivedMessage', _onReceivedMessage);
+    for (final cmd in const [
+      'created@message',
+      'forwarded@message',
+      'updated@message',
+      'rollbacked@message',
+      'deleted@message',
+      'cleared@message',
+      'changed@session-unit',
+      'updated@message-badge',
+      'updated-badge@message',
+      'kicked@connection',
+    ]) {
+      conn.on(cmd, (args) => _onDirectCommand(cmd, args));
+    }
     conn.onreconnecting(
       ({error}) =>
           _emitConnection(SignalRConnectionState.reconnecting, error: error),
@@ -341,7 +356,7 @@ class SignalRNetcoreGateway implements SignalRGateway {
     final conn = _connection;
     if (conn != null) {
       try {
-        await conn.stop()?.timeout(
+        await conn.stop().timeout(
           const Duration(milliseconds: 1500),
           onTimeout: () {
             AppLogger.instance.info(
@@ -375,7 +390,7 @@ class SignalRNetcoreGateway implements SignalRGateway {
       final oldConn = _connection;
       if (oldConn != null) {
         try {
-          await oldConn.stop()?.timeout(
+          await oldConn.stop().timeout(
             const Duration(milliseconds: 600),
             onTimeout: () {
               AppLogger.instance.info(
@@ -425,6 +440,9 @@ class SignalRNetcoreGateway implements SignalRGateway {
     final commandValue = envelope?['command']?.toString();
     final now = DateTime.now();
     _lastReceivedAt = now;
+    debugPrint(
+      '[SignalR] ReceivedMessage command=$commandValue args=$arguments',
+    );
     AppLogger.instance.info(
       'SignalR ReceivedMessage',
       category: 'signalr',
@@ -446,9 +464,75 @@ class SignalRNetcoreGateway implements SignalRGateway {
       );
       return;
     }
+    if (command == SignalRCommand.sessionTyping) {
+      final payload = _asMap(envelope['payload']) ?? envelope;
+      final sessionId = (payload['sessionId'] ?? '').toString().trim();
+      final senderSessionUnitId =
+          (payload['senderSessionUnitId'] ?? '').toString().trim();
+      final senderName = (payload['senderName'] ?? '').toString().trim();
+      final isTyping = payload['isTyping'] == true;
+      final action = (payload['action'] ?? 'typing').toString().trim();
+      final actionText = payload['actionText']?.toString().trim();
+
+      _events.add(
+        SignalRTypingEvent(
+          sessionId: sessionId,
+          senderSessionUnitId: senderSessionUnitId,
+          senderName: senderName.isEmpty ? '对方' : senderName,
+          isTyping: isTyping,
+          action: action.isEmpty ? 'typing' : action,
+          actionText:
+              (actionText == null || actionText.isEmpty) ? null : actionText,
+          receivedAt: now,
+          envelope: envelope,
+        ),
+      );
+      return;
+    }
     _events.add(
       SignalRCommandEvent(
         command: command,
+        envelope: envelope,
+        receivedAt: now,
+      ),
+    );
+  }
+
+  void _onDirectCommand(String command, List<Object?>? arguments) {
+    final value =
+        arguments == null || arguments.isEmpty ? null : arguments.first;
+    final map = _asMap(value) ?? <String, dynamic>{};
+    final now = DateTime.now();
+    _lastReceivedAt = now;
+    debugPrint(
+      '[SignalR] DirectCommand command=$command args=$arguments',
+    );
+    AppLogger.instance.info(
+      'SignalR DirectCommand',
+      category: 'signalr',
+      event: 'direct_command',
+      context: <String, Object?>{
+        'payloadSize': value?.toString().length ?? 0,
+        'command': command,
+      },
+    );
+    final signalRCmd = SignalRCommand.fromValue(command);
+    if (signalRCmd == null) {
+      _events.add(
+        SignalRUnknownCommandEvent(
+          command: command,
+          envelope: map,
+          receivedAt: now,
+        ),
+      );
+      return;
+    }
+    final envelope = map.containsKey('payload') || map.containsKey('scopes')
+        ? map
+        : <String, dynamic>{'command': command, 'payload': map};
+    _events.add(
+      SignalRCommandEvent(
+        command: signalRCmd,
         envelope: envelope,
         receivedAt: now,
       ),

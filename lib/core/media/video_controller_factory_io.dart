@@ -1,10 +1,13 @@
 import 'dart:io';
 import 'package:video_player/video_player.dart';
 
-VideoPlayerController createVideoController(String source) {
+VideoPlayerController createVideoController(
+  String source, {
+  Map<String, String> httpHeaders = const <String, String>{},
+}) {
   final uri = Uri.tryParse(source);
   if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-    return VideoPlayerController.networkUrl(uri);
+    return VideoPlayerController.networkUrl(uri, httpHeaders: httpHeaders);
   }
   final path = uri?.scheme == 'file' ? uri!.toFilePath() : source;
   final file = File(path);
