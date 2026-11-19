@@ -100,6 +100,9 @@ class RealtimeSyncCoordinator {
         // owner-wide /changes endpoint.
         unawaited(_syncChangedSessionUnit(event));
         break;
+      case SignalRCommand.sessionUnitDisposed:
+        unawaited(_handleSessionUnitDisposed(event));
+        break;
       case SignalRCommand.aiStarted:
         _publishAiEvent(
           AiStreamEventKind.started,
@@ -347,6 +350,22 @@ class RealtimeSyncCoordinator {
     });
   }
 
+  Future<void> _handleSessionUnitDisposed(SignalRCommandEvent event) async {
+    final payload = event.payload;
+    if (payload is! Map) return;
+    final map = Map<String, dynamic>.from(payload);
+    final ownerId = (map['ownerId'] as num?)?.toInt() ?? 0;
+    final unitId = (map['sessionUnitId'] ?? '').toString();
+    final type = (map['disposalType'] as num?)?.toInt() ?? 0;
+    if (ownerId > 0 && unitId.isNotEmpty && type > 0) {
+      await _sessionRepository.applyDisposal(
+        ownerId: ownerId,
+        sessionUnitId: unitId,
+        disposalType: type,
+      );
+    }
+  }
+
   int? _extractOwnerId(Object? payload) {
     if (payload is! Map) return null;
     final map = Map<String, dynamic>.from(payload);
@@ -426,6 +445,7 @@ class RealtimeSyncCoordinator {
     final sync = () async {
       try {
         await _sessionRepository.loadChanges(ownerId: ownerId);
+        await _sessionRepository.syncDisposals(ownerId: ownerId);
         if (messageChanges) await _messageRepository.loadChanges(ownerId: ownerId);
       } catch (error) {
         debugPrint(

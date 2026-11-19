@@ -100,6 +100,25 @@ class SessionDao {
   Future<int> resetMessages(int ownerId, String sessionUnitId) =>
       _database.resetFriendMessages(ownerId, sessionUnitId);
 
+  Future<int> deleteFriend(String sessionUnitId) =>
+      _database.deleteFriendRow(sessionUnitId);
+
+  Future<int> deleteMessages(int ownerId, String sessionUnitId) =>
+      _database.deleteMessagesBySessionUnit(ownerId, sessionUnitId);
+
+  Future<int> markKilled(String sessionUnitId) =>
+      _database.markFriendKilled(sessionUnitId);
+
+  Future<String?> readSettingValue(String key) =>
+      _database.readSettingValue(key);
+
+  Future<void> writeSettingValue({
+    required String id,
+    required String group,
+    required String value,
+  }) =>
+      _database.writeSettingValue(id: id, group: group, value: value);
+
   String _loadedAllKey(int ownerId) => 'friends-is-loaded-all-$ownerId';
 }
 

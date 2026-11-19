@@ -117,6 +117,22 @@ class SessionUnitApi {
     );
   }
 
+  Future<Map<String, dynamic>> getDisposals({
+    required int ownerId,
+    required String afterId,
+    int maxResultCount = 100,
+  }) async {
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      '/api/chat/session-unit-disposal/get-list',
+      data: <String, Object?>{
+        'ownerId': ownerId,
+        'afterId': afterId,
+        'maxResultCount': maxResultCount,
+      },
+    );
+    return response;
+  }
+
   Future<PagedResultDto<LoggedInDevice>> getDevices({String? afterId}) async {
     final response = await _apiClient.get<Map<String, dynamic>>(
       _environment.appDeviceUrl(

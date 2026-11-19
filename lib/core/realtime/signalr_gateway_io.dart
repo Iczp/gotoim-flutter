@@ -121,6 +121,7 @@ class SignalRNetcoreGateway implements SignalRGateway {
       'deleted@message',
       'cleared@message',
       'changed@session-unit',
+      'disposed@session-unit',
       'updated@message-badge',
       'updated-badge@message',
       'kicked@connection',

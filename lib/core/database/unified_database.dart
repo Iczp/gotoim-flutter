@@ -414,6 +414,49 @@ class UnifiedDatabase {
     return deleted;
   }
 
+  Future<int> deleteFriendRow(String sessionUnitId) async {
+    await initialize();
+    return _connection.runDelete(
+      'DELETE FROM Friends WHERE id = ?',
+      <Object?>[sessionUnitId],
+    );
+  }
+
+  Future<int> deleteMessagesBySessionUnit(int ownerId, String sessionUnitId) async {
+    await initialize();
+    final whereOwner = ownerId > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
+    return _connection.runDelete(
+      'DELETE FROM Messages WHERE ${whereOwner}sessionUnitId = ?',
+      <Object?>[if (ownerId > 0) ownerId, sessionUnitId],
+    );
+  }
+
+  Future<int> markFriendKilled(String sessionUnitId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT raw FROM Friends WHERE id = ? LIMIT 1',
+      <Object?>[sessionUnitId],
+    );
+    if (rows.isEmpty || rows.single['raw'] is! String) return 0;
+    try {
+      final decoded = jsonDecode(rows.single['raw'] as String);
+      if (decoded is! Map) return 0;
+      final raw = Map<String, dynamic>.from(decoded);
+      raw['isKilled'] = true;
+      if (raw['setting'] is Map) {
+        final setting = Map<String, dynamic>.from(raw['setting'] as Map);
+        setting['isKilled'] = true;
+        raw['setting'] = setting;
+      }
+      return await _connection.runUpdate(
+        'UPDATE Friends SET raw = ?, updateTime = ? WHERE id = ?',
+        <Object?>[jsonEncode(raw), DateTime.now().millisecondsSinceEpoch, sessionUnitId],
+      );
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<void> updateFriendLastMessage({
     required int ownerId,
     required String sessionUnitId,

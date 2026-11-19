@@ -411,6 +411,78 @@ class SessionRepository {
     await _dao.resetMessages(ownerId, sessionUnitId);
     _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
   }
+
+  Future<void> applyDisposal({
+    required int ownerId,
+    required String sessionUnitId,
+    required int disposalType,
+  }) async {
+    switch (disposalType) {
+      case 1: // Remove: 移出/退出群聊，保留会话但标记 killed
+        await _dao.markKilled(sessionUnitId);
+        break;
+      case 2: // Delete: 彻底软删除好友/会话，删除本地会话以及消息
+        await _dao.deleteFriend(sessionUnitId);
+        await _dao.deleteMessages(ownerId, sessionUnitId);
+        break;
+      case 3: // Hide: 隐藏会话列表项，删除会话行，保留历史消息
+        await _dao.deleteFriend(sessionUnitId);
+        break;
+      case 4: // ClearMessage: 仅清空历史聊天记录
+        await _dao.resetMessages(ownerId, sessionUnitId);
+        break;
+    }
+    _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
+  }
+
+  Future<void> syncDisposals({required int ownerId}) async {
+    final count = await _dao.count(ownerId);
+    if (count == 0) {
+      // 关键业务规范：如果本地未缓存过该身份的好友/会话，无需拉取删除历史
+      return;
+    }
+    var afterId = await _dao.readSettingValue('disposal-cursor-$ownerId') ?? '0';
+    while (true) {
+      final response = await _api.getDisposals(
+        ownerId: ownerId,
+        afterId: afterId,
+        maxResultCount: 100,
+      );
+      final rawItems = response['items'];
+      final items =
+          rawItems is List ? rawItems.whereType<Map>().toList() : const <Map>[];
+      final headId = response['headId']?.toString();
+      if (items.isNotEmpty) {
+        for (final item in items) {
+          final unitId = item['sessionUnitId']?.toString();
+          final type = (item['disposalType'] as num?)?.toInt() ?? 0;
+          if (unitId != null && unitId.isNotEmpty) {
+            await applyDisposal(
+              ownerId: ownerId,
+              sessionUnitId: unitId,
+              disposalType: type,
+            );
+          }
+        }
+        afterId = headId ?? items.last['id']?.toString() ?? afterId;
+        await _dao.writeSettingValue(
+          id: 'disposal-cursor-$ownerId',
+          group: 'sync',
+          value: afterId,
+        );
+      } else {
+        if (headId != null && headId != afterId) {
+          await _dao.writeSettingValue(
+            id: 'disposal-cursor-$ownerId',
+            group: 'sync',
+            value: headId,
+          );
+        }
+        break;
+      }
+      if (items.length < 100) break;
+    }
+  }
 }
 
 Map<String, dynamic> _map(Object? value) =>

@@ -104,6 +104,7 @@ enum SignalRCommand {
   kicked('kicked'),
   welcome('welcome'),
   sessionUnitChanged('changed@session-unit'),
+  sessionUnitDisposed('disposed@session-unit'),
   sessionTyping('typing@session');
 
   const SignalRCommand(this.value);
