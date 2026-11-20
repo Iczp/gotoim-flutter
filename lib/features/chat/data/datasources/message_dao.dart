@@ -27,6 +27,23 @@ class MessageDao {
 
   Future<String?> syncCursor(int owner, String unit) =>
       _database.readMessageSyncCursor(syncNamespace, owner, unit);
+
+  Future<int?> readMessageWatermark(int ownerId, String sessionUnitId) async {
+    final raw = await syncCursor(ownerId, sessionUnitId);
+    if (raw == null || raw.isEmpty) return null;
+    return int.tryParse(raw);
+  }
+
+  Future<void> writeMessageWatermark(
+    int ownerId,
+    String sessionUnitId,
+    int watermark,
+  ) => _database.writeMessageSyncCursor(
+    syncNamespace,
+    ownerId,
+    sessionUnitId,
+    watermark.toString(),
+  );
   Future<List<String>> syncScopes(int owner, String after, int limit) =>
       _database.readMessageSyncScopes(owner, after, limit);
   Future<List<int>> syncIds(int owner, String unit, int after, int limit) =>

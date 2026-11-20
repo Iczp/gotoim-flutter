@@ -138,6 +138,33 @@ class MessageRepository {
     required String sessionUnitId,
   }) => _dao.maxServerId(ownerId, sessionUnitId);
 
+  /// Returns the safe cursor for pulling new messages.
+  /// Prefers the contiguous sync watermark if established; falls back to max server ID.
+  Future<int> getLatestSyncCursor({
+    required int ownerId,
+    required String sessionUnitId,
+  }) async {
+    final watermark = await _dao.readMessageWatermark(ownerId, sessionUnitId);
+    if (watermark != null && watermark > 0) {
+      return watermark;
+    }
+    final maxId = await _dao.maxServerId(ownerId, sessionUnitId);
+    if (maxId > 0) {
+      await _dao.writeMessageWatermark(ownerId, sessionUnitId, maxId);
+    }
+    return maxId;
+  }
+
+  Future<void> updateMessageWatermark({
+    required int ownerId,
+    required String sessionUnitId,
+    required int watermark,
+  }) async {
+    if (watermark > 0) {
+      await _dao.writeMessageWatermark(ownerId, sessionUnitId, watermark);
+    }
+  }
+
   /// Retries a failed text message in-place so its local identity and UI slot
   /// remain stable instead of inserting a duplicate bubble.
   Future<ChatMessage> retryText(ChatMessage message) async {
@@ -436,6 +463,22 @@ class MessageRepository {
         maxMessageId: maxMessageId == 0 ? null : maxMessageId,
       );
       await _dao.upsertAll(remote.items);
+      if (beforeScore == null && remote.items.isNotEmpty) {
+        final maxFetchedId = remote.items
+            .map((item) => item.serverId ?? 0)
+            .fold<int>(0, (max, id) => id > max ? id : max);
+        if (maxFetchedId > 0) {
+          final current =
+              await _dao.readMessageWatermark(ownerId, sessionUnitId);
+          if (current == null || current < maxFetchedId) {
+            await _dao.writeMessageWatermark(
+              ownerId,
+              sessionUnitId,
+              maxFetchedId,
+            );
+          }
+        }
+      }
       final requestedRemoteCount = limit - local.length;
       final hasMore =
           remote.hasMore ?? remote.items.length >= requestedRemoteCount;
@@ -517,6 +560,12 @@ class MessageRepository {
     }
     final items = collected.values.toList(growable: false);
     await _dao.upsertAll(items);
+    final syncedMax = collected.values
+        .map((item) => item.serverId ?? 0)
+        .fold<int>(cursor, (max, id) => id > max ? id : max);
+    if (syncedMax > 0) {
+      await _dao.writeMessageWatermark(ownerId, sessionUnitId, syncedMax);
+    }
     final persisted =
         items.isEmpty
             ? const <ChatMessage>[]

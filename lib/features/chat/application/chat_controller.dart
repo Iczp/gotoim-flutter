@@ -717,19 +717,28 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
           );
         }
       }
-      final minMessageId = await _repository.maxLocalServerId(
+      final minMessageId = await _repository.getLatestSyncCursor(
+        ownerId: effectiveOwnerId,
+        sessionUnitId: sessionUnitId,
+      );
+      final maxLocalId = await _repository.maxLocalServerId(
         ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
       );
       if (_isDisposed) return;
-      if (minMessageId <= 0) {
+      if (minMessageId <= 0 && maxLocalId <= 0) {
         return;
       }
+      final hasGap = minMessageId > 0 && maxLocalId > minMessageId;
+      final shouldRefreshRecent = refreshRecent &&
+          (hasGap || !_repository.isChangeSyncAvailable);
+      final effectiveMinMessageId =
+          minMessageId > 0 ? minMessageId : maxLocalId;
       final latest = await _repository.loadLatest(
         ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
-        minMessageId: minMessageId,
-        refreshRecent: refreshRecent && !_repository.isChangeSyncAvailable,
+        minMessageId: effectiveMinMessageId,
+        refreshRecent: shouldRefreshRecent,
       );
       if (_isDisposed) return;
       final byId = <String, ChatMessage>{
@@ -1264,6 +1273,12 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
                   openRead: () => Stream<List<int>>.value(thumbBytes!),
                   contentType: 'image/jpeg',
                 ),
+                'snapshotThumbnailFile': MultipartUploadFile(
+                  name: 'thumb_${video.name}.jpg',
+                  length: thumbBytes.length,
+                  openRead: () => Stream<List<int>>.value(thumbBytes!),
+                  contentType: 'image/jpeg',
+                ),
               }
             : null;
         final extraFields = <String, Object?>{
@@ -1659,6 +1674,12 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         extraFiles = <String, MultipartUploadFile>{
           'snapshotFile': MultipartUploadFile(
             name: '${video.name}.jpg',
+            length: bytes.length,
+            openRead: () => Stream<List<int>>.value(bytes),
+            contentType: 'image/jpeg',
+          ),
+          'snapshotThumbnailFile': MultipartUploadFile(
+            name: 'thumb_${video.name}.jpg',
             length: bytes.length,
             openRead: () => Stream<List<int>>.value(bytes),
             contentType: 'image/jpeg',

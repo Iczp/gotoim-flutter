@@ -236,6 +236,17 @@ extension MessageSyncDatabase on UnifiedDatabase {
     String unit,
   ) => readSettingValue(_cursorKey(namespace, owner, unit));
 
+  Future<void> writeMessageSyncCursor(
+    String namespace,
+    int owner,
+    String unit,
+    String cursor,
+  ) => writeSettingValue(
+    id: _cursorKey(namespace, owner, unit),
+    group: 'message-sync',
+    value: cursor,
+  );
+
   Future<List<String>> readMessageSyncScopes(
     int owner,
     String after,

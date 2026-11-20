@@ -115,6 +115,8 @@ class DioApiClient implements ApiClient {
       path: path,
       method: 'POST',
       query: query,
+      sendTimeout: const Duration(minutes: 10),
+      receiveTimeout: const Duration(minutes: 10),
       dataFactory:
           () => FormData.fromMap(<String, Object>{
             fieldName: MultipartFile.fromStream(
@@ -181,6 +183,8 @@ class DioApiClient implements ApiClient {
     Object? cancelTag,
     void Function(int received, int total)? onReceiveProgress,
     void Function(int sent, int total)? onSendProgress,
+    Duration? sendTimeout,
+    Duration? receiveTimeout,
   }) async {
     final traceId = DiagnosticTrace.create('http');
     final stopwatch = Stopwatch()..start();
@@ -210,6 +214,8 @@ class DioApiClient implements ApiClient {
         options: Options(
           method: method,
           responseType: responseType,
+          sendTimeout: sendTimeout,
+          receiveTimeout: receiveTimeout,
           contentType: dataFactory != null ? null : Headers.jsonContentType,
           headers: <String, String>{
             ..._deviceContext.requestHeaders,
@@ -279,6 +285,8 @@ class DioApiClient implements ApiClient {
           cancelTag: cancelTag,
           onReceiveProgress: onReceiveProgress,
           onSendProgress: onSendProgress,
+          sendTimeout: sendTimeout,
+          receiveTimeout: receiveTimeout,
         );
       }
       if (retryOnUnauthorized &&

@@ -640,6 +640,13 @@ class _FakeApiClient implements ApiClient {
   Future<void> cancelByTag(Object tag) async {}
 
   @override
+  Future<T> delete<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async => (responses[path] ?? <String, dynamic>{}) as T;
+
+  @override
   Future<List<int>> getBytes(
     String path, {
     Object? cancelTag,
