@@ -1238,13 +1238,21 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
     } catch (_) {
       // Metadata extraction is optional on unsupported platforms.
     }
-    if ((width == null || height == null) &&
-        thumbBytes != null &&
-        thumbBytes.isNotEmpty) {
+    if (thumbBytes != null && thumbBytes.isNotEmpty) {
       final thumbDims = await _decodeImageDimensions(thumbBytes);
-      if (thumbDims != null) {
-        width ??= thumbDims.width;
-        height ??= thumbDims.height;
+      if (thumbDims != null && thumbDims.width > 0 && thumbDims.height > 0) {
+        if (width == null || height == null) {
+          width = thumbDims.width;
+          height = thumbDims.height;
+        } else {
+          final isThumbLandscape = thumbDims.width > thumbDims.height;
+          final isMetaLandscape = width > height;
+          if (isThumbLandscape != isMetaLandscape) {
+            final temp = width;
+            width = height;
+            height = temp;
+          }
+        }
       }
     }
 
@@ -1284,6 +1292,8 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         final extraFields = <String, Object?>{
           if (width != null) 'width': width,
           if (height != null) 'height': height,
+          if (width != null) 'imageWidth': width,
+          if (height != null) 'imageHeight': height,
           if (durationMs != null) 'durationMs': durationMs,
         };
 

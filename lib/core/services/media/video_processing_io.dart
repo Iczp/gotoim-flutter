@@ -66,10 +66,16 @@ class _NativeVideoProcessingService implements VideoProcessingService {
   }
 
   VideoMetadata _metadata(MediaInfo info, String fallbackPath) {
+    var width = info.width;
+    var height = info.height;
     final orientation = info.orientation ?? 0;
-    final rotated = orientation % 180 != 0;
-    final width = rotated ? info.height : info.width;
-    final height = rotated ? info.width : info.height;
+    if (width != null && height != null && orientation % 180 != 0) {
+      if (width > height) {
+        final tmp = width;
+        width = height;
+        height = tmp;
+      }
+    }
     return VideoMetadata(
       durationMs: info.duration?.round(),
       width: width,

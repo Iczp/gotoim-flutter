@@ -281,6 +281,14 @@ class MessageApi {
       if (uploadResult['gifUrl'] != null) 'gifUrl': uploadResult['gifUrl'],
       if (uploadResult['width'] != null) 'width': uploadResult['width'],
       if (uploadResult['height'] != null) 'height': uploadResult['height'],
+      if (uploadResult['imageWidth'] != null)
+        'imageWidth': uploadResult['imageWidth']
+      else if (uploadResult['width'] != null)
+        'imageWidth': uploadResult['width'],
+      if (uploadResult['imageHeight'] != null)
+        'imageHeight': uploadResult['imageHeight']
+      else if (uploadResult['height'] != null)
+        'imageHeight': uploadResult['height'],
       if (uploadResult['profile'] != null) 'profile': uploadResult['profile'],
       if (messageType == 3)
         'time': uploadResult['duration'] ?? safeExtraContent['durationMs'] ?? 0,
