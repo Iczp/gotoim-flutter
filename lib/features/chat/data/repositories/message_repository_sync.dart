@@ -89,6 +89,39 @@ extension MessageRepositorySync on MessageRepository {
               'isRollbacked': isRollbacked,
               if (rollbackTime != null) 'rollbackTime': rollbackTime,
             });
+
+            if (!isDeleted && !isRollbacked && state['message'] is Map) {
+              final raw = Map<String, dynamic>.from(state['message'] as Map);
+              final remoteMessage = ChatMessage.fromJson(
+                raw,
+                ownerId: owner,
+                sessionUnitId: unit,
+              );
+              final sId = remoteMessage.serverId;
+              if (sId != null && sId > 0) {
+                final existing = await _dao.findByServerId(
+                  ownerId: owner,
+                  sessionUnitId: unit,
+                  serverId: sId,
+                );
+                final merged = existing != null
+                    ? existing.copyWith(
+                        serverId: remoteMessage.serverId,
+                        score: remoteMessage.score,
+                        raw: <String, dynamic>{
+                          ...existing.raw,
+                          ...remoteMessage.raw,
+                          'content': <String, dynamic>{
+                            ...existing.content,
+                            ...remoteMessage.content,
+                          },
+                        },
+                      )
+                    : remoteMessage;
+                await _dao.upsertAll(<ChatMessage>[merged]);
+                await _updateSessionSummary(merged);
+              }
+            }
           }
 
           await _dao.applySyncPage(owner, unit, mappedItems);
@@ -233,6 +266,48 @@ extension MessageRepositorySync on MessageRepository {
               'isDeleted': true,
               'syncVersion': changeId,
             });
+          } else {
+            if (state['message'] is Map) {
+              final raw = Map<String, dynamic>.from(state['message'] as Map);
+              final remoteMessage = ChatMessage.fromJson(
+                raw,
+                ownerId: owner,
+                sessionUnitId: entry.key,
+              );
+              final sId = remoteMessage.serverId;
+              if (sId != null && sId > 0) {
+                final existing = await _dao.findByServerId(
+                  ownerId: owner,
+                  sessionUnitId: entry.key,
+                  serverId: sId,
+                );
+                final merged = existing != null
+                    ? existing.copyWith(
+                        serverId: remoteMessage.serverId,
+                        score: remoteMessage.score,
+                        raw: <String, dynamic>{
+                          ...existing.raw,
+                          ...remoteMessage.raw,
+                          'content': <String, dynamic>{
+                            ...existing.content,
+                            ...remoteMessage.content,
+                          },
+                        },
+                      )
+                    : remoteMessage;
+                await _dao.upsertAll(<ChatMessage>[merged]);
+                await _updateSessionSummary(merged);
+              }
+            } else {
+              final parsedId = int.tryParse('$msgId');
+              if (parsedId != null && parsedId > 0) {
+                await fetchAndApplyUpdatedMessage(
+                  ownerId: owner,
+                  sessionUnitId: entry.key,
+                  messageId: parsedId,
+                );
+              }
+            }
           }
         }
       }

@@ -587,4 +587,63 @@ void main() {
       expect((await sessions.readById('unit'))!.preview, '消息已撤回');
     },
   );
+
+  test('incremental updated change refreshes message content and dims in local cache', () async {
+    final original = message(100).copyWith(
+      raw: {
+        ...message(100).raw,
+        'content': {'width': 1080, 'height': 1920},
+      },
+    );
+    await dao.upsertAll([original]);
+    await dao.applySyncPage(1, '__message_change_v2__', [], cursor: v2Cursor('e', '5'));
+
+    client.respond = (path, body) async {
+      if (path == '/api/chat/message-change/pull') {
+        return v2Pull(
+          epoch: 'e',
+          headChangeId: '6',
+          nextCursor: '6',
+          items: [
+            {
+              'messageChangeId': '6',
+              'sessionUnitId': 'unit',
+              'messageId': 100,
+              'changeType': 'Updated',
+            },
+          ],
+        );
+      }
+      if (path == '/api/chat/message/by-ids') {
+        return {
+          'items': [
+            {
+              'sessionUnitId': 'unit',
+              'messageId': '100',
+              'status': 'Visible',
+              'messageChangeId': '6',
+              'message': {
+                'id': 100,
+                'sessionUnitId': 'unit',
+                'ownerId': 1,
+                'creationTime': '2026-11-20T00:00:00Z',
+                'content': {'width': 1920, 'height': 1080},
+              },
+            },
+          ],
+        };
+      }
+      if (path == '/api/chat/message-change/ack') {
+        return <String, dynamic>{'acknowledged': true};
+      }
+      throw UnimplementedError('Unexpected path: $path');
+    };
+
+    await repo.loadChanges(ownerId: 1);
+
+    final updated = await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 100);
+    expect(updated, isNotNull);
+    expect(updated!.content['width'], 1920);
+    expect(updated.content['height'], 1080);
+  });
 }
