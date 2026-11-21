@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/database/unified_database.dart';
 import 'package:gotoim_flutter/core/network/api_client.dart';
+import 'package:gotoim_flutter/core/network/api_exception.dart';
 import 'package:gotoim_flutter/core/realtime/signalr_gateway.dart';
 import 'package:gotoim_flutter/core/services/clipboard_service.dart';
 import 'package:gotoim_flutter/core/services/file/attachment_transfer_service.dart';
@@ -162,6 +163,62 @@ class _Settings implements ChatSettingsRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _ForbiddenClient implements ApiClient {
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    throw ApiException('Forbidden', statusCode: 403);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _SnapshotVsForwardClient implements ApiClient {
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    if (path.endsWith('/message/history')) {
+      return <String, dynamic>{
+        'items': <dynamic>[
+          <String, dynamic>{
+            'id': 1000,
+            'sessionUnitId': 'unit',
+            'content': <String, dynamic>{'text': 'recent snapshot message 1000'},
+          },
+        ],
+        'totalCount': 1,
+      } as T;
+    }
+    if (path.endsWith('/message/latest')) {
+      final minId = (query?['minMessageId'] as num?)?.toInt() ?? 0;
+      if (minId == 100) {
+        return <String, dynamic>{
+          'items': <dynamic>[
+            <String, dynamic>{
+              'id': 200,
+              'sessionUnitId': 'unit',
+              'content': <String, dynamic>{'text': 'forward message 200'},
+            },
+          ],
+          'totalCount': 1,
+        } as T;
+      }
+      return <String, dynamic>{'items': <dynamic>[], 'totalCount': 0} as T;
+    }
+    return <String, dynamic>{'items': <dynamic>[], 'totalCount': 0} as T;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -256,4 +313,157 @@ void main() {
       expect(await dao.readMessageWatermark(1, 'unit'), 7318641);
     },
   );
+
+  test('F1: getLatestSyncCursor does NOT write maxServerId as watermark when watermark is unset', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = MessageDao(database);
+
+    final msg = ChatMessage.fromJson(
+      {
+        'id': 200,
+        'content': {'text': 'realtime message 200'},
+      },
+      ownerId: 1,
+      sessionUnitId: 'unit',
+    );
+    await dao.upsertAll([msg]);
+
+    final repo = MessageRepository(
+      api: MessageApi(_GapTestClient()),
+      dao: dao,
+    );
+
+    final cursor = await repo.getLatestSyncCursor(
+      ownerId: 1,
+      sessionUnitId: 'unit',
+    );
+    // Cursor should return 0, and watermark in SQLite must remain unset/null!
+    expect(cursor, 0);
+    expect(await dao.readMessageWatermark(1, 'unit'), isNull);
+  });
+
+  test('F2: loadLatest does NOT advance forward watermark to snapshot max ID', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = MessageDao(database);
+
+    await dao.writeMessageWatermark(1, 'unit', 100);
+
+    final client = _SnapshotVsForwardClient();
+    final repo = MessageRepository(
+      api: MessageApi(client),
+      dao: dao,
+    );
+
+    await repo.loadLatest(
+      ownerId: 1,
+      sessionUnitId: 'unit',
+      minMessageId: 100,
+      refreshRecent: true,
+    );
+
+    // Watermark must advance to 200 (forward progress), NOT 1000 (snapshot max)!
+    final watermark = await dao.readMessageWatermark(1, 'unit');
+    expect(watermark, 200);
+  });
+
+  test('F3: loadHistory does NOT overwrite an existing watermark from history response', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = MessageDao(database);
+
+    // Existing watermark is established at 500
+    await dao.writeMessageWatermark(1, 'unit', 500);
+
+    final client = _SnapshotVsForwardClient();
+    final repo = MessageRepository(
+      api: MessageApi(client),
+      dao: dao,
+    );
+
+    // Fetch initial history page where remote returns snapshot message with ID 1000
+    await repo.loadHistory(
+      ownerId: 1,
+      sessionUnitId: 'unit',
+    );
+
+    // Watermark must remain 500, not overwritten by 1000!
+    final watermark = await dao.readMessageWatermark(1, 'unit');
+    expect(watermark, 500);
+  });
+
+  test('F4: ChatController loadLatest with refreshRecent fetches history snapshot for empty session', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = MessageDao(database);
+
+    final client = _GapTestClient();
+    final bus = SessionChangeBus();
+    addTearDown(bus.dispose);
+    final repo = MessageRepository(
+      api: MessageApi(client),
+      dao: dao,
+      sessionChangeBus: bus,
+    );
+
+    final controller = ChatController(
+      repo,
+      _Sessions(),
+      filePickerService: _Files(),
+      attachmentTransferService: _Transfer(),
+      mediaService: _Media(),
+      audioPlaybackService: _Audio(),
+      sessionChangeBus: bus,
+      clipboardService: _Clipboard(),
+      chatSettingsRepository: _Settings(),
+      aiStreamChangeBus: AiStreamChangeBus(),
+      signalRGateway: _Gateway(),
+      ownerId: 1,
+      sessionUnitId: 'unit',
+      initialTitle: 'empty session',
+    );
+    addTearDown(controller.dispose);
+
+    // Initial state: empty messages
+    expect(controller.messages, isEmpty);
+
+    // Reconnect/re-entry triggers loadLatest(refreshRecent: true)
+    await controller.loadLatest(refreshRecent: true);
+
+    // Verified: First messages are recovered and visible in controller!
+    expect(controller.messages, isNotEmpty);
+    expect(await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 7318641), isNotNull);
+  });
+
+  test('F7: loadHistory on 403 Forbidden does NOT permanently mark loadedAll', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = MessageDao(database);
+
+    final client = _ForbiddenClient();
+    final repo = MessageRepository(
+      api: MessageApi(client),
+      dao: dao,
+    );
+
+    final page = await repo.loadHistory(
+      ownerId: 1,
+      sessionUnitId: 'unit',
+    );
+
+    expect(page.items, isEmpty);
+    // Crucial: SQLite loadedAll flag must NOT be marked true!
+    expect(await dao.isLoadedAll('unit'), isFalse);
+  });
 }

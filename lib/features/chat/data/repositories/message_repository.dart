@@ -139,7 +139,9 @@ class MessageRepository {
   }) => _dao.maxServerId(ownerId, sessionUnitId);
 
   /// Returns the safe cursor for pulling new messages.
-  /// Prefers the contiguous sync watermark if established; falls back to max server ID.
+  /// Prefers the contiguous sync watermark if established; returns 0 if not yet established.
+  /// F1: Never blindly promote maxServerId to watermark, as an out-of-order realtime message
+  /// or send receipt would cause un-synced gaps to be skipped.
   Future<int> getLatestSyncCursor({
     required int ownerId,
     required String sessionUnitId,
@@ -148,11 +150,7 @@ class MessageRepository {
     if (watermark != null && watermark > 0) {
       return watermark;
     }
-    final maxId = await _dao.maxServerId(ownerId, sessionUnitId);
-    if (maxId > 0) {
-      await _dao.writeMessageWatermark(ownerId, sessionUnitId, maxId);
-    }
-    return maxId;
+    return 0;
   }
 
   Future<void> updateMessageWatermark({
@@ -470,7 +468,9 @@ class MessageRepository {
         if (maxFetchedId > 0) {
           final current =
               await _dao.readMessageWatermark(ownerId, sessionUnitId);
-          if (current == null || current < maxFetchedId) {
+          // F3: Only establish baseline watermark if none exists yet.
+          // Never advance an existing watermark from a history query!
+          if (current == null || current == 0) {
             await _dao.writeMessageWatermark(
               ownerId,
               sessionUnitId,
@@ -506,9 +506,12 @@ class MessageRepository {
         'maxMessageId=$maxMessageId error=$error',
       );
       if (error is ApiException && error.statusCode == 403) {
-        // Forbidden: Server explicitly denied history access for this sessionUnit.
-        // Mark loadedAll to prevent continuous failing requests and return local messages.
-        await _dao.markLoadedAll(sessionUnitId, true);
+        // F7: Forbidden (403): Server denied history access for this sessionUnit.
+        // Return local messages without permanently marking loadedAll in SQLite,
+        // so that once permissions are restored, future queries can retry cleanly.
+        debugPrint(
+          '[loadHistory][403] session=$sessionUnitId Forbidden; returning local without marking loadedAll',
+        );
         return MessagePage(local, false);
       }
       if (local.isNotEmpty) return MessagePage(local, true);
@@ -529,6 +532,7 @@ class MessageRepository {
     }
     var cursor = minMessageId;
     final collected = <String, ChatMessage>{};
+    int? initialSnapshotMax;
     if (refreshRecent) {
       // Withdrawals do not create a larger message ID. Refresh a bounded
       // recent window as well as the forward cursor on re-entry/reconnect.
@@ -540,7 +544,13 @@ class MessageRepository {
       for (final item in recent.items) {
         collected[item.localId] = item;
       }
+      if (minMessageId <= 0 && recent.items.isNotEmpty) {
+        initialSnapshotMax = recent.items
+            .map((item) => item.serverId ?? 0)
+            .fold<int>(0, (max, id) => id > max ? id : max);
+      }
     }
+    var forwardWatermark = cursor;
     for (var pageIndex = 0; cursor > 0 && pageIndex < maxPages; pageIndex++) {
       final page = await _api.latest(
         ownerId: ownerId,
@@ -555,16 +565,21 @@ class MessageRepository {
       final next = page.items
           .map((item) => item.serverId ?? 0)
           .fold<int>(cursor, (max, id) => id > max ? id : max);
+      forwardWatermark = next;
       if (page.items.length < limit || next <= cursor) break;
       cursor = next;
     }
     final items = collected.values.toList(growable: false);
     await _dao.upsertAll(items);
-    final syncedMax = collected.values
-        .map((item) => item.serverId ?? 0)
-        .fold<int>(cursor, (max, id) => id > max ? id : max);
-    if (syncedMax > 0) {
-      await _dao.writeMessageWatermark(ownerId, sessionUnitId, syncedMax);
+
+    // F2: Separate forward progress and snapshot coverage.
+    // Watermark ONLY advances through confirmed forward latest pages!
+    // Never jump forwardWatermark based on recent snapshot when minMessageId > 0!
+    if (forwardWatermark > minMessageId) {
+      await _dao.writeMessageWatermark(ownerId, sessionUnitId, forwardWatermark);
+    } else if (minMessageId <= 0 && initialSnapshotMax != null && initialSnapshotMax > 0) {
+      // First-time snapshot establishing baseline for an uninitialized session
+      await _dao.writeMessageWatermark(ownerId, sessionUnitId, initialSnapshotMax);
     }
     final persisted =
         items.isEmpty

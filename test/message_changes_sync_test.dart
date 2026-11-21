@@ -15,6 +15,21 @@ import 'package:gotoim_flutter/features/session/data/models/session_summary.dart
 class _Client implements ApiClient {
   final calls = <(String, Object?)>[];
   late Future<Object> Function(String, Map<String, dynamic>) respond;
+  Future<Object> Function(String, Map<String, Object?>?)? getRespond;
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    calls.add((path, query));
+    if (getRespond != null) {
+      return await getRespond!(path, query) as T;
+    }
+    return <String, dynamic>{} as T;
+  }
+
   @override
   Future<T> post<T>(
     String path, {
@@ -645,5 +660,77 @@ void main() {
     expect(updated, isNotNull);
     expect(updated!.content['width'], 1920);
     expect(updated.content['height'], 1080);
+  });
+
+  test('F5: loadChanges does NOT advance cursor or send ACK when fetchAndApplyUpdatedMessage fails', () async {
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final dao = MessageDao(database);
+
+    var ackCalled = false;
+    final client = _Client();
+    client.respond = (path, body) async {
+      if (path.endsWith('/message-change/pull')) {
+        return <String, dynamic>{
+          'epoch': 'e1',
+          'headChangeId': '10',
+          'nextCursor': '10',
+          'hasMore': false,
+          'items': <dynamic>[
+            <String, dynamic>{
+              'messageChangeId': '10',
+              'sessionId': 'srv-1',
+              'sessionUnitId': 'unit',
+              'messageId': '999',
+              'changeType': 'Updated',
+            },
+          ],
+        };
+      }
+      if (path.endsWith('/message-change/ack')) {
+        ackCalled = true;
+        return <String, dynamic>{'acknowledged': true};
+      }
+      if (path.endsWith('/message/by-ids')) {
+        return <String, dynamic>{
+          'items': <dynamic>[
+            <String, dynamic>{
+              'status': 'Visible',
+              'messageId': '999',
+            },
+          ],
+        };
+      }
+      return <String, dynamic>{};
+    };
+    client.getRespond = (path, query) async {
+      if (path.contains('/message/item')) {
+        // Simulate network failure when fetching updated message body
+        throw ApiException('Failed to fetch message body', statusCode: 500);
+      }
+      return <String, dynamic>{};
+    };
+
+    final repo = MessageRepository(
+      api: MessageApi(client),
+      dao: dao,
+    );
+
+    // Initial cursor is at 5
+    await dao.applySyncPage(
+      1,
+      '__message_change_v2__',
+      const [],
+      cursor: v2Cursor('e1', '5'),
+    );
+    expect(await dao.syncCursor(1, '__message_change_v2__'), v2Cursor('e1', '5'));
+
+    await repo.loadChanges(ownerId: 1);
+
+    // F5: Cursor must NOT be advanced, and ACK must NOT have been sent!
+    expect(await dao.syncCursor(1, '__message_change_v2__'), v2Cursor('e1', '5'));
+    expect(ackCalled, isFalse);
   });
 }

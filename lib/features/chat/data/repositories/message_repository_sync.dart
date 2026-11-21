@@ -301,11 +301,18 @@ extension MessageRepositorySync on MessageRepository {
             } else {
               final parsedId = int.tryParse('$msgId');
               if (parsedId != null && parsedId > 0) {
-                await fetchAndApplyUpdatedMessage(
+                final applied = await fetchAndApplyUpdatedMessage(
                   ownerId: owner,
                   sessionUnitId: entry.key,
                   messageId: parsedId,
                 );
+                if (applied == null) {
+                  // F5: 变更正文加载失败，不能确认游标或发送 ACK，中止当前同步批次以待下次重试
+                  debugPrint(
+                    '[MessageSync] 变更正文加载失败 messageId=$parsedId，中断本轮游标推进以待重试',
+                  );
+                  return;
+                }
               }
             }
           }

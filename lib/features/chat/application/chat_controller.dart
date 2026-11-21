@@ -727,6 +727,30 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
       );
       if (_isDisposed) return;
       if (minMessageId <= 0 && maxLocalId <= 0) {
+        if (refreshRecent) {
+          // F4: 空会话首次进入或断线重连恢复：通过 refreshRecent 拉取最近快照，建立首屏并校准初始基线
+          final recentMessages = await _repository.loadLatest(
+            ownerId: effectiveOwnerId,
+            sessionUnitId: sessionUnitId,
+            minMessageId: 0,
+            refreshRecent: true,
+          );
+          if (_isDisposed) return;
+          if (recentMessages.isNotEmpty) {
+            final byId = <String, ChatMessage>{
+              for (final item in _messages) item.localId: item,
+            };
+            for (final item in recentMessages) {
+              byId[item.localId] = item;
+            }
+            final merged = byId.values.toList(growable: false)
+              ..sort((a, b) => a.score.compareTo(b.score));
+            _messages
+              ..clear()
+              ..addAll(merged);
+            notifyListeners();
+          }
+        }
         return;
       }
       final hasGap = minMessageId > 0 && maxLocalId > minMessageId;

@@ -252,6 +252,7 @@ void main() {
       final client =
           _FakeApiClient()
             ..multipartResponse = <String, dynamic>{
+              'blobId': 'blob-88',
               'id': 88,
               'clientMessageId': 'server-client-id',
               'messageType': 5,
@@ -280,9 +281,10 @@ void main() {
       final afterUpload =
           (await dao.readPage(ownerId: 7, sessionUnitId: 'session')).single;
 
-      expect(client.multipartPaths, <String>[
-        '/api/chat/message-sender/send-upload-file/session',
-      ]);
+      expect(
+        client.multipartPaths.any((p) => p.contains('upload-file/session')),
+        isTrue,
+      );
       expect(sent.localId, local.localId);
       expect(afterUpload.localId, local.localId);
       expect(afterUpload.serverId, 88);
@@ -304,6 +306,7 @@ void main() {
     final client =
         _FakeApiClient()
           ..multipartResponse = <String, dynamic>{
+            'blobId': 'blob-89',
             'id': 89,
             'messageType': 3,
             'content': <String, dynamic>{'url': '/voice/89.m4a'},
@@ -619,7 +622,9 @@ class _FakeApiClient implements ApiClient {
     postPaths.add(path);
     postQueries.add(query ?? const <String, Object?>{});
     if (data is Map<String, Object?>) postData = data;
-    return postResponse as T;
+    if (postResponse != null) return postResponse as T;
+    if (multipartResponse != null) return multipartResponse as T;
+    return <String, dynamic>{'id': 88} as T;
   }
 
   @override

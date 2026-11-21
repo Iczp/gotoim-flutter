@@ -30,7 +30,7 @@ extension MessageSyncDatabase on UnifiedDatabase {
   ) async {
     await initialize();
     if (ids.isEmpty) return [];
-    final whereOwner = owner > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
+    final whereOwner = owner > 0 ? 'ownerId = ? AND ' : '';
     return _connection.runSelect(
       'SELECT * FROM Messages WHERE ${whereOwner}sessionUnitId = ? COLLATE NOCASE AND serverId IN (${List.filled(ids.length, '?').join(',')})',
       [if (owner > 0) owner, unit, ...ids],
@@ -46,7 +46,7 @@ extension MessageSyncDatabase on UnifiedDatabase {
       final batch = rows.skip(offset).take(100).toList();
       final conditions = List.filled(
         batch.length,
-        '((ownerId = ? OR ownerId = 0) AND sessionUnitId = ? COLLATE NOCASE AND ((serverId IS NOT NULL AND serverId = ?) OR (clientMessageId IS NOT NULL AND clientMessageId = ?)))',
+        '(ownerId = ? AND sessionUnitId = ? COLLATE NOCASE AND ((serverId IS NOT NULL AND serverId = ?) OR (clientMessageId IS NOT NULL AND clientMessageId = ?)))',
       ).join(' OR ');
       final existingRows = await executor.runSelect(
         'SELECT * FROM Messages WHERE $conditions',
@@ -298,7 +298,7 @@ extension MessageSyncDatabase on UnifiedDatabase {
           final clearMs = int.tryParse('${item['clearTime']}');
           if (clearMs != null && clearMs > 0) {
             await tx.runDelete(
-              'DELETE FROM Messages WHERE (ownerId = ? OR ownerId = 0) AND sessionUnitId = ? COLLATE NOCASE AND creationTime <= ?',
+              'DELETE FROM Messages WHERE ownerId = ? AND sessionUnitId = ? COLLATE NOCASE AND creationTime <= ?',
               [owner, unit, clearMs],
             );
           }
