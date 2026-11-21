@@ -6,6 +6,7 @@ class ChatOwner {
     required this.name,
     required this.imageUrl,
     required this.typeDescription,
+    this.objectType,
     this.unreadCount = 0,
     this.immersedCount = 0,
   });
@@ -23,6 +24,7 @@ class ChatOwner {
       name: name,
       imageUrl: avatar.isEmpty ? null : avatar,
       typeDescription: json['objectTypeDescription']?.toString() ?? '',
+      objectType: int.tryParse('${json['objectType'] ?? ''}'),
     );
   }
 
@@ -30,6 +32,7 @@ class ChatOwner {
   final String name;
   final String? imageUrl;
   final String typeDescription;
+  final int? objectType;
   final int unreadCount;
   final int immersedCount;
 
@@ -43,18 +46,20 @@ class ChatOwner {
       name: row['name']?.toString() ?? '',
       imageUrl: null,
       typeDescription: row['objectType']?.toString() ?? '',
+      objectType: int.tryParse('${row['objectType'] ?? ''}'),
     );
   }
 
   Map<String, Object?> toDatabaseValues() => <String, Object?>{
     'id': id,
     'name': name,
-    'objectType': typeDescription,
+    'objectType': objectType?.toString() ?? typeDescription,
     'raw': encodeJson(<String, Object?>{
       'id': id,
       'displayName': name,
       'thumbnail': imageUrl,
       'objectTypeDescription': typeDescription,
+      'objectType': objectType,
     }),
   };
 
@@ -64,6 +69,7 @@ class ChatOwner {
         name: name,
         imageUrl: imageUrl,
         typeDescription: typeDescription,
+        objectType: objectType,
         unreadCount: unread,
         immersedCount: immersed,
       );
@@ -73,6 +79,7 @@ class ChatOwner {
     name: name ?? this.name,
     imageUrl: imageUrl ?? this.imageUrl,
     typeDescription: typeDescription,
+    objectType: objectType,
     unreadCount: unreadCount,
     immersedCount: immersedCount,
   );

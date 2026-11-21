@@ -66,6 +66,7 @@ import '../../features/local_file_server/pages/shared_file_manager_page.dart';
 import '../../features/workbench/presentation/workbench_page.dart';
 import '../../features/session/presentation/login_devices_page.dart';
 import '../../features/chat/presentation/chat_page.dart';
+import '../../features/call_center/presentation/call_center_management_page.dart';
 import '../../features/chat_settings/presentation/chat_settings_page.dart';
 import '../../features/chat_settings/presentation/group_name_page.dart';
 import '../../features/chat_settings/presentation/member_list_page.dart';
@@ -253,12 +254,33 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       _buildAppRoute(
         path: '/social',
-        builder: (context, state) => const SocialIdentityGate(child: SocialPage()),
+        builder:
+            (context, state) => const SocialIdentityGate(child: SocialPage()),
       ),
-      _buildAppRoute(path: '/diagnostics/social-profile', builder: (context, state) => const SocialProfileDiagnosticsPage()),
-      _buildAppRoute(path: '/social/notifications', builder: (context, state) => const SocialIdentityGate(child: SocialNotificationsPage())),
-      _buildAppRoute(path: '/social/publish', builder: (context, state) => const SocialIdentityGate(child: SocialPublishPage())),
-      _buildAppRoute(path: '/social/my-posts', builder: (context, state) => const SocialIdentityGate(useExistingActor: true, child: SocialMyPostsPage())),
+      _buildAppRoute(
+        path: '/diagnostics/social-profile',
+        builder: (context, state) => const SocialProfileDiagnosticsPage(),
+      ),
+      _buildAppRoute(
+        path: '/social/notifications',
+        builder:
+            (context, state) =>
+                const SocialIdentityGate(child: SocialNotificationsPage()),
+      ),
+      _buildAppRoute(
+        path: '/social/publish',
+        builder:
+            (context, state) =>
+                const SocialIdentityGate(child: SocialPublishPage()),
+      ),
+      _buildAppRoute(
+        path: '/social/my-posts',
+        builder:
+            (context, state) => const SocialIdentityGate(
+              useExistingActor: true,
+              child: SocialMyPostsPage(),
+            ),
+      ),
       _buildAppRoute(
         path: '/social/detail/:id',
         builder: (context, state) {
@@ -282,7 +304,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final extra = state.extra as Map<String, dynamic>? ?? {};
           final post = extra['post'] as SocialPost;
           final initialIndex = (extra['initialIndex'] as num?)?.toInt() ?? 0;
-          final medias = (extra['medias'] as List?)?.cast<SocialPostMedia>() ?? post.medias;
+          final medias =
+              (extra['medias'] as List?)?.cast<SocialPostMedia>() ??
+              post.medias;
           return SocialMediaViewerPage(
             post: post,
             initialIndex: initialIndex,
@@ -329,6 +353,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       _buildAppRoute(
         path: '/search',
         builder: (context, state) => const SearchPage(),
+      ),
+      _buildAppRoute(
+        path: '/call-center/:shopKeeperId',
+        builder:
+            (context, state) => CallCenterManagementPage(
+              shopKeeperId: int.parse(state.pathParameters['shopKeeperId']!),
+            ),
       ),
       _buildAppRoute(
         path: '/create-group',

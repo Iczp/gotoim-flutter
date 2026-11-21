@@ -129,11 +129,19 @@ class CurrentOwnerHeader extends ConsumerWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (owner?.objectType == 7)
+                          IconButton(
+                            icon: const Icon(Icons.support_agent_rounded),
+                            tooltip: '客服管理',
+                            onPressed:
+                                () => context.push('/call-center/${owner!.id}'),
+                          ),
                         IconButton(
                           icon: const Icon(Icons.search_rounded),
                           tooltip: '搜索',
                           onPressed: () {
-                            final isDesktop = (!kIsWeb &&
+                            final isDesktop =
+                                (!kIsWeb &&
                                     (Platform.isWindows ||
                                         Platform.isMacOS ||
                                         Platform.isLinux)) ||
@@ -190,7 +198,8 @@ class CurrentOwnerHeader extends ConsumerWidget {
       _HeaderMenuRoute(
         targetRect: targetRect,
         onSelected: (value) {
-          final isDesktop = (!kIsWeb &&
+          final isDesktop =
+              (!kIsWeb &&
                   (Platform.isWindows ||
                       Platform.isMacOS ||
                       Platform.isLinux)) ||
