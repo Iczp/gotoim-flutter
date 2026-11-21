@@ -1,4 +1,5 @@
 import '../../../../core/database/unified_database.dart';
+import '../../../chat_settings/data/models/chat_member.dart';
 import '../models/chat_owner.dart';
 import '../models/session_summary.dart';
 
@@ -118,6 +119,14 @@ class SessionDao {
     required String value,
   }) =>
       _database.writeSettingValue(id: id, group: group, value: value);
+
+  Future<int> deleteMember({required String sessionUnitId, required String memberId}) =>
+      _database.deleteMemberRow(sessionUnitId: sessionUnitId, memberId: memberId);
+
+  Future<void> upsertMember(int ownerId, String sessionUnitId, Map<String, dynamic> rawMember) async {
+    final member = ChatMember.fromJson(rawMember);
+    await _database.upsertMemberRows([member.toDatabaseValues(ownerId, sessionUnitId)]);
+  }
 
   String _loadedAllKey(int ownerId) => 'friends-is-loaded-all-$ownerId';
 }

@@ -103,6 +103,13 @@ class RealtimeSyncCoordinator {
       case SignalRCommand.sessionUnitDisposed:
         unawaited(_handleSessionUnitDisposed(event));
         break;
+      case SignalRCommand.memberRemoved:
+        unawaited(_handleMemberRemoved(event));
+        break;
+      case SignalRCommand.memberAdded:
+      case SignalRCommand.memberUpdated:
+        unawaited(_handleMemberAddedOrUpdated(event));
+        break;
       case SignalRCommand.aiStarted:
         _publishAiEvent(
           AiStreamEventKind.started,
@@ -362,6 +369,38 @@ class RealtimeSyncCoordinator {
         ownerId: ownerId,
         sessionUnitId: unitId,
         disposalType: type,
+      );
+    }
+  }
+
+  Future<void> _handleMemberRemoved(SignalRCommandEvent event) async {
+    final payload = event.payload;
+    if (payload is! Map) return;
+    final map = Map<String, dynamic>.from(payload);
+    final sessionUnitId = (map['sessionId'] ?? map['sessionUnitId'] ?? '').toString().trim();
+    final memberUnitId = (map['sessionUnitId'] ?? map['memberSessionUnitId'] ?? '').toString().trim();
+    final ownerId = await _sessionRepository.readCurrentOwnerId() ?? 0;
+    if (sessionUnitId.isNotEmpty && memberUnitId.isNotEmpty && ownerId > 0) {
+      await _sessionRepository.removeSessionMember(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        memberSessionUnitId: memberUnitId,
+      );
+    }
+  }
+
+  Future<void> _handleMemberAddedOrUpdated(SignalRCommandEvent event) async {
+    final payload = event.payload;
+    if (payload is! Map) return;
+    final map = Map<String, dynamic>.from(payload);
+    final sessionUnitId = (map['sessionId'] ?? map['sessionUnitId'] ?? '').toString().trim();
+    final su = map['sessionUnit'] ?? map['member'] ?? map;
+    final ownerId = await _sessionRepository.readCurrentOwnerId() ?? 0;
+    if (sessionUnitId.isNotEmpty && su is Map && ownerId > 0) {
+      await _sessionRepository.upsertSessionMember(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        rawMember: Map<String, dynamic>.from(su),
       );
     }
   }

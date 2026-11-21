@@ -19,12 +19,14 @@ class ChatMember {
     required this.id,
     required this.score,
     required this.name,
+    this.memberName,
     required this.avatarUrl,
     required this.isCreator,
     required this.joinTime,
     required this.lastSendTime,
     required this.organizationList,
     required this.tagList,
+    required this.roleList,
     required this.raw,
   });
 
@@ -32,15 +34,21 @@ class ChatMember {
     final owner = asMap(json['owner']);
     final setting = asMap(json['setting']);
     final id = json['id']?.toString() ?? '';
+    final resolvedMemberName = firstNonEmpty(<Object?>[
+      setting['memberName'],
+      json['memberName'],
+    ]);
     return ChatMember(
       id: id,
       score: asInt(json['score']) ?? 0,
       name: firstNonEmpty(<Object?>[
-        owner['displayName'],
+        setting['memberName'],
         json['memberName'],
+        owner['displayName'],
         owner['name'],
         '-',
       ]),
+      memberName: resolvedMemberName.isNotEmpty ? resolvedMemberName : null,
       avatarUrl: firstNonEmpty(<Object?>[
         owner['thumbnail'],
         owner['portrait'],
@@ -51,6 +59,7 @@ class ChatMember {
       lastSendTime: asDate(setting['lastSendTime']),
       organizationList: _idNameList(json['organizationList']),
       tagList: _idNameList(json['tagList']),
+      roleList: _idNameList(json['roleList']),
       raw: Map<String, dynamic>.unmodifiable(json),
     );
   }
@@ -63,12 +72,14 @@ class ChatMember {
   final String id;
   final int score;
   final String name;
+  final String? memberName;
   final String avatarUrl;
   final bool isCreator;
   final DateTime? joinTime;
   final DateTime? lastSendTime;
   final List<MemberIdName> organizationList;
   final List<MemberIdName> tagList;
+  final List<MemberIdName> roleList;
   final Map<String, dynamic> raw;
 
   int? get chatObjectId =>

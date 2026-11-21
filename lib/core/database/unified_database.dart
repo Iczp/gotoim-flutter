@@ -355,6 +355,17 @@ class UnifiedDatabase {
     }
   }
 
+  Future<int> deleteMemberRow({
+    required String sessionUnitId,
+    required String memberId,
+  }) async {
+    await initialize();
+    return _connection.runDelete(
+      'DELETE FROM Members WHERE sessionUnitId = ? AND id = ?',
+      <Object?>[sessionUnitId, memberId],
+    );
+  }
+
   Future<void> updateFriendMemberState({
     required String sessionUnitId,
     int? memberCount,
@@ -842,6 +853,54 @@ class UnifiedDatabase {
             row['raw'],
           ],
         );
+
+        // Piggyback senderSessionUnit into Members table
+        try {
+          final rawVal = row['raw'];
+          final rawJson = rawVal is String ? jsonDecode(rawVal) : rawVal;
+          if (rawJson is Map && rawJson['senderSessionUnit'] is Map) {
+            final senderSu = Map<String, dynamic>.from(rawJson['senderSessionUnit'] as Map);
+            final memberId = senderSu['id']?.toString() ?? '';
+            final sessionUnitId = row['sessionUnitId']?.toString() ?? '';
+            final ownerId = (row['ownerId'] as num?)?.toInt() ?? 0;
+            if (memberId.isNotEmpty && sessionUnitId.isNotEmpty && ownerId > 0) {
+              final memberOwner = senderSu['owner'] is Map ? (senderSu['owner'] as Map) : const {};
+              final memberSetting = senderSu['setting'] is Map ? (senderSu['setting'] as Map) : const {};
+              final memberName = (memberSetting['memberName'] ?? senderSu['memberName'] ?? memberOwner['displayName'] ?? memberOwner['name'] ?? '成员').toString();
+              final isCreator = memberSetting['isCreator'] == true || memberSetting['isCreator'] == 1 ? 1 : 0;
+              final score = (senderSu['score'] as num?)?.toInt() ?? 0;
+              final now = DateTime.now().millisecondsSinceEpoch;
+              await tx.runInsert(
+                '''INSERT INTO Members
+                (id, ownerId, sessionUnitId, memberName, isFriendship, isCreator,
+                 isList, score, sorting, ticks, joinTime, createTime, updateTime, raw)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET ownerId=excluded.ownerId,
+                sessionUnitId=excluded.sessionUnitId, memberName=excluded.memberName,
+                isFriendship=excluded.isFriendship, isCreator=excluded.isCreator,
+                isList=excluded.isList, score=excluded.score, sorting=excluded.sorting,
+                ticks=excluded.ticks, joinTime=excluded.joinTime,
+                updateTime=excluded.updateTime, raw=excluded.raw''',
+                <Object?>[
+                  memberId,
+                  ownerId,
+                  sessionUnitId,
+                  memberName,
+                  0,
+                  isCreator,
+                  1,
+                  score,
+                  senderSu['sorting'],
+                  senderSu['ticks'],
+                  now,
+                  now,
+                  now,
+                  jsonEncode(senderSu),
+                ],
+              );
+            }
+          }
+        } catch (_) {}
       }
       await tx.send();
     } catch (_) {

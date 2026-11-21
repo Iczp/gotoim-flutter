@@ -42,6 +42,9 @@ class ChatMemberDao {
     items.map((item) => item.toDatabaseValues(ownerId, sessionUnitId)).toList(),
   );
 
+  Future<int> deleteMember(String sessionUnitId, String memberId) =>
+      _database.deleteMemberRow(sessionUnitId: sessionUnitId, memberId: memberId);
+
   Future<void> updateState(
     String sessionUnitId, {
     int? totalCount,

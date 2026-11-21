@@ -374,6 +374,7 @@ class SessionRepository {
         'displayName': owner.name,
         'thumbnail': owner.imageUrl,
         'objectTypeDescription': owner.typeDescription,
+        'objectType': owner.objectType,
       };
     }
     return null;
@@ -435,13 +436,32 @@ class SessionRepository {
     _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
   }
 
+  Future<void> removeSessionMember({
+    required int ownerId,
+    required String sessionUnitId,
+    required String memberSessionUnitId,
+  }) async {
+    await _dao.deleteMember(sessionUnitId: sessionUnitId, memberId: memberSessionUnitId);
+    _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
+  }
+
+  Future<void> upsertSessionMember({
+    required int ownerId,
+    required String sessionUnitId,
+    required Map<String, dynamic> rawMember,
+  }) async {
+    await _dao.upsertMember(ownerId, sessionUnitId, rawMember);
+    _changeBus?.publish(ownerId: ownerId, sessionUnitId: sessionUnitId);
+  }
+
   Future<void> syncDisposals({required int ownerId}) async {
     final count = await _dao.count(ownerId);
     if (count == 0) {
       // 关键业务规范：如果本地未缓存过该身份的好友/会话，无需拉取删除历史
       return;
     }
-    var afterId = await _dao.readSettingValue('disposal-cursor-$ownerId') ?? '0';
+    var afterId =
+        await _dao.readSettingValue('disposal-cursor-$ownerId') ?? '0';
     while (true) {
       final response = await _api.getDisposals(
         ownerId: ownerId,
