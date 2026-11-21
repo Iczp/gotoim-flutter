@@ -110,8 +110,9 @@ class ChatSettingsRepository {
     String keyword = '',
     bool forceRemote = false,
   }) async {
+    var local = <ChatMember>[];
     if (!forceRemote) {
-      final localPage = await loadLocalMembers(
+      local = await _dao.readPage(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
         cursorScore: cursorScore,
@@ -119,19 +120,37 @@ class ChatSettingsRepository {
         limit: limit,
         keyword: keyword,
       );
-      if (localPage.items.length >= limit) {
-        return localPage;
+      if (local.length >= limit) return MemberPage(local, true, null);
+      if (await _dao.isLoadedAll(sessionUnitId)) {
+        return MemberPage(local, false, null);
       }
     }
 
-    return loadRemoteMembers(
-      ownerId: ownerId,
+    final last = local.isEmpty ? null : local.last;
+    final remote = await _api.getMembers(
       sessionUnitId: sessionUnitId,
-      cursorScore: cursorScore,
-      cursorId: cursorId,
-      limit: limit,
+      limit: limit - local.length,
+      maxScore: last?.score ?? cursorScore,
+      cursorId: last?.id ?? cursorId,
       keyword: keyword,
     );
+    if (remote.items.isNotEmpty) {
+      await _dao.upsertAll(ownerId, sessionUnitId, remote.items);
+    }
+    final requestedRemoteCount = limit - local.length;
+    final hasMore =
+        remote.hasMore ?? (remote.items.length >= requestedRemoteCount);
+    await _dao.updateState(
+      sessionUnitId,
+      totalCount: remote.totalCount,
+      loadedAll: !hasMore,
+    );
+    final merged =
+        <String, ChatMember>{
+          for (final item in local) item.id: item,
+          for (final item in remote.items) item.id: item,
+        }.values.toList();
+    return MemberPage(merged, hasMore, remote.totalCount);
   }
 
   Future<void> setTopping(String id, bool value) async {
@@ -170,6 +189,10 @@ class ChatSettingsRepository {
 
   Future<void> setRoomTitle(String roomId, String title) async {
     await _api.setRoomTitle(roomId, title);
+  }
+
+  Future<void> setAdmin(String sessionUnitId, bool isAdmin) async {
+    await _api.setAdmin(sessionUnitId, isAdmin);
   }
 }
 

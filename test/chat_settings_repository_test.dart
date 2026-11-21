@@ -155,6 +155,56 @@ void main() {
     expect(client.queries.single['maxScore'], 10);
     expect(client.queries.single['cursorId'], 'local-1');
   });
+
+  test('3-tier member score and setAdmin', () async {
+    final client = _FakeApiClient(<String, dynamic>{});
+    final database = UnifiedDatabase(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
+    addTearDown(database.close);
+    final repository = ChatSettingsRepository(
+      api: ChatMemberApi(client),
+      dao: ChatMemberDao(database),
+    );
+
+    // 群主
+    final owner = ChatMember.fromJson(<String, dynamic>{
+      'id': 'm-owner',
+      'owner': <String, dynamic>{'displayName': '群主'},
+      'setting': <String, dynamic>{'isCreator': true, 'isAdmin': false},
+      'creationTime': '2026-01-01T00:00:00Z',
+    });
+    // 管理员
+    final admin = ChatMember.fromJson(<String, dynamic>{
+      'id': 'm-admin',
+      'owner': <String, dynamic>{'displayName': '管理员'},
+      'setting': <String, dynamic>{'isCreator': false, 'isAdmin': true},
+      'creationTime': '2026-01-02T00:00:00Z',
+    });
+    // 普通成员
+    final member = ChatMember.fromJson(<String, dynamic>{
+      'id': 'm-member',
+      'owner': <String, dynamic>{'displayName': '普通成员'},
+      'setting': <String, dynamic>{'isCreator': false, 'isAdmin': false},
+      'creationTime': '2026-01-03T00:00:00Z',
+    });
+
+    expect(owner.isCreator, isTrue);
+    expect(owner.isAdmin, isFalse);
+    expect(admin.isCreator, isFalse);
+    expect(admin.isAdmin, isTrue);
+    expect(member.isCreator, isFalse);
+    expect(member.isAdmin, isFalse);
+
+    // 分值层级：群主 (3e13) > 管理员 (2e13) > 普通成员 (1e13)
+    expect(owner.score, greaterThan(admin.score));
+    expect(admin.score, greaterThan(member.score));
+
+    // 调用 setAdmin
+    await repository.setAdmin('m-member', true);
+    expect(client.postPaths.single, '/api/chat/session-unit-setting/set-admin/m-member');
+    expect(client.postQueries.single['isAdmin'], isTrue);
+  });
 }
 
 class _FakeApiClient implements ApiClient {
@@ -162,6 +212,8 @@ class _FakeApiClient implements ApiClient {
   final Map<String, dynamic> response;
   int getCount = 0;
   final List<Map<String, Object?>> queries = <Map<String, Object?>>[];
+  final List<String> postPaths = <String>[];
+  final List<Map<String, Object?>> postQueries = <Map<String, Object?>>[];
 
   @override
   Future<T> get<T>(
@@ -176,6 +228,19 @@ class _FakeApiClient implements ApiClient {
 
   @override
   Future<T> post<T>(
+    String path, {
+    Map<String, Object?>? query,
+    Object? data,
+    Map<String, String>? headers,
+    bool retryOnUnauthorized = true,
+  }) async {
+    postPaths.add(path);
+    postQueries.add(query ?? const <String, Object?>{});
+    return <String, dynamic>{} as T;
+  }
+
+  @override
+  Future<T> delete<T>(
     String path, {
     Map<String, Object?>? query,
     Object? data,

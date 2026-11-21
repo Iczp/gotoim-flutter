@@ -5,9 +5,17 @@ import '../data/models/chat_member.dart';
 import 'member_profile_sheet.dart';
 
 class MemberTile extends StatelessWidget {
-  const MemberTile({required this.member, this.compact = false, super.key});
+  const MemberTile({
+    required this.member,
+    this.compact = false,
+    this.canManageAdmin = false,
+    this.onToggleAdmin,
+    super.key,
+  });
   final ChatMember member;
   final bool compact;
+  final bool canManageAdmin;
+  final ValueChanged<ChatMember>? onToggleAdmin;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +48,16 @@ class MemberTile extends StatelessWidget {
                         size: 15,
                         color: Colors.amber,
                       ),
+                    )
+                  else if (member.isAdmin)
+                    const Positioned(
+                      right: -3,
+                      bottom: -2,
+                      child: Icon(
+                        Icons.shield,
+                        size: 15,
+                        color: Colors.blue,
+                      ),
                     ),
                 ],
               ),
@@ -71,7 +89,16 @@ class MemberTile extends StatelessWidget {
           Flexible(child: Text(member.name, overflow: TextOverflow.ellipsis)),
           if (member.isCreator) ...<Widget>[
             const SizedBox(width: 8),
-            const Chip(label: Text('群主'), visualDensity: VisualDensity.compact),
+            const Chip(
+              label: Text('群主', style: TextStyle(fontSize: 11, color: Colors.amber)),
+              visualDensity: VisualDensity.compact,
+            ),
+          ] else if (member.isAdmin) ...<Widget>[
+            const SizedBox(width: 8),
+            const Chip(
+              label: Text('管理员', style: TextStyle(fontSize: 11, color: Colors.blue)),
+              visualDensity: VisualDensity.compact,
+            ),
           ],
         ],
       ),
@@ -86,7 +113,16 @@ class MemberTile extends StatelessWidget {
         maxLines: 3,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: canManageAdmin && !member.isCreator
+          ? IconButton(
+              icon: Icon(
+                member.isAdmin ? Icons.shield : Icons.shield_outlined,
+                color: member.isAdmin ? Colors.blue : null,
+              ),
+              tooltip: member.isAdmin ? '取消管理员' : '设为管理员',
+              onPressed: () => onToggleAdmin?.call(member),
+            )
+          : const Icon(Icons.chevron_right),
     );
   }
 

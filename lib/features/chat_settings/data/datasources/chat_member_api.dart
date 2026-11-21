@@ -77,4 +77,10 @@ class ChatMemberApi {
         '/api/chat/room/set-title/$roomId',
         query: <String, Object?>{'title': title},
       );
+
+  Future<Map<String, dynamic>> setAdmin(String sessionUnitId, bool isAdmin) =>
+      _client.post<Map<String, dynamic>>(
+        '/api/chat/session-unit-setting/set-admin/$sessionUnitId',
+        query: <String, Object?>{'isAdmin': isAdmin},
+      );
 }

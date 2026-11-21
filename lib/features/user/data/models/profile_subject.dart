@@ -53,7 +53,9 @@ class ProfileSubject {
     id: member.id,
     name: member.name,
     avatarUrl: member.avatarUrl,
-    subtitle: member.isCreator ? '群主' : '会话成员',
+    subtitle: member.isCreator
+        ? '群主'
+        : (member.isAdmin ? '管理员' : '会话成员'),
     raw: member.raw,
   );
 

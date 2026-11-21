@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/chat_settings_controller.dart';
 import '../application/member_list_controller.dart';
+import '../data/models/chat_member.dart';
 import 'member_tile.dart';
 
 class MemberListPage extends ConsumerStatefulWidget {
@@ -52,6 +53,9 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
     animation: controller,
     builder: (context, _) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
+      final isOwner = controller.members.any(
+        (m) => m.isCreator && m.chatObjectId == widget.ownerId,
+      );
       final content = Column(
           children: <Widget>[
             Padding(
@@ -93,7 +97,12 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
                     itemCount: controller.members.length + 1,
                     itemBuilder: (context, index) {
                       if (index < controller.members.length) {
-                        return MemberTile(member: controller.members[index]);
+                        final item = controller.members[index];
+                        return MemberTile(
+                          member: item,
+                          canManageAdmin: isOwner,
+                          onToggleAdmin: _handleToggleAdmin,
+                        );
                       }
                       if (controller.loading) {
                         return const Padding(
@@ -151,6 +160,48 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
       );
     },
   );
+
+  Future<void> _handleToggleAdmin(ChatMember member) async {
+    final targetIsAdmin = !member.isAdmin;
+    final actionText = targetIsAdmin ? '设为管理员' : '取消管理员';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(actionText),
+        content: Text('确定要将「${member.name}」$actionText吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(chatSettingsRepositoryProvider).setAdmin(
+        member.id,
+        targetIsAdmin,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已将 ${member.name} $actionText')),
+        );
+      }
+      await controller.refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e')),
+        );
+      }
+    }
+  }
 
   Future<void> _fillViewport() async {
     if (checkingUnderflow || controller.loading || !controller.hasMore) return;
