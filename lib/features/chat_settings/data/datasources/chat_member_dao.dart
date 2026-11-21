@@ -45,6 +45,16 @@ class ChatMemberDao {
   Future<int> deleteMember(String sessionUnitId, String memberId) =>
       _database.deleteMemberRow(sessionUnitId: sessionUnitId, memberId: memberId);
 
+  Future<void> demoteStaleAdmins(
+    int ownerId,
+    String sessionUnitId,
+    Set<String> activeAdminIds,
+  ) => _database.demoteStaleAdmins(
+    ownerId: ownerId,
+    sessionUnitId: sessionUnitId,
+    activeAdminIds: activeAdminIds,
+  );
+
   Future<void> updateState(
     String sessionUnitId, {
     int? totalCount,

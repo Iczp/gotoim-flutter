@@ -366,6 +366,46 @@ class UnifiedDatabase {
     );
   }
 
+  /// 万人大群模式防幽灵断层：
+  /// 首屏已返回所有管理层（分值 >= 1.5e13），如果本地记录显示为管理员/群主，但远端首屏已无其管理角色，
+  /// 则立即在 SQLite 中将其降级为普通成员，杜绝悬挂假管理员。
+  Future<void> demoteStaleAdmins({
+    required int ownerId,
+    required String sessionUnitId,
+    required Set<String> activeAdminIds,
+  }) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT id, joinTime, raw FROM Members WHERE ownerId = ? AND sessionUnitId = ? AND score >= 15000000000000',
+      <Object?>[ownerId, sessionUnitId],
+    );
+    for (final row in rows) {
+      final id = row['id'] as String;
+      if (!activeAdminIds.contains(id)) {
+        final joinTime = row['joinTime'] as int? ?? 0;
+        final demotedScore = 10000000000000 - joinTime;
+        var rawJson = row['raw'] as String?;
+        if (rawJson != null && rawJson.isNotEmpty) {
+          try {
+            final map = jsonDecode(rawJson) as Map<String, dynamic>;
+            final setting = map['setting'] is Map ? Map<String, dynamic>.from(map['setting'] as Map) : <String, dynamic>{};
+            setting['isAdmin'] = false;
+            setting['isCreator'] = false;
+            map['setting'] = setting;
+            map['isAdmin'] = false;
+            map['isCreator'] = false;
+            map['score'] = demotedScore;
+            rawJson = jsonEncode(map);
+          } catch (_) {}
+        }
+        await _connection.runUpdate(
+          'UPDATE Members SET isCreator = 0, score = ?, raw = ? WHERE id = ?',
+          <Object?>[demotedScore, rawJson, id],
+        );
+      }
+    }
+  }
+
   Future<void> updateFriendMemberState({
     required String sessionUnitId,
     int? memberCount,

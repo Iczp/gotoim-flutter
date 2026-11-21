@@ -79,6 +79,15 @@ class ChatSettingsRepository {
         cursorScore == null && cursorId == null && skipCount == 0;
     final hasMore = remote.hasMore ?? (remote.items.length >= limit);
 
+    // 万人大群防幽灵断层：首屏必定包含所有管理层，比对清除本地已被撤销的假管理员
+    if (isFirstPage && keyword.isEmpty && remote.items.isNotEmpty) {
+      final activeAdminIds = remote.items
+          .where((m) => m.isCreator || m.isAdmin)
+          .map((m) => m.id)
+          .toSet();
+      await _dao.demoteStaleAdmins(ownerId, sessionUnitId, activeAdminIds);
+    }
+
     // 仅在无搜索、第一页请求时拿到全群权威总人数，才持久化到本地
     if (isFirstPage && keyword.isEmpty && remote.totalCount > 0) {
       await _dao.updateState(
