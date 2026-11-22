@@ -62,6 +62,8 @@ class ContactEntry {
         ? '#'
         : String.fromCharCode(value.runes.first).toUpperCase();
   }
+
+  int get ticks => _asInt(raw['ticks'] ?? raw['Ticks']) ?? 0;
 }
 
 @immutable

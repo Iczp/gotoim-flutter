@@ -29,4 +29,20 @@ class ContactsApi {
       OnlineFriend.fromJson,
     ).items;
   }
+
+  /// 增量拉取联系人变更
+  Future<Map<String, dynamic>> getContactChanges({
+    required int ownerId,
+    required int minTicks,
+    int maxResultCount = 100,
+  }) async {
+    return _apiClient.get<Map<String, dynamic>>(
+      '/api/chat/session-unit-cache/changes',
+      query: <String, Object?>{
+        'ownerId': ownerId,
+        'minTicks': minTicks,
+        'maxResultCount': maxResultCount,
+      },
+    );
+  }
 }

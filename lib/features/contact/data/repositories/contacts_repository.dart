@@ -38,11 +38,53 @@ class ContactsRepository {
   Future<void> saveIndexedFriends({
     required int ownerId,
     required List<ContactGroup> groups,
-  }) => _database.writeSettingValue(
-    id: _cacheKey(ownerId),
-    group: 'contacts',
-    value: jsonEncode(groups.map((item) => item.toJson()).toList()),
+  }) {
+    final maxTicks = computeMaxTicks(groups);
+    if (maxTicks > 0) {
+      saveLastSyncTicks(ownerId, maxTicks);
+    }
+    return _database.writeSettingValue(
+      id: _cacheKey(ownerId),
+      group: 'contacts',
+      value: jsonEncode(groups.map((item) => item.toJson()).toList()),
+    );
+  }
+
+  Future<int> readLastSyncTicks(int ownerId) async {
+    final value = await _database.readSettingValue(_syncTicksKey(ownerId));
+    if (value == null || value.isEmpty) return 0;
+    return int.tryParse(value) ?? 0;
+  }
+
+  Future<void> saveLastSyncTicks(int ownerId, int ticks) =>
+      _database.writeSettingValue(
+        id: _syncTicksKey(ownerId),
+        group: 'contacts',
+        value: ticks.toString(),
+      );
+
+  Future<Map<String, dynamic>> loadContactChanges({
+    required int ownerId,
+    required int minTicks,
+    int maxResultCount = 100,
+  }) => _api.getContactChanges(
+    ownerId: ownerId,
+    minTicks: minTicks,
+    maxResultCount: maxResultCount,
   );
 
+  int computeMaxTicks(List<ContactGroup> groups) {
+    var max = 0;
+    for (final group in groups) {
+      for (final contact in group.contacts) {
+        if (contact.ticks > max) {
+          max = contact.ticks;
+        }
+      }
+    }
+    return max;
+  }
+
   String _cacheKey(int ownerId) => 'contacts-indexed-$ownerId';
+  String _syncTicksKey(int ownerId) => 'contacts-sync-ticks-$ownerId';
 }

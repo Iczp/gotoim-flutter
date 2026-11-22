@@ -75,6 +75,29 @@ class ContactsController extends ChangeNotifier {
         '[contacts][local] ownerId=$ownerId groups=${local.length} total=$totalCount',
       );
       notifyListeners();
+
+      // 增量检查：如果本地存在版本号且数据非空，先向服务端请求增量变更
+      try {
+        final lastSyncTicks = await _contactsRepository.readLastSyncTicks(ownerId);
+        if (lastSyncTicks > 0) {
+          final changes = await _contactsRepository.loadContactChanges(
+            ownerId: ownerId,
+            minTicks: lastSyncTicks,
+          );
+          final items = changes['items'];
+          if (items is List && items.isEmpty) {
+            // 无任何联系人变更，直接保持本地最新状态，免除网络全量传输与重新渲染
+            debugPrint(
+              '[contacts][incremental] up to date, ownerId=$ownerId minTicks=$lastSyncTicks',
+            );
+            return;
+          }
+        }
+      } catch (exception) {
+        debugPrint(
+          '[contacts][incremental-fallback] ownerId=$ownerId error=$exception',
+        );
+      }
     }
     try {
       final remote = await _contactsRepository.loadIndexedFriends(
@@ -117,6 +140,26 @@ class ContactsController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      if (_groups.isNotEmpty) {
+        try {
+          final lastSyncTicks = await _contactsRepository.readLastSyncTicks(ownerId);
+          if (lastSyncTicks > 0) {
+            final changes = await _contactsRepository.loadContactChanges(
+              ownerId: ownerId,
+              minTicks: lastSyncTicks,
+            );
+            final items = changes['items'];
+            if (items is List && items.isEmpty) {
+              debugPrint(
+                '[contacts][refresh-incremental] up to date, ownerId=$ownerId minTicks=$lastSyncTicks',
+              );
+              return;
+            }
+          }
+        } catch (e) {
+          debugPrint('[contacts][refresh-incremental-fallback] error=$e');
+        }
+      }
       final remote = await _contactsRepository.loadIndexedFriends(
         ownerId: ownerId,
       );
