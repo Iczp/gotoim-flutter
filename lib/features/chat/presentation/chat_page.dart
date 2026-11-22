@@ -59,6 +59,7 @@ import 'widgets/chat_selection_bar.dart';
 import 'widgets/chat_text_selection_sheet.dart';
 import 'widgets/chat_title_bar.dart';
 import 'widgets/chat_transfer_sheet.dart';
+import 'widgets/half_screen_chat_sheet.dart';
 import 'ai_run_timeline_page.dart';
 
 /// 聊天会话主页面（ChatPage）
@@ -360,6 +361,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
               onCancelSelection: controller.cancelSelection,
               onTransfer: _openTransferSheet,
               onOpenSettings: _openChatSettings,
+              onOpenHistory: _openHalfScreenHistory,
               onOpenAiRuns: _openAiRunTimeline,
               onPopOut:
                   widget.onPopOut ??
@@ -1647,6 +1649,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
         'displayName': displayName,
         'owner': <String, dynamic>{'displayName': displayName},
       }),
+    );
+  }
+
+  void _openHalfScreenHistory() {
+    HalfScreenChatSheet.show(
+      context: context,
+      sessionUnitId: widget.sessionUnitId,
+      ownerId: widget.ownerId,
+      title: controller.title,
+      isHistoryMode: true,
     );
   }
 

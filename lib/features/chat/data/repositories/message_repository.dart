@@ -540,6 +540,131 @@ class MessageRepository {
     }
   }
 
+  Future<MessageSliceResult> getAroundAnchorSlice({
+    required int ownerId,
+    required String sessionUnitId,
+    required int targetServerId,
+    int beforeCount = 20,
+    int afterCount = 20,
+  }) async {
+    // 1. 本地优先查找切片
+    var slice = await _dao.readAroundAnchorSlice(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      targetServerId: targetServerId,
+      beforeCount: beforeCount,
+      afterCount: afterCount,
+    );
+
+    ChatMessage? anchor = slice['anchor'] as ChatMessage?;
+    var before = slice['before'] as List<ChatMessage>? ?? const [];
+    var after = slice['after'] as List<ChatMessage>? ?? const [];
+
+    // 2. 若本地无锚点消息，穿透拉取
+    if (anchor == null) {
+      try {
+        final olderRemote = await _api.history(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          limit: beforeCount + 1,
+          maxMessageId: targetServerId,
+        );
+        _checkActive();
+        if (olderRemote.items.isNotEmpty) {
+          await _dao.upsertAll(olderRemote.items);
+        }
+
+        final newerRemote = await _api.latest(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          limit: afterCount + 1,
+          minMessageId: targetServerId,
+        );
+        _checkActive();
+        if (newerRemote.items.isNotEmpty) {
+          await _dao.upsertAll(newerRemote.items);
+        }
+
+        slice = await _dao.readAroundAnchorSlice(
+          ownerId: ownerId,
+          sessionUnitId: sessionUnitId,
+          targetServerId: targetServerId,
+          beforeCount: beforeCount,
+          afterCount: afterCount,
+        );
+        anchor = slice['anchor'] as ChatMessage?;
+        before = slice['before'] as List<ChatMessage>? ?? const [];
+        after = slice['after'] as List<ChatMessage>? ?? const [];
+      } catch (e) {
+        debugPrint('[getAroundAnchorSlice] remote fetch error: $e');
+      }
+    }
+
+    final hasMoreOlder = before.length > beforeCount;
+    final validBefore = hasMoreOlder ? before.take(beforeCount).toList() : before;
+    final hasMoreNewer = after.length > afterCount;
+    final validAfter = hasMoreNewer ? after.take(afterCount).toList() : after;
+
+    final chronologicalBefore = validBefore.reversed.toList();
+    final combined = <ChatMessage>[
+      ...chronologicalBefore,
+      if (anchor != null) anchor,
+      ...validAfter,
+    ];
+
+    final targetIndex = anchor == null ? -1 : chronologicalBefore.length;
+
+    return MessageSliceResult(
+      items: combined,
+      anchor: anchor,
+      targetIndex: targetIndex,
+      hasMoreOlder: hasMoreOlder,
+      hasMoreNewer: hasMoreNewer,
+    );
+  }
+
+  Future<MessagePage> loadNewerMessages({
+    required int ownerId,
+    required String sessionUnitId,
+    required int afterScore,
+    required int afterServerId,
+    int limit = 30,
+  }) async {
+    final local = await _dao.readNewerPage(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      afterScore: afterScore,
+      limit: limit,
+    );
+
+    if (local.length >= limit) {
+      return MessagePage(local, true);
+    }
+
+    try {
+      final remote = await _api.latest(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        limit: limit,
+        minMessageId: afterServerId,
+      );
+      _checkActive();
+      if (remote.items.isNotEmpty) {
+        await _dao.upsertAll(remote.items);
+      }
+      final refreshed = await _dao.readNewerPage(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        afterScore: afterScore,
+        limit: limit,
+      );
+      final hasMore = remote.hasMore ?? remote.items.length >= limit;
+      return MessagePage(refreshed, hasMore);
+    } catch (e) {
+      return MessagePage(local, false);
+    }
+  }
+
   Future<List<ChatMessage>> loadLatest({
     required int ownerId,
     required String sessionUnitId,
@@ -1292,6 +1417,22 @@ class MessagePage {
   const MessagePage(this.items, this.hasMore);
   final List<ChatMessage> items;
   final bool hasMore;
+}
+
+class MessageSliceResult {
+  const MessageSliceResult({
+    required this.items,
+    required this.anchor,
+    required this.targetIndex,
+    required this.hasMoreOlder,
+    required this.hasMoreNewer,
+  });
+
+  final List<ChatMessage> items;
+  final ChatMessage? anchor;
+  final int targetIndex;
+  final bool hasMoreOlder;
+  final bool hasMoreNewer;
 }
 
 Map<String, dynamic>? _findRealtimeMessage(Object? value) {

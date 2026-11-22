@@ -801,6 +801,65 @@ class UnifiedDatabase {
     );
   }
 
+  Future<List<Map<String, Object?>>> readNewerMessageRows({
+    required int ownerId,
+    required String sessionUnitId,
+    required int afterScore,
+    int limit = 30,
+  }) async {
+    await initialize();
+    final whereOwner = 'ownerId = ? AND ';
+    return _connection.runSelect(
+      'SELECT * FROM Messages WHERE ${whereOwner}sessionUnitId = ? '
+      'AND score > ? '
+      'ORDER BY score ASC LIMIT ?',
+      <Object?>[
+        ownerId,
+        sessionUnitId,
+        afterScore,
+        limit.clamp(1, 100),
+      ],
+    );
+  }
+
+  Future<Map<String, Object?>> readAroundAnchorMessageRows({
+    required int ownerId,
+    required String sessionUnitId,
+    required int targetServerId,
+    int beforeCount = 20,
+    int afterCount = 20,
+  }) async {
+    await initialize();
+    final anchor = await readMessageRowByServerId(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      serverId: targetServerId,
+    );
+    if (anchor == null) {
+      return {
+        'anchor': null,
+        'before': <Map<String, Object?>>[],
+        'after': <Map<String, Object?>>[],
+      };
+    }
+    final anchorScore = (anchor['score'] as num).toInt();
+    final beforeRows = await _connection.runSelect(
+      'SELECT * FROM Messages WHERE ownerId = ? AND sessionUnitId = ? AND score < ? '
+      'ORDER BY score DESC LIMIT ?',
+      <Object?>[ownerId, sessionUnitId, anchorScore, beforeCount + 1],
+    );
+    final afterRows = await _connection.runSelect(
+      'SELECT * FROM Messages WHERE ownerId = ? AND sessionUnitId = ? AND score > ? '
+      'ORDER BY score ASC LIMIT ?',
+      <Object?>[ownerId, sessionUnitId, anchorScore, afterCount + 1],
+    );
+    return {
+      'anchor': anchor,
+      'before': beforeRows,
+      'after': afterRows,
+    };
+  }
+
   Future<int> countMessageRows(int ownerId, String sessionUnitId) async {
     await initialize();
     final whereOwner = 'ownerId = ? AND ';

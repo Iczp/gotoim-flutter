@@ -12,6 +12,7 @@ import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/desktop_dialog.dart';
 import '../../contact/presentation/add_friend_page.dart';
+import '../../chat/presentation/widgets/half_screen_chat_sheet.dart';
 import '../../home/presentation/home_sections.dart';
 import '../../session/presentation/desktop_session_split_view.dart';
 import '../application/search_controller.dart';
@@ -544,10 +545,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   : null,
               onTap: () {
                 controller.recordKeyword(keyword);
-                _navigateToChat(
+                HalfScreenChatSheet.show(
                   context: context,
                   sessionUnitId: msg.sessionUnitId,
+                  targetServerMessageId: msg.serverId,
                   title: msg.sessionTitle,
+                  isHistoryMode: true,
                 );
               },
             ),

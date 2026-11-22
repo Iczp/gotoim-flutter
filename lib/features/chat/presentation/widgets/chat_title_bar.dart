@@ -14,6 +14,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
     required this.showTransfer,
     required this.onTransfer,
     required this.onOpenSettings,
+    this.onOpenHistory,
     this.onOpenAiRuns,
     this.onPopOut,
     this.selectionMode = false,
@@ -29,6 +30,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showTransfer;
   final VoidCallback onTransfer;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenAiRuns;
   final VoidCallback? onPopOut;
   final bool selectionMode;
@@ -89,6 +91,12 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: '在独立窗口打开',
           onPressed: onPopOut,
           icon: const Icon(Icons.open_in_new_rounded, size: 20),
+        ),
+      if (!selectionMode && onOpenHistory != null)
+        IconButton(
+          tooltip: '查看聊天记录 (半屏)',
+          onPressed: onOpenHistory,
+          icon: const Icon(Icons.history_rounded, size: 21),
         ),
       if (!selectionMode)
         IconButton(

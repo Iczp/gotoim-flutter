@@ -110,6 +110,43 @@ class MessageDao {
     limit: limit,
   )).map(ChatMessage.fromDatabaseRow).toList(growable: false);
 
+  Future<List<ChatMessage>> readNewerPage({
+    required int ownerId,
+    required String sessionUnitId,
+    required int afterScore,
+    int limit = 30,
+  }) async => (await _database.readNewerMessageRows(
+    ownerId: ownerId,
+    sessionUnitId: sessionUnitId,
+    afterScore: afterScore,
+    limit: limit,
+  )).map(ChatMessage.fromDatabaseRow).toList(growable: false);
+
+  Future<Map<String, dynamic>> readAroundAnchorSlice({
+    required int ownerId,
+    required String sessionUnitId,
+    required int targetServerId,
+    int beforeCount = 20,
+    int afterCount = 20,
+  }) async {
+    final raw = await _database.readAroundAnchorMessageRows(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      targetServerId: targetServerId,
+      beforeCount: beforeCount,
+      afterCount: afterCount,
+    );
+    final anchorRow = raw['anchor'] as Map<String, Object?>?;
+    final beforeRows = raw['before'] as List<Map<String, Object?>>? ?? const [];
+    final afterRows = raw['after'] as List<Map<String, Object?>>? ?? const [];
+
+    return {
+      'anchor': anchorRow == null ? null : ChatMessage.fromDatabaseRow(anchorRow),
+      'before': beforeRows.map(ChatMessage.fromDatabaseRow).toList(growable: false),
+      'after': afterRows.map(ChatMessage.fromDatabaseRow).toList(growable: false),
+    };
+  }
+
   Future<ChatMessage?> findByServerId({
     required int ownerId,
     required String sessionUnitId,
