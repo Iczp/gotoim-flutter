@@ -305,6 +305,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
       asInt(friend?.raw['destinationId']);
   @override
   bool get isMuted => friend?.isMuted == true;
+  bool get isSessionKilled => friend?.isKilled == true;
   String? get backgroundImage {
     final setting = asMap(friend?.raw['setting'] ?? friend?.raw['Setting']);
     return (setting['backgroundImage'] ?? setting['BackgroundImage'])
@@ -801,6 +802,11 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
       notifyListeners();
       return;
     }
+    if (isSessionKilled) {
+      error = StateError('您已退出该群聊或已被移出，无法发送消息');
+      notifyListeners();
+      return;
+    }
     isSending = true;
     notifyListeners();
     final quote = quoting;
@@ -1181,6 +1187,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   }
 
   Future<void> _sendImage(SelectedFile image) async {
+    if (isSessionKilled) return;
     final bytes = await image.readBytes();
     final dims = await _decodeImageDimensions(bytes);
     final local = await _repository.createLocalImage(
@@ -1229,6 +1236,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   }
 
   Future<void> _sendVideo(SelectedFile video) async {
+    if (isSessionKilled) return;
     Uint8List? thumbBytes;
     String? localThumbPath;
     try {
@@ -1614,6 +1622,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   }
 
   Future<void> _sendFile(SelectedFile file) async {
+    if (isSessionKilled) return;
     final local = await _repository.createLocalFile(
       ownerId: ownerId,
       sessionUnitId: sessionUnitId,

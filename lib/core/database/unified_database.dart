@@ -514,6 +514,36 @@ class UnifiedDatabase {
     }
   }
 
+  Future<int> markFriendActive(String sessionUnitId) async {
+    await initialize();
+    final rows = await _connection.runSelect(
+      'SELECT raw FROM Friends WHERE id = ? LIMIT 1',
+      <Object?>[sessionUnitId],
+    );
+    if (rows.isEmpty || rows.single['raw'] is! String) return 0;
+    try {
+      final decoded = jsonDecode(rows.single['raw'] as String);
+      if (decoded is! Map) return 0;
+      final raw = Map<String, dynamic>.from(decoded);
+      raw['isKilled'] = false;
+      if (raw['setting'] is Map) {
+        final setting = Map<String, dynamic>.from(raw['setting'] as Map);
+        setting['isKilled'] = false;
+        raw['setting'] = setting;
+      }
+      return await _connection.runUpdate(
+        'UPDATE Friends SET raw = ?, updateTime = ? WHERE id = ?',
+        <Object?>[
+          jsonEncode(raw),
+          DateTime.now().millisecondsSinceEpoch,
+          sessionUnitId,
+        ],
+      );
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<void> updateFriendLastMessage({
     required int ownerId,
     required String sessionUnitId,

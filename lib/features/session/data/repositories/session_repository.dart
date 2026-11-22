@@ -419,6 +419,9 @@ class SessionRepository {
     required int disposalType,
   }) async {
     switch (disposalType) {
+      case 0: // Normal: 重新入群/恢复好友，解除 killed 状态
+        await _dao.markActive(sessionUnitId);
+        break;
       case 1: // Remove: 移出/退出群聊，保留会话但标记 killed
         await _dao.markKilled(sessionUnitId);
         break;

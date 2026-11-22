@@ -56,6 +56,7 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
   final Map<String, AttachmentTransferState> _attachments = {};
   bool _isPinned = false;
   bool _isMaximized = false;
+  bool _isKilled = false;
 
   late final WindowMethodChannel _mainIpcChannel;
   late final SubWindowChatController _subWindowChatController;
@@ -219,6 +220,17 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
               _isLoading = false;
               _loadingHistory = false;
               _refreshPending = false;
+            });
+          }
+          return true;
+        case 'session_unit_disposed':
+          final data = call.arguments as Map?;
+          if (data != null &&
+              data['sessionUnitId']?.toString() == widget.payload.sessionUnitId &&
+              mounted) {
+            final disposalType = (data['disposalType'] as num?)?.toInt() ?? 1;
+            setState(() {
+              _isKilled = (disposalType == 1);
             });
           }
           return true;
@@ -474,21 +486,42 @@ class _DesktopSubWindowChatViewState extends State<DesktopSubWindowChatView> {
           Expanded(child: _buildMessageList(isDark)),
 
           // 3. 微信同款 ChatComposer 统一输入区（复用非独立聊天输入框，带高度拖拽、截图、文件粘贴、表情等）
-          ChatComposer(
-            controller: _subWindowChatController,
-            input: _inputController,
-            isDesktop: true,
-            quoteContentBuilder:
-                (quote) => Text(
-                  '${quote.senderName}: ${quote.text}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.white70 : Colors.black87,
+          if (_isKilled)
+            Container(
+              height: 56,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
+                border: Border(
+                  top: BorderSide(
+                    color: isDark ? const Color(0xFF3A3A3A) : const Color(0xFFE8E8E8),
                   ),
                 ),
-          ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '您已退出该群聊或已被移出，无法发送或接收新消息',
+                style: TextStyle(
+                  color: isDark ? Colors.white54 : const Color(0xFF8C8C8C),
+                  fontSize: 14,
+                ),
+              ),
+            )
+          else
+            ChatComposer(
+              controller: _subWindowChatController,
+              input: _inputController,
+              isDesktop: true,
+              quoteContentBuilder:
+                  (quote) => Text(
+                    '${quote.senderName}: ${quote.text}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+            ),
         ],
       ),
     );

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/app_navigation.dart';
 import '../../../core/network/session_invalidator.dart';
 import '../../../core/realtime/signalr_gateway.dart';
+import '../../../core/services/window_service.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../chat/application/chat_controller.dart';
 import '../../chat/application/ai_stream_change_bus.dart';
@@ -27,13 +28,15 @@ class RealtimeSyncCoordinator {
     required MessageAlertCoordinator messageAlertCoordinator,
     required ActiveChatRegistry activeChatRegistry,
     required Future<void> Function(String reason) onKicked,
+    WindowService? windowService,
   }) : _gateway = gateway,
        _sessionRepository = sessionRepository,
        _messageRepository = messageRepository,
        _aiStreamChangeBus = aiStreamChangeBus,
        _messageAlertCoordinator = messageAlertCoordinator,
        _activeChatRegistry = activeChatRegistry,
-       _onKicked = onKicked;
+       _onKicked = onKicked,
+       _windowService = windowService;
 
   final SignalRGateway _gateway;
   final SessionRepository _sessionRepository;
@@ -42,6 +45,7 @@ class RealtimeSyncCoordinator {
   final MessageAlertCoordinator _messageAlertCoordinator;
   final ActiveChatRegistry _activeChatRegistry;
   final Future<void> Function(String reason) _onKicked;
+  final WindowService? _windowService;
   StreamSubscription<SignalRAppEvent>? _subscription;
   Timer? _syncTimer;
   final Set<int> _pendingOwnerIds = <int>{};
@@ -364,12 +368,22 @@ class RealtimeSyncCoordinator {
     final ownerId = (map['ownerId'] as num?)?.toInt() ?? 0;
     final unitId = (map['sessionUnitId'] ?? '').toString();
     final type = (map['disposalType'] as num?)?.toInt() ?? 0;
-    if (ownerId > 0 && unitId.isNotEmpty && type > 0) {
+    if (ownerId > 0 && unitId.isNotEmpty) {
       await _sessionRepository.applyDisposal(
         ownerId: ownerId,
         sessionUnitId: unitId,
         disposalType: type,
       );
+      try {
+        await _windowService?.broadcastToAllSubWindows(
+          'session_unit_disposed',
+          <String, dynamic>{
+            'sessionUnitId': unitId,
+            'ownerId': ownerId,
+            'disposalType': type,
+          },
+        );
+      } catch (_) {}
     }
   }
 
@@ -520,6 +534,7 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
     aiStreamChangeBus: ref.watch(aiStreamChangeBusProvider),
     messageAlertCoordinator: ref.watch(messageAlertCoordinatorProvider),
     activeChatRegistry: ref.watch(activeChatRegistryProvider),
+    windowService: ref.watch(windowServiceProvider),
     onKicked: (reason) async {
       if (ref.read(authControllerProvider).status ==
           AuthStatus.unauthenticated) {

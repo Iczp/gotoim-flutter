@@ -230,6 +230,12 @@ abstract class WindowService {
     String? fileName,
     String? caption,
   });
+
+  /// 广播通知所有独立子窗口
+  Future<void> broadcastToAllSubWindows(
+    String method, [
+    dynamic arguments,
+  ]) async {}
 }
 
 typedef MessageSenderCallback =
@@ -1289,6 +1295,7 @@ class DefaultWindowService implements WindowService {
     }
   }
 
+  @override
   Future<void> broadcastToAllSubWindows(
     String method, [
     dynamic arguments,

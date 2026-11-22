@@ -517,25 +517,49 @@ class _ChatPageState extends ConsumerState<ChatPage>
     ChatController controller, {
     bool useGlass = false,
     bool hasBackground = false,
-  }) => ChatInputArea(
-    selectionMode: controller.selectionMode,
-    selectionActions: ChatSelectionBar(
-      count: controller.selectedLocalIds.length,
-      onCancel: controller.cancelSelection,
-      onDelete: _deleteSelectedMessages,
-      onMergeForward: _showMergeForwardTargets,
-    ),
-    composer: ChatComposer(
-      key: _composerKey,
-      controller: controller,
-      input: input,
-      useGlass: useGlass,
-      hasBackground: hasBackground,
-      isDesktop: widget.isDesktop,
-      quoteContentBuilder: (quote) => _buildQuotedContent(quote, _mediaItems),
-      onOpenAppearancePanel: _openAppearancePanel,
-    ),
-  );
+  }) {
+    if (controller.isSessionKilled) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      return Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
+          border: Border(
+            top: BorderSide(
+              color: isDark ? const Color(0xFF3A3A3A) : const Color(0xFFE8E8E8),
+            ),
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          '您已退出该群聊或已被移出，无法发送或接收新消息',
+          style: TextStyle(
+            color: isDark ? Colors.white54 : const Color(0xFF8C8C8C),
+            fontSize: 14,
+          ),
+        ),
+      );
+    }
+    return ChatInputArea(
+      selectionMode: controller.selectionMode,
+      selectionActions: ChatSelectionBar(
+        count: controller.selectedLocalIds.length,
+        onCancel: controller.cancelSelection,
+        onDelete: _deleteSelectedMessages,
+        onMergeForward: _showMergeForwardTargets,
+      ),
+      composer: ChatComposer(
+        key: _composerKey,
+        controller: controller,
+        input: input,
+        useGlass: useGlass,
+        hasBackground: hasBackground,
+        isDesktop: widget.isDesktop,
+        quoteContentBuilder: (quote) => _buildQuotedContent(quote, _mediaItems),
+        onOpenAppearancePanel: _openAppearancePanel,
+      ),
+    );
+  }
 
   Future<void> _openAppearancePanel() async {
     _floatingWindowManager.show(

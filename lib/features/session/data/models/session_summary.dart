@@ -346,6 +346,12 @@ class SessionSummary {
   bool get isMuted =>
       muteExpireTime != null && muteExpireTime!.isAfter(DateTime.now());
 
+  bool get isKilled {
+    if (raw['isKilled'] == true) return true;
+    final setting = asMap(raw['setting'] ?? raw['Setting']);
+    return setting['isKilled'] == true || setting['IsKilled'] == true;
+  }
+
   String get messageTypeLabel =>
       messageContentType(asMap(raw['lastMessage'] ?? raw['LastMessage']));
 

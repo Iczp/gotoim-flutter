@@ -110,6 +110,9 @@ class SessionDao {
   Future<int> markKilled(String sessionUnitId) =>
       _database.markFriendKilled(sessionUnitId);
 
+  Future<int> markActive(String sessionUnitId) =>
+      _database.markFriendActive(sessionUnitId);
+
   Future<String?> readSettingValue(String key) =>
       _database.readSettingValue(key);
 
