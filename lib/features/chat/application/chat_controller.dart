@@ -306,6 +306,8 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   @override
   bool get isMuted => friend?.isMuted == true;
   bool get isSessionKilled => friend?.isKilled == true;
+  String get activeSessionId => friend?.sessionId ?? sessionUnitId;
+  bool get isGroupSession => friend?.isGroup == true;
   String? get backgroundImage {
     final setting = asMap(friend?.raw['setting'] ?? friend?.raw['Setting']);
     return (setting['backgroundImage'] ?? setting['BackgroundImage'])

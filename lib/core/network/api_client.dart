@@ -15,6 +15,15 @@ abstract class ApiClient {
     bool retryOnUnauthorized = true,
   });
 
+  Future<T> put<T>(
+    String path, {
+    Map<String, Object?>? query,
+    Object? data,
+    Map<String, String>? headers,
+    bool retryOnUnauthorized = true,
+  }) =>
+      throw UnsupportedError('PUT is not supported.');
+
   Future<T> delete<T>(String path, {Map<String, Object?>? query}) =>
       throw UnsupportedError('DELETE is not supported.');
 

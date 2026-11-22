@@ -41,6 +41,7 @@ import '../../chat_settings/application/chat_settings_controller.dart';
 import '../../chat_settings/presentation/member_profile_sheet.dart';
 import '../../user/data/models/profile_subject.dart';
 import '../../chat_settings/presentation/chat_settings_page.dart';
+import '../../announcement/presentation/widgets/pinned_announcement_banner.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/session_change_bus.dart';
 import '../../session/presentation/chat_object_avatar.dart';
@@ -490,7 +491,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
         padding: EdgeInsets.only(
           top: safeArea.top + ChatTitleBar.toolbarHeight,
         ),
-        child: Column(children: [Expanded(child: messageList), inputArea]),
+        child: Column(
+          children: [
+            if (controller.isGroupSession)
+              PinnedAnnouncementBanner(
+                sessionId: controller.activeSessionId,
+                canManage: true,
+              ),
+            Expanded(child: messageList),
+            inputArea,
+          ],
+        ),
       );
     }
 
@@ -498,6 +509,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
       fit: StackFit.expand,
       children: <Widget>[
         Positioned.fill(child: messageList),
+        if (controller.isGroupSession)
+          Positioned(
+            top: safeArea.top + ChatTitleBar.toolbarHeight,
+            left: 0,
+            right: 0,
+            child: PinnedAnnouncementBanner(
+              sessionId: controller.activeSessionId,
+              canManage: true,
+            ),
+          ),
         Positioned(
           left: 0,
           right: 0,

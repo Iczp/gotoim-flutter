@@ -97,6 +97,24 @@ class DioApiClient implements ApiClient {
   }
 
   @override
+  Future<T> put<T>(
+    String path, {
+    Map<String, Object?>? query,
+    Object? data,
+    Map<String, String>? headers,
+    bool retryOnUnauthorized = true,
+  }) {
+    return _request<T>(
+      path: path,
+      method: 'PUT',
+      query: query,
+      data: data,
+      headers: headers,
+      retryOnUnauthorized: retryOnUnauthorized,
+    );
+  }
+
+  @override
   Future<T> postMultipart<T>(
     String path, {
     Map<String, Object?>? query,

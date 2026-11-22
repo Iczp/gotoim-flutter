@@ -19,6 +19,7 @@ import '../../mine/presentation/my_qr_code_dialog.dart';
 import '../../mine/presentation/my_qr_code_page.dart';
 import '../../group/data/room_api.dart';
 import '../../group_management/presentation/group_management_page.dart';
+import '../../announcement/presentation/announcement_list_page.dart';
 import '../application/chat_settings_controller.dart';
 import 'chat_background_page.dart';
 import 'chat_background_preview_page.dart';
@@ -367,6 +368,22 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                             );
                           }
                         },
+                      ),
+                    if (controller.isGroup)
+                      Cell(
+                        icon: const Icon(Icons.campaign_outlined),
+                        title: '群公告与通知',
+                        subtitle: '查看历史公告与已读统计',
+                        showArrow: true,
+                        onTap: controller.sessionId == null
+                            ? null
+                            : () {
+                                AnnouncementListPage.open(
+                                  context,
+                                  sessionId: controller.sessionId!,
+                                  canManage: controller.isCreator,
+                                );
+                              },
                       ),
                     if (controller.objectType == 2)
                       Cell(
