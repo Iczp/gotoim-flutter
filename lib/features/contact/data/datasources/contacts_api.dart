@@ -45,4 +45,39 @@ class ContactsApi {
       },
     );
   }
+
+  /// 获取联系人/会话单元详细信息（含系统条目与私有扩展条目）
+  Future<Map<String, dynamic>> getContactDetail({
+    required String sessionUnitId,
+  }) async {
+    return _apiClient.get<Map<String, dynamic>>(
+      '/api/chat/session-unit/$sessionUnitId/detail',
+    );
+  }
+
+  /// 获取系统字段定义列表
+  Future<Map<String, dynamic>> getEntryNames({
+    int maxResultCount = 100,
+  }) async {
+    return _apiClient.get<Map<String, dynamic>>(
+      '/api/chat/entry-name',
+      query: <String, Object?>{
+        'MaxResultCount': maxResultCount,
+      },
+    );
+  }
+
+  /// 设置会话单元自定义条目
+  Future<Map<String, dynamic>> setSessionUnitEntries({
+    required String sessionUnitId,
+    required Map<String, List<String>> entries,
+  }) async {
+    return _apiClient.post<Map<String, dynamic>>(
+      '/api/chat/entry/set-for-session-unit',
+      query: <String, Object?>{
+        'sessionUnitId': sessionUnitId,
+      },
+      data: entries,
+    );
+  }
 }

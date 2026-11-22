@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/application_shell.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../home/presentation/home_sections.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/presentation/chat_object_avatar.dart';
@@ -10,7 +12,9 @@ import '../../user/data/models/profile_subject.dart';
 import '../../user/presentation/widgets/profile_action_sheets.dart';
 import '../../user/presentation/widgets/profile_gender_badge.dart';
 import '../application/contacts_controller.dart';
+import '../data/models/contact_entry_item.dart';
 import '../data/models/contact_group.dart';
+import 'contact_entry_editor_dialog.dart';
 import 'widgets/contact_row.dart';
 
 /// 桌面端微信 4.0 风格通讯录三栏主视图 (DesktopContactsSplitView)
@@ -521,7 +525,7 @@ class _QuickActionRow extends StatelessWidget {
 }
 
 /// 桌面端微信 4.0 风格联系人详细资料视图（第三栏打开）
-class DesktopContactDetailView extends StatelessWidget {
+class DesktopContactDetailView extends ConsumerStatefulWidget {
   const DesktopContactDetailView({
     required this.contact,
     required this.onSendMessage,
@@ -532,17 +536,72 @@ class DesktopContactDetailView extends StatelessWidget {
   final VoidCallback onSendMessage;
 
   @override
+  ConsumerState<DesktopContactDetailView> createState() =>
+      _DesktopContactDetailViewState();
+}
+
+class _DesktopContactDetailViewState
+    extends ConsumerState<DesktopContactDetailView> {
+  ContactDetail? _detail;
+  bool _isLoadingDetail = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDetail();
+  }
+
+  @override
+  void didUpdateWidget(covariant DesktopContactDetailView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.contact.id != widget.contact.id) {
+      _detail = null;
+      _fetchDetail();
+    }
+  }
+
+  Future<void> _fetchDetail() async {
+    if (widget.contact.id.isEmpty) return;
+    setState(() => _isLoadingDetail = true);
+    final detail = await ref
+        .read(contactsControllerProvider)
+        .loadContactDetail(widget.contact.id);
+    if (!mounted) return;
+    setState(() {
+      _detail = detail;
+      _isLoadingDetail = false;
+    });
+  }
+
+  void _openEntryEditor() {
+    ContactEntryEditorDialog.show(
+      context,
+      sessionUnitId: widget.contact.id,
+      initialEntries: _detail?.userEntries ?? const <ContactEntryItem>[],
+      onSaved: _fetchDetail,
+    );
+  }
+
+  void _copyToClipboard(String label, String value) {
+    Clipboard.setData(ClipboardData(text: value));
+    showToast('已复制$label: $value', type: ToastType.success);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
-    final data = ProfileData(ProfileSubject.contact(contact));
+    final data = ProfileData(ProfileSubject.contact(widget.contact));
     final canvasBg =
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFFFFFFF);
     final cardBg =
         isDark ? const Color(0xFF282828) : const Color(0xFFF9F9F9);
     final dividerColor =
         isDark ? const Color(0x1FFFFFFF) : const Color(0x1F000000);
+
+    final systemEntries = _detail?.systemEntries ?? const <ContactEntryItem>[];
+    final userEntries = _detail?.userEntries ?? const <ContactEntryItem>[];
 
     return Container(
       color: canvasBg,
@@ -565,6 +624,14 @@ class DesktopContactDetailView extends StatelessWidget {
                     color: colorScheme.onSurface,
                   ),
                 ),
+                if (_isLoadingDetail) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 1.5),
+                  ),
+                ],
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.more_horiz_rounded, size: 20),
@@ -572,7 +639,7 @@ class DesktopContactDetailView extends StatelessWidget {
                   onPressed: () {
                     showMoreProfileActionSheet(
                       context,
-                      userId: contact.id,
+                      userId: widget.contact.id,
                       userName: data.displayName,
                     );
                   },
@@ -601,9 +668,9 @@ class DesktopContactDetailView extends StatelessWidget {
                           ChatObjectAvatar(
                             name: data.displayName,
                             imageUrl:
-                                contact.avatarUrl.isEmpty
+                                widget.contact.avatarUrl.isEmpty
                                     ? null
-                                    : contact.avatarUrl,
+                                    : widget.contact.avatarUrl,
                             radius: 34,
                             chatObjectId: data.chatObjectId,
                           ),
@@ -661,7 +728,7 @@ class DesktopContactDetailView extends StatelessWidget {
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
                       const SizedBox(height: 18),
 
-                      // 2. 详细信息行组
+                      // 2. 基础信息行组
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -708,11 +775,168 @@ class DesktopContactDetailView extends StatelessWidget {
                         ),
                       ),
 
+                      // 3. 系统公开条目信息（如有）
+                      if (systemEntries.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: dividerColor, width: 0.5),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.badge_outlined,
+                                    size: 15,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '公开资料',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              ...List.generate(systemEntries.length, (i) {
+                                final entry = systemEntries[i];
+                                return Column(
+                                  children: [
+                                    if (i > 0)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        child: Divider(
+                                          height: 0.5,
+                                          thickness: 0.5,
+                                          color: dividerColor,
+                                        ),
+                                      ),
+                                    _InteractiveEntryRow(
+                                      entry: entry,
+                                      onCopy: () => _copyToClipboard(entry.title, entry.value),
+                                    ),
+                                  ],
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      // 4. 私有自定义备注与扩展条目
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: dividerColor, width: 0.5),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.lock_outline_rounded,
+                                  size: 15,
+                                  color: colorScheme.secondary,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '自定义扩展与备注',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                const Spacer(),
+                                TextButton.icon(
+                                  onPressed: _openEntryEditor,
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  icon: const Icon(Icons.edit_rounded, size: 14),
+                                  label: Text(
+                                    userEntries.isEmpty ? '添加' : '编辑',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (userEntries.isEmpty) ...[
+                              const SizedBox(height: 10),
+                              InkWell(
+                                onTap: _openEntryEditor,
+                                borderRadius: BorderRadius.circular(6),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.add_circle_outline_rounded,
+                                        size: 16,
+                                        color: colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '添加电话、邮箱、级别或私人备注',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ] else ...[
+                              const SizedBox(height: 12),
+                              ...List.generate(userEntries.length, (i) {
+                                final entry = userEntries[i];
+                                return Column(
+                                  children: [
+                                    if (i > 0)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        child: Divider(
+                                          height: 0.5,
+                                          thickness: 0.5,
+                                          color: dividerColor,
+                                        ),
+                                      ),
+                                    _InteractiveEntryRow(
+                                      entry: entry,
+                                      onCopy: () => _copyToClipboard(entry.title, entry.value),
+                                    ),
+                                  ],
+                                );
+                              }),
+                            ],
+                          ],
+                        ),
+                      ),
+
                       const SizedBox(height: 36),
 
-                      // 3. 底部发消息大按钮（微信经典绿色主按钮）
+                      // 5. 底部发消息大按钮（微信经典绿色主按钮）
                       FilledButton.icon(
-                        onPressed: onSendMessage,
+                        onPressed: widget.onSendMessage,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF07C160),
                           foregroundColor: Colors.white,
@@ -768,6 +992,60 @@ class DesktopContactDetailView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 支持交互点击与复制的条目行
+class _InteractiveEntryRow extends StatelessWidget {
+  const _InteractiveEntryRow({
+    required this.entry,
+    required this.onCopy,
+  });
+
+  final ContactEntryItem entry;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            entry.title,
+            style: TextStyle(
+              fontSize: 13,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
+        Expanded(
+          child: SelectableText(
+            entry.value,
+            style: TextStyle(
+              fontSize: 13,
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        InkWell(
+          onTap: onCopy,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Icon(
+              Icons.copy_rounded,
+              size: 14,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

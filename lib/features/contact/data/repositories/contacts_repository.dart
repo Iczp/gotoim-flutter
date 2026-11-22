@@ -85,6 +85,23 @@ class ContactsRepository {
     return max;
   }
 
+  /// 获取联系人详情
+  Future<Map<String, dynamic>> loadContactDetail(String sessionUnitId) =>
+      _api.getContactDetail(sessionUnitId: sessionUnitId);
+
+  /// 获取系统字段定义
+  Future<Map<String, dynamic>> loadEntryNames() => _api.getEntryNames();
+
+  /// 保存会话单元自定义条目
+  Future<Map<String, dynamic>> saveSessionUnitEntries(
+    String sessionUnitId,
+    Map<String, List<String>> entries,
+  ) =>
+      _api.setSessionUnitEntries(
+        sessionUnitId: sessionUnitId,
+        entries: entries,
+      );
+
   String _cacheKey(int ownerId) => 'contacts-indexed-$ownerId';
   String _syncTicksKey(int ownerId) => 'contacts-sync-ticks-$ownerId';
 }

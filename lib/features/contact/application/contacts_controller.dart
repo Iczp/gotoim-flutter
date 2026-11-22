@@ -9,6 +9,7 @@ import '../../session/application/session_list_controller.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/data/repositories/session_repository.dart';
 import '../data/datasources/contacts_api.dart';
+import '../data/models/contact_entry_item.dart';
 import '../data/models/contact_group.dart';
 import '../data/repositories/contacts_repository.dart';
 
@@ -187,6 +188,53 @@ class ContactsController extends ChangeNotifier {
         isRefreshing = false;
         notifyListeners();
       }
+    }
+  }
+
+  /// 加载指定联系人/会话单元详情（包含系统条目与私有扩展条目）
+  Future<ContactDetail?> loadContactDetail(String sessionUnitId) async {
+    try {
+      final res = await _contactsRepository.loadContactDetail(sessionUnitId);
+      return ContactDetail.fromJson(res);
+    } catch (e) {
+      debugPrint('[contacts] loadContactDetail error: $e');
+      return null;
+    }
+  }
+
+  /// 加载系统字段定义
+  Future<List<EntryNameDefinition>> loadEntryNames() async {
+    try {
+      final res = await _contactsRepository.loadEntryNames();
+      final items = res['items'];
+      if (items is List) {
+        return items
+            .whereType<Map>()
+            .map((e) => EntryNameDefinition.fromJson(Map<String, dynamic>.from(e)))
+            .toList(growable: false);
+      }
+      return const <EntryNameDefinition>[];
+    } catch (e) {
+      debugPrint('[contacts] loadEntryNames error: $e');
+      return const <EntryNameDefinition>[];
+    }
+  }
+
+  /// 保存会话单元自定义条目
+  Future<bool> saveContactEntries(
+    String sessionUnitId,
+    Map<String, List<String>> entries,
+  ) async {
+    try {
+      await _contactsRepository.saveSessionUnitEntries(sessionUnitId, entries);
+      // 成功后触发增量刷新
+      if (_ownerId != null) {
+        unawaited(refresh());
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[contacts] saveContactEntries error: $e');
+      rethrow;
     }
   }
 
