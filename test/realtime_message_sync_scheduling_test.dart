@@ -26,6 +26,8 @@ class _Gateway extends Fake implements SignalRGateway {
 class _Sessions extends Fake implements SessionRepository {
   int syncs = 0;
   @override
+  Future<void> syncDisposals({required int ownerId}) async {}
+  @override
   Future<int?> readCurrentOwnerId() async => 1;
   @override
   Future<List<SessionSummary>> loadChanges({required int ownerId}) async {

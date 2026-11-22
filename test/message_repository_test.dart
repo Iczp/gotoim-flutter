@@ -71,6 +71,11 @@ void main() {
     addTearDown(database.close);
     final dao = MessageDao(database);
     await dao.upsertAll(<ChatMessage>[message(2), message(1)]);
+    await dao.writeHistoryCoverage(7, 'session', null, {
+      'min': 1,
+      'max': 2,
+      'earliest': false,
+    });
     final client = _FakeApiClient();
     final repository = MessageRepository(api: MessageApi(client), dao: dao);
 
@@ -474,6 +479,10 @@ void main() {
       ]);
       await dao.upsertAll([message(1)]);
       await dao.markLoadedAll('session', true);
+      await dao.writeHistoryCoverage(7, 'session', message(1).score, {
+        'min': 0,
+        'earliest': true,
+      });
       final client = _FakeApiClient();
       final repository = MessageRepository(api: MessageApi(client), dao: dao);
       for (var i = 0; i < 3; i++) {

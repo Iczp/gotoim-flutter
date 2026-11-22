@@ -33,11 +33,10 @@ extension MessageRepositorySync on MessageRepository {
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is Map && decoded['epoch'] != null && decoded['seq'] != null) {
-        return {
-          'epoch': '${decoded['epoch']}',
-          'seq': '${decoded['seq']}',
-        };
+      if (decoded is Map &&
+          decoded['epoch'] != null &&
+          decoded['seq'] != null) {
+        return {'epoch': '${decoded['epoch']}', 'seq': '${decoded['seq']}'};
       }
     } catch (_) {}
     return null;
@@ -90,69 +89,73 @@ extension MessageRepositorySync on MessageRepository {
               if (rollbackTime != null) 'rollbackTime': rollbackTime,
             });
 
-            if (!isDeleted && !isRollbacked && state['message'] is Map) {
-              final raw = Map<String, dynamic>.from(state['message'] as Map);
-              final remoteMessage = ChatMessage.fromJson(
-                raw,
-                ownerId: owner,
-                sessionUnitId: unit,
-              );
-              final sId = remoteMessage.serverId;
-              if (sId != null && sId > 0) {
-                final existing = await _dao.findByServerId(
+              if (!isDeleted && !isRollbacked && state['message'] is Map) {
+                final raw = Map<String, dynamic>.from(state['message'] as Map);
+                final remoteMessage = ChatMessage.fromJson(
+                  raw,
                   ownerId: owner,
                   sessionUnitId: unit,
-                  serverId: sId,
                 );
-                final merged = existing != null
-                    ? existing.copyWith(
-                        serverId: remoteMessage.serverId,
-                        score: remoteMessage.score,
-                        raw: <String, dynamic>{
-                          ...existing.raw,
-                          ...remoteMessage.raw,
-                          'content': <String, dynamic>{
-                            ...existing.content,
-                            ...remoteMessage.content,
-                          },
-                        },
-                      )
-                    : remoteMessage;
-                await _dao.upsertAll(<ChatMessage>[merged]);
-                await _updateSessionSummary(merged);
+                final sId = remoteMessage.serverId;
+                if (sId != null && sId > 0) {
+                  final existing = await _dao.findByServerId(
+                    ownerId: owner,
+                    sessionUnitId: unit,
+                    serverId: sId,
+                  );
+                  final merged =
+                      existing != null
+                          ? existing.copyWith(
+                            serverId: remoteMessage.serverId,
+                            score: remoteMessage.score,
+                            raw: <String, dynamic>{
+                              ...existing.raw,
+                              ...remoteMessage.raw,
+                              'content': <String, dynamic>{
+                                ...existing.content,
+                                ...remoteMessage.content,
+                              },
+                            },
+                          )
+                          : remoteMessage;
+                  _checkActive();
+                  await _dao.upsertAll(<ChatMessage>[merged]);
+                  await _updateSessionSummary(merged);
+                }
               }
             }
-          }
 
-          await _dao.applySyncPage(owner, unit, mappedItems);
-          _sessionChangeBus?.publish(
-            ownerId: owner,
-            sessionUnitId: unit,
-            messageIds:
-                mappedItems
-                    .where(
-                      (row) =>
-                          row['isRollbacked'] == true ||
-                          row['isDeleted'] == true,
-                    )
-                    .map((row) => int.parse('${row['messageId']}'))
-                    .toList(),
-            deletedMessageIds:
-                mappedItems
-                    .where((row) => row['isDeleted'] == true)
-                    .map((row) => int.parse('${row['messageId']}'))
-                    .toList(),
-          );
-          afterId = ids.last;
-          if (ids.length < 200) break;
+            _checkActive();
+            await _dao.applySyncPage(owner, unit, mappedItems);
+            _sessionChangeBus?.publish(
+              ownerId: owner,
+              sessionUnitId: unit,
+              messageIds:
+                  mappedItems
+                      .where(
+                        (row) =>
+                            row['isRollbacked'] == true ||
+                            row['isDeleted'] == true,
+                      )
+                      .map((row) => int.parse('${row['messageId']}'))
+                      .toList(),
+              deletedMessageIds:
+                  mappedItems
+                      .where((row) => row['isDeleted'] == true)
+                      .map((row) => int.parse('${row['messageId']}'))
+                      .toList(),
+            );
+            afterId = ids.last;
+            if (ids.length < 200) break;
+          }
         }
-      }
-      afterScope = units.last;
-      if (units.length < 50) break;
+        afterScope = units.last;
+        if (units.length < 50) break;
       }
     }
 
     final newCursor = _formatV2Cursor(epoch, headChangeId);
+    _checkActive();
     await _dao.applySyncPage(
       owner,
       _globalV2CursorUnit,
@@ -190,11 +193,7 @@ extension MessageRepositorySync on MessageRepository {
 
       if (cursor == null || page['resetRequired'] == true) {
         if (++resets > 2) throw StateError('消息同步基线反复变化，请重试');
-        await _calibrateOwner(
-          owner,
-          epoch: pageEpoch,
-          headChangeId: pageHead,
-        );
+        await _calibrateOwner(owner, epoch: pageEpoch, headChangeId: pageHead);
         return;
       }
 
@@ -219,7 +218,12 @@ extension MessageRepositorySync on MessageRepository {
         final changeType = row['changeType']?.toString();
         final messageId = row['messageId'];
         final changeId = row['messageChangeId']?.toString() ?? '0';
-        if (unit == null || unit.isEmpty || messageId == null) continue;
+        if (unit == null || unit.isEmpty || messageId == null) {
+          throw StateError('Incomplete message change scope');
+        }
+        if (changeType != 'Recalled' && changeType != 'Updated') {
+          throw StateError('Unsupported message change type: $changeType');
+        }
 
         if (changeType == 'Recalled') {
           itemsByUnit.putIfAbsent(unit, () => []).add({
@@ -245,6 +249,17 @@ extension MessageRepositorySync on MessageRepository {
           sessionUnitId: entry.key,
           messageIds: entry.value.toSet().toList(),
         );
+        _checkActive();
+        final expectedIds = entry.value.toSet();
+        for (final state in states) {
+          final id = int.tryParse('${state['messageId']}');
+          if (id == null || !expectedIds.remove(id)) {
+            throw StateError('Unexpected message state');
+          }
+        }
+        if (expectedIds.isNotEmpty) {
+          throw StateError('Message state response is incomplete');
+        }
         final stateItems = itemsByUnit[entry.key]!;
         for (final state in states) {
           final status = state['status']?.toString();
@@ -281,20 +296,22 @@ extension MessageRepositorySync on MessageRepository {
                   sessionUnitId: entry.key,
                   serverId: sId,
                 );
-                final merged = existing != null
-                    ? existing.copyWith(
-                        serverId: remoteMessage.serverId,
-                        score: remoteMessage.score,
-                        raw: <String, dynamic>{
-                          ...existing.raw,
-                          ...remoteMessage.raw,
-                          'content': <String, dynamic>{
-                            ...existing.content,
-                            ...remoteMessage.content,
+                final merged =
+                    existing != null
+                        ? existing.copyWith(
+                          serverId: remoteMessage.serverId,
+                          score: remoteMessage.score,
+                          raw: <String, dynamic>{
+                            ...existing.raw,
+                            ...remoteMessage.raw,
+                            'content': <String, dynamic>{
+                              ...existing.content,
+                              ...remoteMessage.content,
+                            },
                           },
-                        },
-                      )
-                    : remoteMessage;
+                        )
+                        : remoteMessage;
+                _checkActive();
                 await _dao.upsertAll(<ChatMessage>[merged]);
                 await _updateSessionSummary(merged);
               }
@@ -320,6 +337,7 @@ extension MessageRepositorySync on MessageRepository {
       }
 
       for (final entry in itemsByUnit.entries) {
+        _checkActive();
         await _dao.applySyncPage(owner, entry.key, entry.value);
         if (entry.value.isNotEmpty) {
           _sessionChangeBus?.publish(
@@ -343,6 +361,7 @@ extension MessageRepositorySync on MessageRepository {
       }
 
       final newCursor = _formatV2Cursor(pageEpoch, nextCursor);
+      _checkActive();
       await _dao.applySyncPage(
         owner,
         _globalV2CursorUnit,

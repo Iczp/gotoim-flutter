@@ -36,8 +36,9 @@ import '../../chat_settings/data/models/chat_member.dart';
 import '../../chat_settings/data/repositories/chat_settings_repository.dart';
 import '../presentation/widgets/chat_composer_controller.dart';
 
-final messageRepositoryProvider = Provider<MessageRepository>(
-  (ref) => MessageRepository(
+final messageRepositoryProvider = Provider<MessageRepository>((ref) {
+  ref.watch(currentUserProvider.select((user) => user?.id));
+  final repository = MessageRepository(
     api: MessageApi(ref.watch(apiClientProvider)),
     dao: MessageDao(
       ref.watch(unifiedDatabaseProvider),
@@ -45,8 +46,10 @@ final messageRepositoryProvider = Provider<MessageRepository>(
     ),
     sessionDao: SessionDao(ref.watch(unifiedDatabaseProvider)),
     sessionChangeBus: ref.watch(sessionChangeBusProvider),
-  ),
-);
+  );
+  ref.onDispose(repository.dispose);
+  return repository;
+});
 
 final voiceCacheServiceProvider = Provider<VoiceCacheService>(
   (ref) => createVoiceCacheService(ref.watch(apiClientProvider)),
@@ -744,7 +747,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
               byId[item.localId] = item;
             }
             final merged = byId.values.toList(growable: false)
-              ..sort((a, b) => a.score.compareTo(b.score));
+              ..sort((a, b) => b.score.compareTo(a.score));
             _messages
               ..clear()
               ..addAll(merged);
@@ -754,10 +757,9 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         return;
       }
       final hasGap = minMessageId > 0 && maxLocalId > minMessageId;
-      final shouldRefreshRecent = refreshRecent &&
-          (hasGap || !_repository.isChangeSyncAvailable);
-      final effectiveMinMessageId =
-          minMessageId > 0 ? minMessageId : maxLocalId;
+      final shouldRefreshRecent =
+          refreshRecent && (hasGap || !_repository.isChangeSyncAvailable);
+      final effectiveMinMessageId = minMessageId;
       final latest = await _repository.loadLatest(
         ownerId: effectiveOwnerId,
         sessionUnitId: sessionUnitId,
@@ -1691,7 +1693,10 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
     }());
   }
 
-  Future<ChatMessage> _retryLocalVideo(ChatMessage sending, SelectedFile video) async {
+  Future<ChatMessage> _retryLocalVideo(
+    ChatMessage sending,
+    SelectedFile video,
+  ) async {
     Map<String, MultipartUploadFile>? extraFiles;
     try {
       Uint8List? thumbBytes;

@@ -31,6 +31,22 @@ class MessageRepository {
   final SessionDao? _sessionDao;
   final SessionChangeBus? _sessionChangeBus;
   final Map<String, Future<void>> _changeSyncInFlight = {};
+  final Map<String, Future<List<ChatMessage>>> _latestInFlight = {};
+  final Map<String, Timer> _latestRetries = {};
+  bool _disposed = false;
+
+  void dispose() {
+    _disposed = true;
+    for (final timer in _latestRetries.values) {
+      timer.cancel();
+    }
+    _latestRetries.clear();
+  }
+
+  void _checkActive() {
+    if (_disposed) throw StateError('Message synchronization context expired');
+  }
+
   DateTime? _changeSyncRetryAt;
   bool get isChangeSyncAvailable =>
       _changeSyncRetryAt?.isAfter(DateTime.now()) != true;
@@ -105,20 +121,22 @@ class MessageRepository {
         sessionUnitId: sessionUnitId,
         serverId: messageId,
       );
-      final merged = existing != null
-          ? existing.copyWith(
-              serverId: remoteMessage.serverId,
-              score: remoteMessage.score,
-              raw: <String, dynamic>{
-                ...existing.raw,
-                ...remoteMessage.raw,
-                'content': <String, dynamic>{
-                  ...existing.content,
-                  ...remoteMessage.content,
+      final merged =
+          existing != null
+              ? existing.copyWith(
+                serverId: remoteMessage.serverId,
+                score: remoteMessage.score,
+                raw: <String, dynamic>{
+                  ...existing.raw,
+                  ...remoteMessage.raw,
+                  'content': <String, dynamic>{
+                    ...existing.content,
+                    ...remoteMessage.content,
+                  },
                 },
-              },
-            )
-          : remoteMessage;
+              )
+              : remoteMessage;
+      _checkActive();
       await _dao.upsertAll(<ChatMessage>[merged]);
       await _updateSessionSummary(merged);
       _sessionChangeBus?.publish(
@@ -159,6 +177,7 @@ class MessageRepository {
     required int watermark,
   }) async {
     if (watermark > 0) {
+      _checkActive();
       await _dao.writeMessageWatermark(ownerId, sessionUnitId, watermark);
     }
   }
@@ -168,6 +187,7 @@ class MessageRepository {
   Future<ChatMessage> retryText(ChatMessage message) async {
     if (message.messageType != 0 || message.state == 'sending') return message;
     var result = message.copyWith(state: 'sending');
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[result]);
     await _updateSessionSummary(result);
     try {
@@ -194,6 +214,7 @@ class MessageRepository {
         },
       );
     }
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[result]);
     await _updateSessionSummary(result);
     return result;
@@ -245,6 +266,7 @@ class MessageRepository {
       sessionUnitId: message.sessionUnitId,
       messageId: message.serverId!,
     );
+    _checkActive();
     await _dao.applySyncPage(message.ownerId, message.sessionUnitId, [
       {'messageId': message.serverId, 'syncVersion': 0, 'isDeleted': true},
     ]);
@@ -266,6 +288,7 @@ class MessageRepository {
         'rollbackTime': DateTime.now().toIso8601String(),
       },
     );
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[updated]);
     await _updateSessionSummary(updated);
     return updated;
@@ -344,6 +367,7 @@ class MessageRepository {
           'remindList': remindList,
       },
     );
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[localMessage]);
     // 立即通知会话列表更新为发送中状态
     await _updateSessionSummary(localMessage);
@@ -387,6 +411,7 @@ class MessageRepository {
         },
       );
     }
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[result]);
     await _updateSessionSummary(result);
     return result;
@@ -436,59 +461,49 @@ class MessageRepository {
       '[loadMessages][local-page] session=$sessionUnitId '
       'requested=$limit added=${local.length}',
     );
-    if (local.length >= limit) return MessagePage(local, true);
-    final loadedAll = await _dao.isLoadedAll(sessionUnitId);
-    debugPrint(
-      '[loadMessages][loaded-all-check] session=$sessionUnitId '
-      'loadedAll=$loadedAll localAdded=${local.length}',
+    _checkActive();
+    final covered = await _dao.readHistoryCoverage(
+      ownerId,
+      sessionUnitId,
+      beforeScore,
     );
-    if (local.isEmpty && loadedAll && beforeScore == null) {
-      debugPrint(
-        '[loadMessages][loaded-all-reset] session=$sessionUnitId '
-        'local is empty but loadedAll was true; resetting to false',
-      );
-      await _dao.markLoadedAll(sessionUnitId, false);
-    } else if (loadedAll) {
-      return MessagePage(local, false);
+    if (covered != null &&
+        (beforeScore != null || local.isNotEmpty) &&
+        (local.length >= limit || covered['earliest'] == true)) {
+      final lowest = local.isEmpty ? 0 : local.last.serverId ?? 0;
+      final highest = local.where((m) => m.serverId != null)
+          .fold<int>(0, (max, m) => m.serverId! > max ? m.serverId! : max);
+      final withinUpper = beforeScore != null ||
+          highest <= (covered['max'] as int? ?? 0);
+      if (withinUpper && (covered['earliest'] == true || lowest >= (covered['min'] as int))) {
+        return MessagePage(
+          local,
+          covered['earliest'] != true || local.length >= limit,
+        );
+      }
     }
-    final cursorScore = local.isNotEmpty ? local.last.score : beforeScore;
-    final maxMessageId = cursorScore == null ? null : cursorScore ~/ 1000000;
+    // Query from the requested boundary, never from the oldest isolated cache row.
+    final maxMessageId = beforeScore == null ? null : beforeScore ~/ 1000000;
     try {
       final remote = await _api.history(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
-        limit: limit - local.length,
+        limit: limit,
         maxMessageId: maxMessageId == 0 ? null : maxMessageId,
       );
+      _checkActive();
+      _checkActive();
       await _dao.upsertAll(remote.items);
-      if (beforeScore == null && remote.items.isNotEmpty) {
-        final maxFetchedId = remote.items
-            .map((item) => item.serverId ?? 0)
-            .fold<int>(0, (max, id) => id > max ? id : max);
-        if (maxFetchedId > 0) {
-          final current =
-              await _dao.readMessageWatermark(ownerId, sessionUnitId);
-          // F3: Only establish baseline watermark if none exists yet.
-          // Never advance an existing watermark from a history query!
-          if (current == null || current == 0) {
-            await _dao.writeMessageWatermark(
-              ownerId,
-              sessionUnitId,
-              maxFetchedId,
-            );
-          }
-        }
-      }
-      final requestedRemoteCount = limit - local.length;
-      final hasMore =
-          remote.hasMore ?? remote.items.length >= requestedRemoteCount;
-      if (!hasMore) {
-        await _dao.markLoadedAll(sessionUnitId, true);
-        debugPrint(
-          '[loadMessages][mark-loaded-all] session=$sessionUnitId '
-          'received=${remote.items.length} requested=$requestedRemoteCount',
-        );
-      }
+      final hasMore = remote.hasMore ?? remote.items.length >= limit;
+      if (!hasMore) await _dao.markLoadedAll(sessionUnitId, true);
+      await _dao.writeHistoryCoverage(ownerId, sessionUnitId, beforeScore, {
+        'min': remote.items
+            .map((m) => m.serverId ?? 0)
+            .fold<int>(0, (a, b) => a == 0 || b < a ? b : a),
+        'max': remote.items.fold<int>(0, (max, m) =>
+            (m.serverId ?? 0) > max ? m.serverId! : max),
+        'earliest': !hasMore,
+      });
       debugPrint(
         '[loadMessages][remote] session=$sessionUnitId maxMessageId=$maxMessageId '
         'received=${remote.items.length} persisted=${remote.items.length}',
@@ -499,7 +514,13 @@ class MessageRepository {
         beforeScore: beforeScore,
         limit: limit,
       );
-      return MessagePage(all, hasMore);
+      final ids = remote.items.map((m) => m.serverId).toSet();
+      return MessagePage(
+        all
+            .where((m) => m.serverId == null || ids.contains(m.serverId))
+            .toList(),
+        hasMore,
+      );
     } catch (error) {
       debugPrint(
         '[loadHistory][ERROR] session=$sessionUnitId '
@@ -527,12 +548,86 @@ class MessageRepository {
     int maxPages = 10,
     bool refreshRecent = false,
   }) async {
-    if (minMessageId <= 0 && !refreshRecent) {
-      return const <ChatMessage>[];
+    _checkActive();
+    final key = '$ownerId:$sessionUnitId';
+    _latestRetries.remove(key)?.cancel();
+    final existing = _latestInFlight[key];
+    if (existing != null) return existing;
+    final task = _loadLatest(
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      minMessageId: minMessageId,
+      limit: limit,
+      maxPages: maxPages,
+      refreshRecent: refreshRecent,
+    );
+    _latestInFlight[key] = task;
+    try {
+      return await task;
+    } catch (error) {
+      if (!_disposed && !(error is ApiException &&
+          (error.statusCode == 401 || error.statusCode == 403))) {
+        _scheduleLatest(ownerId, sessionUnitId, minMessageId, limit, maxPages,
+            delay: const Duration(seconds: 5));
+      }
+      rethrow;
+    } finally {
+      if (identical(_latestInFlight[key], task)) _latestInFlight.remove(key);
+    }
+  }
+
+  void _scheduleLatest(
+    int owner,
+    String unit,
+    int cursor,
+    int limit,
+    int pages, {
+    Duration delay = const Duration(milliseconds: 100),
+  }) {
+    if (_disposed) return;
+    final key = '$owner:$unit';
+    _latestRetries.remove(key)?.cancel();
+    _latestRetries[key] = Timer(delay, () async {
+      _latestRetries.remove(key);
+      if (_disposed) return;
+      try {
+        await loadLatest(
+          ownerId: owner,
+          sessionUnitId: unit,
+          minMessageId: cursor,
+          limit: limit,
+          maxPages: pages,
+        );
+      } catch (error) {
+        debugPrint('[MessageSync] continuation failed: $error');
+        _scheduleLatest(
+          owner,
+          unit,
+          cursor,
+          limit,
+          pages,
+          delay: const Duration(seconds: 5),
+        );
+      }
+    });
+  }
+
+  Future<List<ChatMessage>> _loadLatest({
+    required int ownerId,
+    required String sessionUnitId,
+    required int minMessageId,
+    required int limit,
+    required int maxPages,
+    required bool refreshRecent,
+  }) async {
+    if (limit < 1 || maxPages < 1) {
+      throw ArgumentError('Invalid sync batch size');
     }
     var cursor = minMessageId;
     final collected = <String, ChatMessage>{};
-    int? initialSnapshotMax;
+    var hasMore = false;
+    final startedEmpty = minMessageId == 0 &&
+        await _dao.maxServerId(ownerId, sessionUnitId) == 0;
     if (refreshRecent) {
       // Withdrawals do not create a larger message ID. Refresh a bounded
       // recent window as well as the forward cursor on re-entry/reconnect.
@@ -544,21 +639,29 @@ class MessageRepository {
       for (final item in recent.items) {
         collected[item.localId] = item;
       }
-      if (minMessageId <= 0 && recent.items.isNotEmpty) {
-        initialSnapshotMax = recent.items
-            .map((item) => item.serverId ?? 0)
-            .fold<int>(0, (max, id) => id > max ? id : max);
+      _checkActive();
+      if (startedEmpty && await _dao.maxServerId(ownerId, sessionUnitId) == 0) {
+        cursor = recent.items.fold<int>(0, (max, m) =>
+            (m.serverId ?? 0) > max ? m.serverId! : max);
       }
     }
     var forwardWatermark = cursor;
-    for (var pageIndex = 0; cursor > 0 && pageIndex < maxPages; pageIndex++) {
+    for (var pageIndex = 0; pageIndex < maxPages; pageIndex++) {
       final page = await _api.latest(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
         limit: limit,
         minMessageId: cursor,
       );
-      if (page.items.isEmpty) break;
+      _checkActive();
+      hasMore = page.hasMore ?? page.items.length >= limit;
+      if (page.items.isEmpty) {
+        if (hasMore) throw StateError('Empty message page with more results');
+        break;
+      }
+      if (page.items.any((m) => m.serverId == null || m.serverId! <= cursor)) {
+        throw StateError('Message page did not advance');
+      }
       for (final item in page.items) {
         collected[item.localId] = item;
       }
@@ -566,20 +669,33 @@ class MessageRepository {
           .map((item) => item.serverId ?? 0)
           .fold<int>(cursor, (max, id) => id > max ? id : max);
       forwardWatermark = next;
-      if (page.items.length < limit || next <= cursor) break;
+      if (!hasMore || next <= cursor) break;
       cursor = next;
     }
     final items = collected.values.toList(growable: false);
+    _checkActive();
+    _checkActive();
     await _dao.upsertAll(items);
 
     // F2: Separate forward progress and snapshot coverage.
     // Watermark ONLY advances through confirmed forward latest pages!
     // Never jump forwardWatermark based on recent snapshot when minMessageId > 0!
     if (forwardWatermark > minMessageId) {
-      await _dao.writeMessageWatermark(ownerId, sessionUnitId, forwardWatermark);
-    } else if (minMessageId <= 0 && initialSnapshotMax != null && initialSnapshotMax > 0) {
-      // First-time snapshot establishing baseline for an uninitialized session
-      await _dao.writeMessageWatermark(ownerId, sessionUnitId, initialSnapshotMax);
+      _checkActive();
+      await _dao.writeMessageWatermark(
+        ownerId,
+        sessionUnitId,
+        forwardWatermark,
+      );
+    }
+    if (hasMore) {
+      _scheduleLatest(
+        ownerId,
+        sessionUnitId,
+        forwardWatermark,
+        limit,
+        maxPages,
+      );
     }
     final persisted =
         items.isEmpty
@@ -643,6 +759,7 @@ class MessageRepository {
         if (remindList.isNotEmpty) 'remindList': remindList,
       },
     );
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[local]);
     // 立即通知会话列表更新为发送中状态
     await _updateSessionSummary(local);
@@ -679,6 +796,7 @@ class MessageRepository {
         },
       );
     }
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[local]);
     await _updateSessionSummary(local);
     return local;
@@ -739,6 +857,7 @@ class MessageRepository {
             : existing?.isRollbacked == true
             ? existing!
             : incoming;
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[message]);
     final persisted =
         message.serverId == null
@@ -817,6 +936,7 @@ class MessageRepository {
         },
       },
     );
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[message]);
     await _updateSessionSummary(message);
     return message;
@@ -864,6 +984,7 @@ class MessageRepository {
         },
       },
     );
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[message]);
     await _updateSessionSummary(message);
     return message;
@@ -941,6 +1062,7 @@ class MessageRepository {
         },
       );
     }
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[result]);
     await _updateSessionSummary(result);
     return result;
@@ -977,6 +1099,7 @@ class MessageRepository {
         },
       },
     );
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[message]);
     await _updateSessionSummary(message);
     debugPrint(
@@ -1019,6 +1142,7 @@ class MessageRepository {
         },
       },
     );
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[message]);
     await _updateSessionSummary(message);
     debugPrint(
@@ -1087,6 +1211,7 @@ class MessageRepository {
         'localId=${local.localId} error=$error',
       );
     }
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[result]);
     await _updateSessionSummary(result);
     return result;
@@ -1132,6 +1257,7 @@ class MessageRepository {
         'localId=${local.localId} error=$error',
       );
     }
+    _checkActive();
     await _dao.upsertAll(<ChatMessage>[result]);
     await _updateSessionSummary(result);
     return result;

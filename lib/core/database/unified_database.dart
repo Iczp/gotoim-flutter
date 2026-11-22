@@ -28,7 +28,7 @@ class UnifiedDatabase {
   );
 
   static const databaseName = 'gotoim';
-  static const schemaVersion = 4;
+  static const schemaVersion = 5;
   static const diagnosticsTable = 'diagnostic_records';
   static const diagnosticsScratchTable = 'diagnostic_scratch';
 
@@ -429,10 +429,10 @@ class UnifiedDatabase {
 
   Future<int> resetFriendMessages(int ownerId, String sessionUnitId) async {
     await initialize();
-    final whereOwner = ownerId > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
+    final whereOwner = 'ownerId = ? AND ';
     final deleted = await _connection.runDelete(
       'DELETE FROM Messages WHERE ${whereOwner}sessionUnitId = ?',
-      <Object?>[if (ownerId > 0) ownerId, sessionUnitId],
+      <Object?>[ownerId, sessionUnitId],
     );
     final rows = await _connection.runSelect(
       'SELECT raw FROM Friends WHERE id = ? LIMIT 1',
@@ -467,18 +467,20 @@ class UnifiedDatabase {
 
   Future<int> deleteFriendRow(String sessionUnitId) async {
     await initialize();
-    return _connection.runDelete(
-      'DELETE FROM Friends WHERE id = ?',
-      <Object?>[sessionUnitId],
-    );
+    return _connection.runDelete('DELETE FROM Friends WHERE id = ?', <Object?>[
+      sessionUnitId,
+    ]);
   }
 
-  Future<int> deleteMessagesBySessionUnit(int ownerId, String sessionUnitId) async {
+  Future<int> deleteMessagesBySessionUnit(
+    int ownerId,
+    String sessionUnitId,
+  ) async {
     await initialize();
-    final whereOwner = ownerId > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
+    final whereOwner = 'ownerId = ? AND ';
     return _connection.runDelete(
       'DELETE FROM Messages WHERE ${whereOwner}sessionUnitId = ?',
-      <Object?>[if (ownerId > 0) ownerId, sessionUnitId],
+      <Object?>[ownerId, sessionUnitId],
     );
   }
 
@@ -501,7 +503,11 @@ class UnifiedDatabase {
       }
       return await _connection.runUpdate(
         'UPDATE Friends SET raw = ?, updateTime = ? WHERE id = ?',
-        <Object?>[jsonEncode(raw), DateTime.now().millisecondsSinceEpoch, sessionUnitId],
+        <Object?>[
+          jsonEncode(raw),
+          DateTime.now().millisecondsSinceEpoch,
+          sessionUnitId,
+        ],
       );
     } catch (_) {
       return 0;
@@ -751,13 +757,13 @@ class UnifiedDatabase {
     int limit = 30,
   }) async {
     await initialize();
-    final whereOwner = ownerId > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
+    final whereOwner = 'ownerId = ? AND ';
     return _connection.runSelect(
       'SELECT * FROM Messages WHERE ${whereOwner}sessionUnitId = ? '
       '${beforeScore == null ? '' : 'AND score < ? '}'
       'ORDER BY score DESC LIMIT ?',
       <Object?>[
-        if (ownerId > 0) ownerId,
+        ownerId,
         sessionUnitId,
         if (beforeScore != null) beforeScore,
         limit.clamp(1, 100),
@@ -767,10 +773,10 @@ class UnifiedDatabase {
 
   Future<int> countMessageRows(int ownerId, String sessionUnitId) async {
     await initialize();
-    final whereOwner = ownerId > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
+    final whereOwner = 'ownerId = ? AND ';
     final rows = await _connection.runSelect(
       'SELECT COUNT(*) AS count FROM Messages WHERE ${whereOwner}sessionUnitId = ?',
-      <Object?>[if (ownerId > 0) ownerId, sessionUnitId],
+      <Object?>[ownerId, sessionUnitId],
     );
     return (rows.single['count'] as num?)?.toInt() ?? 0;
   }
@@ -781,16 +787,18 @@ class UnifiedDatabase {
     required int serverId,
   }) async {
     await initialize();
-    final whereOwner = ownerId > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
+    final whereOwner = 'ownerId = ? AND ';
     final rows = await _connection.runSelect(
       'SELECT * FROM Messages WHERE ${whereOwner}sessionUnitId = ? '
       'AND serverId = ? LIMIT 1',
-      <Object?>[if (ownerId > 0) ownerId, sessionUnitId, serverId],
+      <Object?>[ownerId, sessionUnitId, serverId],
     );
     return rows.isEmpty ? null : rows.single;
   }
 
-  Future<Map<String, Object?>?> readMessageRowAnyByServerId(int serverId) async {
+  Future<Map<String, Object?>?> readMessageRowAnyByServerId(
+    int serverId,
+  ) async {
     await initialize();
     final rows = await _connection.runSelect(
       'SELECT * FROM Messages WHERE serverId = ? ORDER BY id DESC LIMIT 1',
@@ -801,21 +809,21 @@ class UnifiedDatabase {
 
   Future<int> readMaxMessageScore(int ownerId, String sessionUnitId) async {
     await initialize();
-    final whereOwner = ownerId > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
+    final whereOwner = 'ownerId = ? AND ';
     final rows = await _connection.runSelect(
       'SELECT MAX(score) AS score FROM Messages WHERE ${whereOwner}sessionUnitId = ?',
-      <Object?>[if (ownerId > 0) ownerId, sessionUnitId],
+      <Object?>[ownerId, sessionUnitId],
     );
     return (rows.single['score'] as num?)?.toInt() ?? 0;
   }
 
   Future<int> readMaxMessageServerId(int ownerId, String sessionUnitId) async {
     await initialize();
-    final whereOwner = ownerId > 0 ? '(ownerId = ? OR ownerId = 0) AND ' : '';
+    final whereOwner = 'ownerId = ? AND ';
     final rows = await _connection.runSelect(
       'SELECT MAX(serverId) AS serverId FROM Messages '
       'WHERE ${whereOwner}sessionUnitId = ?',
-      <Object?>[if (ownerId > 0) ownerId, sessionUnitId],
+      <Object?>[ownerId, sessionUnitId],
     );
     return (rows.single['serverId'] as num?)?.toInt() ?? 0;
   }
@@ -899,7 +907,9 @@ class UnifiedDatabase {
           final rawVal = row['raw'];
           final rawJson = rawVal is String ? jsonDecode(rawVal) : rawVal;
           if (rawJson is Map && rawJson['senderSessionUnit'] is Map) {
-            final senderSu = Map<String, dynamic>.from(rawJson['senderSessionUnit'] as Map);
+            final senderSu = Map<String, dynamic>.from(
+              rawJson['senderSessionUnit'] as Map,
+            );
             final memberId = senderSu['id']?.toString() ?? '';
             final sessionUnitId = row['sessionUnitId']?.toString() ?? '';
             final ownerId = (row['ownerId'] as num?)?.toInt() ?? 0;

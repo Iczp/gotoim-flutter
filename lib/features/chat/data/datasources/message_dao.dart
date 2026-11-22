@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../../../core/database/unified_database.dart';
 import '../models/chat_message.dart';
 
@@ -59,6 +60,36 @@ class MessageDao {
     unit: unit,
     items: items,
     cursor: cursor,
+  );
+
+  String _historyKey(int owner, String unit, int? before) =>
+      'message-history:v2:$syncNamespace:$owner:$unit:${before ?? "head"}';
+
+  Future<Map<String, dynamic>?> readHistoryCoverage(
+    int owner,
+    String unit,
+    int? before,
+  ) async {
+    final raw = await _database.readSettingValue(
+      _historyKey(owner, unit, before),
+    );
+    if (raw == null) return null;
+    try {
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> writeHistoryCoverage(
+    int owner,
+    String unit,
+    int? before,
+    Map<String, dynamic> coverage,
+  ) => _database.writeSettingValue(
+    id: _historyKey(owner, unit, before),
+    group: 'message-history',
+    value: jsonEncode(coverage),
   );
 
   Future<void> markOpened(String localId) =>

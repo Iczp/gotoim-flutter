@@ -79,6 +79,7 @@ class MessageApi {
     final json = await _client.get<Map<String, dynamic>>(
       '/api/chat/message/history',
       query: <String, Object?>{
+        'authoritative': true,
         'sessionUnitId': sessionUnitId,
         'maxResultCount': limit,
         if (maxMessageId != null) 'maxMessageId': maxMessageId,
@@ -120,6 +121,7 @@ class MessageApi {
         'sessionUnitId': sessionUnitId,
         'maxResultCount': limit,
         'minMessageId': minMessageId,
+        'authoritative': true,
       },
     );
     return PagedResultDto<ChatMessage>.fromJson(
@@ -211,10 +213,7 @@ class MessageApi {
         path = '/api/chat/attachments/upload-file/$sessionUnitId';
         break;
     }
-    final mergedFields = <String, Object?>{
-      ...?extraFields,
-      ...?extraFiles,
-    };
+    final mergedFields = <String, Object?>{...?extraFields, ...?extraFiles};
     return _client.postMultipart<Map<String, dynamic>>(
       path,
       file: MultipartUploadFile(
@@ -249,7 +248,9 @@ class MessageApi {
           ? rawDuration
           : num.tryParse('${rawDuration ?? ''}');
       if (rawNum != null && rawNum > 0) {
-        resolvedVideoDurationSec = double.parse((rawNum / 1000.0).toStringAsFixed(2));
+        resolvedVideoDurationSec = double.parse(
+          (rawNum / 1000.0).toStringAsFixed(2),
+        );
       }
       safeExtraContent.remove('durationMs');
     }

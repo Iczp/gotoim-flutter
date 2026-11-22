@@ -30,10 +30,10 @@ extension MessageSyncDatabase on UnifiedDatabase {
   ) async {
     await initialize();
     if (ids.isEmpty) return [];
-    final whereOwner = owner > 0 ? 'ownerId = ? AND ' : '';
+    final whereOwner = 'ownerId = ? AND ';
     return _connection.runSelect(
       'SELECT * FROM Messages WHERE ${whereOwner}sessionUnitId = ? COLLATE NOCASE AND serverId IN (${List.filled(ids.length, '?').join(',')})',
-      [if (owner > 0) owner, unit, ...ids],
+      [owner, unit, ...ids],
     );
   }
 
@@ -62,18 +62,18 @@ extension MessageSyncDatabase on UnifiedDatabase {
       final byServer = {
         for (final row in existingRows)
           if (row['serverId'] != null)
-            '${row['sessionUnitId']?.toString().toLowerCase()}:${row['serverId']}':
+            '${row['ownerId']}:${row['sessionUnitId']?.toString().toLowerCase()}:${row['serverId']}':
                 row,
       };
       final byClient = {
         for (final row in existingRows)
           if (row['clientMessageId'] != null)
-            '${row['sessionUnitId']?.toString().toLowerCase()}:${row['clientMessageId']}':
+            '${row['ownerId']}:${row['sessionUnitId']?.toString().toLowerCase()}:${row['clientMessageId']}':
                 row,
       };
       final byClientIdOnly = {
         for (final row in existingRows)
-          if (row['clientMessageId'] != null) '${row['clientMessageId']}': row,
+          if (row['clientMessageId'] != null) '${row['ownerId']}:${row['clientMessageId']}': row,
       };
       final tuples = <String>[];
       final args = <Object?>[];
@@ -110,12 +110,12 @@ extension MessageSyncDatabase on UnifiedDatabase {
         final state =
             byKey['${row['syncNamespace'] ?? ''}:${row['ownerId']}:${row['sessionUnitId']}:${row['serverId']}'];
         if (state?['isDeleted'] == 1) continue;
-        final unitKey = row['sessionUnitId']?.toString().toLowerCase();
+        final unitKey = '${row['ownerId']}:${row['sessionUnitId']?.toString().toLowerCase()}';
         final existing =
             byServer['$unitKey:${row['serverId']}'] ??
             byClient['$unitKey:${row['clientMessageId']}'] ??
             (row['clientMessageId'] != null
-                ? byClientIdOnly['${row['clientMessageId']}']
+                ? byClientIdOnly['${row['ownerId']}:${row['clientMessageId']}']
                 : null);
         final oldRaw =
             existing == null

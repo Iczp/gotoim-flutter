@@ -36,6 +36,9 @@ class _GapTestClient implements ApiClient {
     if (path.endsWith('/message/latest')) {
       final minId = (query?['minMessageId'] as num?)?.toInt() ?? 0;
       latestMinMessageIds.add(minId);
+      if (minId >= 7318641) {
+        return {'items': [], 'extra': {'hasMore': false}} as T;
+      }
       // Return the gap message 7318640 and the newest message 7318641
       return {
         'items': [
@@ -186,15 +189,18 @@ class _SnapshotVsForwardClient implements ApiClient {
   }) async {
     if (path.endsWith('/message/history')) {
       return <String, dynamic>{
-        'items': <dynamic>[
-          <String, dynamic>{
-            'id': 1000,
-            'sessionUnitId': 'unit',
-            'content': <String, dynamic>{'text': 'recent snapshot message 1000'},
-          },
-        ],
-        'totalCount': 1,
-      } as T;
+            'items': <dynamic>[
+              <String, dynamic>{
+                'id': 1000,
+                'sessionUnitId': 'unit',
+                'content': <String, dynamic>{
+                  'text': 'recent snapshot message 1000',
+                },
+              },
+            ],
+            'totalCount': 1,
+          }
+          as T;
     }
     if (path.endsWith('/message/latest')) {
       final minId = (query?['minMessageId'] as num?)?.toInt() ?? 0;
@@ -213,6 +219,50 @@ class _SnapshotVsForwardClient implements ApiClient {
       return <String, dynamic>{'items': <dynamic>[], 'totalCount': 0} as T;
     }
     return <String, dynamic>{'items': <dynamic>[], 'totalCount': 0} as T;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RecoveryClient implements ApiClient {
+  final List<int> cursors = [];
+  final List<int?> historyCursors = [];
+  Completer<Map<String, dynamic>>? delayed;
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    if (path.endsWith('/history')) {
+      historyCursors.add(query?['maxMessageId'] as int?);
+      return {
+            'items': [
+              for (final id in [200, 150, 140])
+                {
+                  'id': id,
+                  'content': {'text': '$id'},
+                },
+            ],
+            'extra': {'hasMore': true},
+          }
+          as T;
+    }
+    final cursor = query?['minMessageId'] as int;
+    cursors.add(cursor);
+    if (delayed != null) return await delayed!.future as T;
+    return {
+          'items': [
+            if (cursor < 3)
+              {
+                'id': cursor + 1,
+                'content': {'text': 'recovered'},
+              },
+          ],
+          'extra': {'hasMore': cursor < 2},
+        }
+        as T;
   }
 
   @override
@@ -336,14 +386,15 @@ void main() {
       dao: dao,
     );
 
-    final cursor = await repo.getLatestSyncCursor(
-      ownerId: 1,
-      sessionUnitId: 'unit',
-    );
-    // Cursor should return 0, and watermark in SQLite must remain unset/null!
-    expect(cursor, 0);
-    expect(await dao.readMessageWatermark(1, 'unit'), isNull);
-  });
+      final cursor = await repo.getLatestSyncCursor(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+      );
+      // Cursor should return 0, and watermark in SQLite must remain unset/null!
+      expect(cursor, 0);
+      expect(await dao.readMessageWatermark(1, 'unit'), isNull);
+    },
+  );
 
   test('F2: loadLatest does NOT advance forward watermark to snapshot max ID', () async {
     final database = UnifiedDatabase(
@@ -354,11 +405,8 @@ void main() {
 
     await dao.writeMessageWatermark(1, 'unit', 100);
 
-    final client = _SnapshotVsForwardClient();
-    final repo = MessageRepository(
-      api: MessageApi(client),
-      dao: dao,
-    );
+      final client = _SnapshotVsForwardClient();
+      final repo = MessageRepository(api: MessageApi(client), dao: dao);
 
     await repo.loadLatest(
       ownerId: 1,
@@ -367,10 +415,11 @@ void main() {
       refreshRecent: true,
     );
 
-    // Watermark must advance to 200 (forward progress), NOT 1000 (snapshot max)!
-    final watermark = await dao.readMessageWatermark(1, 'unit');
-    expect(watermark, 200);
-  });
+      // Watermark must advance to 200 (forward progress), NOT 1000 (snapshot max)!
+      final watermark = await dao.readMessageWatermark(1, 'unit');
+      expect(watermark, 200);
+    },
+  );
 
   test('F3: loadHistory does NOT overwrite an existing watermark from history response', () async {
     final database = UnifiedDatabase(
@@ -382,22 +431,17 @@ void main() {
     // Existing watermark is established at 500
     await dao.writeMessageWatermark(1, 'unit', 500);
 
-    final client = _SnapshotVsForwardClient();
-    final repo = MessageRepository(
-      api: MessageApi(client),
-      dao: dao,
-    );
+      final client = _SnapshotVsForwardClient();
+      final repo = MessageRepository(api: MessageApi(client), dao: dao);
 
-    // Fetch initial history page where remote returns snapshot message with ID 1000
-    await repo.loadHistory(
-      ownerId: 1,
-      sessionUnitId: 'unit',
-    );
+      // Fetch initial history page where remote returns snapshot message with ID 1000
+      await repo.loadHistory(ownerId: 1, sessionUnitId: 'unit');
 
-    // Watermark must remain 500, not overwritten by 1000!
-    final watermark = await dao.readMessageWatermark(1, 'unit');
-    expect(watermark, 500);
-  });
+      // Watermark must remain 500, not overwritten by 1000!
+      final watermark = await dao.readMessageWatermark(1, 'unit');
+      expect(watermark, 500);
+    },
+  );
 
   test('F4: ChatController loadLatest with refreshRecent fetches history snapshot for empty session', () async {
     final database = UnifiedDatabase(
@@ -439,10 +483,18 @@ void main() {
     // Reconnect/re-entry triggers loadLatest(refreshRecent: true)
     await controller.loadLatest(refreshRecent: true);
 
-    // Verified: First messages are recovered and visible in controller!
-    expect(controller.messages, isNotEmpty);
-    expect(await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 7318641), isNotNull);
-  });
+      // Verified: First messages are recovered and visible in controller!
+      expect(controller.messages, isNotEmpty);
+      expect(
+        await dao.findByServerId(
+          ownerId: 1,
+          sessionUnitId: 'unit',
+          serverId: 7318641,
+        ),
+        isNotNull,
+      );
+    },
+  );
 
   test('F7: loadHistory on 403 Forbidden does NOT permanently mark loadedAll', () async {
     final database = UnifiedDatabase(
@@ -451,19 +503,172 @@ void main() {
     addTearDown(database.close);
     final dao = MessageDao(database);
 
-    final client = _ForbiddenClient();
-    final repo = MessageRepository(
-      api: MessageApi(client),
-      dao: dao,
-    );
+      final client = _ForbiddenClient();
+      final repo = MessageRepository(api: MessageApi(client), dao: dao);
 
-    final page = await repo.loadHistory(
-      ownerId: 1,
-      sessionUnitId: 'unit',
-    );
+      final page = await repo.loadHistory(ownerId: 1, sessionUnitId: 'unit');
 
-    expect(page.items, isEmpty);
-    // Crucial: SQLite loadedAll flag must NOT be marked true!
-    expect(await dao.isLoadedAll('unit'), isFalse);
+      expect(page.items, isEmpty);
+      // Crucial: SQLite loadedAll flag must NOT be marked true!
+      expect(await dao.isLoadedAll('unit'), isFalse);
+    },
+  );
+  test(
+    'missing watermark with newer cache recovers from zero and automatically continues',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      await dao.upsertAll([
+        ChatMessage.fromJson({'id': 500}, ownerId: 1, sessionUnitId: 'unit'),
+      ]);
+      final client = _RecoveryClient();
+      final repo = MessageRepository(api: MessageApi(client), dao: dao);
+      addTearDown(repo.dispose);
+      await repo.loadLatest(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        minMessageId: await repo.getLatestSyncCursor(
+          ownerId: 1,
+          sessionUnitId: 'unit',
+        ),
+        limit: 1,
+        maxPages: 1,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(client.cursors, [0, 1, 2]);
+      expect(await dao.readMessageWatermark(1, 'unit'), 3);
+      expect(
+        await dao.findByServerId(
+          ownerId: 1,
+          sessionUnitId: 'unit',
+          serverId: 1,
+        ),
+        isNotNull,
+      );
+    },
+  );
+
+  test(
+    'a full fragmented history page fetches from its requested boundary and persists coverage',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      await dao.upsertAll([
+        for (final id in [200, 50])
+          ChatMessage.fromJson({'id': id}, ownerId: 1, sessionUnitId: 'unit'),
+      ]);
+      final client = _RecoveryClient();
+      final repo = MessageRepository(api: MessageApi(client), dao: dao);
+      final page = await repo.loadHistory(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        limit: 2,
+      );
+      expect(client.historyCursors, [null]);
+      expect(page.items.map((m) => m.serverId), [200, 150]);
+      expect(await dao.readMessageWatermark(1, 'unit'), isNull);
+      await repo.loadHistory(ownerId: 1, sessionUnitId: 'unit', limit: 2);
+      expect(client.historyCursors.length, 1);
+    },
+  );
+
+  test(
+    'disposing identity while HTTP is pending prevents both message and cursor writes',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      final client =
+          _RecoveryClient()..delayed = Completer<Map<String, dynamic>>();
+      final repo = MessageRepository(api: MessageApi(client), dao: dao);
+      final pending = repo.loadLatest(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        minMessageId: 0,
+      );
+      final assertion = expectLater(pending, throwsStateError);
+      await Future<void>.delayed(Duration.zero);
+      repo.dispose();
+      client.delayed!.complete({
+        'items': [
+          {'id': 1},
+        ],
+        'extra': {'hasMore': false},
+      });
+      await assertion;
+      expect(await dao.readMessageWatermark(1, 'unit'), isNull);
+      expect(await dao.readPage(ownerId: 1, sessionUnitId: 'unit'), isEmpty);
+    },
+  );
+
+  test('Controller does not replace a missing watermark with cached maximum', () async {
+    final database = UnifiedDatabase(DatabaseConnection(NativeDatabase.memory()));
+    addTearDown(database.close);
+    final dao = MessageDao(database);
+    await dao.upsertAll([ChatMessage.fromJson({'id': 500}, ownerId: 1, sessionUnitId: 'unit')]);
+    final client = _RecoveryClient();
+    final repo = MessageRepository(api: MessageApi(client), dao: dao);
+    addTearDown(repo.dispose);
+    final bus = SessionChangeBus();
+    addTearDown(bus.dispose);
+    final controller = ChatController(repo, _Sessions(),
+      filePickerService: _Files(), attachmentTransferService: _Transfer(),
+      mediaService: _Media(), audioPlaybackService: _Audio(), sessionChangeBus: bus,
+      clipboardService: _Clipboard(), chatSettingsRepository: _Settings(),
+      aiStreamChangeBus: AiStreamChangeBus(), signalRGateway: _Gateway(),
+      ownerId: 1, sessionUnitId: 'unit', initialTitle: 'cached');
+    addTearDown(controller.dispose);
+    await controller.loadLatest();
+    expect(client.cursors.first, 0);
+    expect(await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 1), isNotNull);
   });
+
+  test(
+    'known owners cannot read or delete legacy owner-zero or other-owner messages',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      await dao.upsertAll([
+        for (final owner in [0, 1, 2])
+          ChatMessage.fromJson(
+            {'id': owner + 1},
+            ownerId: owner,
+            sessionUnitId: 'unit',
+          ),
+      ]);
+      expect(
+        (await dao.readPage(
+          ownerId: 1,
+          sessionUnitId: 'unit',
+        )).map((m) => m.serverId),
+        [2],
+      );
+      await database.deleteMessagesBySessionUnit(1, 'unit');
+      expect(
+        (await dao.readPage(
+          ownerId: 0,
+          sessionUnitId: 'unit',
+        )).map((m) => m.serverId),
+        [1],
+      );
+      expect(
+        (await dao.readPage(
+          ownerId: 2,
+          sessionUnitId: 'unit',
+        )).map((m) => m.serverId),
+        [3],
+      );
+    },
+  );
 }
