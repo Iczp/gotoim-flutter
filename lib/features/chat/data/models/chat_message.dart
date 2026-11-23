@@ -172,6 +172,7 @@ class ChatMessage {
     return firstNonEmpty(<Object?>[
       content['text'],
       content['content'],
+      content['fallbackText'],
       raw['text'],
     ]);
   }

@@ -124,7 +124,8 @@ class ChatMessageMenuBuilder {
       if (message.messageType == 4) ...[
         _item('playVideo', '播放', Icons.play_circle_outline, context),
       ],
-      _item('forward', '转发', Icons.forward_outlined, context),
+      if (message.messageType != 13)
+        _item('forward', '转发', Icons.forward_outlined, context),
       if (context.canSelect)
         _item('select', '多选', Icons.checklist_outlined, context),
     ];

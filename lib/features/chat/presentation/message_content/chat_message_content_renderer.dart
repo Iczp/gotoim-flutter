@@ -19,6 +19,7 @@ import 'unsupported_message_content.dart';
 import 'article_message_content.dart';
 import 'video_message_content.dart';
 import 'voice_message_content.dart';
+import 'template_message_content.dart';
 
 /// Shared message-type dispatch used by timeline rows and quote containers.
 class ChatMessageContentRenderer extends StatelessWidget {
@@ -95,6 +96,12 @@ class ChatMessageContentRenderer extends StatelessWidget {
       maxWidth: maxWidth,
     ),
     12 => HistoryMessageContent(message: message, presentation: presentation),
+    13 => TemplateMessageContent(
+      message: message,
+      presentation: presentation,
+      maxWidth: maxWidth,
+      onLinkTap: onLinkTap,
+    ),
     3 => VoiceMessageContent(
       message: message,
       onOpened: onVoiceOpened,

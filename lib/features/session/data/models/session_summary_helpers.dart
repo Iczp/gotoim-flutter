@@ -60,6 +60,7 @@ String messageContentType(Map<String, dynamic> message) {
     10 => '[HTML]',
     11 => '[文章]',
     12 => '[聊天记录]',
+    13 => '[模板消息]',
     _ => '',
   };
 }
@@ -78,6 +79,9 @@ String messageContentText(Map<String, dynamic> message) {
     6 => firstNonEmpty([content['title'], content['url']]),
     10 || 12 => content['title']?.toString() ?? '',
     11 => _articlePreview(message['content']),
+    13 => stripMessageTags(
+      firstNonEmpty([content['fallbackText'], content['text']]),
+    ),
     null => stripMessageTags(messagePreview(message['content'])),
     _ => '',
   };
