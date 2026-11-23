@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 class PublicAccountMenuItem {
   const PublicAccountMenuItem({
     required this.name,
+    this.id,
     this.type = 'click',
     this.key,
     this.url,
     this.subButtons = const <PublicAccountMenuItem>[],
   });
 
+  final String? id;
   final String name;
   final String type;
   final String? key;
@@ -19,11 +21,13 @@ class PublicAccountMenuItem {
   factory PublicAccountMenuItem.fromJson(Map<String, dynamic> json) {
     final subRaw =
         json['subButtons'] ?? json['sub_button'] ?? json['children'];
+    final isView = json['event'] == 1 || json['type'] == 'view';
     return PublicAccountMenuItem(
+      id: json['id']?.toString(),
       name: (json['name'] ?? json['title'] ?? '').toString(),
-      type: (json['type'] ?? 'click').toString(),
-      key: json['key']?.toString(),
-      url: json['url']?.toString(),
+      type: isView ? 'view' : (json['type'] ?? 'click').toString(),
+      key: (json['code'] ?? json['key'])?.toString(),
+      url: (json['args'] ?? json['url'])?.toString(),
       subButtons:
           subRaw is List
               ? subRaw

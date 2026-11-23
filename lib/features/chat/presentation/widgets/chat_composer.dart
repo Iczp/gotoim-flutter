@@ -131,10 +131,16 @@ class ChatComposerState extends ConsumerState<ChatComposer>
   }
 
   void _onMenuItemSelected(PublicAccountMenuItem item) {
-    if (item.url != null && item.url!.isNotEmpty) {
-      showToast('访问服务：${item.name}', type: ToastType.info);
+    if (item.type == 'view' && item.url != null && item.url!.isNotEmpty) {
+      showToast('正在访问：${item.name}', type: ToastType.info);
     } else {
-      widget.controller.send(item.key ?? item.name);
+      widget.controller.triggerOfficialMenu({
+        'id': item.id,
+        'name': item.name,
+        'type': item.type,
+        'key': item.key,
+        'url': item.url,
+      });
     }
   }
 

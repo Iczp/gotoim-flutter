@@ -78,6 +78,30 @@ class MessageRepository {
     actionText: actionText,
   );
 
+  Future<Map<String, dynamic>?> getPublishedOfficialMenus(
+    int chatObjectId, {
+    String? version,
+  }) =>
+      _api.getPublishedOfficialMenus(chatObjectId, version: version);
+
+  Future<void> triggerOfficialMenu({
+    required String menuId,
+    required String sessionUnitId,
+  }) => _api.triggerOfficialMenu(
+    menuId: menuId,
+    sessionUnitId: sessionUnitId,
+  );
+
+  Future<void> reportMenuClick({
+    required String menuId,
+    String? sessionUnitId,
+    int? senderId,
+  }) => _api.reportMenuClick(
+    menuId: menuId,
+    sessionUnitId: sessionUnitId,
+    senderId: senderId,
+  );
+
   Future<List<ChatMessage>> loadLocalLatest({
     required int ownerId,
     required String sessionUnitId,

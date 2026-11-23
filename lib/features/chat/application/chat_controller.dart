@@ -320,8 +320,80 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   bool get isOfficialAccount =>
       destinationObjectType == 3 || destinationObjectType == 4;
 
+  List<Map<String, dynamic>> _remoteOfficialMenus = const [];
+  String? _officialMenuVersion;
+
+  Future<void> _loadOfficialMenus() async {
+    if (!isOfficialAccount) return;
+    final dest = asMap(friend?.raw['destination']);
+    final destId = asInt(dest['id']);
+    if (destId == null || destId <= 0) return;
+    try {
+      final res = await _repository.getPublishedOfficialMenus(
+        destId,
+        version: _officialMenuVersion,
+      );
+      if (res != null && !_isDisposed) {
+        final isModified = res['isModified'] as bool? ?? true;
+        final newVersion = res['version']?.toString();
+        if (newVersion != null) {
+          _officialMenuVersion = newVersion;
+        }
+        if (isModified) {
+          final items = res['items'];
+          if (items is List) {
+            _remoteOfficialMenus = items.whereType<Map<String, dynamic>>().toList();
+            notifyListeners();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load official menus: $e');
+    }
+  }
+
+  @override
+  Future<void> triggerOfficialMenu(Map<String, dynamic> item) async {
+    final menuId = item['id']?.toString();
+    final eventType = item['type']?.toString().toLowerCase();
+
+    // 针对 View / 网页跳转等非 trigger 动作，执行独立埋点上报
+    if (menuId != null && menuId.isNotEmpty && (eventType == 'view' || eventType == 'navigation')) {
+      void reportClick() async {
+        try {
+          await _repository.reportMenuClick(
+            menuId: menuId,
+            sessionUnitId: sessionUnitId,
+            senderId: effectiveOwnerId > 0 ? effectiveOwnerId : null,
+          );
+        } catch (_) {}
+      }
+      reportClick();
+      return;
+    }
+
+    if (menuId != null && menuId.isNotEmpty) {
+      try {
+        await _repository.triggerOfficialMenu(
+          menuId: menuId,
+          sessionUnitId: sessionUnitId,
+        );
+        return;
+      } catch (e) {
+        debugPrint('triggerOfficialMenu API failed: $e');
+      }
+    }
+    final keyOrName = item['key'] ?? item['name'] ?? '';
+    if (keyOrName.toString().isNotEmpty) {
+      send(keyOrName.toString());
+    }
+  }
+
   @override
   List<Map<String, dynamic>> get officialAccountMenus {
+    if (_remoteOfficialMenus.isNotEmpty) {
+      return _remoteOfficialMenus;
+    }
     final rawMenus = friend?.raw['menus'];
     if (rawMenus is List && rawMenus.isNotEmpty) {
       return rawMenus.whereType<Map<String, dynamic>>().toList();
@@ -418,6 +490,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
       if (localFriend != null) {
         friend = localFriend;
         _title = localFriend.title;
+        if (isOfficialAccount) unawaited(_loadOfficialMenus());
       }
       _messages
         ..clear()
@@ -632,6 +705,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
       );
       friend = remote;
       _title = remote.title;
+      if (isOfficialAccount) unawaited(_loadOfficialMenus());
       notifyListeners();
       debugPrint(
         '[ChatTrace] ✔ [5/5] remote friend detail synced | '

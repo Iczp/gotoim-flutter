@@ -11,6 +11,7 @@ import '../../data/models/chat_message.dart';
 abstract class ChatComposerController with ChangeNotifier {
   bool get isOfficialAccount;
   List<Map<String, dynamic>> get officialAccountMenus;
+  Future<void> triggerOfficialMenu(Map<String, dynamic> item);
   bool get isMuted;
   bool get isSending;
   ChatMessage? get quoting;

@@ -436,4 +436,54 @@ class MessageApi {
       // 瞬态状态上报忽略失败
     }
   }
+
+  /// 获取公众号/订阅号已发布的正式菜单（带版本比较）: GET /api/chat/menu/published/{chatObjectId}
+  Future<Map<String, dynamic>?> getPublishedOfficialMenus(
+    int chatObjectId, {
+    String? version,
+  }) async {
+    try {
+      final result = await _client.get<dynamic>(
+        '/api/chat/menu/published/$chatObjectId',
+        query: <String, Object?>{
+          if (version != null && version.isNotEmpty) 'version': version,
+        },
+      );
+      if (result is Map<String, dynamic>) {
+        return result;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// 触发公众号菜单后台作业: POST /api/chat/menu/trigger
+  Future<void> triggerOfficialMenu({
+    required String menuId,
+    required String sessionUnitId,
+  }) async {
+    await _client.post<dynamic>(
+      '/api/chat/menu/trigger',
+      query: <String, Object?>{
+        'id': menuId,
+        'sessionUnitId': sessionUnitId,
+      },
+    );
+  }
+
+  /// 上报公众号菜单点击（用于 View、LocalPage 等非后台事件动作的 PV/UV 埋点）
+  Future<void> reportMenuClick({
+    required String menuId,
+    String? sessionUnitId,
+    int? senderId,
+  }) async {
+    try {
+      await _client.post<dynamic>(
+        '/api/chat/menu/report-click/$menuId',
+        data: <String, Object?>{
+          if (sessionUnitId != null) 'sessionUnitId': sessionUnitId,
+          if (senderId != null) 'senderId': senderId,
+        },
+      );
+    } catch (_) {}
+  }
 }
