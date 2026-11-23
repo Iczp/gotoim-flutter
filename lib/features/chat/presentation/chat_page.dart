@@ -52,6 +52,7 @@ import 'message_content/chat_message_presentation.dart';
 import 'message_menu/chat_avatar_menu.dart';
 import 'message_menu/chat_message_menu.dart';
 import 'widgets/chat_composer.dart';
+import 'widgets/template_message_composer.dart';
 import 'widgets/chat_appearance_sheet.dart';
 import 'widgets/chat_input_area.dart';
 import 'widgets/chat_message_list.dart';
@@ -572,6 +573,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         onMergeForward: _showMergeForwardTargets,
       ),
       composer: ChatComposer(
+        onComposeTemplate: () => TemplateMessageComposer.open(context, controller),
         key: _composerKey,
         controller: controller,
         input: input,

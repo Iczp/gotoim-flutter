@@ -1,5 +1,6 @@
 import '../../../session/data/models/session_summary_helpers.dart';
 import 'article_message_item.dart';
+import 'template_message_content.dart';
 
 class ChatMessage {
   const ChatMessage({
@@ -169,6 +170,7 @@ class ChatMessage {
 
   String get text {
     final content = asMap(raw['content']);
+    if (messageType == 13) return templateFallbackText(content['fallbackText']);
     return firstNonEmpty(<Object?>[
       content['text'],
       content['content'],

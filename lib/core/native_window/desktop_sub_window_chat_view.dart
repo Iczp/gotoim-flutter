@@ -973,6 +973,9 @@ class SubWindowChatController extends ChangeNotifier
   List<Map<String, dynamic>> get officialAccountMenus => const [];
 
   @override
+  Future<void> triggerOfficialMenu(Map<String, dynamic> item) async {}
+
+  @override
   bool get isMuted => false;
 
   @override

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'package:uuid/uuid.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_exception.dart';
 
@@ -27,6 +28,93 @@ class MessageRepository {
        _sessionChangeBus = sessionChangeBus;
   final MessageApi _api;
   MessageApi get api => _api;
+  Future<Map<String, dynamic>> usableTemplates(
+    int ownerId, {
+    int skipCount = 0,
+  }) => _api.usableTemplates(ownerId: ownerId, skipCount: skipCount);
+
+  Future<Map<String, dynamic>> templateRevision(String id, int version) =>
+      _api.templateRevision(id, version);
+
+  Future<ChatMessage> sendTemplate({
+    required int ownerId,
+    required String sessionUnitId,
+    required Map<String, dynamic> content,
+    required Map<String, dynamic> snapshot,
+    ChatMessage? quote,
+  }) async {
+    final clientId = const Uuid().v4().replaceAll('-', '').substring(0, 26);
+    final pending = ChatMessage(
+      localId: 'scope:$ownerId:$sessionUnitId:$clientId',
+      serverId: null,
+      clientMessageId: clientId,
+      ownerId: ownerId,
+      sessionUnitId: sessionUnitId,
+      senderSessionUnitId: sessionUnitId,
+      messageType: 13,
+      state: 'sending',
+      score: await _dao.maxScore(ownerId, sessionUnitId) + 1,
+      createdAt: DateTime.now(),
+      raw: {
+        'messageType': 13,
+        'content': snapshot,
+        '_templateRequest': jsonDecode(jsonEncode(content)),
+        if (quote?.serverId != null) 'quoteMessageId': quote!.serverId,
+        if (quote != null) 'quoteMessage': quote.raw,
+      },
+    );
+    return retryTemplate(pending);
+  }
+
+  /// Keep the frozen request and ClientMessageId through failures and restarts.
+  Future<ChatMessage> retryTemplate(ChatMessage message) async {
+    if (message.messageType != 13 ||
+        message.clientMessageId == null ||
+        message.raw['_templateRequest'] is! Map) {
+      throw StateError('模板发送请求不可用，请重新选择模板发送');
+    }
+    var local = message.copyWith(state: 'sending');
+    _checkActive();
+    await _dao.upsertAll([local]);
+    await _updateSessionSummary(local);
+    try {
+      final response = await _api.sendTemplate(
+        sessionUnitId: message.sessionUnitId,
+        clientMessageId: message.clientMessageId!,
+        content: Map<String, dynamic>.from(
+          message.raw['_templateRequest'] as Map,
+        ),
+        quoteMessageId: _asInt(message.raw['quoteMessageId']),
+      );
+      _checkActive();
+      final id = _asInt(response['id']);
+      if (id == null) throw StateError('服务器未返回消息标识');
+      // Local upsert preserves missing fields; explicitly clear the frozen data.
+      final raw = <String, dynamic>{...local.raw, ...response,
+        '_templateRequest': <String, dynamic>{}};
+      local = local.copyWith(
+        serverId: id,
+        state: 'sent',
+        score: id * 1000000,
+        raw: raw,
+      );
+    } catch (_) {
+      // Do not expose transport exceptions or data in UI/logs.
+      local = local.copyWith(
+        state: 'failed',
+        raw: {...local.raw, 'errorMessage': '发送失败，可使用原请求重试'},
+      );
+    }
+    _checkActive();
+    await _dao.upsertAll([local]);
+    await _updateSessionSummary(local);
+    _sessionChangeBus?.publish(
+      ownerId: local.ownerId,
+      sessionUnitId: local.sessionUnitId,
+    );
+    return local;
+  }
+
   final MessageDao _dao;
   final SessionDao? _sessionDao;
   final SessionChangeBus? _sessionChangeBus;

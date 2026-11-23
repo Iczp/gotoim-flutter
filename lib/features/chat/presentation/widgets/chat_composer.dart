@@ -35,6 +35,7 @@ class ChatComposer extends ConsumerStatefulWidget {
     required this.input,
     required this.quoteContentBuilder,
     this.onOpenAppearancePanel,
+    this.onComposeTemplate,
     this.useGlass = false,
     this.hasBackground = false,
     this.isDesktop = false,
@@ -50,6 +51,7 @@ class ChatComposer extends ConsumerStatefulWidget {
   /// 引用消息内容构建器
   final Widget Function(ChatMessage quote) quoteContentBuilder;
   final Future<void> Function()? onOpenAppearancePanel;
+  final Future<void> Function()? onComposeTemplate;
   final bool useGlass;
   final bool hasBackground;
   final bool isDesktop;
@@ -102,6 +104,7 @@ class ChatComposerState extends ConsumerState<ChatComposer>
     ChatFunctionItem('拍视频', Icons.video_camera_back_outlined),
     ChatFunctionItem('视频', Icons.videocam_outlined),
     ChatFunctionItem('文件', Icons.insert_drive_file_outlined, enabled: true),
+    ChatFunctionItem('模板消息', Icons.dashboard_customize_outlined, enabled: true),
     ChatFunctionItem('设置背景', Icons.wallpaper_rounded, enabled: true),
     ChatFunctionItem('位置', Icons.location_on_outlined),
     ChatFunctionItem('名片', Icons.contact_page_outlined),
@@ -492,6 +495,16 @@ class ChatComposerState extends ConsumerState<ChatComposer>
   }
 
   Future<void> _selectFunction(ChatFunctionItem item) async {
+    if (item.label == '模板消息') {
+      _closeFunctions();
+      if (widget.onComposeTemplate != null) {
+        await widget.onComposeTemplate!();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请在主窗口打开会话发送模板消息')));
+      }
+      return;
+    }
     if (item.label == '设置背景') {
       _closeFunctions();
       await widget.onOpenAppearancePanel?.call();
@@ -1228,6 +1241,9 @@ class ChatComposerState extends ConsumerState<ChatComposer>
               tooltip: '表情',
               onPressed: () => _openDesktopEmojiPicker(context),
             ),
+            if (widget.onComposeTemplate != null)
+              _DesktopToolIcon(icon: Icons.dashboard_customize_outlined,
+                tooltip: '模板消息', onPressed: () => widget.onComposeTemplate?.call()),
             const SizedBox(width: 4),
             _DesktopToolIcon(
               icon: Icons.folder_open_outlined,

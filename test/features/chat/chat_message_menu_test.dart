@@ -34,6 +34,11 @@ void main() {
   const builder = ChatMessageMenuBuilder();
 
   group('ChatMessageMenuBuilder Tests', () {
+    test('template exposes summary copy but never offers forwarding', () {
+      final items = builder.build(ChatMessageMenuContext(message: _message(type: 13)));
+      expect(items.map((item) => item.id), contains('copy'));
+      expect(items.map((item) => item.id), isNot(contains('forward')));
+    });
     test('sent self text offers quote, copy, selectText, forward, select, recall, and delete', () {
       final items = builder.build(
         ChatMessageMenuContext(message: _message(), canRecall: true),

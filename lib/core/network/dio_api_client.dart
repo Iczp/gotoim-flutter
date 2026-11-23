@@ -206,6 +206,8 @@ class DioApiClient implements ApiClient {
   }) async {
     final traceId = DiagnosticTrace.create('http');
     final stopwatch = Stopwatch()..start();
+    final isTemplateRequest = path.startsWith('/api/chat/message-template') ||
+        path.startsWith('/api/chat/message-sender/send-template-content-message/');
     final usesStoredAccessToken = headers?.containsKey('Authorization') != true;
     if (usesStoredAccessToken && _globalRefreshInFlight != null) {
       try {
@@ -318,7 +320,7 @@ class DioApiClient implements ApiClient {
         category: 'http',
         event: 'http_error',
         traceId: traceId,
-        error: error,
+        error: isTemplateRequest ? 'Template request failed' : error,
         stackTrace: error.stackTrace,
         context: <String, Object?>{
           'method': method,
@@ -328,7 +330,7 @@ class DioApiClient implements ApiClient {
           'durationMs': stopwatch.elapsedMilliseconds,
           'requestHeaders': error.requestOptions.headers,
           'responseHeaders': error.response?.headers.map,
-          'responseData': error.response?.data,
+          'responseData': isTemplateRequest ? '[redacted]' : error.response?.data,
         },
       );
       throw _toApiException(error);

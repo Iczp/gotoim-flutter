@@ -1520,6 +1520,9 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
     ChatMessage message,
     String targetSessionUnitId,
   ) async {
+    if (message.messageType == 13) {
+      throw StateError('模板消息暂不支持转发');
+    }
     await _repository.forward(
       message: message,
       targetSessionUnitIds: <String>[targetSessionUnitId],
@@ -1530,6 +1533,9 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
     final selected = _messages
         .where((message) => selectedLocalIds.contains(message.localId))
         .toList(growable: false);
+    if (selected.any((message) => message.messageType == 13)) {
+      throw StateError('所选消息含模板消息，暂不支持合并转发');
+    }
     if (selected.any((message) => message.serverId == null)) {
       throw StateError('请等待所选消息发送完成后再合并转发');
     }
@@ -1837,8 +1843,36 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
     );
   }
 
+  Future<Map<String, dynamic>> loadUsableTemplates({int skipCount = 0}) =>
+      _repository.usableTemplates(ownerId, skipCount: skipCount);
+
+  Future<Map<String, dynamic>> loadTemplateRevision(String id, int version) =>
+      _repository.templateRevision(id, version);
+
+  Future<void> sendTemplate(Map<String, dynamic> content,
+      Map<String, dynamic> snapshot) async {
+    if (isMuted) throw StateError('当前会话不可发送消息');
+    final quote = quoting;
+    final result = await _repository.sendTemplate(ownerId: ownerId,
+        sessionUnitId: sessionUnitId, content: content, snapshot: snapshot, quote: quote);
+    if (_isDisposed) return;
+    if (result.state == 'sent') cancelQuote();
+    _replaceMessage(result);
+    notifyListeners();
+    _playSentEffect(result);
+  }
   Future<void> retryMessage(ChatMessage message) async {
     if (message.state != 'failed') return;
+    if (message.messageType == 13) {
+      _replaceMessage(message.copyWith(state: 'sending'));
+      if (!_isDisposed) notifyListeners();
+      final retried = await _repository.retryTemplate(message);
+      if (_isDisposed) return;
+      _replaceMessage(retried);
+      notifyListeners();
+      _playSentEffect(retried);
+      return;
+    }
     if (message.messageType != 0) {
       await retryFile(message);
       return;
@@ -1873,6 +1907,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
 
   bool canRetryMessage(ChatMessage message) {
     if (message.state != 'failed') return false;
+    if (message.messageType == 13) return message.raw['_templateRequest'] is Map;
     if (message.messageType == 0) return true;
     if (_pendingFiles.containsKey(message.localId)) return true;
     if (!kIsWeb && message.localFilePath != null) {

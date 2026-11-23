@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../../chat/data/models/article_message_item.dart';
+import '../../../chat/data/models/template_message_content.dart';
 
 import '../../../../core/utils/message_text_formatter.dart';
 
@@ -71,17 +72,14 @@ String messageContentText(Map<String, dynamic> message) {
   }
   final content = asMap(message['content']);
   return switch (asInt(message['messageType'])) {
-    0 || 1 => stripMessageTags(
-      firstNonEmpty([content['text'], content['content']]),
-    ),
+    0 ||
+    1 => stripMessageTags(firstNonEmpty([content['text'], content['content']])),
     3 => content['time']?.toString() ?? '',
     5 => content['fileName']?.toString() ?? '',
     6 => firstNonEmpty([content['title'], content['url']]),
     10 || 12 => content['title']?.toString() ?? '',
     11 => _articlePreview(message['content']),
-    13 => stripMessageTags(
-      firstNonEmpty([content['fallbackText'], content['text']]),
-    ),
+    13 => stripMessageTags(templateFallbackText(content['fallbackText'])),
     null => stripMessageTags(messagePreview(message['content'])),
     _ => '',
   };
@@ -99,7 +97,9 @@ String _articlePreview(Object? content) {
   final items = ArticleMessageItem.fromContent(content);
   if (items.isEmpty) return '文章内容不可用';
   final title = items.first.title.isEmpty ? '文章' : items.first.title;
-  return stripMessageTags('$title${items.length > 1 ? ' 等${items.length}篇' : ''}');
+  return stripMessageTags(
+    '$title${items.length > 1 ? ' 等${items.length}篇' : ''}',
+  );
 }
 
 String encodeJson(Map<String, dynamic> value) => jsonEncode(value);

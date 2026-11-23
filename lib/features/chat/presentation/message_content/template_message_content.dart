@@ -1,9 +1,8 @@
-import 'dart:io' show Process, ProcessStartMode;
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/security/url_security_service.dart';
+import '../../../../core/services/clipboard_service.dart';
 
 import '../../data/models/chat_message.dart';
 import '../../data/models/template_message_content.dart';
@@ -25,10 +24,15 @@ class TemplateMessageContent extends StatelessWidget {
   final double? maxWidth;
   final Future<void> Function()? onLinkTap;
 
+  static final _parsedMessages = Expando<ParsedTemplateResult>();
+
   @override
   Widget build(BuildContext context) {
     final isQuote = presentation == ChatMessagePresentation.quote;
-    final parsed = TemplateSnapshot.parse(message.raw['content']);
+    final parsed =
+        _parsedMessages[message] ??= TemplateSnapshot.parse(
+          message.raw['content'],
+        );
 
     if (isQuote) {
       return Row(
@@ -42,7 +46,11 @@ class TemplateMessageContent extends StatelessWidget {
             ),
             child: const Text(
               '模板',
-              style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           const SizedBox(width: 6),
@@ -60,8 +68,7 @@ class TemplateMessageContent extends StatelessWidget {
 
     final cardWidget = Container(
       constraints: BoxConstraints(
-        minWidth: 220,
-        maxWidth: maxWidth ?? 340,
+        maxWidth: (maxWidth ?? 340).clamp(0, 340).toDouble(),
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -79,9 +86,10 @@ class TemplateMessageContent extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: !parsed.valid || parsed.snapshot == null
-            ? _buildFallbackCard(context, parsed.fallbackText)
-            : _buildCardContent(context, parsed.snapshot!),
+        child:
+            !parsed.valid || parsed.snapshot == null
+                ? _buildFallbackCard(context, parsed.fallbackText)
+                : _buildCardContent(context, parsed.snapshot!),
       ),
     );
 
@@ -146,7 +154,10 @@ class TemplateMessageContent extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.blue.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(4),
@@ -198,7 +209,8 @@ class TemplateMessageContent extends StatelessWidget {
     switch (node.type) {
       case 'text':
         final tNode = node as TextNode;
-        final resolvedText = tNode.text ?? _resolveBind(snapshot.data, tNode.bind);
+        final resolvedText =
+            tNode.text ?? _resolveBind(snapshot.data, tNode.bind);
         if (resolvedText.isEmpty) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
@@ -206,13 +218,13 @@ class TemplateMessageContent extends StatelessWidget {
             resolvedText,
             style: switch (tNode.style) {
               'heading' => const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+              ),
               'secondary' => TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).textTheme.bodySmall?.color,
-                ),
+                fontSize: 12,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
               _ => const TextStyle(fontSize: 13),
             },
           ),
@@ -227,11 +239,13 @@ class TemplateMessageContent extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                fNode.label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).textTheme.bodySmall?.color,
+              Flexible(
+                child: Text(
+                  fNode.label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -254,10 +268,26 @@ class TemplateMessageContent extends StatelessWidget {
         final val = bNode.text ?? _resolveBind(snapshot.data, bNode.bind);
         if (val.isEmpty) return const SizedBox.shrink();
         final (bgColor, textColor, borderColor) = switch (bNode.tone) {
-          'success' => (const Color(0xFFF6FFED), const Color(0xFF52C41A), const Color(0xFFB7EB8F)),
-          'warning' => (const Color(0xFFFFFBE6), const Color(0xFFFAAD14), const Color(0xFFFFE58F)),
-          'danger' => (const Color(0xFFFFF2F0), const Color(0xFFFF4D4F), const Color(0xFFFFCCC7)),
-          _ => (const Color(0xFFF5F5F5), const Color(0xFF595959), const Color(0xFFD9D9D9)),
+          'success' => (
+            const Color(0xFFF6FFED),
+            const Color(0xFF52C41A),
+            const Color(0xFFB7EB8F),
+          ),
+          'warning' => (
+            const Color(0xFFFFFBE6),
+            const Color(0xFFFAAD14),
+            const Color(0xFFFFE58F),
+          ),
+          'danger' => (
+            const Color(0xFFFFF2F0),
+            const Color(0xFFFF4D4F),
+            const Color(0xFFFFCCC7),
+          ),
+          _ => (
+            const Color(0xFFF5F5F5),
+            const Color(0xFF595959),
+            const Color(0xFFD9D9D9),
+          ),
         };
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
@@ -266,13 +296,20 @@ class TemplateMessageContent extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: bgColor,
+                color:
+                    Theme.of(context).brightness == Brightness.dark
+                        ? textColor.withValues(alpha: 0.15)
+                        : bgColor,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: borderColor),
               ),
               child: Text(
                 val,
-                style: TextStyle(fontSize: 11, color: textColor, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: textColor,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ),
@@ -286,7 +323,7 @@ class TemplateMessageContent extends StatelessWidget {
         } else if (imgNode.bind != null) {
           imageUrl = _resolveBind(snapshot.data, imgNode.bind);
         }
-        if (!isSafeHttpUrl(imageUrl)) return const SizedBox.shrink();
+
         final aspect = switch (imgNode.aspectRatio) {
           'square' => 1.0,
           'portrait' => 3 / 4,
@@ -298,16 +335,14 @@ class TemplateMessageContent extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             child: AspectRatio(
               aspectRatio: aspect,
-              child: Image.network(
-                imageUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(
-                  color: Colors.grey.shade200,
-                  child: const Center(
-                    child: Icon(Icons.broken_image, color: Colors.grey),
-                  ),
-                ),
-              ),
+              child:
+                  !isSafeHttpUrl(imageUrl)
+                      ? _imagePlaceholder(context)
+                      : Image.network(
+                        imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => _imagePlaceholder(context),
+                      ),
             ),
           ),
         );
@@ -325,18 +360,31 @@ class TemplateMessageContent extends StatelessWidget {
       case 'row':
         final rNode = node as RowNode;
         final spacing = _gapSize(rNode.gap);
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            children: [
-              for (int i = 0; i < rNode.children.length; i++) ...[
-                if (i > 0) SizedBox(width: spacing),
-                Expanded(child: _buildNode(context, rNode.children[i], snapshot)),
+        if (rNode.children.isEmpty) return const SizedBox.shrink();
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final wrap =
+                constraints.maxWidth < 280 ||
+                MediaQuery.textScalerOf(context).scale(14) > 18;
+            final width =
+                wrap
+                    ? constraints.maxWidth
+                    : (constraints.maxWidth -
+                            spacing * (rNode.children.length - 1)) /
+                        rNode.children.length;
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                for (final child in rNode.children)
+                  SizedBox(
+                    width: width.clamp(0, double.infinity),
+                    child: _buildNode(context, child, snapshot),
+                  ),
               ],
-            ],
-          ),
+            );
+          },
         );
-
       case 'column':
         final cNode = node as ColumnNode;
         final spacing = _gapSize(cNode.gap);
@@ -357,9 +405,9 @@ class TemplateMessageContent extends StatelessWidget {
       case 'button':
         final btnNode = node as ButtonNode;
         final act = snapshot.actions.cast<TemplateAction?>().firstWhere(
-              (a) => a?.id == btnNode.actionId,
-              orElse: () => null,
-            );
+          (a) => a?.id == btnNode.actionId,
+          orElse: () => null,
+        );
         if (act == null) return const SizedBox.shrink();
         final bindVal = _resolveBind(snapshot.data, act.bind);
         if (bindVal.isEmpty) return const SizedBox.shrink();
@@ -369,7 +417,9 @@ class TemplateMessageContent extends StatelessWidget {
           child: OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
             ),
             icon: Icon(
               act.type == 'openUrl' ? Icons.open_in_browser : Icons.copy,
@@ -386,14 +436,15 @@ class TemplateMessageContent extends StatelessWidget {
   }
 
   double _gapSize(String? gap) => switch (gap) {
-        'small' => 4.0,
-        'large' => 16.0,
-        _ => 8.0,
-      };
+    'small' => 4.0,
+    'large' => 16.0,
+    _ => 8.0,
+  };
 
   String _resolveBind(Map<String, dynamic> data, String? bind) {
     if (bind == null || bind.isEmpty) return '';
     final val = data[bind];
+    if (val is bool) return val ? '是' : '否';
     return val?.toString().trim() ?? '';
   }
 
@@ -403,7 +454,9 @@ class TemplateMessageContent extends StatelessWidget {
     String value,
   ) async {
     if (action.type == 'copyText') {
-      await Clipboard.setData(ClipboardData(text: value));
+      await ProviderScope.containerOf(
+        context,
+      ).read(clipboardServiceProvider).copy(value);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -428,36 +481,23 @@ class TemplateMessageContent extends StatelessWidget {
         return;
       }
 
-      final uri = Uri.parse(value);
-      if (kIsWeb) {
-        // Web 平台
-        return;
-      }
-
-      if (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS) {
-        await InAppBrowser.openWithSystemBrowser(url: WebUri(uri.toString()));
-        return;
-      }
-
-      if (defaultTargetPlatform == TargetPlatform.windows) {
-        await Process.start(
-          'explorer.exe',
-          [uri.toString()],
-          mode: ProcessStartMode.detached,
-          runInShell: false,
-        );
-        return;
-      }
-
-      final command = switch (defaultTargetPlatform) {
-        TargetPlatform.macOS => 'open',
-        TargetPlatform.linux => 'xdg-open',
-        _ => null,
-      };
-      if (command != null) {
-        await Process.run(command, [uri.toString()], runInShell: false);
-      }
+      await ProviderScope.containerOf(context)
+          .read(urlSecurityServiceProvider)
+          .openUrl(
+            context,
+            url: value,
+            title: message.content['templateName']?.toString(),
+          );
     }
   }
+
+  Widget _imagePlaceholder(BuildContext context) => ColoredBox(
+    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    child: Center(
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    ),
+  );
 }

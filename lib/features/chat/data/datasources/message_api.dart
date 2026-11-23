@@ -7,6 +7,38 @@ class MessageApi {
   final ApiClient _client;
   final String deviceId;
 
+  Future<Map<String, dynamic>> usableTemplates({
+    required int ownerId,
+    int skipCount = 0,
+  }) => _client.get<Map<String, dynamic>>(
+    '/api/chat/message-template',
+    query: {
+      'ownerId': ownerId.toString(),
+      'scope': 'usable',
+      'skipCount': skipCount,
+      'maxResultCount': 20,
+    },
+  );
+
+  Future<Map<String, dynamic>> templateRevision(String id, int version) =>
+      _client.get<Map<String, dynamic>>(
+        '/api/chat/message-template/$id/revisions/$version',
+      );
+
+  Future<Map<String, dynamic>> sendTemplate({
+    required String sessionUnitId,
+    required String clientMessageId,
+    required Map<String, dynamic> content,
+    int? quoteMessageId,
+  }) => _client.post<Map<String, dynamic>>(
+    '/api/chat/message-sender/send-template-content-message/$sessionUnitId',
+    data: {
+      'clientMessageId': clientMessageId,
+      'content': content,
+      if (quoteMessageId != null) 'quoteMessageId': quoteMessageId,
+    },
+  );
+
   Future<Map<String, dynamic>> pullChanges({
     required int chatObjectId,
     required String epoch,

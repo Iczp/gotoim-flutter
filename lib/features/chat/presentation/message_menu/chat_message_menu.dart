@@ -111,6 +111,8 @@ class ChatMessageMenuBuilder {
     // 正常状态消息
     final items = <ChatMessageMenuItem>[
       _item('quote', '引用', Icons.format_quote_outlined, context),
+      if (message.messageType == 13)
+        _item('copy', '复制', Icons.copy_outlined, context),
       if (message.messageType == 0 && message.text.isNotEmpty) ...[
         _item('copy', '复制', Icons.copy_outlined, context),
         _item('selectText', '选择', Icons.highlight_outlined, context),

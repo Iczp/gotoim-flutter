@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:gotoim_flutter/core/logging/app_logger.dart';
 import 'package:gotoim_flutter/core/config/app_environment.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotoim_flutter/core/device/client_device_context.dart';
@@ -13,6 +14,26 @@ import 'package:gotoim_flutter/core/network/token_storage.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_unit_api.dart';
 
 void main() {
+  test('template HTTP errors never log echoed message data or raw exceptions', () async {
+    final storage = _MemoryTokenStorage(null, null);
+    final dio = Dio();
+    const secret = 'private-template-data-123';
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      handler.reject(DioException(requestOptions: options, message: secret,
+        response: Response(requestOptions: options, statusCode: 400,
+          data: {'error': {'message': secret}, 'data': {'title': secret}})));
+    }));
+    AppLogger.instance.store.clear();
+    final client = DioApiClient(dio: dio, tokenStorage: storage,
+      tokenRefresher: _FakeRefresher(storage), deviceContext: _device);
+    await expectLater(client.post<Map<String, dynamic>>(
+      '/api/chat/message-sender/send-template-content-message/session',
+      data: {'content': {'data': {'title': secret}}}), throwsA(isA<ApiException>()));
+    final record = AppLogger.instance.store.entries.last;
+    expect(record.context['responseData'], '[redacted]');
+    expect(record.context.toString(), isNot(contains(secret)));
+    expect(record.error?.message, isNot(contains(secret)));
+  });
   for (final anonymousToken in <String?>[null, '']) {
     test(
       'anonymous 401 does not refresh or invalidate the login page ($anonymousToken)',
