@@ -73,10 +73,7 @@ class ContactsApi {
     required Map<String, List<String>> entries,
   }) async {
     return _apiClient.post<Map<String, dynamic>>(
-      '/api/chat/entry/set-for-session-unit',
-      query: <String, Object?>{
-        'sessionUnitId': sessionUnitId,
-      },
+      '/api/chat/entry/set-for-session-unit/$sessionUnitId',
       data: entries,
     );
   }
