@@ -46,4 +46,19 @@ class RoomApi {
       query: <String, Object?>{'verificationMethod': verificationMethod},
     );
   }
+
+  /// 上传并更新群头像，对接 `POST /api/chat/room/upload-portrait/{sessionUnitId}`。
+  /// 服务端会自动触发 `RoomManager.UpdatePortraitAsync` 并向群内播报群头像变更通知。
+  Future<Map<String, dynamic>> uploadPortrait({
+    required String sessionUnitId,
+    required MultipartUploadFile file,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    return _client.postMultipart<Map<String, dynamic>>(
+      '/api/chat/room/upload-portrait/${Uri.encodeComponent(sessionUnitId)}',
+      file: file,
+      fieldName: 'file',
+      onProgress: onProgress,
+    );
+  }
 }

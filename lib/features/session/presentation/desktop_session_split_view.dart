@@ -18,7 +18,9 @@ import '../../mine/presentation/my_qr_code_dialog.dart';
 import '../application/session_list_controller.dart';
 import '../data/models/session_summary.dart';
 import 'desktop_chat_owner_popover.dart';
+import 'session_category_tabs.dart';
 import 'session_list_item.dart';
+import 'session_list_skeleton.dart';
 import 'session_menu.dart';
 import 'signalr_status_bar.dart';
 
@@ -566,10 +568,11 @@ class _DesktopSessionSplitViewState
       );
     }
 
+    final tabSessions = widget.controller.tabFilteredSessions;
     final filteredSessions =
         _searchKeyword.isEmpty
-            ? allSessions
-            : allSessions
+            ? tabSessions
+            : tabSessions
                 .where(
                   (s) => s.title.toLowerCase().contains(
                     _searchKeyword.toLowerCase(),
@@ -873,7 +876,20 @@ class _DesktopSessionSplitViewState
                     ),
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
+
+                  // 2.5 会话分类 Tab 胶囊栏（自适应宽度、更多下拉菜单、被隐藏角标总和）
+                  SessionCategoryTabs(
+                    activeTab: widget.controller.activeTab,
+                    tabUnreadCounts: widget.controller.tabUnreadCounts,
+                    onSelectTab: widget.controller.setSessionTab,
+                    onDoubleTapTab: (tab) {
+                      if (widget.controller.activeTab != tab) {
+                        widget.controller.setSessionTab(tab);
+                      }
+                      widget.controller.requestFocusUnread();
+                    },
+                  ),
 
                   // 3. 网络与实时连接状态栏（未连接时提示）
                   if (widget.controller.connectionState !=
@@ -904,16 +920,10 @@ class _DesktopSessionSplitViewState
                   // 4. 会话列表本体（与移动端完全一致的分组、未读、时间分段和项排版）
                   Expanded(
                     child:
-                        widget.controller.sessions.isEmpty &&
-                                widget.controller.isLoading
-                            ? const Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
+                        filteredSessions.isEmpty && widget.controller.isLoading
+                            ? const SingleChildScrollView(
+                              physics: NeverScrollableScrollPhysics(),
+                              child: SessionListSkeleton(itemCount: 8),
                             )
                             : filteredSessions.isEmpty
                             ? Center(
@@ -1175,23 +1185,18 @@ class _DesktopLoadMoreFooter extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     if (controller.isLoading && controller.sessions.isNotEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
+      return const SessionListSkeleton(itemCount: 2);
     }
-    if (!controller.hasMore && controller.sessions.isNotEmpty) {
+    if (!controller.hasMore && controller.tabFilteredSessions.isNotEmpty) {
+      final count =
+          controller.activeTab == SessionTabKey.all
+              ? (controller.totalCount ?? controller.tabFilteredSessions.length)
+              : controller.tabFilteredSessions.length;
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Center(
           child: Text(
-            '共有 ${controller.totalCount ?? controller.sessions.length} 个好友',
+            '共有 $count 个会话',
             style: theme.textTheme.labelSmall?.copyWith(
               color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
             ),

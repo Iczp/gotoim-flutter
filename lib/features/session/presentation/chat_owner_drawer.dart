@@ -85,10 +85,10 @@ class ChatOwnerDrawer extends ConsumerWidget {
                           style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
                         subtitle:
-                            owner.typeDescription.isEmpty
+                            owner.displayTypeDescription.isEmpty
                                 ? null
                                 : Text(
-                                  owner.typeDescription,
+                                  owner.displayTypeDescription,
                                   style: const TextStyle(
                                     color: Color.fromARGB(77, 53, 53, 53),
                                   ),

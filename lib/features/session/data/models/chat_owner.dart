@@ -1,3 +1,4 @@
+import 'chat_object_type.dart';
 import 'session_summary_helpers.dart';
 
 class ChatOwner {
@@ -36,17 +37,27 @@ class ChatOwner {
   final int unreadCount;
   final int immersedCount;
 
+  /// 优先返回合法的非数字描述，否则回退至权威 `ChatObjectType` 中文标签。
+  String get displayTypeDescription {
+    final trimmed = typeDescription.trim();
+    if (trimmed.isNotEmpty && int.tryParse(trimmed) == null) {
+      return trimmed;
+    }
+    return chatObjectTypeLabel(objectType);
+  }
+
   factory ChatOwner.fromDatabaseRow(Map<String, Object?> row) {
     final raw = row['raw'];
     if (raw is String && raw.isNotEmpty) {
       return ChatOwner.fromJson(decodeJsonObject(raw));
     }
+    final parsedObjectType = int.tryParse('${row['objectType'] ?? ''}');
     return ChatOwner(
       id: (row['id'] as num).toInt(),
       name: row['name']?.toString() ?? '',
       imageUrl: null,
-      typeDescription: row['objectType']?.toString() ?? '',
-      objectType: int.tryParse('${row['objectType'] ?? ''}'),
+      typeDescription: chatObjectTypeLabel(parsedObjectType),
+      objectType: parsedObjectType,
     );
   }
 

@@ -29,6 +29,7 @@ class RealtimeSyncCoordinator {
     required ActiveChatRegistry activeChatRegistry,
     required Future<void> Function(String reason) onKicked,
     WindowService? windowService,
+    bool Function()? isAuthenticated,
   }) : _gateway = gateway,
        _sessionRepository = sessionRepository,
        _messageRepository = messageRepository,
@@ -36,7 +37,8 @@ class RealtimeSyncCoordinator {
        _messageAlertCoordinator = messageAlertCoordinator,
        _activeChatRegistry = activeChatRegistry,
        _onKicked = onKicked,
-       _windowService = windowService;
+       _windowService = windowService,
+       _isAuthenticated = isAuthenticated;
 
   final SignalRGateway _gateway;
   final SessionRepository _sessionRepository;
@@ -46,6 +48,7 @@ class RealtimeSyncCoordinator {
   final ActiveChatRegistry _activeChatRegistry;
   final Future<void> Function(String reason) _onKicked;
   final WindowService? _windowService;
+  final bool Function()? _isAuthenticated;
   StreamSubscription<SignalRAppEvent>? _subscription;
   Timer? _syncTimer;
   final Set<int> _pendingOwnerIds = <int>{};
@@ -57,13 +60,18 @@ class RealtimeSyncCoordinator {
   bool _disposed = false;
   bool _kicked = false;
 
+  bool get _canSync =>
+      !_disposed && (_isAuthenticated == null || _isAuthenticated());
+
   void start() {
     _subscription ??= _gateway.events.listen(_onEvent);
     _scheduleCurrentOwnerSync();
   }
 
   Future<void> syncCurrentOwner() async {
+    if (!_canSync) return;
     final owner = await _sessionRepository.readCurrentOwnerId();
+    if (!_canSync) return;
     if (owner != null && owner > 0) await _syncOwner(owner, messageChanges: true);
   }
 
@@ -230,6 +238,10 @@ class RealtimeSyncCoordinator {
         }
       }
 
+      final isUpdatePortrait =
+          (event.command == SignalRCommand.messageCreated ||
+              event.command == SignalRCommand.messageForwarded) &&
+          _isUpdatePortraitPayload(event.payload);
       final changedOwnerIds = <int>{};
       for (final sessionUnitId in sessionUnitIds) {
         final session =
@@ -276,6 +288,17 @@ class RealtimeSyncCoordinator {
             );
           }
         }
+        if (isUpdatePortrait) {
+          final targetOwnerId = message?.ownerId ?? ownerId;
+          if (targetOwnerId != null && targetOwnerId > 0) {
+            unawaited(
+              _refreshRoomPortraitDetail(
+                ownerId: targetOwnerId,
+                sessionUnitId: sessionUnitId,
+              ),
+            );
+          }
+        }
       }
       if (changedOwnerIds.isNotEmpty) {
         for (final ownerId in changedOwnerIds) {
@@ -287,6 +310,53 @@ class RealtimeSyncCoordinator {
     } catch (error) {
       debugPrint('[realtimeSync][message-failed] error=$error');
       _scheduleCurrentOwnerSync();
+    }
+  }
+
+  /// 检测推送消息是否为群头像更新通知（`Cmd = UpdatePortrait` 或包含 `更新群头像`）。
+  @visibleForTesting
+  static bool isUpdatePortraitPayload(Object? payload) =>
+      _isUpdatePortraitPayload(payload);
+
+  static bool _isUpdatePortraitPayload(Object? payload) {
+    if (payload is Map) {
+      final keyName = '${payload['keyName'] ?? payload['KeyName'] ?? ''}'.trim();
+      final cmd = '${payload['cmd'] ?? payload['Cmd'] ?? ''}'.trim();
+      if (keyName == 'UpdatePortrait' || cmd == 'UpdatePortrait') return true;
+      for (final entry in payload.entries) {
+        final value = entry.value;
+        if (value is String) {
+          if (value.contains('UpdatePortrait') || value.contains('更新群头像')) {
+            return true;
+          }
+        } else if (value is Map || value is List) {
+          if (_isUpdatePortraitPayload(value)) return true;
+        }
+      }
+    } else if (payload is List) {
+      for (final item in payload) {
+        if (_isUpdatePortraitPayload(item)) return true;
+      }
+    } else if (payload is String) {
+      return payload.contains('UpdatePortrait') || payload.contains('更新群头像');
+    }
+    return false;
+  }
+
+  Future<void> _refreshRoomPortraitDetail({
+    required int ownerId,
+    required String sessionUnitId,
+  }) async {
+    try {
+      await _sessionRepository.loadRemoteFriendDetail(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+      );
+    } catch (error) {
+      debugPrint(
+        '[realtimeSync][portrait-refresh-failed] '
+        'owner=$ownerId session=$sessionUnitId error=$error',
+      );
     }
   }
 
@@ -473,11 +543,16 @@ class RealtimeSyncCoordinator {
   }
 
   void _scheduleOwnerSync(int ownerId, {bool messageChanges = false}) {
-    if (_disposed || ownerId <= 0) return;
+    if (!_canSync || ownerId <= 0) return;
     _pendingOwnerIds.add(ownerId);
     if (messageChanges) _pendingMessageOwnerIds.add(ownerId);
     _syncTimer?.cancel();
     _syncTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!_canSync) {
+        _pendingOwnerIds.clear();
+        _pendingMessageOwnerIds.clear();
+        return;
+      }
       final ids = Set<int>.from(_pendingOwnerIds);
       final messageIds = Set<int>.from(_pendingMessageOwnerIds);
       _pendingOwnerIds.clear();
@@ -489,6 +564,11 @@ class RealtimeSyncCoordinator {
   }
 
   Future<void> _syncOwner(int ownerId, {bool messageChanges = false}) {
+    if (!_canSync) {
+      _ownerResyncRequested.remove(ownerId);
+      _ownerMessageResyncRequested.remove(ownerId);
+      return Future<void>.value();
+    }
     final existing = _syncInFlightByOwner[ownerId];
     if (existing != null) {
       _ownerResyncRequested.add(ownerId);
@@ -510,8 +590,10 @@ class RealtimeSyncCoordinator {
     return sync.whenComplete(() {
       if (identical(_syncInFlightByOwner[ownerId], sync)) {
         _syncInFlightByOwner.remove(ownerId);
-        if (_ownerResyncRequested.remove(ownerId)) {
-          _scheduleOwnerSync(ownerId, messageChanges: _ownerMessageResyncRequested.remove(ownerId));
+        final resync = _ownerResyncRequested.remove(ownerId);
+        final msgResync = _ownerMessageResyncRequested.remove(ownerId);
+        if (resync && _canSync) {
+          _scheduleOwnerSync(ownerId, messageChanges: msgResync);
         }
       }
     });
@@ -535,6 +617,9 @@ final realtimeSyncCoordinatorProvider = Provider<RealtimeSyncCoordinator>((
     messageAlertCoordinator: ref.watch(messageAlertCoordinatorProvider),
     activeChatRegistry: ref.watch(activeChatRegistryProvider),
     windowService: ref.watch(windowServiceProvider),
+    isAuthenticated:
+        () =>
+            ref.read(authControllerProvider).status == AuthStatus.authenticated,
     onKicked: (reason) async {
       if (ref.read(authControllerProvider).status ==
           AuthStatus.unauthenticated) {

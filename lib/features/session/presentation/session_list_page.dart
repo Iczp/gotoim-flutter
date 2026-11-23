@@ -9,8 +9,9 @@ import '../application/session_list_controller.dart';
 import '../data/models/session_summary.dart';
 import 'current_device_bar.dart';
 import 'current_owner_header.dart';
-
+import 'session_category_tabs.dart';
 import 'session_list_item.dart';
+import 'session_list_skeleton.dart';
 import 'session_menu.dart';
 import 'signalr_status_bar.dart';
 import '../../home/presentation/home_sections.dart';
@@ -124,8 +125,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
   @override
   Widget build(BuildContext context) {
     final controller = ref.watch(sessionListControllerProvider);
+    final tabSessions = controller.tabFilteredSessions;
     final listItems = buildSessionListItems(
-      controller.sessions,
+      tabSessions,
       hasMore: controller.hasMore,
     );
     _lastListItems = listItems;
@@ -236,6 +238,23 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                         onPressed: () => context.push('/online-devices'),
                       ),
                     ),
+                    SliverToBoxAdapter(
+                      child: SessionCategoryTabs(
+                        activeTab: controller.activeTab,
+                        tabUnreadCounts: controller.tabUnreadCounts,
+                        onSelectTab: (tab) {
+                          _currentScrollIndex = -1;
+                          controller.setSessionTab(tab);
+                        },
+                        onDoubleTapTab: (tab) {
+                          if (controller.activeTab != tab) {
+                            _currentScrollIndex = -1;
+                            controller.setSessionTab(tab);
+                          }
+                          controller.requestFocusUnread();
+                        },
+                      ),
+                    ),
                     if (controller.error != null)
                       SliverToBoxAdapter(
                         child: _ErrorBanner(
@@ -243,12 +262,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage>
                           onRetry: controller.loadNextPage,
                         ),
                       ),
-                    if (controller.sessions.isEmpty && controller.isLoading)
-                      const SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Center(child: CircularProgressIndicator()),
+                    if (tabSessions.isEmpty && controller.isLoading)
+                      const SliverToBoxAdapter(
+                        child: SessionListSkeleton(itemCount: 8),
                       )
-                    else if (controller.sessions.isEmpty)
+                    else if (tabSessions.isEmpty)
                       SliverFillRemaining(
                         hasScrollBody: false,
                         child: _EmptyState(onRetry: controller.loadNextPage),
@@ -475,17 +493,18 @@ class _LoadMoreFooter extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     if (controller.isLoading && controller.sessions.isNotEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const SessionListSkeleton(itemCount: 2);
     }
-    if (!controller.hasMore && controller.sessions.isNotEmpty) {
+    if (!controller.hasMore && controller.tabFilteredSessions.isNotEmpty) {
+      final count =
+          controller.activeTab == SessionTabKey.all
+              ? (controller.totalCount ?? controller.tabFilteredSessions.length)
+              : controller.tabFilteredSessions.length;
       return Padding(
         padding: const EdgeInsets.all(16),
         child: Center(
           child: Text(
-            '共有 ${controller.totalCount ?? controller.sessions.length} 个好友',
+            '共有 $count 个会话',
             style: theme.textTheme.labelSmall?.copyWith(
               color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
             ),

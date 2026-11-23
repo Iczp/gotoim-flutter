@@ -248,7 +248,7 @@ class _OwnerCard extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               AppAvatar(name: owner.name, imageUrl: owner.imageUrl, radius: 18),
-              if (owner.typeDescription.isNotEmpty)
+              if (owner.displayTypeDescription.isNotEmpty)
                 Positioned(
                   right: -2,
                   bottom: -2,
@@ -259,7 +259,9 @@ class _OwnerCard extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      owner.typeDescription.contains('客服')
+                      (owner.objectType == 7 ||
+                              owner.objectType == 8 ||
+                              owner.displayTypeDescription.contains('客服'))
                           ? Icons.support_agent_rounded
                           : Icons.person_rounded,
                       size: 11,
@@ -292,7 +294,7 @@ class _OwnerCard extends StatelessWidget {
           ),
           subtitle: Row(
             children: [
-              if (owner.typeDescription.isNotEmpty)
+              if (owner.displayTypeDescription.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(top: 2),
                   padding: const EdgeInsets.symmetric(
@@ -307,7 +309,7 @@ class _OwnerCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    owner.typeDescription,
+                    owner.displayTypeDescription,
                     style: TextStyle(
                       fontSize: 10.5,
                       color: colorScheme.onSurfaceVariant,

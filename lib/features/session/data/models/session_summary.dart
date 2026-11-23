@@ -301,10 +301,19 @@ class SessionSummary {
       asInt(raw['destinationId'] ?? raw['DestinationId']);
 
   String? get sessionId => (raw['sessionId'] ?? raw['SessionId'])?.toString();
+
+  /// 对端聊天对象的权威类型值（优先读取 `destination.objectType`）。
+  int? get destinationObjectType =>
+      asInt(
+        asMap(raw['destination'] ?? raw['Destination'])['objectType'] ??
+            asMap(raw['destination'] ?? raw['Destination'])['ObjectType'],
+      ) ??
+      asInt(raw['objectType'] ?? raw['ObjectType']);
+
   bool get isGroup =>
       (raw['isGroup'] ?? raw['IsGroup']) == true ||
       asInt(raw['sessionType'] ?? raw['SessionType']) == 1 ||
-      asInt(raw['objectType'] ?? raw['ObjectType']) == 1;
+      destinationObjectType == 2;
 
   /// 会话目标对象的头像链接。
   String? get avatarUrl {

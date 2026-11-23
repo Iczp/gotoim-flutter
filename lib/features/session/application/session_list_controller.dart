@@ -14,11 +14,24 @@ import 'friend_presence_store.dart';
 import '../data/datasources/ai_api.dart';
 import '../data/datasources/session_dao.dart';
 import '../data/datasources/session_unit_api.dart';
+import '../data/models/chat_object_type.dart';
 import '../data/models/chat_owner.dart';
 import '../data/models/session_summary.dart';
 import '../data/models/logged_in_device.dart';
 import '../data/repositories/session_repository.dart';
 import '../data/session_change_bus.dart';
+
+/// 会话列表顶部分类 Tab 枚举（与桌面端 Electron 对齐）。
+enum SessionTabKey {
+  all,
+  direct,
+  room,
+  square,
+  subscription,
+  official,
+  robot,
+  customer,
+}
 
 /// Flag to control printing of [SessionScrollTrace] logs. Defaults to false.
 bool enableSessionScrollTrace = false;
@@ -95,6 +108,10 @@ class SessionListController extends ChangeNotifier {
         _scheduleOnlineDevicesReload();
       } else if (event is SignalRCommandEvent &&
           _shouldSyncForCommand(event.command)) {
+        if (event.command == SignalRCommand.messageCreated ||
+            event.command == SignalRCommand.messageForwarded) {
+          _applyOptimisticOtherOwnerBadges(event);
+        }
         _scheduleRemoteChanges();
       }
     });
@@ -122,6 +139,7 @@ class SessionListController extends ChangeNotifier {
     });
   }
   static const pageSize = 50;
+  static const int _minTabPageItems = 12;
   final SessionRepository _repository;
   final SignalRGateway _signalRGateway;
   final ClientDeviceContext _deviceContext;
@@ -154,8 +172,10 @@ class SessionListController extends ChangeNotifier {
   bool _isLoadingOnlineDevices = false;
   late SignalRConnectionState _connectionState;
   int _focusUnreadRequest = 0;
+  SessionTabKey _activeTab = SessionTabKey.all;
 
   List<SessionSummary> get sessions => List.unmodifiable(_sessions);
+  SessionTabKey get activeTab => _activeTab;
   List<ChatOwner> get owners => _owners;
   ChatOwner? get currentOwner => _currentOwner;
   int? get currentOwnerId => _currentOwner?.id;
@@ -165,6 +185,98 @@ class SessionListController extends ChangeNotifier {
   bool get hasMore => _hasMore;
   int? get totalCount => _totalCount;
   Object? get error => _error;
+
+  /// 按分类聚合未读数（严格遵循免打扰规则：免打扰会话不计入各分类角标）。
+  Map<SessionTabKey, int> get tabUnreadCounts {
+    final counts = <SessionTabKey, int>{
+      for (final tab in SessionTabKey.values) tab: 0,
+    };
+    for (final s in _sessions) {
+      if (s.isImmersed) continue;
+      final unread = s.unreadCount;
+      if (unread <= 0) continue;
+      counts[SessionTabKey.all] = (counts[SessionTabKey.all] ?? 0) + unread;
+      final ot = s.destinationObjectType;
+      if (ot == ChatObjectTypeValues.personal ||
+          ot == ChatObjectTypeValues.anonymous) {
+        counts[SessionTabKey.direct] =
+            (counts[SessionTabKey.direct] ?? 0) + unread;
+      } else if (ot == ChatObjectTypeValues.room) {
+        counts[SessionTabKey.room] = (counts[SessionTabKey.room] ?? 0) + unread;
+      } else if (ot == ChatObjectTypeValues.square) {
+        counts[SessionTabKey.square] =
+            (counts[SessionTabKey.square] ?? 0) + unread;
+      } else if (ot == ChatObjectTypeValues.subscription) {
+        counts[SessionTabKey.subscription] =
+            (counts[SessionTabKey.subscription] ?? 0) + unread;
+      } else if (ot == ChatObjectTypeValues.official) {
+        counts[SessionTabKey.official] =
+            (counts[SessionTabKey.official] ?? 0) + unread;
+      } else if (ot == ChatObjectTypeValues.robot) {
+        counts[SessionTabKey.robot] =
+            (counts[SessionTabKey.robot] ?? 0) + unread;
+      } else if (ot == ChatObjectTypeValues.customer ||
+          ot == ChatObjectTypeValues.shopWaiter ||
+          ot == ChatObjectTypeValues.shopKeeper) {
+        counts[SessionTabKey.customer] =
+            (counts[SessionTabKey.customer] ?? 0) + unread;
+      }
+    }
+    return counts;
+  }
+
+  /// 当前激活分类 Tab 过滤后的会话列表。
+  List<SessionSummary> get tabFilteredSessions {
+    if (_activeTab == SessionTabKey.all) return sessions;
+    return _sessions.where((s) => _matchesTab(s, _activeTab)).toList(
+      growable: false,
+    );
+  }
+
+  bool _matchesTab(SessionSummary s, SessionTabKey tab) {
+    final ot = s.destinationObjectType;
+    return switch (tab) {
+      SessionTabKey.all => true,
+      SessionTabKey.direct =>
+        ot == ChatObjectTypeValues.personal ||
+            ot == ChatObjectTypeValues.anonymous,
+      SessionTabKey.room => ot == ChatObjectTypeValues.room,
+      SessionTabKey.square => ot == ChatObjectTypeValues.square,
+      SessionTabKey.subscription => ot == ChatObjectTypeValues.subscription,
+      SessionTabKey.official => ot == ChatObjectTypeValues.official,
+      SessionTabKey.robot => ot == ChatObjectTypeValues.robot,
+      SessionTabKey.customer =>
+        ot == ChatObjectTypeValues.customer ||
+            ot == ChatObjectTypeValues.shopWaiter ||
+            ot == ChatObjectTypeValues.shopKeeper,
+    };
+  }
+
+  /// 切换当前激活分类 Tab；若筛选结果不足一页且仍有更多数据，自动触发分页补充。
+  void setSessionTab(SessionTabKey tab) {
+    if (_activeTab == tab) return;
+    _activeTab = tab;
+    notifyListeners();
+    _ensureTabFilledIfNeeded();
+  }
+
+  void _ensureTabFilledIfNeeded() {
+    if (_activeTab == SessionTabKey.all) return;
+    if (tabFilteredSessions.length >= _minTabPageItems) return;
+    if (!_hasMore || _isLoading || _error != null || _currentOwner == null) {
+      return;
+    }
+    Future<void>.microtask(() {
+      if (_activeTab != SessionTabKey.all &&
+          tabFilteredSessions.length < _minTabPageItems &&
+          _hasMore &&
+          !_isLoading &&
+          _error == null &&
+          _currentOwner != null) {
+        unawaited(loadNextPage());
+      }
+    });
+  }
   List<LoggedInDevice> get devices => _devices;
   List<LoggedInDevice> get onlineDevices => _onlineDevices;
   String get currentDeviceId => _deviceContext.deviceId;
@@ -296,7 +408,7 @@ class SessionListController extends ChangeNotifier {
   }
 
   void requestFocusUnread() {
-    if (!_sessions.any((session) => session.unreadCount > 0)) return;
+    if (!tabFilteredSessions.any((session) => session.unreadCount > 0)) return;
     _focusUnreadRequest++;
     notifyListeners();
   }
@@ -633,6 +745,53 @@ class SessionListController extends ChangeNotifier {
     });
   }
 
+  void _applyOptimisticOtherOwnerBadges(SignalRCommandEvent event) {
+    if (event.scopes.isEmpty || _owners.isEmpty) return;
+    var senderSessionUnitId = '';
+    final payload = event.payload;
+    if (payload is Map) {
+      final msg = payload['message'] ?? payload['Message'];
+      final msgMap = msg is Map ? msg : null;
+      senderSessionUnitId =
+          '${msgMap?['senderSessionUnitId'] ?? msgMap?['SenderSessionUnitId'] ?? payload['senderSessionUnitId'] ?? payload['SenderSessionUnitId'] ?? ''}'
+              .trim();
+    }
+    final hitOwnerIds = <int>{};
+    for (final scope in event.scopes.whereType<Map>()) {
+      final scopeUnitId =
+          '${scope['sessionUnitId'] ?? scope['SessionUnitId'] ?? ''}'.trim();
+      if (senderSessionUnitId.isNotEmpty &&
+          scopeUnitId == senderSessionUnitId) {
+        continue;
+      }
+      final rawOwnerId =
+          scope['chatObjectId'] ??
+          scope['ChatObjectId'] ??
+          scope['ownerId'] ??
+          scope['OwnerId'];
+      final scopeOwnerId =
+          rawOwnerId is num ? rawOwnerId.toInt() : int.tryParse('$rawOwnerId');
+      if (scopeOwnerId != null &&
+          scopeOwnerId > 0 &&
+          scopeOwnerId != _currentOwner?.id) {
+        hitOwnerIds.add(scopeOwnerId);
+      }
+    }
+    if (hitOwnerIds.isEmpty) return;
+    var changed = false;
+    _owners = _owners
+        .map((owner) {
+          if (!hitOwnerIds.contains(owner.id)) return owner;
+          changed = true;
+          return owner.withOverview(
+            unread: owner.unreadCount + 1,
+            immersed: owner.immersedCount,
+          );
+        })
+        .toList(growable: false);
+    if (changed) notifyListeners();
+  }
+
   void _scheduleRemoteChanges() {
     _remoteChangeTimer?.cancel();
     _remoteChangeTimer = Timer(const Duration(milliseconds: 250), () async {
@@ -648,6 +807,7 @@ class SessionListController extends ChangeNotifier {
   Future<void> selectOwner(ChatOwner owner) async {
     if (_currentOwner?.id == owner.id) return;
     _currentOwner = owner;
+    _activeTab = SessionTabKey.all;
     await _repository.saveCurrentOwnerId(owner.id);
     unawaited(_friendPresenceStore.activateOwner(owner.id));
 
@@ -698,13 +858,21 @@ class SessionListController extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
+    var succeeded = false;
     try {
       await _loadNextPageInternal();
+      succeeded = true;
     } catch (error) {
       _error = error;
     } finally {
       _isLoading = false;
       notifyListeners();
+      if (succeeded &&
+          _activeTab != SessionTabKey.all &&
+          tabFilteredSessions.length < _minTabPageItems &&
+          _hasMore) {
+        _ensureTabFilledIfNeeded();
+      }
     }
   }
 

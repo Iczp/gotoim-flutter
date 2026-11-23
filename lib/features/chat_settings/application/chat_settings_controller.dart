@@ -190,6 +190,15 @@ class ChatSettingsController extends ChangeNotifier {
     return _updateSetting(() => _repository.setRoomTitle(sessionId!, name));
   }
 
+  /// 通过群专属接口上传更新群头像，确保群内收到系统变更消息并即时刷新本地会话缓存。
+  Future<void> uploadGroupPortrait(MultipartUploadFile file) {
+    final roomApi = _roomApi;
+    if (roomApi == null) return Future.value();
+    return _updateSetting(
+      () => roomApi.uploadPortrait(sessionUnitId: sessionUnitId, file: file),
+    );
+  }
+
   Future<void> setJoinVerificationRequired(bool required) {
     final roomApi = _roomApi;
     if (roomApi == null) return Future.value();
