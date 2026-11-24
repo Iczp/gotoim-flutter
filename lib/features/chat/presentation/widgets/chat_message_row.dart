@@ -22,6 +22,7 @@ class ChatMessageRow extends StatelessWidget {
     this.onUserLongPress,
     this.onSessionUnitTap,
     this.onChatObjectTap,
+    this.onAppLinkTap,
     required this.onVoiceOpened,
     required this.onLinkTap,
     required this.mediaItems,
@@ -102,6 +103,9 @@ class ChatMessageRow extends StatelessWidget {
 
   /// 点击系统消息中对象链接的回调
   final void Function(String chatObjectId, String name)? onChatObjectTap;
+
+  /// 点击系统消息中应用内协议链接的回调
+  final void Function(MessageTagNode node)? onAppLinkTap;
 
   /// 消息气泡内容菜单构建器（长按仅在消息气泡内容上生效）
   final WidgetBuilder? contentMenuBuilder;
@@ -569,6 +573,7 @@ class ChatMessageRow extends StatelessWidget {
       linkStyle: linkStyle,
       onSessionUnitTap: onSessionUnitTap,
       onChatObjectTap: onChatObjectTap,
+      onAppLinkTap: onAppLinkTap,
     );
 
     return Padding(

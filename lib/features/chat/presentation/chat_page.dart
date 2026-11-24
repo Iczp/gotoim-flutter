@@ -27,6 +27,9 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/theme/chat_appearance_controller.dart';
 import '../../../core/utils/api_url_resolver.dart';
+import '../../../core/utils/message_text_formatter.dart';
+import '../../announcement/application/announcement_providers.dart';
+import '../../announcement/presentation/widgets/announcement_detail_dialog.dart';
 import '../../../core/widgets/half_page_sheet.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/desktop_dialog.dart';
@@ -896,6 +899,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       onAvatarHover: (rect) => _onAvatarHover(message, rect),
       onAvatarLeave: _onAvatarLeave,
       onSessionUnitTap: _showSessionUnitProfile,
+      onAppLinkTap: _handleAppLinkTap,
       onVoiceOpened: () => controller.markVoiceOpened(message),
       onLinkTap: () => _openLink(message),
       mediaItems: mediaItems,
@@ -1673,6 +1677,34 @@ class _ChatPageState extends ConsumerState<ChatPage>
         'owner': <String, dynamic>{'displayName': displayName},
       }),
     );
+  }
+
+  Future<void> _handleAppLinkTap(MessageTagNode node) async {
+    final id = (node.value ?? node.params?['id'] ?? '').trim();
+    if (id.isEmpty) return;
+    if (node.route == 'announcement') {
+      try {
+        final api = ref.read(announcementApiProvider);
+        final detail = await api.getDetail(id);
+        if (!mounted) return;
+        if (detail == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('公告不存在或已被删除')),
+          );
+          return;
+        }
+        await AnnouncementDetailDialog.show(context, announcement: detail);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载公告详情失败: $e')),
+        );
+      }
+      return;
+    }
+    if (node.route == 'session-unit') {
+      await _showSessionUnitProfile(id, node.text);
+    }
   }
 
   void _openHalfScreenHistory() {
