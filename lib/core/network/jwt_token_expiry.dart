@@ -18,6 +18,15 @@ DateTime? readJwtExpiry(String token) {
   }
 }
 
+bool isJwtExpired(
+  String token, {
+  DateTime? now,
+}) {
+  final expiry = readJwtExpiry(token);
+  if (expiry == null) return false;
+  return !expiry.isAfter((now ?? DateTime.now()).toUtc());
+}
+
 bool shouldRefreshJwt(
   String token, {
   DateTime? now,

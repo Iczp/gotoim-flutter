@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/utils/message_text_formatter.dart';
 import '../../../chat_settings/data/models/chat_member.dart';
 import '../../../chat_settings/presentation/member_profile_sheet.dart';
@@ -196,6 +197,27 @@ class _AnnouncementDetailDialogState
           }
         }
         return;
+      case 'mention':
+        final mentionName = (parsed.params['name'] ?? text).replaceFirst(RegExp(r'^@'), '').trim();
+        if (mentionName.isNotEmpty && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('提及成员: @$mentionName')),
+          );
+        }
+        return;
+      case 'settings':
+        if (mounted) {
+          Navigator.of(context).pop();
+          context.push('/settings');
+        }
+        return;
+      case 'nav':
+        final tab = parsed.params['tab'];
+        if (mounted && tab == 'workbench') {
+          Navigator.of(context).pop();
+          context.push('/workbench');
+        }
+        return;
       default:
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -337,7 +359,7 @@ class _AnnouncementDetailDialogState
                       child: SingleChildScrollView(
                         child: _item.editorType == 1
                             ? MarkdownBody(
-                                data: _item.content,
+                                data: preprocessAnnouncementMarkdownLinks(_item.content),
                                 selectable: true,
                                 onTapLink: (text, href, _) =>
                                     _handleAppLinkTap(text, href),
@@ -347,6 +369,7 @@ class _AnnouncementDetailDialogState
                                   style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
                                   children: parseMessageTagsToSpans(
                                     _item.content,
+                                    parseMentions: true,
                                     textStyle:
                                         theme.textTheme.bodyMedium?.copyWith(height: 1.6) ??
                                         const TextStyle(),
@@ -361,6 +384,8 @@ class _AnnouncementDetailDialogState
                                         _openMemberById(oid, name),
                                     onAppLinkTap: (node) =>
                                         _handleAppLinkTap(node.text, node.href),
+                                    onMentionTap: (name) =>
+                                        _handleAppLinkTap('@$name', 'im://mention?name=${Uri.encodeComponent(name)}'),
                                   ),
                                 ),
                               ),

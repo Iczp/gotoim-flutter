@@ -49,5 +49,21 @@ void main() {
       expect(nodes[2].type, MessageTagType.chatObject);
       expect(nodes[2].value, 'o1');
     });
+
+    test('parses bare im:// links and @mentions when enabled', () {
+      const input = '请 @张三 查看 im://settings 和 https://example.com';
+      final nodes = parseMessageTagNodes(input, parseMentions: true);
+      expect(nodes.any((n) => n.type == MessageTagType.mention && n.value == '张三'), isTrue);
+      expect(nodes.any((n) => n.type == MessageTagType.appLink && n.route == 'settings'), isTrue);
+      expect(nodes.any((n) => n.type == MessageTagType.link && n.href == 'https://example.com'), isTrue);
+    });
+
+    test('preprocessAnnouncementMarkdownLinks skips code blocks and existing links', () {
+      const md = '通知 @李四 看下 `[跳过 @王五]` 与 ```\n@赵六\n``` 以及 [@已有](im://session-unit?id=1)';
+      final result = preprocessAnnouncementMarkdownLinks(md);
+      expect(result, contains('[@李四](im://mention?name=%E6%9D%8E%E5%9B%9B)'));
+      expect(result, contains('```\n@赵六\n```'));
+      expect(result, contains('[@已有](im://session-unit?id=1)'));
+    });
   });
 }

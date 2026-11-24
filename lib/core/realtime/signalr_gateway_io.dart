@@ -34,11 +34,15 @@ class SignalRNetcoreGateway implements SignalRGateway {
     required ClientDeviceContext deviceContext,
     Future<String?> Function()? refreshToken,
     FutureOr<void> Function()? onSessionInvalidated,
+    @visibleForTesting
+    HubConnection Function(Future<String> Function() accessTokenFactory)?
+        hubConnectionFactory,
   }) : _environment = environment,
        _readAccessToken = readAccessToken,
        _deviceContext = deviceContext,
        _refreshToken = refreshToken,
-       _onSessionInvalidated = onSessionInvalidated {
+       _onSessionInvalidated = onSessionInvalidated,
+       _hubConnectionFactory = hubConnectionFactory {
     _initConnection();
   }
 
@@ -47,6 +51,8 @@ class SignalRNetcoreGateway implements SignalRGateway {
   final ClientDeviceContext _deviceContext;
   final Future<String?> Function()? _refreshToken;
   final FutureOr<void> Function()? _onSessionInvalidated;
+  final HubConnection Function(Future<String> Function() accessTokenFactory)?
+      _hubConnectionFactory;
 
   HubConnection? _connection;
   final StreamController<SignalRAppEvent> _events =
@@ -55,59 +61,77 @@ class SignalRNetcoreGateway implements SignalRGateway {
   Object? _lastError;
   String? _lastErrorDescription;
   bool _isConnectingOrRestarting = false;
+  String? _lastAttemptedAccessToken;
+  bool _skipNextFactoryProactiveRefresh = false;
+  Future<void>? _connectInFlight;
+
+  Future<String> _provideAccessToken() async {
+    final skipProactive = _skipNextFactoryProactiveRefresh;
+    _skipNextFactoryProactiveRefresh = false;
+    var token = await _readAccessToken();
+    if (!skipProactive &&
+        token != null &&
+        token.isNotEmpty &&
+        shouldRefreshJwt(token)) {
+      AppLogger.instance.info(
+        'SignalR proactive token refresh before connect/reconnect',
+        category: 'signalr',
+        event: 'proactive_token_refresh',
+      );
+      try {
+        final refresh = _refreshToken;
+        if (refresh != null) {
+          final refreshed = await refresh();
+          if (refreshed != null && refreshed.isNotEmpty) {
+            token = refreshed;
+          }
+        }
+      } on TokenRefreshRejectedException catch (rejection) {
+        AppLogger.instance.error(
+          'SignalR proactive token refresh rejected definitively',
+          category: 'signalr',
+          event: 'token_refresh_rejected',
+          error: rejection,
+        );
+        if (rejection.code != 'session_signed_out') {
+          await _onSessionInvalidated?.call();
+        }
+        return '';
+      } catch (e) {
+        AppLogger.instance.error(
+          'SignalR proactive token refresh failed',
+          category: 'signalr',
+          event: 'proactive_token_refresh_failed',
+          error: e,
+        );
+        if (token != null && isJwtExpired(token)) {
+          rethrow;
+        }
+      }
+    }
+    if (token != null && token.isNotEmpty) {
+      _lastAttemptedAccessToken = token;
+    }
+    return token ?? '';
+  }
 
   void _initConnection() {
     final conn =
-        HubConnectionBuilder()
-            .withUrl(
-              _withDeviceQuery(_environment.signalRHubUrl, _deviceContext),
-              options: HttpConnectionOptions(
-                skipNegotiation: _environment.signalRSkipNegotiation,
-                transport: HttpTransportType.WebSockets,
-                accessTokenFactory: () async {
-                  var token = await _readAccessToken();
-                  if (token != null &&
-                      token.isNotEmpty &&
-                      shouldRefreshJwt(token)) {
-                    AppLogger.instance.info(
-                      'SignalR proactive token refresh before connect/reconnect',
-                      category: 'signalr',
-                      event: 'proactive_token_refresh',
-                    );
-                    try {
-                      final refresh = _refreshToken;
-                      if (refresh != null) {
-                        final refreshed = await refresh();
-                        if (refreshed != null && refreshed.isNotEmpty) {
-                          token = refreshed;
-                        }
-                      }
-                    } on TokenRefreshRejectedException catch (rejection) {
-                      AppLogger.instance.error(
-                        'SignalR proactive token refresh rejected definitively',
-                        category: 'signalr',
-                        event: 'token_refresh_rejected',
-                        error: rejection,
-                      );
-                      await _onSessionInvalidated?.call();
-                      return '';
-                    } catch (e) {
-                      AppLogger.instance.error(
-                        'SignalR proactive token refresh failed',
-                        category: 'signalr',
-                        event: 'proactive_token_refresh_failed',
-                        error: e,
-                      );
-                    }
-                  }
-                  return token ?? '';
-                },
-              ),
-            )
-            .withAutomaticReconnect(
-              retryDelays: _environment.signalRReconnectDelays,
-            )
-            .build();
+        _hubConnectionFactory != null
+            ? _hubConnectionFactory(_provideAccessToken)
+            : HubConnectionBuilder()
+                .withUrl(
+                  _withDeviceQuery(_environment.signalRHubUrl, _deviceContext),
+                  options: HttpConnectionOptions(
+                    skipNegotiation: _environment.signalRSkipNegotiation,
+                    transport: HttpTransportType.WebSockets,
+                    accessTokenFactory: _provideAccessToken,
+                  ),
+                )
+                .withAutomaticReconnect(
+                  retryDelays: _environment.signalRReconnectDelays,
+                )
+                .build();
 
     conn.keepAliveIntervalInMilliseconds = 5000;
     conn.serverTimeoutInMilliseconds = 15000;
@@ -143,30 +167,17 @@ class SignalRNetcoreGateway implements SignalRGateway {
     );
     conn.onclose(({error}) async {
       _emitConnection(SignalRConnectionState.disconnected, error: error);
-      final refresh = _refreshToken;
-      if (_isUnauthorizedError(error) && refresh != null) {
+      if (_isUnauthorizedError(error) && _refreshToken != null) {
         AppLogger.instance.info(
           'SignalR onclose error was 401 Unauthorized, refreshing token...',
           category: 'signalr',
           event: 'onclose_401_refresh',
         );
-        try {
-          final currentToken = await _readAccessToken();
-          String? newToken = currentToken;
-          if (currentToken == null ||
-              currentToken.isEmpty ||
-              shouldRefreshJwt(currentToken)) {
-            newToken = await refresh();
-          }
-          if (newToken != null && newToken.isNotEmpty) {
-            unawaited(restart(fast: true));
-          }
-        } catch (e) {
-          AppLogger.instance.error(
-            'SignalR onclose token refresh failed',
-            category: 'signalr',
-            error: e,
-          );
+        final newToken = await _refreshTokenAfterUnauthorized(
+          failedToken: _lastAttemptedAccessToken,
+        );
+        if (newToken != null && newToken.isNotEmpty) {
+          unawaited(restart(fast: true));
         }
       }
     });
@@ -215,7 +226,17 @@ class SignalRNetcoreGateway implements SignalRGateway {
   Stream<SignalRAppEvent> get events => _events.stream;
 
   @override
-  Future<void> connect() => _connectInternal();
+  Future<void> connect() {
+    final inFlight = _connectInFlight;
+    if (inFlight != null) return inFlight;
+    final future = _connectInternal();
+    _connectInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_connectInFlight, future)) {
+        _connectInFlight = null;
+      }
+    });
+  }
 
   Future<String?> _ensureValidTokenBeforeConnect() async {
     var token = await _readAccessToken();
@@ -247,7 +268,9 @@ class SignalRNetcoreGateway implements SignalRGateway {
             event: 'token_refresh_rejected',
             error: rejection,
           );
-          await _onSessionInvalidated?.call();
+          if (rejection.code != 'session_signed_out') {
+            await _onSessionInvalidated?.call();
+          }
           rethrow;
         } catch (e) {
           AppLogger.instance.error(
@@ -256,10 +279,52 @@ class SignalRNetcoreGateway implements SignalRGateway {
             event: 'token_refresh_failed',
             error: e,
           );
+          if (token != null && isJwtExpired(token)) {
+            rethrow;
+          }
         }
       }
     }
     return token;
+  }
+
+  Future<String?> _refreshTokenAfterUnauthorized({
+    required String? failedToken,
+  }) async {
+    final refresh = _refreshToken;
+    if (refresh == null) return null;
+    try {
+      final currentToken = await _readAccessToken();
+      if (currentToken == null || currentToken.isEmpty) {
+        return null;
+      }
+      if (failedToken != null &&
+          failedToken.isNotEmpty &&
+          currentToken != failedToken &&
+          !shouldRefreshJwt(currentToken)) {
+        return currentToken;
+      }
+      return await refresh();
+    } on TokenRefreshRejectedException catch (rejection) {
+      AppLogger.instance.error(
+        'SignalR refresh token rejected definitively',
+        category: 'signalr',
+        event: 'token_refresh_rejected',
+        error: rejection,
+      );
+      if (rejection.code != 'session_signed_out') {
+        await _onSessionInvalidated?.call();
+      }
+      return null;
+    } catch (refreshErr) {
+      AppLogger.instance.error(
+        'SignalR refresh token attempt failed',
+        category: 'signalr',
+        event: 'token_refresh_failed',
+        error: refreshErr,
+      );
+      return null;
+    }
   }
 
   Future<void> _connectInternal({bool isRetryAfter401 = false}) async {
@@ -272,7 +337,15 @@ class SignalRNetcoreGateway implements SignalRGateway {
     }
 
     // 连接前验证 Token：如果已经过期或即将过期（5分钟内），必须先 refreshtoken 再连接
-    final validToken = await _ensureValidTokenBeforeConnect();
+    final String? validToken;
+    try {
+      validToken = await _ensureValidTokenBeforeConnect();
+    } catch (error) {
+      _lastError = error;
+      _lastErrorDescription = formatSignalRError(error);
+      _emitConnection(SignalRConnectionState.disconnected, error: error);
+      rethrow;
+    }
     if (validToken == null || validToken.isEmpty) {
       _emitConnection(
         SignalRConnectionState.disconnected,
@@ -281,6 +354,7 @@ class SignalRNetcoreGateway implements SignalRGateway {
       return;
     }
 
+    _lastAttemptedAccessToken = validToken;
     _emitConnection(SignalRConnectionState.connecting);
     AppLogger.instance.info(
       'SignalR connecting (retryAfter401: $isRetryAfter401)',
@@ -288,7 +362,12 @@ class SignalRNetcoreGateway implements SignalRGateway {
       event: 'connecting',
     );
     try {
-      await conn.start()?.timeout(const Duration(seconds: 15));
+      _skipNextFactoryProactiveRefresh = true;
+      try {
+        await conn.start()?.timeout(const Duration(seconds: 15));
+      } finally {
+        _skipNextFactoryProactiveRefresh = false;
+      }
       _lastError = null;
       _lastErrorDescription = null;
       _emitConnection(SignalRConnectionState.connected);
@@ -306,45 +385,25 @@ class SignalRNetcoreGateway implements SignalRGateway {
         stackTrace: StackTrace.current,
       );
 
-      final refresh = _refreshToken;
-      if (!isRetryAfter401 && _isUnauthorizedError(error) && refresh != null) {
+      if (!isRetryAfter401 &&
+          _isUnauthorizedError(error) &&
+          _refreshToken != null) {
         AppLogger.instance.info(
           'SignalR 401 detected during connect, triggering token refresh...',
           category: 'signalr',
           event: 'refresh_on_401',
         );
-        try {
-          final currentToken = await _readAccessToken();
-          String? newToken = currentToken;
-          if (currentToken == null ||
-              currentToken.isEmpty ||
-              shouldRefreshJwt(currentToken)) {
-            newToken = await refresh();
-          }
-          if (newToken != null && newToken.isNotEmpty) {
-            AppLogger.instance.info(
-              'SignalR token refreshed, retrying start...',
-              category: 'signalr',
-              event: 'retry_after_refresh',
-            );
-            _initConnection();
-            return await _connectInternal(isRetryAfter401: true);
-          }
-        } on TokenRefreshRejectedException catch (rejection) {
-          AppLogger.instance.error(
-            'SignalR refresh token rejected definitively',
+        final newToken = await _refreshTokenAfterUnauthorized(
+          failedToken: _lastAttemptedAccessToken ?? validToken,
+        );
+        if (newToken != null && newToken.isNotEmpty) {
+          AppLogger.instance.info(
+            'SignalR token refreshed, retrying start...',
             category: 'signalr',
-            event: 'token_refresh_rejected',
-            error: rejection,
+            event: 'retry_after_refresh',
           );
-          await _onSessionInvalidated?.call();
-        } catch (refreshErr) {
-          AppLogger.instance.error(
-            'SignalR refresh token attempt failed',
-            category: 'signalr',
-            event: 'token_refresh_failed',
-            error: refreshErr,
-          );
+          _initConnection();
+          return await _connectInternal(isRetryAfter401: true);
         }
       }
 

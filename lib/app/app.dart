@@ -14,6 +14,7 @@ import '../core/theme/theme_mode_controller.dart';
 import '../core/floating_window/floating_window.dart';
 import '../core/widgets/app_scroll_behavior.dart';
 import '../core/realtime/network_connectivity_coordinator.dart';
+import '../features/auth/application/auth_controller.dart';
 import '../features/session/application/realtime_sync_coordinator.dart';
 import '../features/session/application/presence_heartbeat_coordinator.dart';
 import '../features/session/application/friend_presence_store.dart';
@@ -64,7 +65,8 @@ class _GotoImAppState extends ConsumerState<GotoImApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed &&
+        ref.read(authControllerProvider).status == AuthStatus.authenticated) {
       unawaited(ref.read(realtimeSyncCoordinatorProvider).syncCurrentOwner());
     }
     ref.read(activeChatRegistryProvider).updateLifecycle(state);

@@ -134,4 +134,37 @@ void main() {
     await gateway.controller.close();
     await db.close();
   });
+
+  test('skips scheduled and manual syncs when unauthenticated', () async {
+    final db = UnifiedDatabase(DatabaseConnection(NativeDatabase.memory()));
+    await db.initialize();
+    final dao = MessageDao(db);
+    final client = _Client();
+    final gateway = _Gateway();
+    final sessions = _Sessions();
+    var authenticated = false;
+    final coordinator = RealtimeSyncCoordinator(
+      gateway: gateway,
+      sessionRepository: sessions,
+      messageRepository: MessageRepository(api: MessageApi(client), dao: dao),
+      aiStreamChangeBus: AiStreamChangeBus(),
+      messageAlertCoordinator: _Alerts(),
+      activeChatRegistry: ActiveChatRegistry(),
+      isAuthenticated: () => authenticated,
+      onKicked: (_) async {},
+    );
+    coordinator.start();
+    await coordinator.syncCurrentOwner();
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    expect(sessions.syncs, 0);
+    expect(client.calls, 0);
+
+    authenticated = true;
+    await coordinator.syncCurrentOwner();
+    expect(sessions.syncs, 1);
+
+    await coordinator.dispose();
+    await gateway.controller.close();
+    await db.close();
+  });
 }

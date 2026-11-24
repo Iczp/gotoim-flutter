@@ -114,7 +114,7 @@ String stripMessageTags(
 }
 
 /// 描述标签解析出的文本分段类型。
-enum MessageTagType { text, sessionUnit, chatObject, appLink, link, genericLink }
+enum MessageTagType { text, sessionUnit, chatObject, appLink, link, mention, genericLink }
 
 /// 结构化标签解析结果项。
 class MessageTagNode {
@@ -137,8 +137,127 @@ class MessageTagNode {
   final Map<String, String>? params;
 }
 
+void _appendPlainTextNodes(
+  String text,
+  List<MessageTagNode> target, {
+  bool parseMentions = false,
+}) {
+  if (text.isEmpty) return;
+
+  final escapedSchemes = _configuredAppLinkSchemes.map(RegExp.escape).join('|');
+  final patternStr = parseMentions
+      ? '(?:(?:$escapedSchemes):\\/\\/[^\\s<>"\'\\)\\]]+|https?:\\/\\/[^\\s<>"\'\\)\\]]+|@[^\\s@<>()\\[\\]{},.;:!?\'"，。！？；：、]{1,24})'
+      : '(?:(?:$escapedSchemes):\\/\\/[^\\s<>"\'\\)\\]]+|https?:\\/\\/[^\\s<>"\'\\)\\]]+)';
+  final regex = RegExp(patternStr, caseSensitive: false);
+
+  var lastIdx = 0;
+  for (final match in regex.allMatches(text)) {
+    if (match.start > lastIdx) {
+      target.add(MessageTagNode(
+        type: MessageTagType.text,
+        text: text.substring(lastIdx, match.start),
+      ));
+    }
+
+    final token = match.group(0)!;
+    if (token.startsWith('@') && parseMentions) {
+      target.add(MessageTagNode(
+        type: MessageTagType.mention,
+        text: token,
+        value: token.substring(1),
+      ));
+    } else {
+      final appLink = parseAppLinkUri(token);
+      if (appLink != null) {
+        if (appLink.route == 'session-unit') {
+          target.add(MessageTagNode(
+            type: MessageTagType.sessionUnit,
+            text: token,
+            value: appLink.id,
+            href: token,
+            scheme: appLink.scheme,
+            route: appLink.route,
+            params: appLink.params,
+          ));
+        } else if (appLink.route == 'chat-object') {
+          target.add(MessageTagNode(
+            type: MessageTagType.chatObject,
+            text: token,
+            value: appLink.id,
+            href: token,
+            scheme: appLink.scheme,
+            route: appLink.route,
+            params: appLink.params,
+          ));
+        } else {
+          target.add(MessageTagNode(
+            type: MessageTagType.appLink,
+            text: token,
+            value: appLink.id,
+            href: token,
+            scheme: appLink.scheme,
+            route: appLink.route,
+            params: appLink.params,
+          ));
+        }
+      } else {
+        target.add(MessageTagNode(
+          type: MessageTagType.link,
+          text: token,
+          href: token,
+          value: token,
+        ));
+      }
+    }
+    lastIdx = match.end;
+  }
+
+  if (lastIdx < text.length) {
+    target.add(MessageTagNode(
+      type: MessageTagType.text,
+      text: text.substring(lastIdx),
+    ));
+  }
+}
+
+/// 将公告 Markdown 中的裸 `@成员` 转换为 `im://mention?name=...` 链接，避开代码块与已有 Markdown 链接。
+String preprocessAnnouncementMarkdownLinks(String markdown) {
+  if (markdown.isEmpty) return '';
+  final segmentRegex = RegExp(
+    r'(```[\s\S]*?```|`[^`\n]+`|\[[^\]]*\]\([^)]+\))',
+    multiLine: true,
+  );
+  final mentionRegex = RegExp(r"@([^\s@<>()\[\]{},.;:!?'，。！？；：、]{1,24})");
+  final buffer = StringBuffer();
+  var lastIdx = 0;
+
+  void writeTransformed(String chunk) {
+    buffer.write(chunk.replaceAllMapped(mentionRegex, (m) {
+      final name = m.group(1) ?? '';
+      if (name.isEmpty) return m.group(0)!;
+      final scheme = _configuredAppLinkSchemes.first;
+      return '[@$name]($scheme://mention?name=${Uri.encodeComponent(name)})';
+    }));
+  }
+
+  for (final match in segmentRegex.allMatches(markdown)) {
+    if (match.start > lastIdx) {
+      writeTransformed(markdown.substring(lastIdx, match.start));
+    }
+    buffer.write(match.group(0));
+    lastIdx = match.end;
+  }
+  if (lastIdx < markdown.length) {
+    writeTransformed(markdown.substring(lastIdx));
+  }
+  return buffer.toString();
+}
+
 /// 将包含特定标签的消息字符串解析为结构化节点列表。
-List<MessageTagNode> parseMessageTagNodes(String? input) {
+List<MessageTagNode> parseMessageTagNodes(
+  String? input, {
+  bool parseMentions = false,
+}) {
   if (input == null || input.isEmpty) return const [];
 
   final nodes = <MessageTagNode>[];
@@ -146,10 +265,11 @@ List<MessageTagNode> parseMessageTagNodes(String? input) {
 
   for (final match in _kMessageTagRegex.allMatches(input)) {
     if (match.start > lastIndex) {
-      nodes.add(MessageTagNode(
-        type: MessageTagType.text,
-        text: input.substring(lastIndex, match.start),
-      ));
+      _appendPlainTextNodes(
+        input.substring(lastIndex, match.start),
+        nodes,
+        parseMentions: parseMentions,
+      );
     }
 
     final uid = match.group(1);
@@ -223,10 +343,11 @@ List<MessageTagNode> parseMessageTagNodes(String? input) {
   }
 
   if (lastIndex < input.length) {
-    nodes.add(MessageTagNode(
-      type: MessageTagType.text,
-      text: input.substring(lastIndex),
-    ));
+    _appendPlainTextNodes(
+      input.substring(lastIndex),
+      nodes,
+      parseMentions: parseMentions,
+    );
   }
 
   return nodes;
@@ -237,12 +358,14 @@ List<InlineSpan> parseMessageTagsToSpans(
   String? input, {
   required TextStyle textStyle,
   required TextStyle linkStyle,
+  bool parseMentions = false,
   void Function(String uid, String name)? onSessionUnitTap,
   void Function(String oid, String name)? onChatObjectTap,
   void Function(MessageTagNode node)? onAppLinkTap,
   void Function(String url)? onExternalLinkTap,
+  void Function(String name)? onMentionTap,
 }) {
-  final nodes = parseMessageTagNodes(input);
+  final nodes = parseMessageTagNodes(input, parseMentions: parseMentions);
   final spans = <InlineSpan>[];
 
   for (final node in nodes) {
@@ -280,6 +403,15 @@ List<InlineSpan> parseMessageTagsToSpans(
           style: linkStyle,
           recognizer: (onExternalLinkTap != null && url.isNotEmpty)
               ? (TapGestureRecognizer()..onTap = () => onExternalLinkTap(url))
+              : null,
+        ));
+      case MessageTagType.mention:
+        final mentionName = node.value ?? node.text.replaceFirst(RegExp(r'^@'), '');
+        spans.add(TextSpan(
+          text: node.text,
+          style: linkStyle,
+          recognizer: (onMentionTap != null && mentionName.isNotEmpty)
+              ? (TapGestureRecognizer()..onTap = () => onMentionTap(mentionName))
               : null,
         ));
       case MessageTagType.genericLink:
