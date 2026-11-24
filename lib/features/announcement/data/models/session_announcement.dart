@@ -17,6 +17,7 @@ class SessionAnnouncement {
     required this.creationTime,
     this.publisherName,
     this.publisherAvatar,
+    this.sessionName,
     this.sorting = 0,
     this.pinnedTime,
     this.expireTime,
@@ -39,6 +40,7 @@ class SessionAnnouncement {
       publisherName: json['publisherName']?.toString(),
       publisherAvatar:
           json['publisherAvatar']?.toString() ?? json['publisherPortrait']?.toString(),
+      sessionName: json['sessionName']?.toString(),
       title: json['title']?.toString() ?? '',
       content: json['content']?.toString() ?? '',
       editorType: (json['editorType'] as num?)?.toInt() ?? 0,
@@ -70,6 +72,7 @@ class SessionAnnouncement {
   final String publisherChatObjectId;
   final String? publisherName;
   final String? publisherAvatar;
+  final String? sessionName;
   final String title;
   final String content;
   final int editorType;

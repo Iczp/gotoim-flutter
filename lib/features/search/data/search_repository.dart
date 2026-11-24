@@ -3,24 +3,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
 import '../../../core/database/unified_database.dart';
+import '../../announcement/application/announcement_providers.dart';
+import '../../announcement/data/announcement_api.dart';
+import '../../announcement/data/models/session_announcement.dart';
 import '../../contact/data/contact_api.dart';
 import '../domain/search_models.dart';
 
 final searchRepositoryProvider = Provider<SearchRepository>((ref) {
   final database = ref.watch(unifiedDatabaseProvider);
   final contactApi = ref.watch(contactApiProvider);
-  return SearchRepository(database: database, contactApi: contactApi);
+  final announcementApi = ref.watch(announcementApiProvider);
+  return SearchRepository(
+    database: database,
+    contactApi: contactApi,
+    announcementApi: announcementApi,
+  );
 });
 
 class SearchRepository {
   SearchRepository({
     required UnifiedDatabase database,
     required ContactApi contactApi,
+    required AnnouncementApi announcementApi,
   })  : _database = database,
-        _contactApi = contactApi;
+        _contactApi = contactApi,
+        _announcementApi = announcementApi;
 
   final UnifiedDatabase _database;
   final ContactApi _contactApi;
+  final AnnouncementApi _announcementApi;
 
   // ========== 历史记录 ==========
 
@@ -231,6 +242,12 @@ class SearchRepository {
     } catch (_) {
       return const <SearchRemoteContactItem>[];
     }
+  }
+
+  Future<List<SessionAnnouncement>> searchAnnouncements({
+    required String keyword,
+  }) async {
+    return _announcementApi.search(keyword: keyword, maxResultCount: 20);
   }
 
   String _extractSnippet(String text, String keyword) {

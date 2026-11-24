@@ -65,6 +65,37 @@ class AnnouncementApi {
     }
   }
 
+  Future<List<SessionAnnouncement>> search({
+    required String keyword,
+    String? sessionId,
+    int maxResultCount = 20,
+    int skipCount = 0,
+  }) async {
+    final trimmed = keyword.trim();
+    if (trimmed.isEmpty) return const [];
+    try {
+      final json = await _client.get<Map<String, dynamic>>(
+        '/api/chat/session-announcement/search',
+        query: <String, Object?>{
+          'Keyword': trimmed,
+          if (sessionId != null && sessionId.isNotEmpty) 'SessionId': sessionId,
+          'MaxResultCount': maxResultCount,
+          'SkipCount': skipCount,
+        },
+      );
+      final rawItems = json['items'];
+      if (rawItems is List) {
+        return rawItems
+            .whereType<Map<String, dynamic>>()
+            .map(SessionAnnouncement.fromJson)
+            .toList(growable: false);
+      }
+      return const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<SessionAnnouncement?> getDetail(String id) async {
     try {
       final json = await _client.get<Map<String, dynamic>>(

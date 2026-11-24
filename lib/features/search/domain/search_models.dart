@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../announcement/data/models/session_announcement.dart';
 
 /// 搜索匹配到的联系人/群聊
 @immutable
@@ -77,6 +78,7 @@ enum SearchCategory {
   all('全部'),
   contacts('联系人'),
   messages('聊天记录'),
+  announcements('群公告'),
   remote('网络搜索');
 
   const SearchCategory(this.label);
@@ -92,6 +94,7 @@ class SearchResultState {
     this.isRemoteLoading = false,
     this.localContacts = const <SearchContactItem>[],
     this.localMessages = const <SearchMessageItem>[],
+    this.announcements = const <SessionAnnouncement>[],
     this.remoteContacts = const <SearchRemoteContactItem>[],
     this.history = const <String>[],
     this.selectedCategory = SearchCategory.all,
@@ -104,6 +107,7 @@ class SearchResultState {
   final bool isRemoteLoading;
   final List<SearchContactItem> localContacts;
   final List<SearchMessageItem> localMessages;
+  final List<SessionAnnouncement> announcements;
   final List<SearchRemoteContactItem> remoteContacts;
   final List<String> history;
   final SearchCategory selectedCategory;
@@ -114,6 +118,7 @@ class SearchResultState {
   bool get hasAnyResult =>
       localContacts.isNotEmpty ||
       localMessages.isNotEmpty ||
+      announcements.isNotEmpty ||
       remoteContacts.isNotEmpty;
 
   SearchResultState copyWith({
@@ -122,6 +127,7 @@ class SearchResultState {
     bool? isRemoteLoading,
     List<SearchContactItem>? localContacts,
     List<SearchMessageItem>? localMessages,
+    List<SessionAnnouncement>? announcements,
     List<SearchRemoteContactItem>? remoteContacts,
     List<String>? history,
     SearchCategory? selectedCategory,
@@ -134,6 +140,7 @@ class SearchResultState {
       isRemoteLoading: isRemoteLoading ?? this.isRemoteLoading,
       localContacts: localContacts ?? this.localContacts,
       localMessages: localMessages ?? this.localMessages,
+      announcements: announcements ?? this.announcements,
       remoteContacts: remoteContacts ?? this.remoteContacts,
       history: history ?? this.history,
       selectedCategory: selectedCategory ?? this.selectedCategory,

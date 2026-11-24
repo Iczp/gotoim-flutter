@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../../announcement/data/models/session_announcement.dart';
 import '../../session/application/session_list_controller.dart';
 import '../data/search_repository.dart';
 import '../domain/search_models.dart';
@@ -70,6 +71,7 @@ class GlobalSearchController extends ChangeNotifier {
         selectedCategory: SearchCategory.all,
         localContacts: const <SearchContactItem>[],
         localMessages: const <SearchMessageItem>[],
+        announcements: const <SessionAnnouncement>[],
         remoteContacts: const <SearchRemoteContactItem>[],
       );
       notifyListeners();
@@ -126,15 +128,19 @@ class GlobalSearchController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final remotes = await _repository.searchRemoteContacts(
-        ownerId: ownerId,
-        keyword: query,
-      );
+      final results = await Future.wait([
+        _repository.searchRemoteContacts(
+          ownerId: ownerId,
+          keyword: query,
+        ),
+        _repository.searchAnnouncements(keyword: query),
+      ]);
       if (_state.keyword.trim() != query) return;
 
       _state = _state.copyWith(
         isRemoteLoading: false,
-        remoteContacts: remotes,
+        remoteContacts: results[0] as List<SearchRemoteContactItem>,
+        announcements: results[1] as List<SessionAnnouncement>,
       );
       notifyListeners();
     } catch (_) {

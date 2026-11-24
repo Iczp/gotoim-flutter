@@ -11,6 +11,7 @@ import '../../../core/theme/app_theme_tokens.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/desktop_dialog.dart';
+import '../../announcement/presentation/widgets/announcement_detail_dialog.dart';
 import '../../contact/presentation/add_friend_page.dart';
 import '../../chat/presentation/widgets/half_screen_chat_sheet.dart';
 import '../../home/presentation/home_sections.dart';
@@ -264,6 +265,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       case SearchCategory.all:
         final total = state.localContacts.length +
             state.localMessages.length +
+            state.announcements.length +
             state.remoteContacts.length;
         return total > 0 ? '全部 ($total)' : '全部';
       case SearchCategory.contacts:
@@ -274,6 +276,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         return state.localMessages.isNotEmpty
             ? '聊天记录 (${state.localMessages.length})'
             : '聊天记录';
+      case SearchCategory.announcements:
+        return state.announcements.isNotEmpty
+            ? '群公告 (${state.announcements.length})'
+            : '群公告';
       case SearchCategory.remote:
         return state.remoteContacts.isNotEmpty
             ? '网络搜索 (${state.remoteContacts.length})'
@@ -402,6 +408,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final isAll = state.selectedCategory == SearchCategory.all;
     final showContacts = isAll || state.selectedCategory == SearchCategory.contacts;
     final showMessages = isAll || state.selectedCategory == SearchCategory.messages;
+    final showAnnouncements =
+        isAll || state.selectedCategory == SearchCategory.announcements;
     final showRemote = isAll || state.selectedCategory == SearchCategory.remote;
 
     // 分类筛选模式下的空状态处理
@@ -409,6 +417,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       final categoryHasResult = switch (state.selectedCategory) {
         SearchCategory.contacts => state.localContacts.isNotEmpty || state.isLocalLoading,
         SearchCategory.messages => state.localMessages.isNotEmpty,
+        SearchCategory.announcements =>
+          state.announcements.isNotEmpty || state.isRemoteLoading,
         SearchCategory.remote => state.remoteContacts.isNotEmpty || state.isRemoteLoading,
         _ => false,
       };
@@ -434,6 +444,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         ? state.localMessages.take(limit).toList()
         : state.localMessages;
     final hasMoreMessages = isAll && state.localMessages.length > limit;
+
+    final announcementsToShow = isAll && state.announcements.length > limit
+        ? state.announcements.take(limit).toList()
+        : state.announcements;
+    final hasMoreAnnouncements = isAll && state.announcements.length > limit;
 
     final remotesToShow = isAll && state.remoteContacts.length > limit
         ? state.remoteContacts.take(limit).toList()
@@ -562,10 +577,83 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             ),
         ],
 
+        // 2.5 群公告
+        if (showAnnouncements && state.announcements.isNotEmpty) ...[
+          if ((showContacts && (state.localContacts.isNotEmpty || state.isLocalLoading)) ||
+              (showMessages && state.localMessages.isNotEmpty))
+            const Divider(height: 16),
+          _buildSectionHeader(
+            context,
+            title: '群公告',
+            count: state.announcements.length,
+            isLoading: state.isRemoteLoading,
+          ),
+          for (final ann in announcementsToShow)
+            ListTile(
+              leading: CircleAvatar(
+                radius: 20,
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                child: Icon(
+                  Icons.campaign_rounded,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: _buildHighlightedText(
+                      text: ann.title.isNotEmpty ? ann.title : '(无标题公告)',
+                      keyword: keyword,
+                      context: context,
+                      isTitle: true,
+                    ),
+                  ),
+                  if (ann.sessionName != null && ann.sessionName!.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(left: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        ann.sessionName!,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              subtitle: _buildHighlightedText(
+                text: ann.content.replaceAll(RegExp(r'\s+'), ' ').trim(),
+                keyword: keyword,
+                context: context,
+                isTitle: false,
+              ),
+              onTap: () {
+                controller.recordKeyword(keyword);
+                AnnouncementDetailDialog.show(
+                  context,
+                  announcement: ann,
+                  sessionTitle: ann.sessionName,
+                );
+              },
+            ),
+          if (hasMoreAnnouncements)
+            _buildViewMoreTile(
+              context,
+              title: '查看更多群公告 (共${state.announcements.length}条)',
+              onTap: () => controller.setCategory(SearchCategory.announcements),
+            ),
+        ],
+
         // 3. 线上搜索预览
         if (showRemote && (state.remoteContacts.isNotEmpty || state.isRemoteLoading)) ...[
           if ((showContacts && (state.localContacts.isNotEmpty || state.isLocalLoading)) ||
-              (showMessages && state.localMessages.isNotEmpty))
+              (showMessages && state.localMessages.isNotEmpty) ||
+              (showAnnouncements && state.announcements.isNotEmpty))
             const Divider(height: 16),
           _buildSectionHeader(
             context,

@@ -232,6 +232,18 @@ class _AnnouncementDetailDialogState
           _openStat(initialTabIndex: tabIdx);
         }
         return;
+      case 'file':
+      case 'browser':
+        final targetUrl = (parsed.params['url'] ?? id).trim();
+        if (targetUrl.isNotEmpty) {
+          await Clipboard.setData(ClipboardData(text: targetUrl));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('已复制链接: $targetUrl')),
+            );
+          }
+        }
+        return;
       default:
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -239,6 +251,57 @@ class _AnnouncementDetailDialogState
           );
         }
     }
+  }
+
+  void _showImagePreview(String imageUrl, String? caption) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black87,
+        insetPadding: const EdgeInsets.all(24),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Center(
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      '图片加载失败',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (caption != null && caption.trim().isNotEmpty)
+              Positioned(
+                left: 16,
+                right: 56,
+                bottom: 16,
+                child: Text(
+                  caption,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _openPublisherProfile() {
@@ -377,6 +440,51 @@ class _AnnouncementDetailDialogState
                                 selectable: true,
                                 onTapLink: (text, href, _) =>
                                     _handleAppLinkTap(text, href),
+                                imageBuilder: (uri, title, alt) {
+                                  final imageUrl = uri.toString();
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: GestureDetector(
+                                      onTap: () => _showImagePreview(imageUrl, alt ?? title),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxHeight: 280,
+                                          ),
+                                          child: Image.network(
+                                            imageUrl,
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (_, _, _) => Container(
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                color: colorScheme.surfaceContainerHighest,
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.broken_image_outlined,
+                                                    size: 18,
+                                                    color: colorScheme.outline,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Flexible(
+                                                    child: Text(
+                                                      alt?.isNotEmpty == true ? alt! : '图片加载失败',
+                                                      style: theme.textTheme.bodySmall,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
                               )
                             : SelectableText.rich(
                                 TextSpan(
