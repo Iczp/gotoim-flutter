@@ -130,12 +130,13 @@ class _AnnouncementDetailDialogState
     }
   }
 
-  void _openStat() {
+  void _openStat({int initialTabIndex = 0}) {
     Navigator.of(context).pop();
     AnnouncementStatSheet.show(
       context,
       announcementId: _item.id,
       title: _item.title,
+      initialTabIndex: initialTabIndex,
     );
   }
 
@@ -216,6 +217,19 @@ class _AnnouncementDetailDialogState
         if (mounted && tab == 'workbench') {
           Navigator.of(context).pop();
           context.push('/workbench');
+        }
+        return;
+      case 'announcement-stat':
+        final statTab = parsed.params['tab'];
+        final tabIdx = switch (statTab) {
+          'read' => 1,
+          'unread' => 2,
+          'confirmed' => 3,
+          'unconfirmed' => 4,
+          _ => 0,
+        };
+        if (mounted && widget.canManage) {
+          _openStat(initialTabIndex: tabIdx);
         }
         return;
       default:
@@ -411,11 +425,66 @@ class _AnnouncementDetailDialogState
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  Text(
-                    '已读 ${_item.readCount} 人'
-                    '${_item.requireConfirm ? " · 已确认 ${_item.confirmedCount} 人" : ""}',
-                    style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.outline),
-                  ),
+                  if (widget.canManage)
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        InkWell(
+                          onTap: () => _openStat(initialTabIndex: 1),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Text(
+                            '已读 ${_item.readCount} 人',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () => _openStat(initialTabIndex: 2),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Text(
+                            '未读',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.orange.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (_item.requireConfirm) ...[
+                          InkWell(
+                            onTap: () => _openStat(initialTabIndex: 3),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Text(
+                              '已确认 ${_item.confirmedCount} 人',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => _openStat(initialTabIndex: 4),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Text(
+                              '待确认',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.orange.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    )
+                  else
+                    Text(
+                      '已读 ${_item.readCount} 人'
+                      '${_item.requireConfirm ? " · 已确认 ${_item.confirmedCount} 人" : ""}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.outline),
+                    ),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -450,7 +519,7 @@ class _AnnouncementDetailDialogState
                           tooltip: '查看统计',
                           icon: const Icon(Icons.pie_chart_outline, size: 18),
                           visualDensity: VisualDensity.compact,
-                          onPressed: _openStat,
+                          onPressed: () => _openStat(),
                         ),
                       if (_item.requireConfirm) ...[
                         const SizedBox(width: 4),

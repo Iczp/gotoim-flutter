@@ -2,22 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/announcement_providers.dart';
 import '../data/models/session_announcement.dart';
+import '../../chat_settings/data/models/chat_member.dart';
+import '../../chat_settings/presentation/member_profile_sheet.dart';
 import '../../session/presentation/chat_object_avatar.dart';
 
 class AnnouncementStatSheet extends ConsumerStatefulWidget {
   const AnnouncementStatSheet({
     required this.announcementId,
     required this.title,
+    this.initialTabIndex = 0,
     super.key,
   });
 
   final String announcementId;
   final String title;
+  final int initialTabIndex;
 
   static Future<void> show(
     BuildContext context, {
     required String announcementId,
     required String title,
+    int initialTabIndex = 0,
   }) {
     final isDesktop = MediaQuery.sizeOf(context).width >= 720;
     if (isDesktop) {
@@ -26,10 +31,11 @@ class AnnouncementStatSheet extends ConsumerStatefulWidget {
         builder: (_) => Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 680),
+            constraints: const BoxConstraints(maxWidth: 560, maxHeight: 680),
             child: AnnouncementStatSheet(
               announcementId: announcementId,
               title: title,
+              initialTabIndex: initialTabIndex,
             ),
           ),
         ),
@@ -47,6 +53,7 @@ class AnnouncementStatSheet extends ConsumerStatefulWidget {
         child: AnnouncementStatSheet(
           announcementId: announcementId,
           title: title,
+          initialTabIndex: initialTabIndex,
         ),
       ),
     );
@@ -65,10 +72,39 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    final safeInitial = widget.initialTabIndex.clamp(0, 4);
+    _tabController = TabController(
+      length: 5,
+      initialIndex: safeInitial,
+      vsync: this,
+    );
     _controller = AnnouncementStatController(
       ref.read(announcementApiProvider),
       widget.announcementId,
+    );
+    if (safeInitial != 0) {
+      _controller.setFilterType(safeInitial);
+    }
+  }
+
+  void _switchToTab(int index) {
+    final safeIndex = index.clamp(0, 4);
+    _tabController.animateTo(safeIndex);
+    _controller.setFilterType(safeIndex);
+  }
+
+  void _openMemberProfile(SessionAnnouncementMember member) {
+    showMemberProfileSheet(
+      context,
+      ChatMember.fromJson(<String, dynamic>{
+        'id': member.sessionUnitId,
+        'displayName': member.name,
+        'owner': <String, dynamic>{
+          'id': member.chatObjectId,
+          'displayName': member.name,
+          if (member.portrait != null) 'portrait': member.portrait,
+        },
+      }),
     );
   }
 
@@ -114,25 +150,27 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
               ),
             ),
 
-            // 概览指标卡片网格
+            // 概览指标卡片网格（点击直接定位对应人员列表）
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  _buildStatCard('总人数', '${stat?.totalMemberCount ?? 0}', Colors.grey),
+                  _buildStatCard('总人数', '${stat?.totalMemberCount ?? 0}', Colors.grey, () => _switchToTab(0)),
                   const SizedBox(width: 8),
                   _buildStatCard(
                     '已读 (${(stat?.readRate ?? 0).toStringAsFixed(0)}%)',
                     '${stat?.readCount ?? 0}',
                     Colors.green,
+                    () => _switchToTab(1),
                   ),
                   const SizedBox(width: 8),
-                  _buildStatCard('未读', '${stat?.unreadCount ?? 0}', Colors.orange),
+                  _buildStatCard('未读', '${stat?.unreadCount ?? 0}', Colors.orange, () => _switchToTab(2)),
                   const SizedBox(width: 8),
                   _buildStatCard(
                     '已确认 (${(stat?.confirmedRate ?? 0).toStringAsFixed(0)}%)',
                     '${stat?.confirmedCount ?? 0}',
                     Colors.blue,
+                    () => _switchToTab(3),
                   ),
                 ],
               ),
@@ -141,6 +179,8 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
             // Tab 栏
             TabBar(
               controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
               labelColor: colorScheme.primary,
               unselectedLabelColor: colorScheme.outline,
               indicatorSize: TabBarIndicatorSize.label,
@@ -152,6 +192,10 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
                 Tab(text: '已读 (${stat?.readCount ?? 0})'),
                 Tab(text: '未读 (${stat?.unreadCount ?? 0})'),
                 Tab(text: '已确认 (${stat?.confirmedCount ?? 0})'),
+                Tab(
+                  text:
+                      '待确认 (${((stat?.totalMemberCount ?? 0) - (stat?.confirmedCount ?? 0)).clamp(0, 999999)})',
+                ),
               ],
             ),
 
@@ -202,27 +246,36 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color color) {
+  Widget _buildStatCard(
+    String label,
+    String value,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          children: [
-            Text(label, style: TextStyle(color: color, fontSize: 11)),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              style: TextStyle(
-                color: color,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: [
+              Text(label, style: TextStyle(color: color, fontSize: 11)),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -233,6 +286,7 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
     final colorScheme = theme.colorScheme;
 
     return ListTile(
+      onTap: () => _openMemberProfile(member),
       leading: ChatObjectAvatar(
         name: member.name,
         imageUrl: member.portrait,
