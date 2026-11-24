@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/announcement_providers.dart';
 import '../data/models/session_announcement.dart';
@@ -115,6 +116,48 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
     super.dispose();
   }
 
+  Future<void> _copyRemindText() async {
+    final list = _controller.members;
+    if (list.isEmpty) return;
+    final names = list.map((m) => m.name.trim()).where((n) => n.isNotEmpty).toList();
+    if (names.isEmpty) return;
+    final mentions = names.map((n) => '@$n').join(' ');
+    final tabIdx = _tabController.index;
+    final tip = tabIdx == 4
+        ? '请及时确认收到公告'
+        : tabIdx == 2
+            ? '请及时查看公告'
+            : '请关注公告';
+    final text = '$mentions $tip《${widget.title}》';
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已复制 ${names.length} 位成员的 @催办文案')),
+      );
+    }
+  }
+
+  Future<void> _copyMemberList() async {
+    final list = _controller.members;
+    if (list.isEmpty) return;
+    final lines = <String>[
+      '姓名\t角色\t阅读状态\t确认状态\t首次阅读时间',
+      ...list.map((m) {
+        final role = m.isCreator ? '群主' : (m.isAdmin ? '管理员' : '成员');
+        final read = m.firstReadTime != null ? '已读' : '未读';
+        final confirmed = m.isConfirmed ? '已确认' : '未确认';
+        final time = m.firstReadTime ?? '';
+        return '${m.name}\t$role\t$read\t$confirmed\t$time';
+      }),
+    ];
+    await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已复制 ${list.length} 条成员统计名单')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -199,23 +242,40 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
               ],
             ),
 
-            // 搜索框
+            // 搜索框与快捷催办/导出操作
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: SizedBox(
-                height: 38,
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: '搜索姓名...',
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      borderSide: BorderSide(color: colorScheme.outlineVariant),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 36,
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: '搜索姓名...',
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide(color: colorScheme.outlineVariant),
+                          ),
+                        ),
+                        onChanged: (text) => _controller.setKeyword(text),
+                      ),
                     ),
                   ),
-                  onChanged: (text) => _controller.setKeyword(text),
-                ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    tooltip: '复制 @催办文案',
+                    icon: const Icon(Icons.campaign_outlined, size: 20),
+                    onPressed: _controller.members.isEmpty ? null : _copyRemindText,
+                  ),
+                  IconButton(
+                    tooltip: '复制统计名单',
+                    icon: const Icon(Icons.copy_all_outlined, size: 20),
+                    onPressed: _controller.members.isEmpty ? null : _copyMemberList,
+                  ),
+                ],
               ),
             ),
 

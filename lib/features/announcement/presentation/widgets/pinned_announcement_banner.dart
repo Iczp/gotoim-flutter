@@ -11,12 +11,14 @@ class PinnedAnnouncementBanner extends ConsumerStatefulWidget {
     required this.sessionId,
     this.sessionTitle,
     this.canManage = false,
+    this.refreshTriggerKey,
     super.key,
   });
 
   final String sessionId;
   final String? sessionTitle;
   final bool canManage;
+  final String? refreshTriggerKey;
 
   @override
   ConsumerState<PinnedAnnouncementBanner> createState() =>
@@ -51,6 +53,11 @@ class _PinnedAnnouncementBannerState
       _controller.dispose();
       _popupFlowRunning = false;
       _initController();
+    } else if (oldWidget.refreshTriggerKey != widget.refreshTriggerKey &&
+        widget.refreshTriggerKey != null &&
+        widget.refreshTriggerKey!.isNotEmpty) {
+      _controller.loadPinned();
+      _checkAndShowPopupQueue();
     }
   }
 

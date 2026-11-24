@@ -276,6 +276,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
+  String? _latestAnnouncementTriggerKey(List<ChatMessage> messages) {
+    if (messages.isEmpty) return null;
+    final latest = messages.first;
+    final raw = '${latest.textContent} ${latest.rawContent ?? ''}';
+    if (raw.contains('im://announcement') ||
+        raw.contains('发布了新公告') ||
+        raw.contains('置顶了公告')) {
+      return latest.id;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
@@ -503,6 +515,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 sessionId: controller.activeSessionId,
                 sessionTitle: controller.title,
                 canManage: true,
+                refreshTriggerKey: _latestAnnouncementTriggerKey(controller.messages),
               ),
             Expanded(child: messageList),
             inputArea,
@@ -524,6 +537,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
               sessionId: controller.activeSessionId,
               sessionTitle: controller.title,
               canManage: true,
+              refreshTriggerKey: _latestAnnouncementTriggerKey(controller.messages),
             ),
           ),
         Positioned(

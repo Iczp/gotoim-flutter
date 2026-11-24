@@ -38,6 +38,8 @@ class AnnouncementListPage extends ConsumerStatefulWidget {
 
 class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
   late AnnouncementListController _controller;
+  String _keyword = '';
+  bool _onlyUnconfirmed = false;
 
   @override
   void initState() {
@@ -119,16 +121,70 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
             );
           }
 
-          return RefreshIndicator(
-            onRefresh: _controller.loadList,
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: _controller.items.length,
-              itemBuilder: (context, index) {
-                final item = _controller.items[index];
-                return _buildAnnouncementCard(context, item);
-              },
-            ),
+          final kw = _keyword.trim().toLowerCase();
+          final filteredItems = _controller.items.where((item) {
+            if (_onlyUnconfirmed && (!item.requireConfirm || item.isSelfConfirmed)) {
+              return false;
+            }
+            if (kw.isEmpty) return true;
+            return item.title.toLowerCase().contains(kw) ||
+                item.content.toLowerCase().contains(kw);
+          }).toList(growable: false);
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 36,
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText: '搜索公告标题或内容...',
+                            prefixIcon: const Icon(Icons.search, size: 18),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(color: colorScheme.outlineVariant),
+                            ),
+                          ),
+                          onChanged: (val) => setState(() => _keyword = val),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('仅看未确认', style: TextStyle(fontSize: 12)),
+                      selected: _onlyUnconfirmed,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (selected) => setState(() => _onlyUnconfirmed = selected),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: filteredItems.isEmpty
+                    ? Center(
+                        child: Text(
+                          '无匹配公告',
+                          style: TextStyle(color: colorScheme.outline),
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _controller.loadList,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: filteredItems.length,
+                          itemBuilder: (context, index) {
+                            final item = filteredItems[index];
+                            return _buildAnnouncementCard(context, item);
+                          },
+                        ),
+                      ),
+              ),
+            ],
           );
         },
       ),
