@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/utils/message_text_formatter.dart';
 import '../../../chat_settings/data/models/chat_member.dart';
 import '../../../chat_settings/presentation/member_profile_sheet.dart';
 import '../../application/announcement_providers.dart';
@@ -134,6 +136,73 @@ class _AnnouncementDetailDialogState
       announcementId: _item.id,
       title: _item.title,
     );
+  }
+
+  void _openMemberById(String id, String displayName, {String? avatar}) {
+    if (id.isEmpty) return;
+    showMemberProfileSheet(
+      context,
+      ChatMember.fromJson(<String, dynamic>{
+        'id': id,
+        'displayName': displayName,
+        'owner': <String, dynamic>{
+          if (int.tryParse(id) != null) 'id': int.parse(id),
+          'displayName': displayName,
+          if (avatar != null) 'portrait': avatar,
+        },
+      }),
+    );
+  }
+
+  Future<void> _handleAppLinkTap(String text, String? href) async {
+    final rawHref = (href ?? '').trim();
+    if (rawHref.isEmpty) return;
+    final parsed = parseAppLinkUri(rawHref);
+    if (parsed == null) return;
+
+    final id = parsed.id;
+    switch (parsed.route) {
+      case 'session-unit':
+      case 'chat-object':
+        _openMemberById(id, text.isNotEmpty ? text : '成员 $id');
+        return;
+      case 'announcement':
+        if (id.isEmpty) return;
+        final idx = _navList.indexWhere((e) => e.id == id);
+        if (idx >= 0) {
+          await _navigateToIndex(idx);
+          return;
+        }
+        setState(() => _navLoading = true);
+        try {
+          final api = ref.read(announcementApiProvider);
+          final detail = await api.getDetail(id);
+          if (mounted && detail != null) {
+            setState(() => _item = detail);
+            api.recordView(detail.id);
+          }
+        } finally {
+          if (mounted) setState(() => _navLoading = false);
+        }
+        return;
+      case 'copy':
+        final copyText = parsed.params['text'] ?? id;
+        if (copyText.isNotEmpty) {
+          await Clipboard.setData(ClipboardData(text: copyText));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('已复制到剪贴板')),
+            );
+          }
+        }
+        return;
+      default:
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('暂不支持快捷指令: ${parsed.route}')),
+          );
+        }
+    }
   }
 
   void _openPublisherProfile() {
@@ -270,10 +339,30 @@ class _AnnouncementDetailDialogState
                             ? MarkdownBody(
                                 data: _item.content,
                                 selectable: true,
+                                onTapLink: (text, href, _) =>
+                                    _handleAppLinkTap(text, href),
                               )
-                            : SelectableText(
-                                _item.content,
-                                style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                            : SelectableText.rich(
+                                TextSpan(
+                                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                                  children: parseMessageTagsToSpans(
+                                    _item.content,
+                                    textStyle:
+                                        theme.textTheme.bodyMedium?.copyWith(height: 1.6) ??
+                                        const TextStyle(),
+                                    linkStyle: (theme.textTheme.bodyMedium ?? const TextStyle())
+                                        .copyWith(
+                                      color: colorScheme.primary,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                    onSessionUnitTap: (uid, name) =>
+                                        _openMemberById(uid, name),
+                                    onChatObjectTap: (oid, name) =>
+                                        _openMemberById(oid, name),
+                                    onAppLinkTap: (node) =>
+                                        _handleAppLinkTap(node.text, node.href),
+                                  ),
+                                ),
                               ),
                       ),
                     ),
