@@ -219,6 +219,27 @@ class _PinnedAnnouncementBannerState
                         ),
                       ),
                     ),
+                    if (_controller.pinnedList.length > 1) ...[
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 22, minHeight: 24),
+                        onPressed: _controller.prevPinned,
+                      ),
+                      Text(
+                        '${_controller.pinnedIndex + 1}/${_controller.pinnedList.length}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.grey[300] : Colors.grey[700],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 22, minHeight: 24),
+                        onPressed: _controller.nextPinned,
+                      ),
+                    ],
                     if (item.requireConfirm && !item.isSelfConfirmed) ...[
                       const SizedBox(width: 6),
                       SizedBox(

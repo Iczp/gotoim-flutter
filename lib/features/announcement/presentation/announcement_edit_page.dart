@@ -42,8 +42,11 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
   bool _isPopup = false;
   bool _requireConfirm = false;
   bool _applyToNewMembers = false;
+  bool _resetReceipts = false;
   String _expireMode = 'never'; // never | 7d | 30d | custom
   DateTime? _customExpireTime;
+  String _publishMode = 'now'; // now | scheduled
+  DateTime? _customPublishTime;
   bool _submitting = false;
 
   @override
@@ -62,6 +65,10 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
       if (item.expireTime != null && item.expireTime!.isNotEmpty) {
         _expireMode = 'custom';
         _customExpireTime = DateTime.tryParse(item.expireTime!);
+      }
+      if (item.publishTime != null && item.publishTime!.isNotEmpty) {
+        _publishMode = 'scheduled';
+        _customPublishTime = DateTime.tryParse(item.publishTime!);
       }
     }
   }
@@ -85,7 +92,7 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
     return _customExpireTime?.toUtc().toIso8601String();
   }
 
-  Future<void> _handleSubmit() async {
+  Future<void> _handleSubmit({bool saveAsDraft = false}) async {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
 
@@ -110,6 +117,9 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
       final effectiveSorting = parsedSorting > 0 ? parsedSorting : (_isPinned ? 1.0 : 0.0);
       final effectivePinned = effectiveSorting > 0;
       final expireTimeIso = _resolveExpireTimeIso();
+      final publishTimeIso = _publishMode == 'scheduled'
+          ? _customPublishTime?.toUtc().toIso8601String()
+          : null;
 
       if (widget.editItem != null) {
         result = await api.update(
@@ -119,6 +129,9 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
           isPinned: effectivePinned,
           sorting: effectiveSorting,
           expireTime: expireTimeIso,
+          publishTime: publishTimeIso,
+          saveAsDraft: saveAsDraft,
+          resetReceipts: _resetReceipts,
           applyToNewMembers: _applyToNewMembers,
           isPopup: _isPopup,
           requireConfirm: _requireConfirm,
@@ -131,6 +144,8 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
           isPinned: effectivePinned,
           sorting: effectiveSorting,
           expireTime: expireTimeIso,
+          publishTime: publishTimeIso,
+          saveAsDraft: saveAsDraft,
           applyToNewMembers: _applyToNewMembers,
           isPopup: _isPopup,
           requireConfirm: _requireConfirm,
@@ -159,17 +174,21 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
       appBar: AppBar(
         title: Text(widget.editItem != null ? '编辑公告' : '发布新公告'),
         actions: [
+          TextButton(
+            onPressed: _submitting ? null : () => _handleSubmit(saveAsDraft: true),
+            child: const Text('存草稿'),
+          ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
-              onPressed: _submitting ? null : _handleSubmit,
+              onPressed: _submitting ? null : () => _handleSubmit(saveAsDraft: false),
               child: _submitting
                   ? const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('发布'),
+                  : Text(_publishMode == 'scheduled' ? '定时发布' : '发布'),
             ),
           ),
         ],
@@ -309,6 +328,69 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
                       value: _applyToNewMembers,
                       onChanged: (val) => setState(() => _applyToNewMembers = val),
                     ),
+                    const Divider(height: 1),
+                    ListTile(
+                      title: const Text('发布方式'),
+                      subtitle: Text(
+                        _publishMode == 'now'
+                            ? '立即发布'
+                            : (_customPublishTime != null
+                                ? '定时 ${_customPublishTime!.toLocal().toString().substring(0, 16)}'
+                                : '选择定时发布时间'),
+                      ),
+                      trailing: DropdownButton<String>(
+                        value: _publishMode,
+                        underline: const SizedBox.shrink(),
+                        items: const [
+                          DropdownMenuItem(value: 'now', child: Text('立即发布')),
+                          DropdownMenuItem(value: 'scheduled', child: Text('定时发布')),
+                        ],
+                        onChanged: (val) async {
+                          if (val == null) return;
+                          if (val == 'scheduled') {
+                            final now = DateTime.now();
+                            final pickedDate = await showDatePicker(
+                              context: context,
+                              initialDate: _customPublishTime ?? now.add(const Duration(days: 1)),
+                              firstDate: now,
+                              lastDate: now.add(const Duration(days: 365)),
+                            );
+                            if (pickedDate != null && mounted) {
+                              final pickedTime = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.fromDateTime(
+                                  _customPublishTime ?? now.add(const Duration(hours: 1)),
+                                ),
+                              );
+                              if (mounted) {
+                                final t = pickedTime ?? const TimeOfDay(hour: 9, minute: 0);
+                                setState(() {
+                                  _publishMode = 'scheduled';
+                                  _customPublishTime = DateTime(
+                                    pickedDate.year,
+                                    pickedDate.month,
+                                    pickedDate.day,
+                                    t.hour,
+                                    t.minute,
+                                  );
+                                });
+                              }
+                            }
+                          } else {
+                            setState(() => _publishMode = 'now');
+                          }
+                        },
+                      ),
+                    ),
+                    if (widget.editItem != null && _requireConfirm) ...[
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        title: const Text('修改后要求成员重新确认'),
+                        subtitle: const Text('清空既有确认回执'),
+                        value: _resetReceipts,
+                        onChanged: (val) => setState(() => _resetReceipts = val),
+                      ),
+                    ],
                   ],
                 ),
               ),

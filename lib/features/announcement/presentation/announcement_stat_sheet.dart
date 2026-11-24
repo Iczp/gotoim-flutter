@@ -137,6 +137,31 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
     }
   }
 
+  Future<void> _sendServerRemind() async {
+    try {
+      final api = ref.read(announcementApiProvider);
+      final count = await api.remindUnconfirmed(
+        widget.announcementId,
+        sessionUnitId: widget.announcementId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              count > 0 ? '已向群内发送催办提醒（待确认 $count 人）' : '所有成员均已确认',
+            ),
+          ),
+        );
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('发送催办失败: $err')),
+        );
+      }
+    }
+  }
+
   Future<void> _copyMemberList() async {
     final list = _controller.members;
     if (list.isEmpty) return;
@@ -269,6 +294,11 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
                     tooltip: '复制 @催办文案',
                     icon: const Icon(Icons.campaign_outlined, size: 20),
                     onPressed: _controller.members.isEmpty ? null : _copyRemindText,
+                  ),
+                  IconButton(
+                    tooltip: '发送群内催办提醒',
+                    icon: const Icon(Icons.notifications_active_outlined, size: 20),
+                    onPressed: _sendServerRemind,
                   ),
                   IconButton(
                     tooltip: '复制统计名单',

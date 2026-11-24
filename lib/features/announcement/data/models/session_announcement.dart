@@ -20,6 +20,7 @@ class SessionAnnouncement {
     this.sorting = 0,
     this.pinnedTime,
     this.expireTime,
+    this.publishTime,
     this.applyToNewMembers = false,
     this.isExpired = false,
     this.isEffectiveForCurrentUser = true,
@@ -46,6 +47,7 @@ class SessionAnnouncement {
       sorting: (json['sorting'] as num?)?.toDouble() ?? 0,
       pinnedTime: json['pinnedTime']?.toString(),
       expireTime: json['expireTime']?.toString(),
+      publishTime: json['publishTime']?.toString(),
       applyToNewMembers: json['applyToNewMembers'] == true,
       isExpired: json['isExpired'] == true,
       isEffectiveForCurrentUser: json['isEffectiveForCurrentUser'] != false,
@@ -76,6 +78,7 @@ class SessionAnnouncement {
   final double sorting;
   final String? pinnedTime;
   final String? expireTime;
+  final String? publishTime;
   final bool applyToNewMembers;
   final bool isExpired;
   final bool isEffectiveForCurrentUser;
@@ -112,6 +115,7 @@ class SessionAnnouncement {
       sorting: sorting,
       pinnedTime: pinnedTime ?? this.pinnedTime,
       expireTime: expireTime,
+      publishTime: publishTime,
       applyToNewMembers: applyToNewMembers,
       isExpired: isExpired,
       isEffectiveForCurrentUser: isEffectiveForCurrentUser,

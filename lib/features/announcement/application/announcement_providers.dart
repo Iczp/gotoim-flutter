@@ -16,7 +16,10 @@ class PinnedAnnouncementController extends ChangeNotifier {
   final AnnouncementApi _api;
   final String sessionId;
 
-  SessionAnnouncement? pinned;
+  List<SessionAnnouncement> pinnedList = const [];
+  int pinnedIndex = 0;
+  SessionAnnouncement? get pinned =>
+      pinnedList.isEmpty ? null : pinnedList[pinnedIndex.clamp(0, pinnedList.length - 1)];
   bool loading = false;
   bool isDismissed = false;
 
@@ -25,12 +28,25 @@ class PinnedAnnouncementController extends ChangeNotifier {
     loading = true;
     notifyListeners();
     try {
-      pinned = await _api.getPinned(sessionId);
+      pinnedList = await _api.getPinnedList(sessionId);
+      pinnedIndex = 0;
       isDismissed = false;
     } finally {
       loading = false;
       notifyListeners();
     }
+  }
+
+  void prevPinned() {
+    if (pinnedList.length <= 1) return;
+    pinnedIndex = (pinnedIndex - 1 + pinnedList.length) % pinnedList.length;
+    notifyListeners();
+  }
+
+  void nextPinned() {
+    if (pinnedList.length <= 1) return;
+    pinnedIndex = (pinnedIndex + 1) % pinnedList.length;
+    notifyListeners();
   }
 
   void dismiss() {
@@ -43,22 +59,27 @@ class PinnedAnnouncementController extends ChangeNotifier {
     if (item == null) return;
     try {
       await _api.confirm(item.id);
-      pinned = item.copyWith(
+      final updated = item.copyWith(
         isSelfConfirmed: true,
         confirmedCount: item.confirmedCount + 1,
       );
+      pinnedList = [
+        for (var i = 0; i < pinnedList.length; i++)
+          if (i == pinnedIndex) updated else pinnedList[i],
+      ];
       notifyListeners();
     } catch (_) {}
   }
 }
 
 class AnnouncementListController extends ChangeNotifier {
-  AnnouncementListController(this._api, this.sessionId) {
+  AnnouncementListController(this._api, this.sessionId, {this.includeDrafts = false}) {
     loadList();
   }
 
   final AnnouncementApi _api;
   final String sessionId;
+  final bool includeDrafts;
 
   List<SessionAnnouncement> items = const [];
   bool loading = false;
@@ -68,7 +89,11 @@ class AnnouncementListController extends ChangeNotifier {
     loading = true;
     notifyListeners();
     try {
-      items = await _api.getList(sessionId: sessionId, maxResultCount: 100);
+      items = await _api.getList(
+        sessionId: sessionId,
+        includeDrafts: includeDrafts,
+        maxResultCount: 100,
+      );
     } finally {
       loading = false;
       notifyListeners();

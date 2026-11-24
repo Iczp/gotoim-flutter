@@ -18,10 +18,26 @@ class AnnouncementApi {
     }
   }
 
+  Future<List<SessionAnnouncement>> getPinnedList(String sessionId) async {
+    try {
+      final res = await _client.get<List<dynamic>>(
+        '/api/chat/session-announcement/pinned-list/$sessionId',
+      );
+      return res
+          .whereType<Map<String, dynamic>>()
+          .map(SessionAnnouncement.fromJson)
+          .toList(growable: false);
+    } catch (_) {
+      final single = await getPinned(sessionId);
+      return single != null ? [single] : const [];
+    }
+  }
+
   Future<List<SessionAnnouncement>> getList({
     required String sessionId,
     String? keyword,
     bool? isPinned,
+    bool includeDrafts = false,
     int maxResultCount = 50,
     int skipCount = 0,
   }) async {
@@ -32,6 +48,7 @@ class AnnouncementApi {
           'SessionId': sessionId,
           if (keyword != null && keyword.isNotEmpty) 'Keyword': keyword,
           if (isPinned != null) 'IsPinned': isPinned,
+          if (includeDrafts) 'IncludeDrafts': true,
           'MaxResultCount': maxResultCount,
           'SkipCount': skipCount,
         },
@@ -67,6 +84,8 @@ class AnnouncementApi {
     bool isPinned = false,
     double? sorting,
     String? expireTime,
+    String? publishTime,
+    bool saveAsDraft = false,
     bool applyToNewMembers = false,
     bool isPopup = false,
     bool requireConfirm = false,
@@ -81,6 +100,8 @@ class AnnouncementApi {
         'isPinned': isPinned,
         'sorting': ?sorting,
         'expireTime': expireTime,
+        'publishTime': publishTime,
+        'saveAsDraft': saveAsDraft,
         'applyToNewMembers': applyToNewMembers,
         'isPopup': isPopup,
         'requireConfirm': requireConfirm,
@@ -97,6 +118,9 @@ class AnnouncementApi {
     bool isPinned = false,
     double? sorting,
     String? expireTime,
+    String? publishTime,
+    bool saveAsDraft = false,
+    bool resetReceipts = false,
     bool applyToNewMembers = false,
     bool isPopup = false,
     bool requireConfirm = false,
@@ -110,6 +134,9 @@ class AnnouncementApi {
         'isPinned': isPinned,
         'sorting': ?sorting,
         'expireTime': expireTime,
+        'publishTime': publishTime,
+        'saveAsDraft': saveAsDraft,
+        'resetReceipts': resetReceipts,
         'applyToNewMembers': applyToNewMembers,
         'isPopup': isPopup,
         'requireConfirm': requireConfirm,
@@ -134,6 +161,29 @@ class AnnouncementApi {
 
   Future<void> delete(String id) async {
     await _client.delete<dynamic>('/api/chat/session-announcement/$id');
+  }
+
+  Future<SessionAnnouncement> publish(String id, {String? sessionUnitId}) async {
+    final json = await _client.post<Map<String, dynamic>>(
+      '/api/chat/session-announcement/$id/publish',
+      query: <String, Object?>{'sessionUnitId': ?sessionUnitId},
+    );
+    return SessionAnnouncement.fromJson(json);
+  }
+
+  Future<void> revoke(String id, {String? sessionUnitId}) async {
+    await _client.post<dynamic>(
+      '/api/chat/session-announcement/$id/revoke',
+      query: <String, Object?>{'sessionUnitId': ?sessionUnitId},
+    );
+  }
+
+  Future<int> remindUnconfirmed(String id, {required String sessionUnitId}) async {
+    final res = await _client.post<dynamic>(
+      '/api/chat/session-announcement/$id/remind-unconfirmed',
+      data: <String, Object?>{'sessionUnitId': sessionUnitId},
+    );
+    return (res as num?)?.toInt() ?? 0;
   }
 
   Future<void> confirm(String id, {String? deviceId}) async {

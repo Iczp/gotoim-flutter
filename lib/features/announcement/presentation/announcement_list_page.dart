@@ -47,6 +47,7 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
     _controller = AnnouncementListController(
       ref.read(announcementApiProvider),
       widget.sessionId,
+      includeDrafts: widget.canManage,
     );
   }
 
@@ -225,6 +226,33 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
             children: [
               Row(
                 children: [
+                  if (item.status == 0) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        item.publishTime != null ? '定时' : '草稿',
+                        style: const TextStyle(color: Colors.amber, fontSize: 11),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else if (item.status == 2) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '已撤回',
+                        style: TextStyle(color: colorScheme.outline, fontSize: 11),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   if (item.isPinned) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -299,6 +327,51 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
                             announcementId: item.id,
                             title: item.title,
                           );
+                        } else if (val == 'publish') {
+                          await ref.read(announcementApiProvider).publish(item.id);
+                          _controller.loadList();
+                        } else if (val == 'revoke') {
+                          await ref.read(announcementApiProvider).revoke(item.id);
+                          _controller.loadList();
+                        } else if (val == 'pinWeight') {
+                          final weightCtrl = TextEditingController(
+                            text: (item.sorting > 0 ? item.sorting : (item.isPinned ? 1 : 0))
+                                .toStringAsFixed(0),
+                          );
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('调整置顶权重'),
+                              content: TextField(
+                                controller: weightCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  hintText: '0 表示不置顶，数字越大越靠前',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('取消'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('保存'),
+                                ),
+                              ],
+                            ),
+                          );
+                          final w = double.tryParse(weightCtrl.text.trim()) ?? 0;
+                          weightCtrl.dispose();
+                          if (confirmed == true) {
+                            await ref.read(announcementApiProvider).setPinned(
+                                  id: item.id,
+                                  isPinned: w > 0,
+                                  sorting: w,
+                                );
+                            _controller.loadList();
+                          }
                         } else if (val == 'pin') {
                           await _controller.togglePin(item);
                         } else if (val == 'edit') {
@@ -337,14 +410,29 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
                         }
                       },
                       itemBuilder: (_) => [
-                        const PopupMenuItem(
-                          value: 'stat',
-                          child: Text('查看已读/未读统计'),
-                        ),
-                        PopupMenuItem(
-                          value: 'pin',
-                          child: Text(item.isPinned ? '取消置顶' : '置顶此条'),
-                        ),
+                        if (item.status == 0)
+                          const PopupMenuItem(
+                            value: 'publish',
+                            child: Text('立即发布'),
+                          ),
+                        if (item.status == 1) ...[
+                          const PopupMenuItem(
+                            value: 'stat',
+                            child: Text('查看已读/未读统计'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'pinWeight',
+                            child: Text('调整置顶权重'),
+                          ),
+                          PopupMenuItem(
+                            value: 'pin',
+                            child: Text(item.isPinned ? '取消置顶' : '置顶此条'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'revoke',
+                            child: Text('撤回公告'),
+                          ),
+                        ],
                         const PopupMenuItem(value: 'edit', child: Text('编辑公告')),
                         const PopupMenuItem(
                           value: 'delete',
