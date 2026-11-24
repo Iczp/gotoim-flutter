@@ -1,28 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/session_announcement.dart';
+import '../../../chat_settings/data/models/chat_member.dart';
+import '../../../chat_settings/presentation/member_profile_sheet.dart';
 import '../../application/announcement_providers.dart';
+import '../../data/models/session_announcement.dart';
 import '../announcement_stat_sheet.dart';
 
 class AnnouncementDetailDialog extends ConsumerStatefulWidget {
   const AnnouncementDetailDialog({
     required this.announcement,
+    this.sessionTitle,
     this.canManage = false,
     super.key,
   });
 
   final SessionAnnouncement announcement;
+  final String? sessionTitle;
   final bool canManage;
 
-  static Future<void> show(
+  static Future<bool?> show(
     BuildContext context, {
     required SessionAnnouncement announcement,
+    String? sessionTitle,
     bool canManage = false,
   }) {
-    return showDialog<void>(
+    return showDialog<bool>(
       context: context,
       builder: (_) => AnnouncementDetailDialog(
         announcement: announcement,
+        sessionTitle: sessionTitle,
         canManage: canManage,
       ),
     );
@@ -36,7 +43,9 @@ class AnnouncementDetailDialog extends ConsumerStatefulWidget {
 class _AnnouncementDetailDialogState
     extends ConsumerState<AnnouncementDetailDialog> {
   late SessionAnnouncement _item;
+  List<SessionAnnouncement> _navList = const [];
   bool _confirming = false;
+  bool _navLoading = false;
 
   @override
   void initState() {
@@ -44,6 +53,57 @@ class _AnnouncementDetailDialogState
     _item = widget.announcement;
     // 自动上报已读
     ref.read(announcementApiProvider).recordView(_item.id);
+    _loadNavList();
+  }
+
+  Future<void> _loadNavList() async {
+    final sid = _item.sessionId.trim();
+    if (sid.isEmpty) return;
+    try {
+      final list = await ref.read(announcementApiProvider).getList(
+            sessionId: sid,
+            maxResultCount: 100,
+          );
+      if (!mounted) return;
+      setState(() {
+        _navList = list;
+      });
+    } catch (_) {
+      // ignore nav list error
+    }
+  }
+
+  int get _currentIndex => _navList.indexWhere((e) => e.id == _item.id);
+  bool get _hasPrev => _currentIndex > 0;
+  bool get _hasNext => _currentIndex >= 0 && _currentIndex < _navList.length - 1;
+
+  Future<void> _navigateToIndex(int index) async {
+    if (index < 0 || index >= _navList.length || _navLoading) return;
+    final target = _navList[index];
+    setState(() => _navLoading = true);
+    try {
+      final api = ref.read(announcementApiProvider);
+      final detail = await api.getDetail(target.id);
+      if (!mounted) return;
+      if (detail != null) {
+        setState(() {
+          _item = detail;
+          _navList = [
+            for (var i = 0; i < _navList.length; i++)
+              if (i == index) detail else _navList[i],
+          ];
+        });
+        api.recordView(detail.id);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('切换公告失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _navLoading = false);
+    }
   }
 
   Future<void> _handleConfirm() async {
@@ -60,6 +120,7 @@ class _AnnouncementDetailDialogState
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已确认收到公告')),
         );
+        Navigator.of(context).pop(true);
       }
     } finally {
       if (mounted) setState(() => _confirming = false);
@@ -75,21 +136,64 @@ class _AnnouncementDetailDialogState
     );
   }
 
+  void _openPublisherProfile() {
+    final unitId = _item.publisherSessionUnitId;
+    final chatObjectId = _item.publisherChatObjectId;
+    if (unitId.isEmpty && chatObjectId.isEmpty) return;
+    final name = _item.publisherName ?? '管理员';
+    showMemberProfileSheet(
+      context,
+      ChatMember.fromJson(<String, dynamic>{
+        'id': unitId.isNotEmpty ? unitId : chatObjectId,
+        'displayName': name,
+        'owner': <String, dynamic>{
+          if (chatObjectId.isNotEmpty) 'id': int.tryParse(chatObjectId) ?? chatObjectId,
+          'displayName': name,
+          if (_item.publisherAvatar != null) 'portrait': _item.publisherAvatar,
+        },
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final screenSize = MediaQuery.sizeOf(context);
+    final dialogWidth = (screenSize.width * 0.62).clamp(420.0, 820.0);
+    final dialogHeight = (screenSize.height * 0.62).clamp(320.0, 680.0);
+    final headerTitle = (widget.sessionTitle?.trim().isNotEmpty == true)
+        ? '${widget.sessionTitle!.trim()} 公告'
+        : '公告详情';
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 600),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      headerTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: colorScheme.outline,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
               Row(
                 children: [
                   if (_item.isPinned) ...[
@@ -107,25 +211,39 @@ class _AnnouncementDetailDialogState
                     const SizedBox(width: 8),
                   ],
                   Expanded(
-                    child: Text(
+                    child: SelectableText(
                       _item.title,
                       style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                spacing: 16,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    '发布人: ${_item.publisherName ?? "管理员"}',
-                    style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.outline),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '发布人: ',
+                        style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.outline),
+                      ),
+                      InkWell(
+                        onTap: _openPublisherProfile,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Text(
+                          _item.publisherName ?? '管理员',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
                   Text(
                     _item.creationTime.length > 16
                         ? _item.creationTime.substring(0, 16).replaceAll('T', ' ')
@@ -134,18 +252,50 @@ class _AnnouncementDetailDialogState
                   ),
                 ],
               ),
-              const Divider(height: 24),
+              const Divider(height: 20),
               Expanded(
-                child: SingleChildScrollView(
-                  child: Text(
-                    _item.content,
-                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
-                  ),
+                child: Stack(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      height: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerLowest,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colorScheme.outlineVariant),
+                      ),
+                      child: SingleChildScrollView(
+                        child: _item.editorType == 1
+                            ? MarkdownBody(
+                                data: _item.content,
+                                selectable: true,
+                              )
+                            : SelectableText(
+                                _item.content,
+                                style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                              ),
+                      ),
+                    ),
+                    if (_navLoading)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Center(child: CircularProgressIndicator()),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              const Divider(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              const Divider(height: 20),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   Text(
                     '已读 ${_item.readCount} 人'
@@ -153,15 +303,43 @@ class _AnnouncementDetailDialogState
                     style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.outline),
                   ),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (_navList.length > 1) ...[
+                        IconButton(
+                          tooltip: '上一条',
+                          icon: const Icon(Icons.chevron_left, size: 20),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: (_hasPrev && !_navLoading)
+                              ? () => _navigateToIndex(_currentIndex - 1)
+                              : null,
+                        ),
+                        if (_currentIndex >= 0)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              '${_currentIndex + 1} / ${_navList.length}',
+                              style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.outline),
+                            ),
+                          ),
+                        IconButton(
+                          tooltip: '下一条',
+                          icon: const Icon(Icons.chevron_right, size: 20),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: (_hasNext && !_navLoading)
+                              ? () => _navigateToIndex(_currentIndex + 1)
+                              : null,
+                        ),
+                      ],
                       if (widget.canManage)
-                        TextButton.icon(
-                          icon: const Icon(Icons.pie_chart_outline, size: 16),
-                          label: const Text('统计'),
+                        IconButton(
+                          tooltip: '查看统计',
+                          icon: const Icon(Icons.pie_chart_outline, size: 18),
+                          visualDensity: VisualDensity.compact,
                           onPressed: _openStat,
                         ),
                       if (_item.requireConfirm) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
                         FilledButton.icon(
                           icon: const Icon(Icons.check_circle_outline, size: 16),
                           label: Text(_item.isSelfConfirmed ? '已确认' : '确认收到'),

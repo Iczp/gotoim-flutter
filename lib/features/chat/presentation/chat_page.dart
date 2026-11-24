@@ -358,6 +358,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             appBar: ChatTitleBar(
               title: controller.title,
               typingText: controller.typingText,
+              isMuted: controller.friend?.isImmersed == true,
               showTransfer: controller.friend?.isShopkeeperOrWaiter == true,
               useGlass: true,
               hasBackground: hasChatBackground,
@@ -500,6 +501,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             if (controller.isGroupSession)
               PinnedAnnouncementBanner(
                 sessionId: controller.activeSessionId,
+                sessionTitle: controller.title,
                 canManage: true,
               ),
             Expanded(child: messageList),
@@ -520,6 +522,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             right: 0,
             child: PinnedAnnouncementBanner(
               sessionId: controller.activeSessionId,
+              sessionTitle: controller.title,
               canManage: true,
             ),
           ),
@@ -1693,7 +1696,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
           );
           return;
         }
-        await AnnouncementDetailDialog.show(context, announcement: detail);
+        await AnnouncementDetailDialog.show(
+          context,
+          announcement: detail,
+          sessionTitle: controller.title,
+        );
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

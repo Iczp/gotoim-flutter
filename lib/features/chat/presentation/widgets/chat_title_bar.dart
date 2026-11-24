@@ -11,6 +11,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   const ChatTitleBar({
     required this.title,
     this.typingText,
+    this.isMuted = false,
     required this.showTransfer,
     required this.onTransfer,
     required this.onOpenSettings,
@@ -27,6 +28,7 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
 
   final String title;
   final String? typingText;
+  final bool isMuted;
   final bool showTransfer;
   final VoidCallback onTransfer;
   final VoidCallback onOpenSettings;
@@ -119,10 +121,28 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          title,
-          style: titleStyle,
-          overflow: TextOverflow.ellipsis,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                style: titleStyle,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (isMuted) ...[
+              const SizedBox(width: 5),
+              Tooltip(
+                message: '消息免打扰',
+                child: Icon(
+                  Icons.notifications_off_outlined,
+                  size: 15,
+                  color: foregroundColor.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ],
         ),
         if (hasTyping)
           Padding(

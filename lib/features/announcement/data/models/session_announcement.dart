@@ -31,7 +31,8 @@ class SessionAnnouncement {
       publisherSessionUnitId: json['publisherSessionUnitId']?.toString() ?? '',
       publisherChatObjectId: json['publisherChatObjectId']?.toString() ?? '',
       publisherName: json['publisherName']?.toString(),
-      publisherAvatar: json['publisherAvatar']?.toString(),
+      publisherAvatar:
+          json['publisherAvatar']?.toString() ?? json['publisherPortrait']?.toString(),
       title: json['title']?.toString() ?? '',
       content: json['content']?.toString() ?? '',
       editorType: (json['editorType'] as num?)?.toInt() ?? 0,
@@ -44,7 +45,8 @@ class SessionAnnouncement {
       readCount: (json['readCount'] as num?)?.toInt() ?? 0,
       linkedMessageId: json['linkedMessageId']?.toString(),
       creationTime: json['creationTime']?.toString() ?? '',
-      isSelfConfirmed: json['isSelfConfirmed'] == true,
+      isSelfConfirmed:
+          json['isSelfConfirmed'] == true || json['isConfirmedByCurrentUser'] == true,
       isSelfRead: json['isSelfRead'] == true,
     );
   }
