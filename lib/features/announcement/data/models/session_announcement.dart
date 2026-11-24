@@ -17,7 +17,12 @@ class SessionAnnouncement {
     required this.creationTime,
     this.publisherName,
     this.publisherAvatar,
+    this.sorting = 0,
     this.pinnedTime,
+    this.expireTime,
+    this.applyToNewMembers = false,
+    this.isExpired = false,
+    this.isEffectiveForCurrentUser = true,
     this.linkedMessageId,
     this.isSelfConfirmed = false,
     this.isSelfRead = false,
@@ -37,8 +42,13 @@ class SessionAnnouncement {
       content: json['content']?.toString() ?? '',
       editorType: (json['editorType'] as num?)?.toInt() ?? 0,
       status: (json['status'] as num?)?.toInt() ?? 1,
-      isPinned: json['isPinned'] == true,
+      isPinned: json['isPinned'] == true || ((json['sorting'] as num?)?.toDouble() ?? 0) > 0,
+      sorting: (json['sorting'] as num?)?.toDouble() ?? 0,
       pinnedTime: json['pinnedTime']?.toString(),
+      expireTime: json['expireTime']?.toString(),
+      applyToNewMembers: json['applyToNewMembers'] == true,
+      isExpired: json['isExpired'] == true,
+      isEffectiveForCurrentUser: json['isEffectiveForCurrentUser'] != false,
       isPopup: json['isPopup'] == true,
       requireConfirm: json['requireConfirm'] == true,
       confirmedCount: (json['confirmedCount'] as num?)?.toInt() ?? 0,
@@ -63,7 +73,12 @@ class SessionAnnouncement {
   final int editorType;
   final int status;
   final bool isPinned;
+  final double sorting;
   final String? pinnedTime;
+  final String? expireTime;
+  final bool applyToNewMembers;
+  final bool isExpired;
+  final bool isEffectiveForCurrentUser;
   final bool isPopup;
   final bool requireConfirm;
   final int confirmedCount;
@@ -94,7 +109,12 @@ class SessionAnnouncement {
       editorType: editorType,
       status: status,
       isPinned: isPinned ?? this.isPinned,
+      sorting: sorting,
       pinnedTime: pinnedTime ?? this.pinnedTime,
+      expireTime: expireTime,
+      applyToNewMembers: applyToNewMembers,
+      isExpired: isExpired,
+      isEffectiveForCurrentUser: isEffectiveForCurrentUser,
       isPopup: isPopup,
       requireConfirm: requireConfirm,
       confirmedCount: confirmedCount ?? this.confirmedCount,

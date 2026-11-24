@@ -86,13 +86,18 @@ class _PinnedAnnouncementBannerState
       if (pinned != null &&
           pinned.isPopup &&
           !pinned.isSelfConfirmed &&
+          !pinned.isExpired &&
+          pinned.isEffectiveForCurrentUser &&
           !_poppedAnnouncementIds.contains(pinned.id)) {
         queue.add(pinned);
         seen.add(pinned.id);
       }
       for (final item in list) {
+        if (queue.length >= 3) break;
         if (item.isPopup &&
             !item.isSelfConfirmed &&
+            !item.isExpired &&
+            item.isEffectiveForCurrentUser &&
             !_poppedAnnouncementIds.contains(item.id) &&
             seen.add(item.id)) {
           queue.add(item);

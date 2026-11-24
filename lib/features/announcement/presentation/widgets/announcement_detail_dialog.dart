@@ -525,8 +525,15 @@ class _AnnouncementDetailDialogState
                         const SizedBox(width: 4),
                         FilledButton.icon(
                           icon: const Icon(Icons.check_circle_outline, size: 16),
-                          label: Text(_item.isSelfConfirmed ? '已确认' : '确认收到'),
-                          onPressed: _item.isSelfConfirmed || _confirming ? null : _handleConfirm,
+                          label: Text(
+                            _item.isSelfConfirmed
+                                ? '已确认'
+                                : (_item.isExpired ? '已过期' : '确认收到'),
+                          ),
+                          onPressed:
+                              (_item.isSelfConfirmed || _item.isExpired || _confirming)
+                                  ? null
+                                  : _handleConfirm,
                         ),
                       ],
                     ],

@@ -65,6 +65,9 @@ class AnnouncementApi {
     required String content,
     int editorType = 0,
     bool isPinned = false,
+    double? sorting,
+    String? expireTime,
+    bool applyToNewMembers = false,
     bool isPopup = false,
     bool requireConfirm = false,
   }) async {
@@ -76,6 +79,9 @@ class AnnouncementApi {
         'content': content,
         'editorType': editorType,
         'isPinned': isPinned,
+        'sorting': ?sorting,
+        'expireTime': expireTime,
+        'applyToNewMembers': applyToNewMembers,
         'isPopup': isPopup,
         'requireConfirm': requireConfirm,
       },
@@ -89,6 +95,9 @@ class AnnouncementApi {
     required String content,
     int editorType = 0,
     bool isPinned = false,
+    double? sorting,
+    String? expireTime,
+    bool applyToNewMembers = false,
     bool isPopup = false,
     bool requireConfirm = false,
   }) async {
@@ -99,6 +108,9 @@ class AnnouncementApi {
         'content': content,
         'editorType': editorType,
         'isPinned': isPinned,
+        'sorting': ?sorting,
+        'expireTime': expireTime,
+        'applyToNewMembers': applyToNewMembers,
         'isPopup': isPopup,
         'requireConfirm': requireConfirm,
       },
@@ -106,10 +118,17 @@ class AnnouncementApi {
     return SessionAnnouncement.fromJson(json);
   }
 
-  Future<void> setPinned({required String id, required bool isPinned}) async {
+  Future<void> setPinned({
+    required String id,
+    required bool isPinned,
+    double? sorting,
+  }) async {
     await _client.post<dynamic>(
       '/api/chat/session-announcement/$id/pinned',
-      query: <String, Object?>{'isPinned': isPinned},
+      query: <String, Object?>{
+        'isPinned': isPinned,
+        'sorting': ?sorting,
+      },
     );
   }
 

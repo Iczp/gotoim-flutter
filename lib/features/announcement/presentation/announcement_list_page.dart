@@ -123,7 +123,11 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
 
           final kw = _keyword.trim().toLowerCase();
           final filteredItems = _controller.items.where((item) {
-            if (_onlyUnconfirmed && (!item.requireConfirm || item.isSelfConfirmed)) {
+            if (_onlyUnconfirmed &&
+                (!item.requireConfirm ||
+                    item.isSelfConfirmed ||
+                    item.isExpired ||
+                    !item.isEffectiveForCurrentUser)) {
               return false;
             }
             if (kw.isEmpty) return true;
@@ -234,14 +238,28 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
                           Icon(Icons.push_pin, size: 12, color: Colors.red),
                           SizedBox(width: 2),
                           Text(
-                            '置顶',
-                            style: TextStyle(
+                            item.sorting > 1 ? '置顶(${item.sorting.toStringAsFixed(0)})' : '置顶',
+                            style: const TextStyle(
                               color: Colors.red,
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  if (item.isExpired) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '已过期',
+                        style: TextStyle(color: colorScheme.outline, fontSize: 11),
                       ),
                     ),
                     const SizedBox(width: 8),
