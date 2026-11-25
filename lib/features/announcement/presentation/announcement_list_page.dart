@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/announcement_providers.dart';
 import '../data/models/session_announcement.dart';
+import 'announcement_edit_page.dart';
 import 'announcement_manage_page.dart';
 import 'widgets/announcement_detail_dialog.dart';
 
@@ -57,6 +58,17 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
     super.dispose();
   }
 
+  Future<void> _openCreate() async {
+    final created = await AnnouncementEditPage.open(
+      context,
+      sessionId: widget.sessionId,
+      permissions: _controller.permissions,
+    );
+    if (created != null) {
+      await _controller.loadList();
+    }
+  }
+
   Future<void> _openManage() async {
     await AnnouncementManagePage.open(
       context,
@@ -75,6 +87,7 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
       builder: (context, _) {
         final perms = _controller.permissions;
         final hasManagementRole = perms?.hasManagementRole ?? widget.canManage;
+        final canCreate = perms?.canCreate ?? hasManagementRole;
         final showManageEntry = perms?.hasManageEntry ?? widget.canManage;
         final pendingCount = perms?.pendingReviewCount ?? 0;
         final manageLabel = hasManagementRole ? '管理' : '我的投稿';
@@ -83,6 +96,12 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
           appBar: AppBar(
             title: const Text('群公告'),
             actions: [
+              if (canCreate)
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  tooltip: hasManagementRole || (perms?.canPublish == true) ? '发布公告' : '投稿',
+                  onPressed: _openCreate,
+                ),
               if (showManageEntry)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -242,22 +261,6 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
             children: [
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'v${item.version}',
-                      style: TextStyle(
-                        color: colorScheme.primary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
                   if (item.isPinned) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

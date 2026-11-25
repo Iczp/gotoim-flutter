@@ -56,7 +56,17 @@ class _AnnouncementDetailDialogState
     _item = widget.announcement;
     // 自动上报已读
     ref.read(announcementApiProvider).recordView(_item.id);
+    if (_item.content.isEmpty) {
+      _loadDetail();
+    }
     _loadNavList();
+  }
+
+  Future<void> _loadDetail() async {
+    final detail = await ref.read(announcementApiProvider).getDetail(_item.id);
+    if (mounted && detail != null) {
+      setState(() => _item = detail);
+    }
   }
 
   Future<void> _loadNavList() async {
@@ -458,22 +468,6 @@ class _AnnouncementDetailDialogState
               ),
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'v${_item.version}',
-                      style: TextStyle(
-                        color: colorScheme.primary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
                   if (_item.isPinned) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -742,7 +736,7 @@ class _AnnouncementDetailDialogState
                               : null,
                         ),
                       ],
-                      if (_item.version > 1)
+                      if (widget.canManage && _item.version > 1)
                         IconButton(
                           tooltip: '历史版本',
                           icon: const Icon(Icons.history, size: 18),

@@ -275,22 +275,18 @@ class AnnouncementApi {
   }
 
   Future<SessionAnnouncement> publish(String id, {String? sessionUnitId}) async {
-    final json = await _client.post<Map<String, dynamic>>(
-      '/api/chat/session-announcement/$id/publish',
-      query: <String, Object?>{
-        if (sessionUnitId != null && sessionUnitId.isNotEmpty) 'sessionUnitId': sessionUnitId,
-      },
-    );
+    final path = (sessionUnitId != null && sessionUnitId.isNotEmpty)
+        ? '/api/chat/session-announcement/$id/publish/$sessionUnitId'
+        : '/api/chat/session-announcement/$id/publish';
+    final json = await _client.post<Map<String, dynamic>>(path);
     return SessionAnnouncement.fromJson(json);
   }
 
   Future<void> revoke(String id, {String? sessionUnitId}) async {
-    await _client.post<dynamic>(
-      '/api/chat/session-announcement/$id/revoke',
-      query: <String, Object?>{
-        if (sessionUnitId != null && sessionUnitId.isNotEmpty) 'sessionUnitId': sessionUnitId,
-      },
-    );
+    final path = (sessionUnitId != null && sessionUnitId.isNotEmpty)
+        ? '/api/chat/session-announcement/$id/revoke/$sessionUnitId'
+        : '/api/chat/session-announcement/$id/revoke';
+    await _client.post<dynamic>(path);
   }
 
   Future<int> remindUnconfirmed(String id, {required String sessionUnitId}) async {
