@@ -40,10 +40,12 @@ class GroupManagementController extends ChangeNotifier {
       }
       settings = loadedSettings;
 
-      final effectiveSessionId =
-          loadedSettings?.sessionId.isNotEmpty == true
-              ? loadedSettings!.sessionId
-              : sessionId;
+      final effectiveSessionUnitId =
+          (sessionUnitId != null && sessionUnitId!.isNotEmpty)
+              ? sessionUnitId!
+              : (loadedSettings?.sessionId.isNotEmpty == true
+                  ? loadedSettings!.sessionId
+                  : sessionId);
 
       final canOrgs =
           loadedSettings == null ||
@@ -59,14 +61,14 @@ class GroupManagementController extends ChangeNotifier {
           loadedSettings.canManageRoles;
 
       final values = await Future.wait(<Future<List<IdNameItem>>>[
-        canOrgs
+        canOrgs && effectiveSessionUnitId.isNotEmpty
             ? _api
-                .organizations(effectiveSessionId)
+                .organizations(effectiveSessionUnitId)
                 .catchError((_) => const <IdNameItem>[])
             : Future<List<IdNameItem>>.value(const <IdNameItem>[]),
-        canRoles
+        canRoles && effectiveSessionUnitId.isNotEmpty
             ? _api
-                .roles(effectiveSessionId)
+                .roles(effectiveSessionUnitId)
                 .catchError((_) => const <IdNameItem>[])
             : Future<List<IdNameItem>>.value(const <IdNameItem>[]),
         canDefs
@@ -156,12 +158,19 @@ class GroupManagementController extends ChangeNotifier {
     await _update(() => _api.dissolveRoom(unitId));
   }
 
+  String get _effectiveUnitId =>
+      (sessionUnitId != null && sessionUnitId!.isNotEmpty)
+          ? sessionUnitId!
+          : (settings?.sessionId.isNotEmpty == true
+              ? settings!.sessionId
+              : sessionId);
+
   Future<void> createOrganization(String name, {String? parentId}) async {
-    final effectiveSessionId =
-        settings?.sessionId.isNotEmpty == true ? settings!.sessionId : sessionId;
+    final unitId = _effectiveUnitId;
+    if (unitId.isEmpty) return;
     await _update(
       () => _api.createOrganization(
-        sessionId: effectiveSessionId,
+        sessionUnitId: unitId,
         name: name,
         parentId: parentId,
       ),
@@ -170,28 +179,36 @@ class GroupManagementController extends ChangeNotifier {
   }
 
   Future<void> deleteOrganization(String organizationId) async {
-    await _update(() => _api.deleteOrganization(organizationId));
+    final unitId = _effectiveUnitId;
+    if (unitId.isEmpty) return;
+    await _update(
+      () => _api.deleteOrganization(organizationId, sessionUnitId: unitId),
+    );
     await initialize();
   }
 
   Future<void> createRole(String name) async {
-    final effectiveSessionId =
-        settings?.sessionId.isNotEmpty == true ? settings!.sessionId : sessionId;
+    final unitId = _effectiveUnitId;
+    if (unitId.isEmpty) return;
     await _update(
-      () => _api.createRole(sessionId: effectiveSessionId, name: name),
+      () => _api.createRole(sessionUnitId: unitId, name: name),
     );
     await initialize();
   }
 
   Future<void> deleteRole(String roleId) async {
-    await _update(() => _api.deleteRole(roleId));
+    final unitId = _effectiveUnitId;
+    if (unitId.isEmpty) return;
+    await _update(() => _api.deleteRole(roleId, sessionUnitId: unitId));
     await initialize();
   }
 
   Future<void> selectRole(String roleId, {bool silent = false}) async {
+    final unitId = _effectiveUnitId;
+    if (unitId.isEmpty) return;
     selectedRoleId = roleId;
     if (!silent) notifyListeners();
-    final json = await _api.rolePermissions(roleId);
+    final json = await _api.rolePermissions(roleId, sessionUnitId: unitId);
     final grants = json['permissionGrant'];
     grantedPermissionIds =
         grants is Map
@@ -205,12 +222,14 @@ class GroupManagementController extends ChangeNotifier {
 
   Future<void> togglePermission(IdNameItem permission, bool enabled) async {
     final roleId = selectedRoleId;
-    if (roleId == null) return;
+    final unitId = _effectiveUnitId;
+    if (roleId == null || unitId.isEmpty) return;
     await _update(
       () => _api.grantRolePermission(
         roleId: roleId,
         definitionId: permission.id,
         enabled: enabled,
+        operatorSessionUnitId: unitId,
       ),
     );
     if (enabled) {
@@ -223,8 +242,15 @@ class GroupManagementController extends ChangeNotifier {
 
   Future<void> setAllPermissions(bool enabled) async {
     final roleId = selectedRoleId;
-    if (roleId == null) return;
-    await _update(() => _api.setAllRolePermissions(roleId: roleId, enabled: enabled));
+    final unitId = _effectiveUnitId;
+    if (roleId == null || unitId.isEmpty) return;
+    await _update(
+      () => _api.setAllRolePermissions(
+        roleId: roleId,
+        sessionUnitId: unitId,
+        enabled: enabled,
+      ),
+    );
     if (enabled) {
       grantedPermissionIds = permissions.map((p) => p.id).toSet();
     } else {

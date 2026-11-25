@@ -279,11 +279,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   String? _latestAnnouncementTriggerKey(List<ChatMessage> messages) {
     if (messages.isEmpty) return null;
     final latest = messages.first;
-    final raw = '${latest.textContent} ${latest.rawContent ?? ''}';
+    final raw = '${latest.text} ${latest.raw['content']?.toString() ?? ''}';
     if (raw.contains('im://announcement') ||
         raw.contains('发布了新公告') ||
         raw.contains('置顶了公告')) {
-      return latest.id;
+      return latest.localId;
     }
     return null;
   }
@@ -513,6 +513,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             if (controller.isGroupSession)
               PinnedAnnouncementBanner(
                 sessionId: controller.activeSessionId,
+                sessionUnitId: widget.sessionUnitId,
                 sessionTitle: controller.title,
                 canManage: true,
                 refreshTriggerKey: _latestAnnouncementTriggerKey(controller.messages),
@@ -535,6 +536,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             right: 0,
             child: PinnedAnnouncementBanner(
               sessionId: controller.activeSessionId,
+              sessionUnitId: widget.sessionUnitId,
               sessionTitle: controller.title,
               canManage: true,
               refreshTriggerKey: _latestAnnouncementTriggerKey(controller.messages),
@@ -1702,7 +1704,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (node.route == 'announcement') {
       try {
         final api = ref.read(announcementApiProvider);
-        final detail = await api.getDetail(id);
+        final detail = await api.getDetail(id, sessionUnitId: widget.sessionUnitId);
         if (!mounted) return;
         if (detail == null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1713,6 +1715,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         await AnnouncementDetailDialog.show(
           context,
           announcement: detail,
+          sessionUnitId: widget.sessionUnitId,
           sessionTitle: controller.title,
         );
       } catch (e) {

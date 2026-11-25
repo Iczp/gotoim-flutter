@@ -87,6 +87,7 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
     _controller = AnnouncementStatController(
       ref.read(announcementApiProvider),
       widget.announcementId,
+      sessionUnitId: widget.sessionUnitId ?? '',
     );
     if (safeInitial != 0) {
       _controller.setFilterType(safeInitial);

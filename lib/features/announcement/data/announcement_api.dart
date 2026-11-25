@@ -5,18 +5,10 @@ class AnnouncementApi {
   AnnouncementApi(this._client);
   final ApiClient _client;
 
-  Future<SessionAnnouncement?> getPinned(
-    String sessionId, {
-    String? sessionUnitId,
-  }) async {
+  Future<SessionAnnouncement?> getPinned(String sessionUnitId) async {
     try {
       final json = await _client.get<Map<String, dynamic>>(
-        '/api/chat/session-announcement/pinned',
-        query: <String, Object?>{
-          'sessionId': sessionId,
-          if (sessionUnitId != null && sessionUnitId.isNotEmpty)
-            'sessionUnitId': sessionUnitId,
-        },
+        '/api/chat/session-announcement/pinned/${Uri.encodeComponent(sessionUnitId)}',
       );
       if (json.isEmpty || json['id'] == null) return null;
       return SessionAnnouncement.fromJson(json);
@@ -25,31 +17,23 @@ class AnnouncementApi {
     }
   }
 
-  Future<List<SessionAnnouncement>> getPinnedList(
-    String sessionId, {
-    String? sessionUnitId,
-  }) async {
+  Future<List<SessionAnnouncement>> getPinnedList(String sessionUnitId) async {
     try {
       final res = await _client.get<List<dynamic>>(
-        '/api/chat/session-announcement/pinned-list/$sessionId',
-        query:
-            sessionUnitId != null && sessionUnitId.isNotEmpty
-                ? <String, Object?>{'sessionUnitId': sessionUnitId}
-                : null,
+        '/api/chat/session-announcement/pinned-list/${Uri.encodeComponent(sessionUnitId)}',
       );
       return res
           .whereType<Map<String, dynamic>>()
           .map(SessionAnnouncement.fromJson)
           .toList(growable: false);
     } catch (_) {
-      final single = await getPinned(sessionId, sessionUnitId: sessionUnitId);
+      final single = await getPinned(sessionUnitId);
       return single != null ? [single] : const [];
     }
   }
 
   Future<List<SessionAnnouncement>> getList({
-    required String sessionId,
-    String? sessionUnitId,
+    required String sessionUnitId,
     String? keyword,
     bool? isPinned,
     bool includeDrafts = false,
@@ -61,9 +45,7 @@ class AnnouncementApi {
       final json = await _client.get<Map<String, dynamic>>(
         '/api/chat/session-announcement',
         query: <String, Object?>{
-          'SessionId': sessionId,
-          if (sessionUnitId != null && sessionUnitId.isNotEmpty)
-            'SessionUnitId': sessionUnitId,
+          'SessionUnitId': sessionUnitId,
           if (keyword != null && keyword.isNotEmpty) 'Keyword': keyword,
           if (isPinned != null) 'IsPinned': isPinned,
           if (includeDrafts) 'IncludeDrafts': true,
@@ -84,41 +66,21 @@ class AnnouncementApi {
     }
   }
 
-  Future<SessionAnnouncementPermissions?> getPermissions(
-    String sessionId, {
-    String? sessionUnitId,
-  }) async {
-    if (sessionId.isEmpty) return null;
-    final query =
-        sessionUnitId != null && sessionUnitId.isNotEmpty
-            ? <String, Object?>{'sessionUnitId': sessionUnitId}
-            : null;
+  Future<SessionAnnouncementPermissions?> getPermissions(String sessionUnitId) async {
+    if (sessionUnitId.isEmpty) return null;
     try {
       final json = await _client.get<Map<String, dynamic>>(
-        '/api/chat/session-announcement/permissions/$sessionId',
-        query: query,
+        '/api/chat/session-announcement/permissions/${Uri.encodeComponent(sessionUnitId)}',
       );
       return SessionAnnouncementPermissions.fromJson(json);
     } catch (_) {
-      try {
-        final json = await _client.get<Map<String, dynamic>>(
-          '/api/chat/session-announcement/permissions',
-          query: <String, Object?>{
-            'sessionId': sessionId,
-            if (sessionUnitId != null && sessionUnitId.isNotEmpty)
-              'sessionUnitId': sessionUnitId,
-          },
-        );
-        return SessionAnnouncementPermissions.fromJson(json);
-      } catch (_) {
-        return null;
-      }
+      return null;
     }
   }
 
   Future<List<SessionAnnouncement>> search({
     required String keyword,
-    String? sessionId,
+    String? sessionUnitId,
     int maxResultCount = 20,
     int skipCount = 0,
   }) async {
@@ -129,7 +91,8 @@ class AnnouncementApi {
         '/api/chat/session-announcement/search',
         query: <String, Object?>{
           'Keyword': trimmed,
-          if (sessionId != null && sessionId.isNotEmpty) 'SessionId': sessionId,
+          if (sessionUnitId != null && sessionUnitId.isNotEmpty)
+            'SessionUnitId': sessionUnitId,
           'MaxResultCount': maxResultCount,
           'SkipCount': skipCount,
         },
@@ -149,15 +112,12 @@ class AnnouncementApi {
 
   Future<SessionAnnouncement?> getDetail(
     String id, {
-    String? sessionUnitId,
+    required String sessionUnitId,
   }) async {
     try {
       final json = await _client.get<Map<String, dynamic>>(
-        '/api/chat/session-announcement/$id',
-        query:
-            sessionUnitId != null && sessionUnitId.isNotEmpty
-                ? <String, Object?>{'sessionUnitId': sessionUnitId}
-                : null,
+        '/api/chat/session-announcement/${Uri.encodeComponent(id)}',
+        query: <String, Object?>{'sessionUnitId': sessionUnitId},
       );
       return SessionAnnouncement.fromJson(json);
     } catch (_) {
@@ -166,8 +126,7 @@ class AnnouncementApi {
   }
 
   Future<SessionAnnouncement> create({
-    required String sessionId,
-    String? sessionUnitId,
+    required String sessionUnitId,
     required String title,
     required String content,
     int editorType = 0,
@@ -184,8 +143,7 @@ class AnnouncementApi {
     final json = await _client.post<Map<String, dynamic>>(
       '/api/chat/session-announcement',
       data: <String, Object?>{
-        'sessionId': sessionId,
-        if (sessionUnitId != null && sessionUnitId.isNotEmpty) 'sessionUnitId': sessionUnitId,
+        'sessionUnitId': sessionUnitId,
         'title': title,
         'content': content,
         'editorType': editorType,
@@ -205,7 +163,7 @@ class AnnouncementApi {
 
   Future<SessionAnnouncement> update({
     required String id,
-    String? sessionUnitId,
+    required String sessionUnitId,
     required String title,
     required String content,
     int editorType = 0,
@@ -223,10 +181,10 @@ class AnnouncementApi {
     bool isPopup = false,
     bool requireConfirm = false,
   }) async {
-    final json = await _client.put<Map<String, dynamic>>(
-      '/api/chat/session-announcement/$id',
+    final json = await _client.post<Map<String, dynamic>>(
+      '/api/chat/session-announcement/${Uri.encodeComponent(id)}/update',
       data: <String, Object?>{
-        if (sessionUnitId != null && sessionUnitId.isNotEmpty) 'sessionUnitId': sessionUnitId,
+        'sessionUnitId': sessionUnitId,
         'title': title,
         'content': content,
         'editorType': editorType,
@@ -278,10 +236,13 @@ class AnnouncementApi {
     return SessionAnnouncement.fromJson(json);
   }
 
-  Future<List<SessionAnnouncementRevision>> getRevisions(String id) async {
+  Future<List<SessionAnnouncementRevision>> getRevisions(
+    String id, {
+    required String sessionUnitId,
+  }) async {
     try {
       final res = await _client.get<List<dynamic>>(
-        '/api/chat/session-announcement/$id/revisions',
+        '/api/chat/session-announcement/${Uri.encodeComponent(id)}/revisions/${Uri.encodeComponent(sessionUnitId)}',
       );
       return res
           .whereType<Map<String, dynamic>>()
@@ -294,35 +255,40 @@ class AnnouncementApi {
 
   Future<void> setPinned({
     required String id,
+    required String sessionUnitId,
     required bool isPinned,
     double? sorting,
   }) async {
     await _client.post<dynamic>(
-      '/api/chat/session-announcement/$id/pinned',
-      query: <String, Object?>{
+      '/api/chat/session-announcement/${Uri.encodeComponent(id)}/set-pinned',
+      data: <String, Object?>{
+        'sessionUnitId': sessionUnitId,
         'isPinned': isPinned,
         if (sorting != null) 'sorting': sorting,
       },
     );
   }
 
-  Future<void> delete(String id) async {
-    await _client.delete<dynamic>('/api/chat/session-announcement/$id');
+  Future<void> delete(String id, {required String sessionUnitId}) async {
+    await _client.post<dynamic>(
+      '/api/chat/session-announcement/${Uri.encodeComponent(id)}/delete/${Uri.encodeComponent(sessionUnitId)}',
+    );
   }
 
-  Future<SessionAnnouncement> publish(String id, {String? sessionUnitId}) async {
-    final path = (sessionUnitId != null && sessionUnitId.isNotEmpty)
-        ? '/api/chat/session-announcement/$id/publish/$sessionUnitId'
-        : '/api/chat/session-announcement/$id/publish';
-    final json = await _client.post<Map<String, dynamic>>(path);
+  Future<SessionAnnouncement> publish(
+    String id, {
+    required String sessionUnitId,
+  }) async {
+    final json = await _client.post<Map<String, dynamic>>(
+      '/api/chat/session-announcement/${Uri.encodeComponent(id)}/publish/${Uri.encodeComponent(sessionUnitId)}',
+    );
     return SessionAnnouncement.fromJson(json);
   }
 
-  Future<void> revoke(String id, {String? sessionUnitId}) async {
-    final path = (sessionUnitId != null && sessionUnitId.isNotEmpty)
-        ? '/api/chat/session-announcement/$id/revoke/$sessionUnitId'
-        : '/api/chat/session-announcement/$id/revoke';
-    await _client.post<dynamic>(path);
+  Future<void> revoke(String id, {required String sessionUnitId}) async {
+    await _client.post<dynamic>(
+      '/api/chat/session-announcement/${Uri.encodeComponent(id)}/revoke/${Uri.encodeComponent(sessionUnitId)}',
+    );
   }
 
   Future<int> remindUnconfirmed(String id, {required String sessionUnitId}) async {
@@ -333,33 +299,47 @@ class AnnouncementApi {
     return (res as num?)?.toInt() ?? 0;
   }
 
-  Future<void> confirm(String id, {String? deviceId}) async {
+  Future<void> confirm(
+    String id, {
+    required String sessionUnitId,
+    String? deviceId,
+  }) async {
     await _client.post<dynamic>(
-      '/api/chat/session-announcement/$id/confirm',
+      '/api/chat/session-announcement/${Uri.encodeComponent(id)}/confirm-receipt',
       data: <String, Object?>{
+        'sessionUnitId': sessionUnitId,
         if (deviceId != null) 'deviceId': deviceId,
       },
     );
   }
 
-  Future<void> recordView(String id, {String? deviceId}) async {
+  Future<void> recordView(
+    String id, {
+    required String sessionUnitId,
+    String? deviceId,
+  }) async {
     await _client.post<dynamic>(
-      '/api/chat/session-announcement/$id/view',
+      '/api/chat/session-announcement/${Uri.encodeComponent(id)}/record-view',
       data: <String, Object?>{
+        'sessionUnitId': sessionUnitId,
         if (deviceId != null) 'deviceId': deviceId,
       },
     );
   }
 
-  Future<SessionAnnouncementStat> getStat(String id) async {
+  Future<SessionAnnouncementStat> getStat(
+    String id, {
+    required String sessionUnitId,
+  }) async {
     final json = await _client.get<Map<String, dynamic>>(
-      '/api/chat/session-announcement/$id/stat',
+      '/api/chat/session-announcement/${Uri.encodeComponent(id)}/stat/${Uri.encodeComponent(sessionUnitId)}',
     );
     return SessionAnnouncementStat.fromJson(json);
   }
 
   Future<({int totalCount, List<SessionAnnouncementMember> items})> getMembers({
     required String id,
+    required String sessionUnitId,
     int filterType = 0,
     String? keyword,
     int maxResultCount = 50,
@@ -367,8 +347,9 @@ class AnnouncementApi {
   }) async {
     try {
       final json = await _client.get<Map<String, dynamic>>(
-        '/api/chat/session-announcement/$id/members',
+        '/api/chat/session-announcement/${Uri.encodeComponent(id)}/members',
         query: <String, Object?>{
+          'SessionUnitId': sessionUnitId,
           'FilterType': filterType,
           if (keyword != null && keyword.isNotEmpty) 'Keyword': keyword,
           'MaxResultCount': maxResultCount,

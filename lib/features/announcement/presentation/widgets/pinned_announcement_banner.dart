@@ -9,6 +9,7 @@ import 'announcement_detail_dialog.dart';
 class PinnedAnnouncementBanner extends ConsumerStatefulWidget {
   const PinnedAnnouncementBanner({
     required this.sessionId,
+    this.sessionUnitId,
     this.sessionTitle,
     this.canManage = false,
     this.refreshTriggerKey,
@@ -16,6 +17,7 @@ class PinnedAnnouncementBanner extends ConsumerStatefulWidget {
   });
 
   final String sessionId;
+  final String? sessionUnitId;
   final String? sessionTitle;
   final bool canManage;
   final String? refreshTriggerKey;
@@ -32,6 +34,11 @@ class _PinnedAnnouncementBannerState
   late PinnedAnnouncementController _controller;
   bool _popupFlowRunning = false;
 
+  String get _effectiveSessionUnitId =>
+      (widget.sessionUnitId != null && widget.sessionUnitId!.isNotEmpty)
+          ? widget.sessionUnitId!
+          : widget.sessionId;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +49,7 @@ class _PinnedAnnouncementBannerState
     _controller = PinnedAnnouncementController(
       ref.read(announcementApiProvider),
       widget.sessionId,
+      sessionUnitId: widget.sessionUnitId,
     );
     _checkAndShowPopupQueue();
   }
@@ -49,7 +57,8 @@ class _PinnedAnnouncementBannerState
   @override
   void didUpdateWidget(covariant PinnedAnnouncementBanner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.sessionId != widget.sessionId) {
+    if (oldWidget.sessionId != widget.sessionId ||
+        oldWidget.sessionUnitId != widget.sessionUnitId) {
       _controller.dispose();
       _popupFlowRunning = false;
       _initController();
@@ -68,13 +77,14 @@ class _PinnedAnnouncementBannerState
   }
 
   Future<void> _checkAndShowPopupQueue() async {
-    if (_popupFlowRunning || widget.sessionId.isEmpty) return;
+    final uid = _effectiveSessionUnitId;
+    if (_popupFlowRunning || uid.isEmpty) return;
     _popupFlowRunning = true;
     try {
       final api = ref.read(announcementApiProvider);
       final results = await Future.wait([
-        api.getPinned(widget.sessionId),
-        api.getList(sessionId: widget.sessionId, maxResultCount: 50),
+        api.getPinned(uid),
+        api.getList(sessionUnitId: uid, maxResultCount: 50),
       ]);
       if (!mounted) return;
 
@@ -110,11 +120,12 @@ class _PinnedAnnouncementBannerState
         _poppedAnnouncementIds.add(item.id);
         final detail = item.content.isNotEmpty
             ? item
-            : await api.getDetail(item.id);
+            : await api.getDetail(item.id, sessionUnitId: uid);
         if (!mounted || detail == null) continue;
         final confirmed = await AnnouncementDetailDialog.show(
           context,
           announcement: detail,
+          sessionUnitId: uid,
           sessionTitle: widget.sessionTitle,
           canManage: widget.canManage,
         );
@@ -198,6 +209,7 @@ class _PinnedAnnouncementBannerState
                           final confirmed = await AnnouncementDetailDialog.show(
                             context,
                             announcement: item,
+                            sessionUnitId: _effectiveSessionUnitId,
                             sessionTitle: widget.sessionTitle,
                             canManage: widget.canManage,
                           );

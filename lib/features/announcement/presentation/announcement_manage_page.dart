@@ -55,6 +55,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
     _controller = AnnouncementListController(
       ref.read(announcementApiProvider),
       widget.sessionId,
+      sessionUnitId: widget.sessionUnitId,
       includeDrafts: true,
     );
   }
@@ -69,6 +70,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
     final saved = await AnnouncementEditPage.open(
       context,
       sessionId: widget.sessionId,
+      sessionUnitId: widget.sessionUnitId,
       editItem: editItem,
       permissions: _controller.permissions,
     );
@@ -190,8 +192,12 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
     final w = double.tryParse(weightCtrl.text.trim()) ?? 0;
     weightCtrl.dispose();
     if (confirmed == true) {
+      final uid = widget.sessionUnitId?.isNotEmpty == true
+          ? widget.sessionUnitId!
+          : (_controller.permissions?.sessionUnitId ?? widget.sessionId);
       await ref.read(announcementApiProvider).setPinned(
             id: item.id,
+            sessionUnitId: uid,
             isPinned: w > 0,
             sorting: w,
           );
@@ -419,6 +425,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
           AnnouncementDetailDialog.show(
             context,
             announcement: item,
+            sessionUnitId: widget.sessionUnitId ?? _controller.permissions?.sessionUnitId,
             sessionTitle: widget.sessionTitle,
             canManage: true,
           );

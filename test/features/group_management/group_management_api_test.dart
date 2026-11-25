@@ -88,21 +88,26 @@ void main() {
     expect(claimed.name, '测试群');
 
     await api.createRole(
-      sessionId: 'sess-1',
-      name: '公告审核员',
       sessionUnitId: 'unit-1',
+      name: '公告审核员',
     );
-    expect(client.lastPostPath, '/api/chat/session-role');
-    expect(client.lastPostData, <String, Object?>{
-      'sessionId': 'sess-1',
-      'name': '公告审核员',
+    expect(client.lastPostPath, '/api/chat/session-role-by-session-unit');
+    expect(client.lastPostQuery, <String, Object?>{
       'sessionUnitId': 'unit-1',
     });
+    expect(client.lastPostData, <String, Object?>{
+      'name': '公告审核员',
+      'isDefault': false,
+    });
 
-    await api.setAllRolePermissions(roleId: 'role-1', enabled: true);
+    await api.setAllRolePermissions(
+      roleId: 'role-1',
+      sessionUnitId: 'unit-1',
+      enabled: true,
+    );
     expect(
       client.lastPostPath,
-      '/api/chat/session-role/role-1/set-all-permissions',
+      '/api/chat/session-role-by-session-unit/role-1/set-all-permissions/unit-1',
     );
     expect(client.lastPostData, <String, Object?>{
       'isEnabled': true,

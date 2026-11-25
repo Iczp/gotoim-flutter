@@ -343,7 +343,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                         showArrow: true,
                         onTap: controller.sessionId == null
                             ? null
-                            : () => _openOrgViewerDialog(controller.sessionId!),
+                            : () => _openOrgViewerDialog(widget.sessionUnitId),
                       ),
                     if (controller.isGroup)
                       Cell(
@@ -357,7 +357,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                                 AnnouncementListPage.open(
                                   context,
                                   sessionId: controller.sessionId!,
-                                  canManage: controller.isCreator,
+                                  sessionUnitId: widget.sessionUnitId,
+                                  canManage:
+                                      _roomMgmtSettings?.canManageAnnouncements ??
+                                      controller.isCreator,
                                 );
                               },
                       ),
@@ -713,11 +716,11 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     );
   }
 
-  Future<void> _openOrgViewerDialog(String sessionId) async {
+  Future<void> _openOrgViewerDialog(String sessionUnitId) async {
     List<IdNameItem> orgs = const <IdNameItem>[];
     Object? loadErr;
     try {
-      orgs = await ref.read(groupManagementApiProvider).organizations(sessionId);
+      orgs = await ref.read(groupManagementApiProvider).organizations(sessionUnitId);
     } catch (e) {
       loadErr = e;
     }

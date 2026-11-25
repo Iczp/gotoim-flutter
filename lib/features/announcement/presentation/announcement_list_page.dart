@@ -8,22 +8,26 @@ import 'widgets/announcement_detail_dialog.dart';
 class AnnouncementListPage extends ConsumerStatefulWidget {
   const AnnouncementListPage({
     required this.sessionId,
+    this.sessionUnitId,
     this.canManage = false,
     super.key,
   });
 
   final String sessionId;
+  final String? sessionUnitId;
   final bool canManage;
 
   static Future<void> open(
     BuildContext context, {
     required String sessionId,
+    String? sessionUnitId,
     bool canManage = false,
   }) {
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => AnnouncementListPage(
           sessionId: sessionId,
+          sessionUnitId: sessionUnitId,
           canManage: canManage,
         ),
       ),
@@ -46,6 +50,7 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
     _controller = AnnouncementListController(
       ref.read(announcementApiProvider),
       widget.sessionId,
+      sessionUnitId: widget.sessionUnitId,
       includeDrafts: false,
       statusFilter: 1,
     );
@@ -61,6 +66,7 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
     final created = await AnnouncementEditPage.open(
       context,
       sessionId: widget.sessionId,
+      sessionUnitId: widget.sessionUnitId,
       permissions: _controller.permissions,
     );
     if (created != null) {
@@ -216,6 +222,7 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
           AnnouncementDetailDialog.show(
             context,
             announcement: item,
+            sessionUnitId: widget.sessionUnitId ?? _controller.permissions?.sessionUnitId,
             canManage: hasManagementRole,
           );
         },

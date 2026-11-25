@@ -13,18 +13,21 @@ import '../announcement_stat_sheet.dart';
 class AnnouncementDetailDialog extends ConsumerStatefulWidget {
   const AnnouncementDetailDialog({
     required this.announcement,
+    this.sessionUnitId,
     this.sessionTitle,
     this.canManage = false,
     super.key,
   });
 
   final SessionAnnouncement announcement;
+  final String? sessionUnitId;
   final String? sessionTitle;
   final bool canManage;
 
   static Future<bool?> show(
     BuildContext context, {
     required SessionAnnouncement announcement,
+    String? sessionUnitId,
     String? sessionTitle,
     bool canManage = false,
   }) {
@@ -32,6 +35,7 @@ class AnnouncementDetailDialog extends ConsumerStatefulWidget {
       context: context,
       builder: (_) => AnnouncementDetailDialog(
         announcement: announcement,
+        sessionUnitId: sessionUnitId,
         sessionTitle: sessionTitle,
         canManage: canManage,
       ),
@@ -50,12 +54,18 @@ class _AnnouncementDetailDialogState
   bool _confirming = false;
   bool _navLoading = false;
 
+  String get _effectiveSessionUnitId => (widget.sessionUnitId ?? '').trim();
+
   @override
   void initState() {
     super.initState();
     _item = widget.announcement;
     // 自动上报已读
-    ref.read(announcementApiProvider).recordView(_item.id);
+    if (_effectiveSessionUnitId.isNotEmpty) {
+      ref
+          .read(announcementApiProvider)
+          .recordView(_item.id, sessionUnitId: _effectiveSessionUnitId);
+    }
     if (_item.content.isEmpty) {
       _loadDetail();
     }
@@ -63,18 +73,22 @@ class _AnnouncementDetailDialogState
   }
 
   Future<void> _loadDetail() async {
-    final detail = await ref.read(announcementApiProvider).getDetail(_item.id);
+    final uid = _effectiveSessionUnitId;
+    if (uid.isEmpty) return;
+    final detail = await ref
+        .read(announcementApiProvider)
+        .getDetail(_item.id, sessionUnitId: uid);
     if (mounted && detail != null) {
       setState(() => _item = detail);
     }
   }
 
   Future<void> _loadNavList() async {
-    final sid = _item.sessionId.trim();
-    if (sid.isEmpty) return;
+    final uid = _effectiveSessionUnitId;
+    if (uid.isEmpty) return;
     try {
       final list = await ref.read(announcementApiProvider).getList(
-            sessionId: sid,
+            sessionUnitId: uid,
             maxResultCount: 100,
           );
       if (!mounted) return;
@@ -91,12 +105,13 @@ class _AnnouncementDetailDialogState
   bool get _hasNext => _currentIndex >= 0 && _currentIndex < _navList.length - 1;
 
   Future<void> _navigateToIndex(int index) async {
-    if (index < 0 || index >= _navList.length || _navLoading) return;
+    final uid = _effectiveSessionUnitId;
+    if (index < 0 || index >= _navList.length || _navLoading || uid.isEmpty) return;
     final target = _navList[index];
     setState(() => _navLoading = true);
     try {
       final api = ref.read(announcementApiProvider);
-      final detail = await api.getDetail(target.id);
+      final detail = await api.getDetail(target.id, sessionUnitId: uid);
       if (!mounted) return;
       if (detail != null) {
         setState(() {
@@ -106,7 +121,7 @@ class _AnnouncementDetailDialogState
               if (i == index) detail else _navList[i],
           ];
         });
-        api.recordView(detail.id);
+        api.recordView(detail.id, sessionUnitId: uid);
       }
     } catch (e) {
       if (mounted) {
@@ -120,9 +135,13 @@ class _AnnouncementDetailDialogState
   }
 
   Future<void> _handleConfirm() async {
+    final uid = _effectiveSessionUnitId;
+    if (uid.isEmpty) return;
     setState(() => _confirming = true);
     try {
-      await ref.read(announcementApiProvider).confirm(_item.id);
+      await ref
+          .read(announcementApiProvider)
+          .confirm(_item.id, sessionUnitId: uid);
       if (mounted) {
         setState(() {
           _item = _item.copyWith(
@@ -146,12 +165,17 @@ class _AnnouncementDetailDialogState
       context,
       announcementId: _item.id,
       title: _item.title,
+      sessionUnitId: _effectiveSessionUnitId,
       initialTabIndex: initialTabIndex,
     );
   }
 
   Future<void> _showRevisionsDialog() async {
-    final revisions = await ref.read(announcementApiProvider).getRevisions(_item.id);
+    final uid = _effectiveSessionUnitId;
+    if (uid.isEmpty) return;
+    final revisions = await ref
+        .read(announcementApiProvider)
+        .getRevisions(_item.id, sessionUnitId: uid);
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -279,13 +303,15 @@ class _AnnouncementDetailDialogState
           await _navigateToIndex(idx);
           return;
         }
+        final uid = _effectiveSessionUnitId;
+        if (uid.isEmpty) return;
         setState(() => _navLoading = true);
         try {
           final api = ref.read(announcementApiProvider);
-          final detail = await api.getDetail(id);
+          final detail = await api.getDetail(id, sessionUnitId: uid);
           if (mounted && detail != null) {
             setState(() => _item = detail);
-            api.recordView(detail.id);
+            api.recordView(detail.id, sessionUnitId: uid);
           }
         } finally {
           if (mounted) setState(() => _navLoading = false);

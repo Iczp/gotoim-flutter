@@ -229,18 +229,18 @@ class GroupManagementApi {
     return RoomManagementSettings.fromJson(json);
   }
 
-  Future<List<IdNameItem>> organizations(String sessionId) async {
+  Future<List<IdNameItem>> organizations(String sessionUnitId) async {
     final json = await _client.get<Map<String, dynamic>>(
-      '/api/chat/session-organization',
-      query: <String, Object?>{'SessionId': sessionId, 'MaxResultCount': 1000},
+      '/api/chat/session-organiztion-by-session-unit',
+      query: <String, Object?>{'sessionUnitId': sessionUnitId, 'MaxResultCount': 1000},
     );
     return _items(json);
   }
 
-  Future<List<IdNameItem>> roles(String sessionId) async {
+  Future<List<IdNameItem>> roles(String sessionUnitId) async {
     final json = await _client.get<Map<String, dynamic>>(
-      '/api/chat/session-role',
-      query: <String, Object?>{'SessionId': sessionId, 'MaxResultCount': 1000},
+      '/api/chat/session-role-by-session-unit',
+      query: <String, Object?>{'sessionUnitId': sessionUnitId, 'MaxResultCount': 1000},
     );
     return _items(json);
   }
@@ -270,56 +270,68 @@ class GroupManagementApi {
   }
 
   Future<void> createOrganization({
-    required String sessionId,
+    required String sessionUnitId,
     required String name,
     String? parentId,
   }) => _client.post<Map<String, dynamic>>(
-    '/api/chat/session-organization',
+    '/api/chat/session-organiztion-by-session-unit',
+    query: <String, Object?>{'sessionUnitId': sessionUnitId},
     data: <String, Object?>{
-      'sessionId': sessionId,
       'name': name,
       if (parentId != null) 'parentId': int.tryParse(parentId),
       'sorting': 0,
     },
   );
 
-  Future<void> deleteOrganization(String organizationId) =>
+  Future<void> deleteOrganization(
+    String organizationId, {
+    required String sessionUnitId,
+  }) =>
       _client.post<Map<String, dynamic>>(
-        '/api/chat/session-organization/${Uri.encodeComponent(organizationId)}/delete',
+        '/api/chat/session-organiztion-by-session-unit/${Uri.encodeComponent(organizationId)}/delete/${Uri.encodeComponent(sessionUnitId)}',
       );
 
   Future<void> createRole({
-    required String sessionId,
+    required String sessionUnitId,
     required String name,
-    String? sessionUnitId,
+    bool isDefault = false,
   }) =>
       _client.post<Map<String, dynamic>>(
-        '/api/chat/session-role',
+        '/api/chat/session-role-by-session-unit',
+        query: <String, Object?>{'sessionUnitId': sessionUnitId},
         data: <String, Object?>{
-          'sessionId': sessionId,
           'name': name,
-          if (sessionUnitId != null && sessionUnitId.isNotEmpty)
-            'sessionUnitId': sessionUnitId,
+          'isDefault': isDefault,
         },
       );
 
-  Future<void> deleteRole(String roleId) =>
+  Future<void> deleteRole(
+    String roleId, {
+    required String sessionUnitId,
+  }) =>
       _client.post<Map<String, dynamic>>(
-        '/api/chat/session-role/${Uri.encodeComponent(roleId)}/delete',
+        '/api/chat/session-role-by-session-unit/${Uri.encodeComponent(roleId)}/delete-by/${Uri.encodeComponent(sessionUnitId)}',
       );
 
-  Future<Map<String, dynamic>> rolePermissions(String roleId) => _client
-      .get<Map<String, dynamic>>('/api/chat/session-role/$roleId/permissions');
+  Future<Map<String, dynamic>> rolePermissions(
+    String roleId, {
+    required String sessionUnitId,
+  }) => _client.get<Map<String, dynamic>>(
+    '/api/chat/session-role-by-session-unit/${Uri.encodeComponent(roleId)}/permissions/${Uri.encodeComponent(sessionUnitId)}',
+  );
 
   Future<void> grantRolePermission({
     required String roleId,
     required String definitionId,
     required bool enabled,
+    String? operatorSessionUnitId,
   }) => _client.post<Map<String, dynamic>>(
     '/api/chat/session-permission/grant-by-session-role',
     query: <String, Object?>{
       'definitionId': definitionId,
       'sessionRoleId': roleId,
+      if (operatorSessionUnitId != null && operatorSessionUnitId.isNotEmpty)
+        'operatorSessionUnitId': operatorSessionUnitId,
     },
     // PermissionGrantValue is an enum in the server contract: 1=granted,
     // 0=undefined/revoked. The server remains authoritative.
@@ -328,9 +340,10 @@ class GroupManagementApi {
 
   Future<void> setAllRolePermissions({
     required String roleId,
+    required String sessionUnitId,
     required bool enabled,
   }) => _client.post<Map<String, dynamic>>(
-    '/api/chat/session-role/${Uri.encodeComponent(roleId)}/set-all-permissions',
+    '/api/chat/session-role-by-session-unit/${Uri.encodeComponent(roleId)}/set-all-permissions/${Uri.encodeComponent(sessionUnitId)}',
     data: <String, Object?>{'isEnabled': enabled, 'value': enabled ? 1 : 0},
   );
 

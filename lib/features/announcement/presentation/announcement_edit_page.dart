@@ -6,18 +6,21 @@ import '../application/announcement_providers.dart';
 class AnnouncementEditPage extends ConsumerStatefulWidget {
   const AnnouncementEditPage({
     required this.sessionId,
+    this.sessionUnitId,
     this.editItem,
     this.permissions,
     super.key,
   });
 
   final String sessionId;
+  final String? sessionUnitId;
   final SessionAnnouncement? editItem;
   final SessionAnnouncementPermissions? permissions;
 
   static Future<SessionAnnouncement?> open(
     BuildContext context, {
     required String sessionId,
+    String? sessionUnitId,
     SessionAnnouncement? editItem,
     SessionAnnouncementPermissions? permissions,
   }) {
@@ -25,6 +28,7 @@ class AnnouncementEditPage extends ConsumerStatefulWidget {
       MaterialPageRoute<SessionAnnouncement>(
         builder: (_) => AnnouncementEditPage(
           sessionId: sessionId,
+          sessionUnitId: sessionUnitId,
           editItem: editItem,
           permissions: permissions,
         ),
@@ -61,7 +65,11 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
     super.initState();
     _permissions = widget.permissions;
     if (_permissions == null) {
-      ref.read(announcementApiProvider).getPermissions(widget.sessionId).then((value) {
+      final permLookupId =
+          (widget.sessionUnitId != null && widget.sessionUnitId!.isNotEmpty)
+              ? widget.sessionUnitId!
+              : widget.sessionId;
+      ref.read(announcementApiProvider).getPermissions(permLookupId).then((value) {
         if (mounted && value != null) {
           setState(() => _permissions = value);
         }
@@ -147,10 +155,17 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
           : null;
       final summary = _changeSummaryController.text.trim();
 
+      final effectiveSessionUnitId =
+          (widget.sessionUnitId != null && widget.sessionUnitId!.isNotEmpty)
+              ? widget.sessionUnitId!
+              : (_permissions?.sessionUnitId.isNotEmpty == true
+                  ? _permissions!.sessionUnitId
+                  : widget.sessionId);
+
       if (widget.editItem != null) {
         result = await api.update(
           id: widget.editItem!.id,
-          sessionUnitId: _permissions?.sessionUnitId,
+          sessionUnitId: effectiveSessionUnitId,
           title: title,
           content: content,
           isPinned: effectivePinned,
@@ -169,8 +184,7 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
         );
       } else {
         result = await api.create(
-          sessionId: widget.sessionId,
-          sessionUnitId: _permissions?.sessionUnitId,
+          sessionUnitId: effectiveSessionUnitId,
           title: title,
           content: content,
           isPinned: effectivePinned,
