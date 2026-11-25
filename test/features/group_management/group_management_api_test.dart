@@ -17,6 +17,9 @@ void main() {
       'pendingAnnouncementCount': 2,
       'isCreator': false,
       'isAdmin': true,
+      'hasCreator': true,
+      'hasAdmin': true,
+      'canClaimCreator': false,
       'canEnterManagement': true,
       'canManageSettings': true,
       'canManageJoinRequests': true,
@@ -34,6 +37,9 @@ void main() {
     expect(dto.invitePolicy, 2);
     expect(dto.allowJoinChannels, 3);
     expect(dto.totalPendingCount, 6);
+    expect(dto.hasCreator, isTrue);
+    expect(dto.hasAdmin, isTrue);
+    expect(dto.canClaimCreator, isFalse);
     expect(dto.canEnterManagement, isTrue);
     expect(dto.canTransferOrDissolve, isFalse);
   });
@@ -76,6 +82,10 @@ void main() {
 
     await api.dissolveRoom('unit-1');
     expect(client.lastPostPath, '/api/chat/room/dissolve/unit-1');
+
+    final claimed = await api.claimCreator('unit-1');
+    expect(client.lastPostPath, '/api/chat/room/claim-creator/unit-1');
+    expect(claimed.name, '测试群');
   });
 }
 

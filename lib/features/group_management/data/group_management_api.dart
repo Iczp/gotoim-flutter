@@ -27,6 +27,9 @@ class RoomManagementSettings {
     this.pendingAnnouncementCount = 0,
     this.isCreator = false,
     this.isAdmin = false,
+    this.hasCreator = false,
+    this.hasAdmin = false,
+    this.canClaimCreator = false,
     this.canEnterManagement = false,
     this.canManageSettings = false,
     this.canManageJoinRequests = false,
@@ -56,6 +59,9 @@ class RoomManagementSettings {
       pendingAnnouncementCount: parseInt(json['pendingAnnouncementCount'], 0),
       isCreator: json['isCreator'] == true,
       isAdmin: json['isAdmin'] == true,
+      hasCreator: json['hasCreator'] == true,
+      hasAdmin: json['hasAdmin'] == true,
+      canClaimCreator: json['canClaimCreator'] == true,
       canEnterManagement: json['canEnterManagement'] == true,
       canManageSettings: json['canManageSettings'] == true,
       canManageJoinRequests: json['canManageJoinRequests'] == true,
@@ -81,6 +87,9 @@ class RoomManagementSettings {
   final int pendingAnnouncementCount;
   final bool isCreator;
   final bool isAdmin;
+  final bool hasCreator;
+  final bool hasAdmin;
+  final bool canClaimCreator;
   final bool canEnterManagement;
   final bool canManageSettings;
   final bool canManageJoinRequests;
@@ -156,6 +165,13 @@ class GroupManagementApi {
       _client.post<Map<String, dynamic>>(
         '/api/chat/room/dissolve/${Uri.encodeComponent(sessionUnitId)}',
       );
+
+  Future<RoomManagementSettings> claimCreator(String sessionUnitId) async {
+    final json = await _client.post<Map<String, dynamic>>(
+      '/api/chat/room/claim-creator/${Uri.encodeComponent(sessionUnitId)}',
+    );
+    return RoomManagementSettings.fromJson(json);
+  }
 
   Future<List<IdNameItem>> organizations(String sessionId) async {
     final json = await _client.get<Map<String, dynamic>>(

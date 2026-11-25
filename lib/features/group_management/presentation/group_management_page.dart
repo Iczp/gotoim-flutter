@@ -7,6 +7,7 @@ import '../../chat_settings/application/chat_settings_controller.dart';
 import '../../chat_settings/data/models/chat_member.dart';
 import '../../chat_settings/presentation/member_list_page.dart';
 import '../../chat_settings/presentation/room_join_requests_page.dart';
+import '../../session/presentation/chat_object_avatar.dart';
 import '../application/group_management_controller.dart';
 import '../data/group_management_api.dart';
 
@@ -472,6 +473,12 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
   }
 
   Widget _buildBasicSection(BuildContext context) {
+    final s = controller.settings;
+    final owners = _members.where((m) => m.isCreator).toList();
+    final admins = _members.where((m) => !m.isCreator && m.isAdmin).toList();
+    final canViewAdmins =
+        (s?.canManageRoles ?? false) || (s?.isCreator ?? false);
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
@@ -502,6 +509,76 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
           subtitle: const Text('开启后仅群主与管理员可在群内发言'),
           value: _isAllMuted,
           onChanged: (v) => setState(() => _isAllMuted = v),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Text(
+                      '当前群主与管理员（${owners.length} 群主 · ${admins.length} 管理员）',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (canViewAdmins && widget.sessionUnitId != null)
+                      TextButton(
+                        onPressed:
+                            () => setState(
+                              () => _activeSection = _GroupMgmtSection.admins,
+                            ),
+                        child: const Text('管理管理员'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    for (final o in owners)
+                      Chip(
+                        avatar: ChatObjectAvatar(
+                          name: o.name,
+                          imageUrl: o.avatarUrl.isEmpty ? null : o.avatarUrl,
+                          radius: 12,
+                          chatObjectId: o.chatObjectId,
+                        ),
+                        label: Text('${o.name} · 群主'),
+                      ),
+                    for (final a in admins)
+                      Chip(
+                        avatar: ChatObjectAvatar(
+                          name: a.name,
+                          imageUrl: a.avatarUrl.isEmpty ? null : a.avatarUrl,
+                          radius: 12,
+                          chatObjectId: a.chatObjectId,
+                        ),
+                        label: Text('${a.name} · 管理员'),
+                      ),
+                    if (owners.isEmpty && admins.isEmpty)
+                      const Text(
+                        '暂无识别到的群主或管理员',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         Align(
@@ -820,8 +897,23 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
                     children: <Widget>[
                       for (final o in owners)
                         ListTile(
+                          leading: ChatObjectAvatar(
+                            name: o.name,
+                            imageUrl: o.avatarUrl.isEmpty ? null : o.avatarUrl,
+                            radius: 18,
+                            chatObjectId: o.chatObjectId,
+                          ),
                           title: Text(o.name),
-                          trailing: const Chip(label: Text('群主')),
+                          trailing: const Chip(
+                            label: Text(
+                              '群主',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.amber,
+                              ),
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
                         ),
                       if (admins.isEmpty)
                         const Padding(
@@ -831,14 +923,36 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
                       else
                         for (final a in admins)
                           ListTile(
+                            leading: ChatObjectAvatar(
+                              name: a.name,
+                              imageUrl:
+                                  a.avatarUrl.isEmpty ? null : a.avatarUrl,
+                              radius: 18,
+                              chatObjectId: a.chatObjectId,
+                            ),
                             title: Text(a.name),
-                            trailing:
-                                isCreator
-                                    ? TextButton(
-                                      onPressed: () => _setAdmin(a, false),
-                                      child: const Text('取消管理员'),
-                                    )
-                                    : const Chip(label: Text('管理员')),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                const Chip(
+                                  label: Text(
+                                    '管理员',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.blue,
+                                    ),
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                if (isCreator) ...<Widget>[
+                                  const SizedBox(width: 6),
+                                  TextButton(
+                                    onPressed: () => _setAdmin(a, false),
+                                    child: const Text('取消管理员'),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                     ],
                   ),

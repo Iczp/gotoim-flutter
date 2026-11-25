@@ -23,6 +23,7 @@ import '../../group_management/data/group_management_api.dart';
 import '../../group_management/presentation/group_management_page.dart';
 import '../../announcement/presentation/announcement_list_page.dart';
 import '../application/chat_settings_controller.dart';
+import '../data/models/chat_member.dart';
 import 'chat_background_page.dart';
 import 'chat_background_preview_page.dart';
 import 'member_list_page.dart';
@@ -325,6 +326,17 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                     ),
                     if (controller.isGroup)
                       Cell(
+                        icon: const Icon(
+                          Icons.workspace_premium_outlined,
+                          color: Colors.amber,
+                        ),
+                        title: '群主与管理员',
+                        subtitle: _managersSummary(controller.members),
+                        showArrow: true,
+                        onTap: () => _openManagersViewerDialog(),
+                      ),
+                    if (controller.isGroup)
+                      Cell(
                         icon: const Icon(Icons.account_tree_outlined),
                         title: '组织部门',
                         subtitle: '查看群组织架构',
@@ -357,7 +369,9 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                             (_roomMgmtSettings?.canEnterManagement ??
                                     controller.isCreator)
                                 ? '设置、审核与权限'
-                                : '需管理权限',
+                                : (_roomMgmtSettings?.canClaimCreator == true
+                                    ? '暂无群主 · 点击认领'
+                                    : '需管理权限'),
                         trailing:
                             (_roomMgmtSettings?.totalPendingCount ?? 0) > 0
                                 ? Badge(
@@ -375,42 +389,20 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                                         _roomMgmtSettings?.canEnterManagement ??
                                         controller.isCreator;
                                     if (!canEnter) {
+                                      if (_roomMgmtSettings?.canClaimCreator ==
+                                          true) {
+                                        await _claimCreator(
+                                          openManagementAfter: true,
+                                        );
+                                        return;
+                                      }
                                       showToast(
                                         '需要群管理权限才能进入',
                                         type: ToastType.info,
                                       );
                                       return;
                                     }
-                                    final isDesktop =
-                                        widget.isDrawer ||
-                                        MediaQuery.sizeOf(context).width >= 720;
-                                    if (isDesktop) {
-                                      await showDesktopModalDialog<void>(
-                                        context: context,
-                                        title: '群管理中心',
-                                        subtitle: controller.title,
-                                        width: 920,
-                                        height: 680,
-                                        child: GroupManagementPage(
-                                          sessionId: controller.sessionId!,
-                                          sessionUnitId: controller.sessionUnitId,
-                                          ownerId: widget.ownerId,
-                                          destinationId: controller.destinationId,
-                                          isDialog: true,
-                                        ),
-                                      );
-                                      await _loadRoomMgmtSettings();
-                                      await controller.refresh();
-                                    } else {
-                                      final destQuery =
-                                          controller.destinationId != null
-                                              ? '&destinationId=${controller.destinationId}'
-                                              : '';
-                                      await context.push(
-                                        '/group-management/${Uri.encodeComponent(controller.sessionId!)}?sessionUnitId=${Uri.encodeQueryComponent(controller.sessionUnitId)}&ownerId=${widget.ownerId}$destQuery',
-                                      );
-                                      await _loadRoomMgmtSettings();
-                                    }
+                                    await _openGroupManagementCenter();
                                   },
                       ),
                     Cell(
@@ -485,6 +477,225 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
 
   Widget _section(List<Widget> children, {String? title}) =>
       CellGroup(title: title, children: children);
+
+  String _managersSummary(List<ChatMember> members) {
+    final owners = members.where((m) => m.isCreator).toList();
+    final admins = members.where((m) => !m.isCreator && m.isAdmin).toList();
+    if (_roomMgmtSettings?.canClaimCreator == true &&
+        owners.isEmpty &&
+        admins.isEmpty) {
+      return '暂无群主 · 可成为群主';
+    }
+    if (owners.isNotEmpty && admins.isNotEmpty) {
+      return '群主：${owners.first.name} · ${admins.length} 名管理员';
+    }
+    if (owners.isNotEmpty) {
+      return '群主：${owners.first.name}';
+    }
+    if (admins.isNotEmpty) {
+      return '${admins.length} 名管理员';
+    }
+    return '查看群主与管理员';
+  }
+
+  Future<void> _openGroupManagementCenter() async {
+    if (controller.sessionId == null) return;
+    final isDesktop =
+        widget.isDrawer || MediaQuery.sizeOf(context).width >= 720;
+    if (isDesktop) {
+      await showDesktopModalDialog<void>(
+        context: context,
+        title: '群管理中心',
+        subtitle: controller.title,
+        width: 920,
+        height: 680,
+        child: GroupManagementPage(
+          sessionId: controller.sessionId!,
+          sessionUnitId: controller.sessionUnitId,
+          ownerId: widget.ownerId,
+          destinationId: controller.destinationId,
+          isDialog: true,
+        ),
+      );
+      await _loadRoomMgmtSettings();
+      await controller.refresh();
+    } else {
+      final destQuery =
+          controller.destinationId != null
+              ? '&destinationId=${controller.destinationId}'
+              : '';
+      await context.push(
+        '/group-management/${Uri.encodeComponent(controller.sessionId!)}?sessionUnitId=${Uri.encodeQueryComponent(controller.sessionUnitId)}&ownerId=${widget.ownerId}$destQuery',
+      );
+      await _loadRoomMgmtSettings();
+    }
+  }
+
+  Future<void> _claimCreator({bool openManagementAfter = false}) async {
+    final confirmed = await showConfirmModal(
+      context: context,
+      title: '成为群主',
+      message: '当前群暂无群主和管理员，确认成为本群群主吗？成为群主后将拥有完整的群管理权限。',
+      confirmText: '确认成为群主',
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      final updated = await ref
+          .read(groupManagementApiProvider)
+          .claimCreator(widget.sessionUnitId);
+      if (!mounted) return;
+      setState(() => _roomMgmtSettings = updated);
+      await controller.refresh();
+      if (!mounted) return;
+      showToast('您已成为本群群主', type: ToastType.success);
+      if (openManagementAfter) {
+        await _openGroupManagementCenter();
+      }
+    } catch (e) {
+      if (mounted) {
+        showToast('操作失败：$e', type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _openManagersViewerDialog() async {
+    await Future.wait(<Future<void>>[
+      controller.refresh(),
+      _loadRoomMgmtSettings(),
+    ]);
+    if (!mounted) return;
+    final members = controller.members;
+    final owners = members.where((m) => m.isCreator).toList();
+    final admins = members.where((m) => !m.isCreator && m.isAdmin).toList();
+    final canClaim = _roomMgmtSettings?.canClaimCreator == true;
+    await showDialog<void>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('群主与管理员'),
+            content: SizedBox(
+              width: 380,
+              height: 360,
+              child: ListView(
+                children: <Widget>[
+                  if (canClaim)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          ctx,
+                        ).colorScheme.primaryContainer.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: <Widget>[
+                          const Expanded(
+                            child: Text(
+                              '当前群暂无群主和管理员，您可以成为本群群主。',
+                              style: TextStyle(fontSize: 12.5),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _claimCreator();
+                            },
+                            child: const Text('成为群主'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      '群主',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (owners.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text('暂未识别到群主信息'),
+                    )
+                  else
+                    for (final owner in owners)
+                      ListTile(
+                        leading: ChatObjectAvatar(
+                          name: owner.name,
+                          imageUrl:
+                              owner.avatarUrl.isEmpty ? null : owner.avatarUrl,
+                          radius: 18,
+                          chatObjectId: owner.chatObjectId,
+                        ),
+                        title: Text(owner.name),
+                        trailing: const Chip(
+                          label: Text(
+                            '群主',
+                            style: TextStyle(fontSize: 11, color: Colors.amber),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          MemberTile.showMemberDetails(context, owner);
+                        },
+                      ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      '管理员（${admins.length}）',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (admins.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text('暂未设置群管理员'),
+                    )
+                  else
+                    for (final admin in admins)
+                      ListTile(
+                        leading: ChatObjectAvatar(
+                          name: admin.name,
+                          imageUrl:
+                              admin.avatarUrl.isEmpty ? null : admin.avatarUrl,
+                          radius: 18,
+                          chatObjectId: admin.chatObjectId,
+                        ),
+                        title: Text(admin.name),
+                        trailing: const Chip(
+                          label: Text(
+                            '管理员',
+                            style: TextStyle(fontSize: 11, color: Colors.blue),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          MemberTile.showMemberDetails(context, admin);
+                        },
+                      ),
+                ],
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('关闭'),
+              ),
+            ],
+          ),
+    );
+  }
 
   Future<void> _openOrgViewerDialog(String sessionId) async {
     List<IdNameItem> orgs = const <IdNameItem>[];

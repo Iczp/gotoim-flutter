@@ -28,6 +28,7 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
   final search = TextEditingController();
   final scrollController = ScrollController();
   bool checkingUnderflow = false;
+  bool _managersOnly = false;
 
   @override
   void initState() {
@@ -56,10 +57,19 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
       final isOwner = controller.members.any(
         (m) => m.isCreator && m.chatObjectId == widget.ownerId,
       );
+      final displayedMembers = <ChatMember>[
+        ...controller.members.where(
+          (m) => !_managersOnly || m.isCreator || m.isAdmin,
+        ),
+      ]..sort((a, b) {
+        final ra = a.isCreator ? 0 : (a.isAdmin ? 1 : 2);
+        final rb = b.isCreator ? 0 : (b.isAdmin ? 1 : 2);
+        return ra.compareTo(rb);
+      });
       final content = Column(
           children: <Widget>[
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
               child: SearchBar(
                 controller: search,
                 hintText: '搜索成员',
@@ -79,6 +89,29 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
                 onSubmitted: controller.search,
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Row(
+                children: <Widget>[
+                  ChoiceChip(
+                    label: const Text('全部成员', style: TextStyle(fontSize: 12)),
+                    selected: !_managersOnly,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) => setState(() => _managersOnly = false),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text(
+                      '群主与管理员',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    selected: _managersOnly,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) => setState(() => _managersOnly = true),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: controller.refresh,
@@ -94,10 +127,10 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
-                    itemCount: controller.members.length + 1,
+                    itemCount: displayedMembers.length + 1,
                     itemBuilder: (context, index) {
-                      if (index < controller.members.length) {
-                        final item = controller.members[index];
+                      if (index < displayedMembers.length) {
+                        final item = displayedMembers[index];
                         return MemberTile(
                           member: item,
                           canManageAdmin: isOwner,
