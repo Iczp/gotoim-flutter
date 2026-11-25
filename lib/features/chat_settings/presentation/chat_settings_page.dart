@@ -917,9 +917,44 @@ class _MemberPreview extends StatelessWidget {
     child: Column(
       children: <Widget>[
         if (controller.loading && controller.members.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: CircularProgressIndicator(),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 5,
+              childAspectRatio: .72,
+              mainAxisSpacing: 4,
+            ),
+            itemCount: 10,
+            itemBuilder: (context, _) {
+              final skColor = Theme.of(context)
+                  .colorScheme
+                  .onSurfaceVariant
+                  .withValues(alpha: 0.14);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: skColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 36,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: skColor,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              );
+            },
           )
         else
           GridView.builder(

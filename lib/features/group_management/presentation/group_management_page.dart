@@ -797,6 +797,12 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
               Text('组织部门', style: Theme.of(context).textTheme.titleSmall),
               const Spacer(),
               FilledButton.tonalIcon(
+                icon: const Icon(Icons.group_work_outlined, size: 16),
+                label: const Text('批量调整成员组织'),
+                onPressed: _members.isEmpty ? null : () => _openBatchMemberOrgDialog(context),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonalIcon(
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('新建部门'),
                 onPressed: () async {
@@ -825,6 +831,12 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
+                      if (controller.settings?.isCreator == true)
+                        IconButton(
+                          icon: const Icon(Icons.security_outlined),
+                          tooltip: '绑定角色',
+                          onPressed: () => _openOrgRoleDialog(context, item),
+                        ),
                       IconButton(
                         icon: const Icon(Icons.add),
                         tooltip: '添加子部门',
@@ -892,7 +904,34 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
         Expanded(
           child:
               _loadingMembers
-                  ? const Center(child: CircularProgressIndicator())
+                  ? ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: 6,
+                    itemBuilder: (context, _) {
+                      final skColor = Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant
+                          .withValues(alpha: 0.14);
+                      return ListTile(
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: skColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        title: Container(
+                          height: 14,
+                          margin: const EdgeInsets.only(right: 120),
+                          decoration: BoxDecoration(
+                            color: skColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      );
+                    },
+                  )
                   : ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     children: <Widget>[
@@ -1356,5 +1395,210 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
     );
     input.dispose();
     return result?.isEmpty == true ? null : result;
+  }
+
+  Future<void> _openOrgRoleDialog(BuildContext context, IdNameItem org) async {
+    final unitId = widget.sessionUnitId;
+    if (unitId == null || unitId.isEmpty) return;
+    final api = ref.read(groupManagementApiProvider);
+    final selectedIds = <String>{};
+    try {
+      final bound = await api.organizationRoles(
+        sessionUnitId: unitId,
+        organizationId: org.id,
+      );
+      selectedIds.addAll(bound.map((e) => e.id));
+    } catch (_) {}
+    if (!context.mounted) return;
+    final customRoles = controller.roles
+        .where((r) => r.name != '管理员' && r.name != 'Admin')
+        .toList();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => StatefulBuilder(
+            builder:
+                (ctx, setDialogState) => AlertDialog(
+                  title: Text('为「${org.name}」绑定角色'),
+                  content: SizedBox(
+                    width: 360,
+                    height: 280,
+                    child:
+                        customRoles.isEmpty
+                            ? const Center(child: Text('暂无自定义群角色'))
+                            : ListView(
+                              children: <Widget>[
+                                for (final r in customRoles)
+                                  CheckboxListTile(
+                                    value: selectedIds.contains(r.id),
+                                    title: Text(r.name),
+                                    onChanged:
+                                        (val) => setDialogState(() {
+                                          if (val == true) {
+                                            selectedIds.add(r.id);
+                                          } else {
+                                            selectedIds.remove(r.id);
+                                          }
+                                        }),
+                                  ),
+                              ],
+                            ),
+                  ),
+                  actions: <Widget>[
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('取消'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('保存绑定'),
+                    ),
+                  ],
+                ),
+          ),
+    );
+    if (saved != true) return;
+    try {
+      await api.setOrganizationRoles(
+        sessionUnitId: unitId,
+        organizationId: org.id,
+        roleIds: selectedIds.toList(),
+      );
+      await controller.initialize();
+      showToast('已更新「${org.name}」绑定角色', type: ToastType.success);
+    } catch (e) {
+      showToast('保存失败：$e', type: ToastType.error);
+    }
+  }
+
+  Future<void> _openBatchMemberOrgDialog(BuildContext context) async {
+    final unitId = widget.sessionUnitId;
+    if (unitId == null || unitId.isEmpty) return;
+    final api = ref.read(groupManagementApiProvider);
+    final selectedMemberIds = <String>{};
+    final selectedOrgIds = <String>{};
+    int mode = 0; // 0=Add, 1=Remove, 2=Replace, 3=Clear
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => StatefulBuilder(
+            builder:
+                (ctx, setDialogState) => AlertDialog(
+                  title: const Text('批量调整成员组织归属'),
+                  content: SizedBox(
+                    width: 440,
+                    height: 380,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        DropdownButton<int>(
+                          value: mode,
+                          isExpanded: true,
+                          items: const <DropdownMenuItem<int>>[
+                            DropdownMenuItem(value: 0, child: Text('添加到所选组织')),
+                            DropdownMenuItem(value: 1, child: Text('从所选组织移除')),
+                            DropdownMenuItem(value: 2, child: Text('重新设置组织（覆盖）')),
+                            DropdownMenuItem(value: 3, child: Text('清空组织（设为未分组）')),
+                          ],
+                          onChanged:
+                              (v) => setDialogState(() {
+                                if (v != null) mode = v;
+                              }),
+                        ),
+                        if (mode != 3) ...<Widget>[
+                          const SizedBox(height: 6),
+                          const Text(
+                            '选择目标组织：',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                          SizedBox(
+                            height: 110,
+                            child: ListView(
+                              children: <Widget>[
+                                for (final org in controller.organizations)
+                                  CheckboxListTile(
+                                    dense: true,
+                                    value: selectedOrgIds.contains(org.id),
+                                    title: Text(org.name),
+                                    onChanged:
+                                        (val) => setDialogState(() {
+                                          if (val == true) {
+                                            selectedOrgIds.add(org.id);
+                                          } else {
+                                            selectedOrgIds.remove(org.id);
+                                          }
+                                        }),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+                        Text(
+                          '选择成员（已选 ${selectedMemberIds.length} 人）：',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        Expanded(
+                          child: ListView(
+                            children: <Widget>[
+                              for (final m in _members)
+                                CheckboxListTile(
+                                  dense: true,
+                                  value: selectedMemberIds.contains(m.id),
+                                  title: Text(m.name),
+                                  subtitle:
+                                      m.organizationList.isEmpty
+                                          ? const Text('未分组')
+                                          : Text(
+                                            m.organizationList
+                                                .map((o) => o.name)
+                                                .join('、'),
+                                          ),
+                                  onChanged:
+                                      (val) => setDialogState(() {
+                                        if (val == true) {
+                                          selectedMemberIds.add(m.id);
+                                        } else {
+                                          selectedMemberIds.remove(m.id);
+                                        }
+                                      }),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: <Widget>[
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('取消'),
+                    ),
+                    FilledButton(
+                      onPressed:
+                          selectedMemberIds.isEmpty ||
+                                  (mode != 3 && selectedOrgIds.isEmpty)
+                              ? null
+                              : () => Navigator.pop(ctx, true),
+                      child: const Text('确认执行'),
+                    ),
+                  ],
+                ),
+          ),
+    );
+    if (confirmed != true) return;
+    try {
+      await api.batchSetMemberOrganizations(
+        sessionUnitId: unitId,
+        memberSessionUnitIds: selectedMemberIds.toList(),
+        organizationIds: mode == 3 ? const <String>[] : selectedOrgIds.toList(),
+        mode: mode,
+      );
+      await _loadMembers();
+      showToast('已批量更新成员组织归属', type: ToastType.success);
+    } catch (e) {
+      showToast('批量操作失败：$e', type: ToastType.error);
+    }
   }
 }

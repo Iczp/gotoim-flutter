@@ -84,22 +84,38 @@ class MemberTile extends StatelessWidget {
         radius: 23,
         chatObjectId: member.chatObjectId,
       ),
-      title: Row(
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 6,
+        runSpacing: 4,
         children: <Widget>[
-          Flexible(child: Text(member.name, overflow: TextOverflow.ellipsis)),
-          if (member.isCreator) ...<Widget>[
-            const SizedBox(width: 8),
+          Text(member.name, overflow: TextOverflow.ellipsis),
+          if (member.isCreator)
             const Chip(
               label: Text('群主', style: TextStyle(fontSize: 11, color: Colors.amber)),
               visualDensity: VisualDensity.compact,
-            ),
-          ] else if (member.isAdmin) ...<Widget>[
-            const SizedBox(width: 8),
+            )
+          else if (member.isAdmin)
             const Chip(
               label: Text('管理员', style: TextStyle(fontSize: 11, color: Colors.blue)),
               visualDensity: VisualDensity.compact,
             ),
-          ],
+          for (final role in member.roleList)
+            Chip(
+              label: Text(
+                role.name,
+                style: const TextStyle(fontSize: 11, color: Colors.green),
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+          for (final org in member.organizationList)
+            Chip(
+              label: Text(
+                org.name,
+                style: const TextStyle(fontSize: 11, color: Colors.teal),
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
         ],
       ),
       subtitle: Text(

@@ -137,6 +137,45 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
                           onToggleAdmin: _handleToggleAdmin,
                         );
                       }
+                      if (controller.loading && displayedMembers.isEmpty) {
+                        final skColor = Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant
+                            .withValues(alpha: 0.14);
+                        return Column(
+                          children: List<Widget>.generate(
+                            8,
+                            (_) => ListTile(
+                              leading: Container(
+                                width: 46,
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  color: skColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              title: Container(
+                                height: 14,
+                                width: 120,
+                                margin: const EdgeInsets.only(right: 120),
+                                decoration: BoxDecoration(
+                                  color: skColor,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              subtitle: Container(
+                                height: 11,
+                                width: 180,
+                                margin: const EdgeInsets.only(top: 6, right: 60),
+                                decoration: BoxDecoration(
+                                  color: skColor,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
                       if (controller.loading) {
                         return const Padding(
                           padding: EdgeInsets.all(20),
