@@ -38,6 +38,7 @@ class AnnouncementApi {
     String? keyword,
     bool? isPinned,
     bool includeDrafts = false,
+    int? status,
     int maxResultCount = 50,
     int skipCount = 0,
   }) async {
@@ -49,6 +50,7 @@ class AnnouncementApi {
           if (keyword != null && keyword.isNotEmpty) 'Keyword': keyword,
           if (isPinned != null) 'IsPinned': isPinned,
           if (includeDrafts) 'IncludeDrafts': true,
+          if (status != null) 'Status': status,
           'MaxResultCount': maxResultCount,
           'SkipCount': skipCount,
         },
@@ -62,6 +64,26 @@ class AnnouncementApi {
       return const [];
     } catch (_) {
       return const [];
+    }
+  }
+
+  Future<SessionAnnouncementPermissions?> getPermissions(String sessionId) async {
+    if (sessionId.isEmpty) return null;
+    try {
+      final json = await _client.get<Map<String, dynamic>>(
+        '/api/chat/session-announcement/permissions/$sessionId',
+      );
+      return SessionAnnouncementPermissions.fromJson(json);
+    } catch (_) {
+      try {
+        final json = await _client.get<Map<String, dynamic>>(
+          '/api/chat/session-announcement/permissions',
+          query: <String, Object?>{'sessionId': sessionId},
+        );
+        return SessionAnnouncementPermissions.fromJson(json);
+      } catch (_) {
+        return null;
+      }
     }
   }
 
@@ -109,6 +131,7 @@ class AnnouncementApi {
 
   Future<SessionAnnouncement> create({
     required String sessionId,
+    String? sessionUnitId,
     required String title,
     required String content,
     int editorType = 0,
@@ -117,6 +140,7 @@ class AnnouncementApi {
     String? expireTime,
     String? publishTime,
     bool saveAsDraft = false,
+    bool submitForReview = false,
     bool applyToNewMembers = false,
     bool isPopup = false,
     bool requireConfirm = false,
@@ -125,14 +149,16 @@ class AnnouncementApi {
       '/api/chat/session-announcement',
       data: <String, Object?>{
         'sessionId': sessionId,
+        if (sessionUnitId != null && sessionUnitId.isNotEmpty) 'sessionUnitId': sessionUnitId,
         'title': title,
         'content': content,
         'editorType': editorType,
         'isPinned': isPinned,
-        'sorting': ?sorting,
+        if (sorting != null) 'sorting': sorting,
         'expireTime': expireTime,
         'publishTime': publishTime,
         'saveAsDraft': saveAsDraft,
+        'submitForReview': submitForReview,
         'applyToNewMembers': applyToNewMembers,
         'isPopup': isPopup,
         'requireConfirm': requireConfirm,
@@ -143,6 +169,7 @@ class AnnouncementApi {
 
   Future<SessionAnnouncement> update({
     required String id,
+    String? sessionUnitId,
     required String title,
     required String content,
     int editorType = 0,
@@ -151,6 +178,10 @@ class AnnouncementApi {
     String? expireTime,
     String? publishTime,
     bool saveAsDraft = false,
+    bool submitForReview = false,
+    bool bumpVersion = false,
+    String? changeSummary,
+    int? expectedVersion,
     bool resetReceipts = false,
     bool applyToNewMembers = false,
     bool isPopup = false,
@@ -159,14 +190,19 @@ class AnnouncementApi {
     final json = await _client.put<Map<String, dynamic>>(
       '/api/chat/session-announcement/$id',
       data: <String, Object?>{
+        if (sessionUnitId != null && sessionUnitId.isNotEmpty) 'sessionUnitId': sessionUnitId,
         'title': title,
         'content': content,
         'editorType': editorType,
         'isPinned': isPinned,
-        'sorting': ?sorting,
+        if (sorting != null) 'sorting': sorting,
         'expireTime': expireTime,
         'publishTime': publishTime,
         'saveAsDraft': saveAsDraft,
+        'submitForReview': submitForReview,
+        'bumpVersion': bumpVersion,
+        if (changeSummary != null && changeSummary.isNotEmpty) 'changeSummary': changeSummary,
+        if (expectedVersion != null) 'expectedVersion': expectedVersion,
         'resetReceipts': resetReceipts,
         'applyToNewMembers': applyToNewMembers,
         'isPopup': isPopup,
@@ -174,6 +210,50 @@ class AnnouncementApi {
       },
     );
     return SessionAnnouncement.fromJson(json);
+  }
+
+  Future<SessionAnnouncement> submitReview(
+    String id, {
+    required String sessionUnitId,
+  }) async {
+    final json = await _client.post<Map<String, dynamic>>(
+      '/api/chat/session-announcement/$id/submit-review',
+      data: <String, Object?>{'sessionUnitId': sessionUnitId},
+    );
+    return SessionAnnouncement.fromJson(json);
+  }
+
+  Future<SessionAnnouncement> review(
+    String id, {
+    required String sessionUnitId,
+    required bool approved,
+    String? remark,
+    bool sendMessageNotification = true,
+  }) async {
+    final json = await _client.post<Map<String, dynamic>>(
+      '/api/chat/session-announcement/$id/review',
+      data: <String, Object?>{
+        'sessionUnitId': sessionUnitId,
+        'approved': approved,
+        if (remark != null && remark.trim().isNotEmpty) 'remark': remark.trim(),
+        'sendMessageNotification': sendMessageNotification,
+      },
+    );
+    return SessionAnnouncement.fromJson(json);
+  }
+
+  Future<List<SessionAnnouncementRevision>> getRevisions(String id) async {
+    try {
+      final res = await _client.get<List<dynamic>>(
+        '/api/chat/session-announcement/$id/revisions',
+      );
+      return res
+          .whereType<Map<String, dynamic>>()
+          .map(SessionAnnouncementRevision.fromJson)
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> setPinned({
@@ -185,7 +265,7 @@ class AnnouncementApi {
       '/api/chat/session-announcement/$id/pinned',
       query: <String, Object?>{
         'isPinned': isPinned,
-        'sorting': ?sorting,
+        if (sorting != null) 'sorting': sorting,
       },
     );
   }
@@ -197,7 +277,9 @@ class AnnouncementApi {
   Future<SessionAnnouncement> publish(String id, {String? sessionUnitId}) async {
     final json = await _client.post<Map<String, dynamic>>(
       '/api/chat/session-announcement/$id/publish',
-      query: <String, Object?>{'sessionUnitId': ?sessionUnitId},
+      query: <String, Object?>{
+        if (sessionUnitId != null && sessionUnitId.isNotEmpty) 'sessionUnitId': sessionUnitId,
+      },
     );
     return SessionAnnouncement.fromJson(json);
   }
@@ -205,7 +287,9 @@ class AnnouncementApi {
   Future<void> revoke(String id, {String? sessionUnitId}) async {
     await _client.post<dynamic>(
       '/api/chat/session-announcement/$id/revoke',
-      query: <String, Object?>{'sessionUnitId': ?sessionUnitId},
+      query: <String, Object?>{
+        if (sessionUnitId != null && sessionUnitId.isNotEmpty) 'sessionUnitId': sessionUnitId,
+      },
     );
   }
 

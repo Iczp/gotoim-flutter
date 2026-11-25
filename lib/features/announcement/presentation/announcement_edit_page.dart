@@ -7,22 +7,26 @@ class AnnouncementEditPage extends ConsumerStatefulWidget {
   const AnnouncementEditPage({
     required this.sessionId,
     this.editItem,
+    this.permissions,
     super.key,
   });
 
   final String sessionId;
   final SessionAnnouncement? editItem;
+  final SessionAnnouncementPermissions? permissions;
 
   static Future<SessionAnnouncement?> open(
     BuildContext context, {
     required String sessionId,
     SessionAnnouncement? editItem,
+    SessionAnnouncementPermissions? permissions,
   }) {
     return Navigator.of(context).push<SessionAnnouncement>(
       MaterialPageRoute<SessionAnnouncement>(
         builder: (_) => AnnouncementEditPage(
           sessionId: sessionId,
           editItem: editItem,
+          permissions: permissions,
         ),
       ),
     );
@@ -37,12 +41,15 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   final _sortingController = TextEditingController(text: '0');
+  final _changeSummaryController = TextEditingController();
 
+  SessionAnnouncementPermissions? _permissions;
   bool _isPinned = false;
   bool _isPopup = false;
   bool _requireConfirm = false;
   bool _applyToNewMembers = false;
   bool _resetReceipts = false;
+  bool _bumpVersion = true;
   String _expireMode = 'never'; // never | 7d | 30d | custom
   DateTime? _customExpireTime;
   String _publishMode = 'now'; // now | scheduled
@@ -52,6 +59,14 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
   @override
   void initState() {
     super.initState();
+    _permissions = widget.permissions;
+    if (_permissions == null) {
+      ref.read(announcementApiProvider).getPermissions(widget.sessionId).then((value) {
+        if (mounted && value != null) {
+          setState(() => _permissions = value);
+        }
+      });
+    }
     final item = widget.editItem;
     if (item != null) {
       _titleController.text = item.title;
@@ -62,6 +77,7 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
       _isPopup = item.isPopup;
       _requireConfirm = item.requireConfirm;
       _applyToNewMembers = item.applyToNewMembers;
+      _bumpVersion = item.status == 1;
       if (item.expireTime != null && item.expireTime!.isNotEmpty) {
         _expireMode = 'custom';
         _customExpireTime = DateTime.tryParse(item.expireTime!);
@@ -78,6 +94,7 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
     _titleController.dispose();
     _contentController.dispose();
     _sortingController.dispose();
+    _changeSummaryController.dispose();
     super.dispose();
   }
 
@@ -92,7 +109,14 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
     return _customExpireTime?.toUtc().toIso8601String();
   }
 
-  Future<void> _handleSubmit({bool saveAsDraft = false}) async {
+  bool get _canDirectPublish => _permissions?.canPublish ?? true;
+  bool get _canPin => _permissions?.canPin ?? true;
+  bool get _isEditingPublished => widget.editItem?.status == 1;
+
+  Future<void> _handleSubmit({
+    bool saveAsDraft = false,
+    bool submitForReview = false,
+  }) async {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
 
@@ -114,16 +138,19 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
       final api = ref.read(announcementApiProvider);
       SessionAnnouncement result;
       final parsedSorting = double.tryParse(_sortingController.text.trim()) ?? 0;
-      final effectiveSorting = parsedSorting > 0 ? parsedSorting : (_isPinned ? 1.0 : 0.0);
-      final effectivePinned = effectiveSorting > 0;
+      final effectiveSorting =
+          _canPin ? (parsedSorting > 0 ? parsedSorting : (_isPinned ? 1.0 : 0.0)) : 0.0;
+      final effectivePinned = _canPin && effectiveSorting > 0;
       final expireTimeIso = _resolveExpireTimeIso();
       final publishTimeIso = _publishMode == 'scheduled'
           ? _customPublishTime?.toUtc().toIso8601String()
           : null;
+      final summary = _changeSummaryController.text.trim();
 
       if (widget.editItem != null) {
         result = await api.update(
           id: widget.editItem!.id,
+          sessionUnitId: _permissions?.sessionUnitId,
           title: title,
           content: content,
           isPinned: effectivePinned,
@@ -131,6 +158,10 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
           expireTime: expireTimeIso,
           publishTime: publishTimeIso,
           saveAsDraft: saveAsDraft,
+          submitForReview: submitForReview,
+          bumpVersion: _isEditingPublished && _bumpVersion,
+          changeSummary: _isEditingPublished && summary.isNotEmpty ? summary : null,
+          expectedVersion: widget.editItem!.version,
           resetReceipts: _resetReceipts,
           applyToNewMembers: _applyToNewMembers,
           isPopup: _isPopup,
@@ -139,6 +170,7 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
       } else {
         result = await api.create(
           sessionId: widget.sessionId,
+          sessionUnitId: _permissions?.sessionUnitId,
           title: title,
           content: content,
           isPinned: effectivePinned,
@@ -146,6 +178,7 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
           expireTime: expireTimeIso,
           publishTime: publishTimeIso,
           saveAsDraft: saveAsDraft,
+          submitForReview: submitForReview,
           applyToNewMembers: _applyToNewMembers,
           isPopup: _isPopup,
           requireConfirm: _requireConfirm,
@@ -158,7 +191,7 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
     } catch (err) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('发布失败: $err')),
+          SnackBar(content: Text('保存失败: $err')),
         );
       }
     } finally {
@@ -169,6 +202,7 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final allowPrimaryPublish = _canDirectPublish || _isEditingPublished;
 
     return Scaffold(
       appBar: AppBar(
@@ -178,17 +212,34 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
             onPressed: _submitting ? null : () => _handleSubmit(saveAsDraft: true),
             child: const Text('存草稿'),
           ),
+          if (_canDirectPublish && (widget.editItem == null || widget.editItem!.status == 0 || widget.editItem!.status == 4))
+            TextButton(
+              onPressed: _submitting ? null : () => _handleSubmit(submitForReview: true),
+              child: const Text('提审'),
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
-              onPressed: _submitting ? null : () => _handleSubmit(saveAsDraft: false),
+              onPressed: _submitting
+                  ? null
+                  : () => allowPrimaryPublish
+                      ? _handleSubmit()
+                      : _handleSubmit(submitForReview: true),
               child: _submitting
                   ? const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : Text(_publishMode == 'scheduled' ? '定时发布' : '发布'),
+                  : Text(
+                      allowPrimaryPublish
+                          ? (_publishMode == 'scheduled'
+                              ? '定时发布'
+                              : _isEditingPublished
+                                  ? '保存修订'
+                                  : '发布')
+                          : '提交审核',
+                    ),
             ),
           ),
         ],
@@ -227,36 +278,38 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Column(
                   children: [
-                    SwitchListTile(
-                      title: const Text('置顶公告'),
-                      subtitle: const Text('0=不置顶；数字越大越置顶（支持多条置顶）'),
-                      value: _isPinned,
-                      onChanged: (val) {
-                        setState(() {
-                          _isPinned = val;
-                          final cur = double.tryParse(_sortingController.text.trim()) ?? 0;
-                          if (val && cur <= 0) {
-                            _sortingController.text = '1';
-                          } else if (!val) {
-                            _sortingController.text = '0';
-                          }
-                        });
-                      },
-                    ),
-                    if (_isPinned)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: TextField(
-                          controller: _sortingController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: '置顶权重（数字越大越靠前）',
-                            isDense: true,
-                            border: OutlineInputBorder(),
+                    if (_canPin) ...[
+                      SwitchListTile(
+                        title: const Text('置顶公告'),
+                        subtitle: const Text('0=不置顶；数字越大越置顶（支持多条置顶）'),
+                        value: _isPinned,
+                        onChanged: (val) {
+                          setState(() {
+                            _isPinned = val;
+                            final cur = double.tryParse(_sortingController.text.trim()) ?? 0;
+                            if (val && cur <= 0) {
+                              _sortingController.text = '1';
+                            } else if (!val) {
+                              _sortingController.text = '0';
+                            }
+                          });
+                        },
+                      ),
+                      if (_isPinned)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: TextField(
+                            controller: _sortingController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: '置顶权重（数字越大越靠前）',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
                           ),
                         ),
-                      ),
-                    const Divider(height: 1),
+                      const Divider(height: 1),
+                    ],
                     ListTile(
                       title: const Text('有效期'),
                       subtitle: Text(
@@ -355,7 +408,7 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
                               firstDate: now,
                               lastDate: now.add(const Duration(days: 365)),
                             );
-                            if (pickedDate != null && mounted) {
+                            if (pickedDate != null && context.mounted) {
                               final pickedTime = await showTimePicker(
                                 context: context,
                                 initialTime: TimeOfDay.fromDateTime(
@@ -382,6 +435,28 @@ class _AnnouncementEditPageState extends ConsumerState<AnnouncementEditPage> {
                         },
                       ),
                     ),
+                    if (_isEditingPublished) ...[
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        title: Text('升版修订 (v${(widget.editItem?.version ?? 1) + 1})'),
+                        subtitle: const Text('留存历史版本快照，并要求确认最新版本号'),
+                        value: _bumpVersion,
+                        onChanged: (val) => setState(() => _bumpVersion = val),
+                      ),
+                      if (_bumpVersion)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: TextField(
+                            controller: _changeSummaryController,
+                            maxLength: 300,
+                            decoration: const InputDecoration(
+                              labelText: '修订说明（可选）',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                    ],
                     if (widget.editItem != null && _requireConfirm) ...[
                       const Divider(height: 1),
                       SwitchListTile(

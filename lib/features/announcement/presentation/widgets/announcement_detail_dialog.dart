@@ -140,6 +140,100 @@ class _AnnouncementDetailDialogState
     );
   }
 
+  Future<void> _showRevisionsDialog() async {
+    final revisions = await ref.read(announcementApiProvider).getRevisions(_item.id);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('历史修订版本'),
+        content: SizedBox(
+          width: 440,
+          height: 340,
+          child: revisions.isEmpty
+              ? const Center(child: Text('暂无历史修订记录'))
+              : ListView.separated(
+                  itemCount: revisions.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (_, idx) {
+                    final rev = revisions[idx];
+                    return Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Theme.of(ctx).colorScheme.outlineVariant,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(ctx)
+                                      .colorScheme
+                                      .primary
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'v${rev.version}',
+                                  style: TextStyle(
+                                    color: Theme.of(ctx).colorScheme.primary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  rev.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '修订人: ${rev.editorName ?? "管理员"}'
+                            '${rev.changeSummary != null && rev.changeSummary!.isNotEmpty ? " · ${rev.changeSummary}" : ""}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Theme.of(ctx).colorScheme.outline,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            rev.content,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _openMemberById(String id, String displayName, {String? avatar}) {
     if (id.isEmpty) return;
     showMemberProfileSheet(
@@ -364,6 +458,22 @@ class _AnnouncementDetailDialogState
               ),
               Row(
                 children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'v${_item.version}',
+                      style: TextStyle(
+                        color: colorScheme.primary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   if (_item.isPinned) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -418,6 +528,16 @@ class _AnnouncementDetailDialogState
                         : _item.creationTime,
                     style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.outline),
                   ),
+                  if (_item.reviewerName != null && _item.reviewerName!.isNotEmpty)
+                    Text(
+                      '审核人: ${_item.reviewerName}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.indigo),
+                    ),
+                  if (_item.reviewRemark != null && _item.reviewRemark!.isNotEmpty)
+                    Text(
+                      '审核意见: ${_item.reviewRemark}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.indigo),
+                    ),
                 ],
               ),
               const Divider(height: 20),
@@ -622,7 +742,14 @@ class _AnnouncementDetailDialogState
                               : null,
                         ),
                       ],
-                      if (widget.canManage)
+                      if (_item.version > 1)
+                        IconButton(
+                          tooltip: '历史版本',
+                          icon: const Icon(Icons.history, size: 18),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: _showRevisionsDialog,
+                        ),
+                      if (widget.canManage || _item.canViewStat)
                         IconButton(
                           tooltip: '查看统计',
                           icon: const Icon(Icons.pie_chart_outline, size: 18),

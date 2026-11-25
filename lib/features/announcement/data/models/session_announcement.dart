@@ -28,6 +28,24 @@ class SessionAnnouncement {
     this.linkedMessageId,
     this.isSelfConfirmed = false,
     this.isSelfRead = false,
+    this.version = 1,
+    this.isApproved = true,
+    this.confirmedVersion = 0,
+    this.reviewerSessionUnitId,
+    this.reviewerChatObjectId,
+    this.reviewerName,
+    this.reviewerPortrait,
+    this.reviewedTime,
+    this.reviewRemark,
+    this.canEdit = false,
+    this.canDelete = false,
+    this.canPublish = false,
+    this.canSubmitReview = false,
+    this.canApprove = false,
+    this.canRevoke = false,
+    this.canPin = false,
+    this.canRemind = false,
+    this.canViewStat = false,
   });
 
   factory SessionAnnouncement.fromJson(Map<String, dynamic> json) {
@@ -62,6 +80,24 @@ class SessionAnnouncement {
       isSelfConfirmed:
           json['isSelfConfirmed'] == true || json['isConfirmedByCurrentUser'] == true,
       isSelfRead: json['isSelfRead'] == true,
+      version: (json['version'] as num?)?.toInt() ?? 1,
+      isApproved: json['isApproved'] != false,
+      confirmedVersion: (json['confirmedVersion'] as num?)?.toInt() ?? 0,
+      reviewerSessionUnitId: json['reviewerSessionUnitId']?.toString(),
+      reviewerChatObjectId: json['reviewerChatObjectId']?.toString(),
+      reviewerName: json['reviewerName']?.toString(),
+      reviewerPortrait: json['reviewerPortrait']?.toString(),
+      reviewedTime: json['reviewedTime']?.toString(),
+      reviewRemark: json['reviewRemark']?.toString(),
+      canEdit: json['canEdit'] == true,
+      canDelete: json['canDelete'] == true,
+      canPublish: json['canPublish'] == true,
+      canSubmitReview: json['canSubmitReview'] == true,
+      canApprove: json['canApprove'] == true,
+      canRevoke: json['canRevoke'] == true,
+      canPin: json['canPin'] == true,
+      canRemind: json['canRemind'] == true,
+      canViewStat: json['canViewStat'] == true,
     );
   }
 
@@ -93,6 +129,24 @@ class SessionAnnouncement {
   final String creationTime;
   final bool isSelfConfirmed;
   final bool isSelfRead;
+  final int version;
+  final bool isApproved;
+  final int confirmedVersion;
+  final String? reviewerSessionUnitId;
+  final String? reviewerChatObjectId;
+  final String? reviewerName;
+  final String? reviewerPortrait;
+  final String? reviewedTime;
+  final String? reviewRemark;
+  final bool canEdit;
+  final bool canDelete;
+  final bool canPublish;
+  final bool canSubmitReview;
+  final bool canApprove;
+  final bool canRevoke;
+  final bool canPin;
+  final bool canRemind;
+  final bool canViewStat;
 
   SessionAnnouncement copyWith({
     bool? isPinned,
@@ -110,6 +164,7 @@ class SessionAnnouncement {
       publisherChatObjectId: publisherChatObjectId,
       publisherName: publisherName,
       publisherAvatar: publisherAvatar,
+      sessionName: sessionName,
       title: title,
       content: content,
       editorType: editorType,
@@ -130,8 +185,129 @@ class SessionAnnouncement {
       creationTime: creationTime,
       isSelfConfirmed: isSelfConfirmed ?? this.isSelfConfirmed,
       isSelfRead: isSelfRead ?? this.isSelfRead,
+      version: version,
+      isApproved: isApproved,
+      confirmedVersion: confirmedVersion,
+      reviewerSessionUnitId: reviewerSessionUnitId,
+      reviewerChatObjectId: reviewerChatObjectId,
+      reviewerName: reviewerName,
+      reviewerPortrait: reviewerPortrait,
+      reviewedTime: reviewedTime,
+      reviewRemark: reviewRemark,
+      canEdit: canEdit,
+      canDelete: canDelete,
+      canPublish: canPublish,
+      canSubmitReview: canSubmitReview,
+      canApprove: canApprove,
+      canRevoke: canRevoke,
+      canPin: canPin,
+      canRemind: canRemind,
+      canViewStat: canViewStat,
     );
   }
+}
+
+class SessionAnnouncementPermissions {
+  const SessionAnnouncementPermissions({
+    required this.sessionId,
+    required this.sessionUnitId,
+    this.isCreator = false,
+    this.canCreate = false,
+    this.canPublish = false,
+    this.canApprove = false,
+    this.canUpdateAny = false,
+    this.canDeleteAny = false,
+    this.canPin = false,
+    this.canRemind = false,
+    this.canViewStat = false,
+    this.pendingReviewCount = 0,
+    this.draftCount = 0,
+  });
+
+  factory SessionAnnouncementPermissions.fromJson(Map<String, dynamic> json) {
+    return SessionAnnouncementPermissions(
+      sessionId: json['sessionId']?.toString() ?? '',
+      sessionUnitId: json['sessionUnitId']?.toString() ?? '',
+      isCreator: json['isCreator'] == true,
+      canCreate: json['canCreate'] == true,
+      canPublish: json['canPublish'] == true,
+      canApprove: json['canApprove'] == true,
+      canUpdateAny: json['canUpdateAny'] == true,
+      canDeleteAny: json['canDeleteAny'] == true,
+      canPin: json['canPin'] == true,
+      canRemind: json['canRemind'] == true,
+      canViewStat: json['canViewStat'] == true,
+      pendingReviewCount: (json['pendingReviewCount'] as num?)?.toInt() ?? 0,
+      draftCount: (json['draftCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String sessionId;
+  final String sessionUnitId;
+  final bool isCreator;
+  final bool canCreate;
+  final bool canPublish;
+  final bool canApprove;
+  final bool canUpdateAny;
+  final bool canDeleteAny;
+  final bool canPin;
+  final bool canRemind;
+  final bool canViewStat;
+  final int pendingReviewCount;
+  final int draftCount;
+
+  bool get hasManagementRole =>
+      isCreator || canApprove || canPublish || canUpdateAny || canDeleteAny;
+
+  bool get hasManageEntry =>
+      hasManagementRole || canCreate || draftCount > 0 || pendingReviewCount > 0;
+}
+
+class SessionAnnouncementRevision {
+  const SessionAnnouncementRevision({
+    required this.id,
+    required this.announcementId,
+    required this.version,
+    required this.title,
+    required this.content,
+    required this.editorType,
+    required this.editorSessionUnitId,
+    required this.editorChatObjectId,
+    required this.creationTime,
+    this.editorName,
+    this.editorPortrait,
+    this.changeSummary,
+  });
+
+  factory SessionAnnouncementRevision.fromJson(Map<String, dynamic> json) {
+    return SessionAnnouncementRevision(
+      id: json['id']?.toString() ?? '',
+      announcementId: json['announcementId']?.toString() ?? '',
+      version: (json['version'] as num?)?.toInt() ?? 1,
+      title: json['title']?.toString() ?? '',
+      content: json['content']?.toString() ?? '',
+      editorType: (json['editorType'] as num?)?.toInt() ?? 0,
+      editorSessionUnitId: json['editorSessionUnitId']?.toString() ?? '',
+      editorChatObjectId: json['editorChatObjectId']?.toString() ?? '',
+      editorName: json['editorName']?.toString(),
+      editorPortrait: json['editorPortrait']?.toString(),
+      changeSummary: json['changeSummary']?.toString(),
+      creationTime: json['creationTime']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String announcementId;
+  final int version;
+  final String title;
+  final String content;
+  final int editorType;
+  final String editorSessionUnitId;
+  final String editorChatObjectId;
+  final String? editorName;
+  final String? editorPortrait;
+  final String? changeSummary;
+  final String creationTime;
 }
 
 class SessionAnnouncementStat {
