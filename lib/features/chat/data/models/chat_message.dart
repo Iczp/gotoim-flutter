@@ -2,6 +2,51 @@ import '../../../session/data/models/session_summary_helpers.dart';
 import 'article_message_item.dart';
 import 'template_message_content.dart';
 
+/// 后端 `compactSenders=true` 时，分页结果在 `extra.senders` 以去重字典下发发送人，
+/// 消息行内的 `senderSessionUnit` 被置空。此函数把字典回填到每条消息（含引用消息），
+/// 使后续 [ChatMessage.fromJson] 与旧协议完全一致；没有字典时原样返回。
+Map<String, dynamic> hydrateCompactSenders(Map<String, dynamic> page) {
+  final extra = page['extra'];
+  final rawSenders = extra is Map ? (extra['senders'] ?? extra['Senders']) : null;
+  final items = page['items'];
+  if (rawSenders is! Map || rawSenders.isEmpty || items is! List) return page;
+  final senders = <String, Map<String, dynamic>>{
+    for (final entry in rawSenders.entries)
+      if (entry.value is Map)
+        entry.key.toString().toLowerCase():
+            Map<String, dynamic>.from(entry.value as Map),
+  };
+  Map<String, dynamic> fill(Map<String, dynamic> row) {
+    final result = Map<String, dynamic>.from(row);
+    final unitId = row['senderSessionUnitId']?.toString().toLowerCase();
+    if (asMap(row['senderSessionUnit']).isEmpty &&
+        unitId != null &&
+        senders.containsKey(unitId)) {
+      result['senderSessionUnit'] = senders[unitId];
+    }
+    final quote = row['quoteMessage'];
+    if (quote is Map) {
+      final quoteMap = Map<String, dynamic>.from(quote);
+      final quoteUnit = quoteMap['senderSessionUnitId']?.toString().toLowerCase();
+      if (asMap(quoteMap['senderSessionUnit']).isEmpty &&
+          quoteUnit != null &&
+          senders.containsKey(quoteUnit)) {
+        quoteMap['senderSessionUnit'] = senders[quoteUnit];
+      }
+      result['quoteMessage'] = quoteMap;
+    }
+    return result;
+  }
+
+  return <String, dynamic>{
+    ...page,
+    'items': [
+      for (final item in items)
+        if (item is Map) fill(Map<String, dynamic>.from(item)) else item,
+    ],
+  };
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.localId,

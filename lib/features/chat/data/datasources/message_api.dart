@@ -112,13 +112,14 @@ class MessageApi {
       '/api/chat/message/history',
       query: <String, Object?>{
         'authoritative': true,
+        'compactSenders': true,
         'sessionUnitId': sessionUnitId,
         'maxResultCount': limit,
         if (maxMessageId != null) 'maxMessageId': maxMessageId,
       },
     );
     return PagedResultDto<ChatMessage>.fromJson(
-      json,
+      hydrateCompactSenders(json),
       (item) => ChatMessage.fromJson(
         item,
         ownerId: ownerId,
@@ -154,10 +155,11 @@ class MessageApi {
         'maxResultCount': limit,
         'minMessageId': minMessageId,
         'authoritative': true,
+        'compactSenders': true,
       },
     );
     return PagedResultDto<ChatMessage>.fromJson(
-      json,
+      hydrateCompactSenders(json),
       (item) => ChatMessage.fromJson(
         item,
         ownerId: ownerId,
