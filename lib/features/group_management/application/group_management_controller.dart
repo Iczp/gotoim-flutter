@@ -36,11 +36,7 @@ class GroupManagementController extends ChangeNotifier {
     try {
       RoomManagementSettings? loadedSettings;
       if (sessionUnitId != null && sessionUnitId!.isNotEmpty) {
-        try {
-          loadedSettings = await _api.getManagementSettings(sessionUnitId!);
-        } catch (_) {
-          loadedSettings = null;
-        }
+        loadedSettings = await _api.getManagementSettings(sessionUnitId!);
       }
       settings = loadedSettings;
 

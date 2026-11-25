@@ -9,6 +9,7 @@ import 'widgets/announcement_detail_dialog.dart';
 class AnnouncementManagePage extends ConsumerStatefulWidget {
   const AnnouncementManagePage({
     required this.sessionId,
+    this.sessionUnitId,
     this.sessionTitle,
     this.isEmbedded = false,
     this.onChanged,
@@ -16,6 +17,7 @@ class AnnouncementManagePage extends ConsumerStatefulWidget {
   });
 
   final String sessionId;
+  final String? sessionUnitId;
   final String? sessionTitle;
   final bool isEmbedded;
   final VoidCallback? onChanged;
@@ -23,12 +25,14 @@ class AnnouncementManagePage extends ConsumerStatefulWidget {
   static Future<bool?> open(
     BuildContext context, {
     required String sessionId,
+    String? sessionUnitId,
     String? sessionTitle,
   }) {
     return Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => AnnouncementManagePage(
           sessionId: sessionId,
+          sessionUnitId: sessionUnitId,
           sessionTitle: sessionTitle,
         ),
       ),
@@ -537,6 +541,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
                         context,
                         announcementId: item.id,
                         title: item.title,
+                        sessionUnitId: widget.sessionUnitId,
                       ),
                       style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
                       child: Text('统计 (${item.readCount})', style: const TextStyle(fontSize: 12)),

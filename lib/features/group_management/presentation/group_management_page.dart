@@ -161,10 +161,10 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
     final canJoin = s?.canManageJoinRequests ?? false;
     final canAnnouncements = s?.canManageAnnouncements ?? false;
     final canMembers = s?.canManageMembers ?? false;
-    final canOrgs = s?.canManageOrgs ?? true;
-    final canAdmins = (s?.canManageRoles ?? false) || (s?.isCreator ?? false);
-    final canRoles = s?.canManageRoles ?? true;
-    final canPermissions = s?.canManagePermissions ?? true;
+    final canOrgs = s?.canManageOrgs ?? false;
+    final canAdmins = s?.canSetAdmin ?? false;
+    final canRoles = s?.canManageRoles ?? false;
+    final canPermissions = s?.canManagePermissions ?? false;
     final canDanger = s?.canTransferOrDissolve ?? false;
 
     if (canSettings) {
@@ -767,6 +767,7 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
             : widget.sessionId;
     return AnnouncementManagePage(
       sessionId: effectiveSessionId,
+      sessionUnitId: widget.sessionUnitId,
       sessionTitle: controller.settings?.name,
       isEmbedded: true,
       onChanged: controller.refreshSettingsOnly,

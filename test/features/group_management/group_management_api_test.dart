@@ -86,6 +86,28 @@ void main() {
     final claimed = await api.claimCreator('unit-1');
     expect(client.lastPostPath, '/api/chat/room/claim-creator/unit-1');
     expect(claimed.name, '测试群');
+
+    await api.createRole(
+      sessionId: 'sess-1',
+      name: '公告审核员',
+      sessionUnitId: 'unit-1',
+    );
+    expect(client.lastPostPath, '/api/chat/session-role');
+    expect(client.lastPostData, <String, Object?>{
+      'sessionId': 'sess-1',
+      'name': '公告审核员',
+      'sessionUnitId': 'unit-1',
+    });
+
+    await api.setAllRolePermissions(roleId: 'role-1', enabled: true);
+    expect(
+      client.lastPostPath,
+      '/api/chat/session-role/role-1/set-all-permissions',
+    );
+    expect(client.lastPostData, <String, Object?>{
+      'isEnabled': true,
+      'value': 1,
+    });
   });
 }
 

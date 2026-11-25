@@ -11,18 +11,21 @@ class AnnouncementStatSheet extends ConsumerStatefulWidget {
   const AnnouncementStatSheet({
     required this.announcementId,
     required this.title,
+    this.sessionUnitId,
     this.initialTabIndex = 0,
     super.key,
   });
 
   final String announcementId;
   final String title;
+  final String? sessionUnitId;
   final int initialTabIndex;
 
   static Future<void> show(
     BuildContext context, {
     required String announcementId,
     required String title,
+    String? sessionUnitId,
     int initialTabIndex = 0,
   }) {
     final isDesktop = MediaQuery.sizeOf(context).width >= 720;
@@ -36,6 +39,7 @@ class AnnouncementStatSheet extends ConsumerStatefulWidget {
             child: AnnouncementStatSheet(
               announcementId: announcementId,
               title: title,
+              sessionUnitId: sessionUnitId,
               initialTabIndex: initialTabIndex,
             ),
           ),
@@ -54,6 +58,7 @@ class AnnouncementStatSheet extends ConsumerStatefulWidget {
         child: AnnouncementStatSheet(
           announcementId: announcementId,
           title: title,
+          sessionUnitId: sessionUnitId,
           initialTabIndex: initialTabIndex,
         ),
       ),
@@ -140,9 +145,18 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
   Future<void> _sendServerRemind() async {
     try {
       final api = ref.read(announcementApiProvider);
+      final unitId = widget.sessionUnitId?.trim() ?? '';
+      if (unitId.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('缺少当前成员身份，无法发送催办')),
+          );
+        }
+        return;
+      }
       final count = await api.remindUnconfirmed(
         widget.announcementId,
-        sessionUnitId: widget.announcementId,
+        sessionUnitId: unitId,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -38,6 +38,10 @@ class RoomManagementSettings {
     this.canManageOrgs = false,
     this.canManageRoles = false,
     this.canManagePermissions = false,
+    this.canSetAdmin = false,
+    this.canManageNameOrDescription = false,
+    this.canToggleAllMuted = false,
+    this.canManageJoinPolicies = false,
     this.canTransferOrDissolve = false,
   });
 
@@ -70,6 +74,18 @@ class RoomManagementSettings {
       canManageOrgs: json['canManageOrgs'] == true,
       canManageRoles: json['canManageRoles'] == true,
       canManagePermissions: json['canManagePermissions'] == true,
+      canSetAdmin: json.containsKey('canSetAdmin')
+          ? json['canSetAdmin'] == true
+          : json['isCreator'] == true,
+      canManageNameOrDescription: json.containsKey('canManageNameOrDescription')
+          ? json['canManageNameOrDescription'] == true
+          : json['canManageSettings'] == true,
+      canToggleAllMuted: json.containsKey('canToggleAllMuted')
+          ? json['canToggleAllMuted'] == true
+          : json['canManageSettings'] == true,
+      canManageJoinPolicies: json.containsKey('canManageJoinPolicies')
+          ? json['canManageJoinPolicies'] == true
+          : json['canManageSettings'] == true,
       canTransferOrDissolve: json['canTransferOrDissolve'] == true,
     );
   }
@@ -98,6 +114,10 @@ class RoomManagementSettings {
   final bool canManageOrgs;
   final bool canManageRoles;
   final bool canManagePermissions;
+  final bool canSetAdmin;
+  final bool canManageNameOrDescription;
+  final bool canToggleAllMuted;
+  final bool canManageJoinPolicies;
   final bool canTransferOrDissolve;
 
   int get totalPendingCount =>
@@ -232,10 +252,19 @@ class GroupManagementApi {
         '/api/chat/session-organization/${Uri.encodeComponent(organizationId)}/delete',
       );
 
-  Future<void> createRole({required String sessionId, required String name}) =>
+  Future<void> createRole({
+    required String sessionId,
+    required String name,
+    String? sessionUnitId,
+  }) =>
       _client.post<Map<String, dynamic>>(
-        '/api/chat/session-role/$sessionId',
-        query: <String, Object?>{'name': name},
+        '/api/chat/session-role',
+        data: <String, Object?>{
+          'sessionId': sessionId,
+          'name': name,
+          if (sessionUnitId != null && sessionUnitId.isNotEmpty)
+            'sessionUnitId': sessionUnitId,
+        },
       );
 
   Future<void> deleteRole(String roleId) =>
