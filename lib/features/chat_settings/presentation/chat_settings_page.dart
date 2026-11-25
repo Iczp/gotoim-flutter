@@ -370,8 +370,14 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                                     controller.isCreator)
                                 ? '设置、审核与权限'
                                 : (_roomMgmtSettings?.canClaimCreator == true
-                                    ? '暂无群主 · 点击认领'
-                                    : '需管理权限'),
+                                    ? (_roomMgmtSettings
+                                                ?.ownershipRecoveryAction ==
+                                            1
+                                        ? '暂无群主 · 管理员可接任'
+                                        : '暂无群主 · 可认领群主')
+                                    : (_roomMgmtSettings?.ownershipState == 1
+                                        ? '暂无群主 · 等待管理员接任'
+                                        : '需管理权限')),
                         trailing:
                             (_roomMgmtSettings?.totalPendingCount ?? 0) > 0
                                 ? Badge(
@@ -532,11 +538,15 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   }
 
   Future<void> _claimCreator({bool openManagementAfter = false}) async {
+    final isAdminTakeover = _roomMgmtSettings?.ownershipRecoveryAction == 1;
     final confirmed = await showConfirmModal(
       context: context,
-      title: '成为群主',
-      message: '当前群暂无群主和管理员，确认成为本群群主吗？成为群主后将拥有完整的群管理权限。',
-      confirmText: '确认成为群主',
+      title: isAdminTakeover ? '接任群主' : '认领群主',
+      message:
+          isAdminTakeover
+              ? '当前群暂无群主，作为管理员可立即接任群主。确认以当前身份接任吗？'
+              : '当前群暂无群主和管理员，确认以当前身份认领成为本群群主吗？成为群主后将拥有完整的群管理权限。',
+      confirmText: isAdminTakeover ? '确认接任群主' : '确认认领群主',
     );
     if (!confirmed || !mounted) return;
     try {
@@ -547,7 +557,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
       setState(() => _roomMgmtSettings = updated);
       await controller.refresh();
       if (!mounted) return;
-      showToast('您已成为本群群主', type: ToastType.success);
+      showToast(
+        isAdminTakeover ? '您已接任本群群主' : '您已认领成为本群群主',
+        type: ToastType.success,
+      );
       if (openManagementAfter) {
         await _openGroupManagementCenter();
       }
@@ -568,6 +581,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     final owners = members.where((m) => m.isCreator).toList();
     final admins = members.where((m) => !m.isCreator && m.isAdmin).toList();
     final canClaim = _roomMgmtSettings?.canClaimCreator == true;
+    final isAdminTakeover = _roomMgmtSettings?.ownershipRecoveryAction == 1;
     await showDialog<void>(
       context: context,
       builder:
@@ -590,10 +604,12 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                       ),
                       child: Row(
                         children: <Widget>[
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              '当前群暂无群主和管理员，您可以成为本群群主。',
-                              style: TextStyle(fontSize: 12.5),
+                              isAdminTakeover
+                                  ? '当前群暂无群主，您作为管理员可以接任群主。'
+                                  : '当前群暂无群主和管理员，您可以认领成为本群群主。',
+                              style: const TextStyle(fontSize: 12.5),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -602,7 +618,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                               Navigator.pop(ctx);
                               _claimCreator();
                             },
-                            child: const Text('成为群主'),
+                            child: Text(isAdminTakeover ? '接任群主' : '认领群主'),
                           ),
                         ],
                       ),

@@ -277,21 +277,79 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
         }
 
         if (s != null && !s.canEnterManagement) {
+          final isAdminTakeover = s.ownershipRecoveryAction == 1;
+          final title =
+              s.canClaimCreator
+                  ? (isAdminTakeover
+                      ? '当前群暂无群主（管理员可接任）'
+                      : '当前群暂无群主和管理员（可认领群主）')
+                  : '需要群管理权限才能进入';
+          final desc =
+              s.recoveryUnavailableReason?.trim().isNotEmpty == true
+                  ? s.recoveryUnavailableReason!
+                  : '仅群主、管理员或被授予对应管理权限的群成员可进入群管理中心';
           final denied = Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(
-                  Icons.lock_outline_rounded,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  '需要群管理权限才能进入',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    Icons.lock_outline_rounded,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    desc,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (s.canClaimCreator) ...<Widget>[
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () async {
+                        try {
+                          final targetSessionUnitId =
+                              controller.sessionUnitId ?? widget.sessionUnitId;
+                          if (targetSessionUnitId == null ||
+                              targetSessionUnitId.isEmpty) {
+                            showToast('缺少当前会话单元标识', type: ToastType.error);
+                            return;
+                          }
+                          await ref
+                              .read(groupManagementApiProvider)
+                              .claimCreator(targetSessionUnitId);
+                          if (!context.mounted) return;
+                          showToast(
+                            isAdminTakeover ? '已成功接任群主' : '已成功认领群主',
+                            type: ToastType.success,
+                          );
+                          await controller.initialize();
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          showToast('操作失败：$e', type: ToastType.error);
+                        }
+                      },
+                      child: Text(
+                        isAdminTakeover ? '以当前身份接任群主' : '以当前身份认领群主',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           );
           return widget.isDialog
@@ -1402,13 +1460,16 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
     if (unitId == null || unitId.isEmpty) return;
     final api = ref.read(groupManagementApiProvider);
     final selectedIds = <String>{};
+    String? loadError;
     try {
       final bound = await api.organizationRoles(
         sessionUnitId: unitId,
         organizationId: org.id,
       );
       selectedIds.addAll(bound.map((e) => e.id));
-    } catch (_) {}
+    } catch (e) {
+      loadError = e.toString();
+    }
     if (!context.mounted) return;
     final customRoles = controller.roles
         .where((r) => r.name != '管理员' && r.name != 'Admin')
@@ -1424,7 +1485,41 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
                     width: 360,
                     height: 280,
                     child:
-                        customRoles.isEmpty
+                        loadError != null
+                            ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  Text(
+                                    '加载组织角色失败：$loadError',
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextButton(
+                                    onPressed: () async {
+                                      try {
+                                        final bound = await api.organizationRoles(
+                                          sessionUnitId: unitId,
+                                          organizationId: org.id,
+                                        );
+                                        setDialogState(() {
+                                          selectedIds
+                                            ..clear()
+                                            ..addAll(bound.map((e) => e.id));
+                                          loadError = null;
+                                        });
+                                      } catch (e) {
+                                        setDialogState(() {
+                                          loadError = e.toString();
+                                        });
+                                      }
+                                    },
+                                    child: const Text('重试加载'),
+                                  ),
+                                ],
+                              ),
+                            )
+                            : customRoles.isEmpty
                             ? const Center(child: Text('暂无自定义群角色'))
                             : ListView(
                               children: <Widget>[
@@ -1450,7 +1545,10 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
                       child: const Text('取消'),
                     ),
                     FilledButton(
-                      onPressed: () => Navigator.pop(ctx, true),
+                      onPressed:
+                          loadError != null
+                              ? null
+                              : () => Navigator.pop(ctx, true),
                       child: const Text('保存绑定'),
                     ),
                   ],
@@ -1589,12 +1687,19 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
     );
     if (confirmed != true) return;
     try {
-      await api.batchSetMemberOrganizations(
-        sessionUnitId: unitId,
-        memberSessionUnitIds: selectedMemberIds.toList(),
-        organizationIds: mode == 3 ? const <String>[] : selectedOrgIds.toList(),
-        mode: mode,
-      );
+      final allIds = selectedMemberIds.toList();
+      const chunkSize = 200;
+      for (var i = 0; i < allIds.length; i += chunkSize) {
+        final end =
+            (i + chunkSize) > allIds.length ? allIds.length : i + chunkSize;
+        await api.batchSetMemberOrganizations(
+          sessionUnitId: unitId,
+          memberSessionUnitIds: allIds.sublist(i, end),
+          organizationIds:
+              mode == 3 ? const <String>[] : selectedOrgIds.toList(),
+          mode: mode,
+        );
+      }
       await _loadMembers();
       showToast('已批量更新成员组织归属', type: ToastType.success);
     } catch (e) {

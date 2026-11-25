@@ -45,10 +45,35 @@ class GroupManagementController extends ChangeNotifier {
               ? loadedSettings!.sessionId
               : sessionId;
 
+      final canOrgs =
+          loadedSettings == null ||
+          loadedSettings.canManageOrgs ||
+          loadedSettings.canManageMembers;
+      final canRoles =
+          loadedSettings == null ||
+          loadedSettings.canManageRoles ||
+          loadedSettings.canManagePermissions;
+      final canDefs =
+          loadedSettings == null ||
+          loadedSettings.canManagePermissions ||
+          loadedSettings.canManageRoles;
+
       final values = await Future.wait(<Future<List<IdNameItem>>>[
-        _api.organizations(effectiveSessionId),
-        _api.roles(effectiveSessionId),
-        _api.permissionDefinitions(),
+        canOrgs
+            ? _api
+                .organizations(effectiveSessionId)
+                .catchError((_) => const <IdNameItem>[])
+            : Future<List<IdNameItem>>.value(const <IdNameItem>[]),
+        canRoles
+            ? _api
+                .roles(effectiveSessionId)
+                .catchError((_) => const <IdNameItem>[])
+            : Future<List<IdNameItem>>.value(const <IdNameItem>[]),
+        canDefs
+            ? _api
+                .permissionDefinitions()
+                .catchError((_) => const <IdNameItem>[])
+            : Future<List<IdNameItem>>.value(const <IdNameItem>[]),
       ]);
       organizations = values[0];
       roles = values[1];

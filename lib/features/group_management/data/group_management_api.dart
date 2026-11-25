@@ -64,6 +64,11 @@ class RoomManagementSettings {
     this.canToggleAllMuted = false,
     this.canManageJoinPolicies = false,
     this.canTransferOrDissolve = false,
+    this.ownershipState = 0,
+    this.creatorSessionUnitId,
+    this.ownershipRecoveryAction = 0,
+    this.recoveryUnavailableReason,
+    this.ownershipVersion = 0,
   });
 
   factory RoomManagementSettings.fromJson(Map<String, dynamic> json) {
@@ -108,6 +113,11 @@ class RoomManagementSettings {
           ? json['canManageJoinPolicies'] == true
           : json['canManageSettings'] == true,
       canTransferOrDissolve: json['canTransferOrDissolve'] == true,
+      ownershipState: parseInt(json['ownershipState'], 0),
+      creatorSessionUnitId: json['creatorSessionUnitId']?.toString(),
+      ownershipRecoveryAction: parseInt(json['ownershipRecoveryAction'], 0),
+      recoveryUnavailableReason: json['recoveryUnavailableReason']?.toString(),
+      ownershipVersion: parseInt(json['ownershipVersion'], 0),
     );
   }
 
@@ -140,6 +150,11 @@ class RoomManagementSettings {
   final bool canToggleAllMuted;
   final bool canManageJoinPolicies;
   final bool canTransferOrDissolve;
+  final int ownershipState;
+  final String? creatorSessionUnitId;
+  final int ownershipRecoveryAction;
+  final String? recoveryUnavailableReason;
+  final int ownershipVersion;
 
   int get totalPendingCount =>
       canEnterManagement
