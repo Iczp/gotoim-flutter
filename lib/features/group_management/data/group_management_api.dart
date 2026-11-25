@@ -12,9 +12,150 @@ class IdNameItem {
   final String? parentId;
 }
 
+class RoomManagementSettings {
+  const RoomManagementSettings({
+    required this.sessionId,
+    required this.roomId,
+    required this.name,
+    this.portrait,
+    this.description,
+    this.verificationMethod = 0,
+    this.isAllMuted = false,
+    this.invitePolicy = 0,
+    this.allowJoinChannels = 7,
+    this.pendingJoinRequestCount = 0,
+    this.pendingAnnouncementCount = 0,
+    this.isCreator = false,
+    this.isAdmin = false,
+    this.canEnterManagement = false,
+    this.canManageSettings = false,
+    this.canManageJoinRequests = false,
+    this.canManageAnnouncements = false,
+    this.canManageMembers = false,
+    this.canManageOrgs = false,
+    this.canManageRoles = false,
+    this.canManagePermissions = false,
+    this.canTransferOrDissolve = false,
+  });
+
+  factory RoomManagementSettings.fromJson(Map<String, dynamic> json) {
+    int parseInt(Object? v, int fallback) =>
+        v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? fallback;
+
+    return RoomManagementSettings(
+      sessionId: json['sessionId']?.toString() ?? '',
+      roomId: parseInt(json['roomId'], 0),
+      name: json['name']?.toString() ?? '',
+      portrait: json['portrait']?.toString(),
+      description: json['description']?.toString(),
+      verificationMethod: parseInt(json['verificationMethod'], 0),
+      isAllMuted: json['isAllMuted'] == true,
+      invitePolicy: parseInt(json['invitePolicy'], 0),
+      allowJoinChannels: parseInt(json['allowJoinChannels'], 7),
+      pendingJoinRequestCount: parseInt(json['pendingJoinRequestCount'], 0),
+      pendingAnnouncementCount: parseInt(json['pendingAnnouncementCount'], 0),
+      isCreator: json['isCreator'] == true,
+      isAdmin: json['isAdmin'] == true,
+      canEnterManagement: json['canEnterManagement'] == true,
+      canManageSettings: json['canManageSettings'] == true,
+      canManageJoinRequests: json['canManageJoinRequests'] == true,
+      canManageAnnouncements: json['canManageAnnouncements'] == true,
+      canManageMembers: json['canManageMembers'] == true,
+      canManageOrgs: json['canManageOrgs'] == true,
+      canManageRoles: json['canManageRoles'] == true,
+      canManagePermissions: json['canManagePermissions'] == true,
+      canTransferOrDissolve: json['canTransferOrDissolve'] == true,
+    );
+  }
+
+  final String sessionId;
+  final int roomId;
+  final String name;
+  final String? portrait;
+  final String? description;
+  final int verificationMethod;
+  final bool isAllMuted;
+  final int invitePolicy;
+  final int allowJoinChannels;
+  final int pendingJoinRequestCount;
+  final int pendingAnnouncementCount;
+  final bool isCreator;
+  final bool isAdmin;
+  final bool canEnterManagement;
+  final bool canManageSettings;
+  final bool canManageJoinRequests;
+  final bool canManageAnnouncements;
+  final bool canManageMembers;
+  final bool canManageOrgs;
+  final bool canManageRoles;
+  final bool canManagePermissions;
+  final bool canTransferOrDissolve;
+
+  int get totalPendingCount =>
+      canEnterManagement
+          ? (pendingJoinRequestCount + pendingAnnouncementCount)
+          : 0;
+}
+
 class GroupManagementApi {
   GroupManagementApi(this._client);
   final ApiClient _client;
+
+  Future<RoomManagementSettings> getManagementSettings(
+    String sessionUnitId,
+  ) async {
+    final json = await _client.get<Map<String, dynamic>>(
+      '/api/chat/room/management-settings/${Uri.encodeComponent(sessionUnitId)}',
+    );
+    return RoomManagementSettings.fromJson(json);
+  }
+
+  Future<RoomManagementSettings> updatePolicies({
+    required String sessionUnitId,
+    int? verificationMethod,
+    bool? isAllMuted,
+    int? invitePolicy,
+    int? allowJoinChannels,
+    String? description,
+  }) async {
+    final json = await _client.post<Map<String, dynamic>>(
+      '/api/chat/room/update-policies',
+      data: <String, Object?>{
+        'sessionUnitId': sessionUnitId,
+        if (verificationMethod != null)
+          'verificationMethod': verificationMethod,
+        if (isAllMuted != null) 'isAllMuted': isAllMuted,
+        if (invitePolicy != null) 'invitePolicy': invitePolicy,
+        if (allowJoinChannels != null) 'allowJoinChannels': allowJoinChannels,
+        if (description != null) 'description': description,
+      },
+    );
+    return RoomManagementSettings.fromJson(json);
+  }
+
+  Future<void> updateRoomName({
+    required String sessionUnitId,
+    required String name,
+  }) => _client.post<Map<String, dynamic>>(
+    '/api/chat/room/update-name/${Uri.encodeComponent(sessionUnitId)}',
+    query: <String, Object?>{'name': name},
+  );
+
+  Future<void> transferCreator({
+    required String sessionUnitId,
+    required String targetSessionUnitId,
+  }) => _client.post<Map<String, dynamic>>(
+    '/api/chat/room/transfer-creator',
+    query: <String, Object?>{
+      'sessionUnitId': sessionUnitId,
+      'targetSessionUnitId': targetSessionUnitId,
+    },
+  );
+
+  Future<void> dissolveRoom(String sessionUnitId) =>
+      _client.post<Map<String, dynamic>>(
+        '/api/chat/room/dissolve/${Uri.encodeComponent(sessionUnitId)}',
+      );
 
   Future<List<IdNameItem>> organizations(String sessionId) async {
     final json = await _client.get<Map<String, dynamic>>(
@@ -39,7 +180,9 @@ class GroupManagementApi {
     final result = <IdNameItem>[];
     void visit(Object? value) {
       if (value is List) {
-        for (final item in value) visit(item);
+        for (final item in value) {
+          visit(item);
+        }
       } else if (value is Map) {
         final map = value.cast<String, dynamic>();
         if (map['id'] != null && map['isGroup'] != true) {
@@ -68,10 +211,20 @@ class GroupManagementApi {
     },
   );
 
+  Future<void> deleteOrganization(String organizationId) =>
+      _client.post<Map<String, dynamic>>(
+        '/api/chat/session-organization/${Uri.encodeComponent(organizationId)}/delete',
+      );
+
   Future<void> createRole({required String sessionId, required String name}) =>
       _client.post<Map<String, dynamic>>(
         '/api/chat/session-role/$sessionId',
         query: <String, Object?>{'name': name},
+      );
+
+  Future<void> deleteRole(String roleId) =>
+      _client.post<Map<String, dynamic>>(
+        '/api/chat/session-role/${Uri.encodeComponent(roleId)}/delete',
       );
 
   Future<Map<String, dynamic>> rolePermissions(String roleId) => _client
@@ -92,12 +245,27 @@ class GroupManagementApi {
     data: enabled ? 1 : 0,
   );
 
+  Future<void> setAllRolePermissions({
+    required String roleId,
+    required bool enabled,
+  }) => _client.post<Map<String, dynamic>>(
+    '/api/chat/session-role/${Uri.encodeComponent(roleId)}/set-all-permissions',
+    data: <String, Object?>{'isEnabled': enabled, 'value': enabled ? 1 : 0},
+  );
+
+  Future<void> setAdmin(String memberSessionUnitId, bool isAdmin) =>
+      _client.post<Map<String, dynamic>>(
+        '/api/chat/session-unit-setting/set-admin/${Uri.encodeComponent(memberSessionUnitId)}',
+        query: <String, Object?>{'isAdmin': isAdmin},
+      );
+
   List<IdNameItem> _items(Map<String, dynamic> json) {
     final raw = json['items'];
     return raw is List
         ? raw
             .whereType<Map>()
             .map((item) => IdNameItem.fromJson(item.cast<String, dynamic>()))
+            .where((item) => item.id.isNotEmpty)
             .toList(growable: false)
         : const <IdNameItem>[];
   }

@@ -10,11 +10,15 @@ class AnnouncementManagePage extends ConsumerStatefulWidget {
   const AnnouncementManagePage({
     required this.sessionId,
     this.sessionTitle,
+    this.isEmbedded = false,
+    this.onChanged,
     super.key,
   });
 
   final String sessionId;
   final String? sessionTitle;
+  final bool isEmbedded;
+  final VoidCallback? onChanged;
 
   static Future<bool?> open(
     BuildContext context, {
@@ -67,6 +71,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
     if (saved != null) {
       _hasChanged = true;
       await _controller.loadList();
+      widget.onChanged?.call();
     }
   }
 
@@ -135,6 +140,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
         sendMessageNotification: sendNotify,
       );
       _hasChanged = true;
+      widget.onChanged?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(approved ? '审核已通过' : '已驳回公告')),
@@ -187,6 +193,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
           );
       _hasChanged = true;
       await _controller.loadList();
+      widget.onChanged?.call();
     }
   }
 
@@ -212,6 +219,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
     if (confirm == true) {
       await _controller.delete(item.id);
       _hasChanged = true;
+      widget.onChanged?.call();
     }
   }
 
@@ -268,6 +276,99 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
           final canCreate = perms?.canCreate ?? true;
           final canPublish = perms?.canPublish ?? false;
 
+          final body = Column(
+            children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Row(
+                  children: [
+                    _filterChip('全部 (${allItems.length})', null),
+                    const SizedBox(width: 6),
+                    _filterChip('待审核 ($pendingCount)', 3),
+                    const SizedBox(width: 6),
+                    _filterChip('已发布 ($publishedCount)', 1),
+                    const SizedBox(width: 6),
+                    _filterChip('草稿 ($draftCount)', 0),
+                    const SizedBox(width: 6),
+                    _filterChip('已驳回 ($rejectedCount)', 4),
+                    const SizedBox(width: 6),
+                    _filterChip('已撤回 ($revokedCount)', 2),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 36,
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText: '搜索标题、内容或发布人...',
+                            prefixIcon: const Icon(Icons.search, size: 18),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(color: colorScheme.outlineVariant),
+                            ),
+                          ),
+                          onChanged: (v) => setState(() => _keyword = v),
+                        ),
+                      ),
+                    ),
+                    if (widget.isEmbedded && canCreate) ...[
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.add, size: 16),
+                        label: Text(canPublish ? '新建公告' : '投稿'),
+                        onPressed: () => _openCreate(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _controller.loading && allItems.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : filtered.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '当前筛选状态下暂无公告',
+                                  style: TextStyle(color: colorScheme.outline),
+                                ),
+                                if (canCreate && allItems.isEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  FilledButton.tonalIcon(
+                                    icon: const Icon(Icons.add),
+                                    label: Text(canPublish ? '发布公告' : '提交公告审阅'),
+                                    onPressed: () => _openCreate(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _controller.loadList,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) =>
+                                  _buildManageCard(context, filtered[index]),
+                            ),
+                          ),
+              ),
+            ],
+          );
+
+          if (widget.isEmbedded) {
+            return body;
+          }
+
           return Scaffold(
             appBar: AppBar(
               title: Text(perms?.hasManagementRole != false ? '公告管理与审核' : '我的公告投稿'),
@@ -280,80 +381,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
                   ),
               ],
             ),
-            body: Column(
-              children: [
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                  child: Row(
-                    children: [
-                      _filterChip('全部 (${allItems.length})', null),
-                      const SizedBox(width: 6),
-                      _filterChip('待审核 ($pendingCount)', 3),
-                      const SizedBox(width: 6),
-                      _filterChip('已发布 ($publishedCount)', 1),
-                      const SizedBox(width: 6),
-                      _filterChip('草稿 ($draftCount)', 0),
-                      const SizedBox(width: 6),
-                      _filterChip('已驳回 ($rejectedCount)', 4),
-                      const SizedBox(width: 6),
-                      _filterChip('已撤回 ($revokedCount)', 2),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                  child: SizedBox(
-                    height: 36,
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: '搜索标题、内容或发布人...',
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(color: colorScheme.outlineVariant),
-                        ),
-                      ),
-                      onChanged: (v) => setState(() => _keyword = v),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: _controller.loading && allItems.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
-                      : filtered.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '当前筛选状态下暂无公告',
-                                    style: TextStyle(color: colorScheme.outline),
-                                  ),
-                                  if (canCreate && allItems.isEmpty) ...[
-                                    const SizedBox(height: 12),
-                                    FilledButton.tonalIcon(
-                                      icon: const Icon(Icons.add),
-                                      label: Text(canPublish ? '发布公告' : '提交公告审阅'),
-                                      onPressed: () => _openCreate(),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _controller.loadList,
-                              child: ListView.builder(
-                                padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-                                itemCount: filtered.length,
-                                itemBuilder: (context, index) =>
-                                    _buildManageCard(context, filtered[index]),
-                              ),
-                            ),
-                ),
-              ],
-            ),
+            body: body,
           );
         },
       ),
@@ -482,6 +510,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
                       onPressed: () async {
                         await _controller.submitReview(item.id);
                         _hasChanged = true;
+                        widget.onChanged?.call();
                       },
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
@@ -494,6 +523,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
                       onPressed: () async {
                         await _controller.publish(item.id);
                         _hasChanged = true;
+                        widget.onChanged?.call();
                       },
                       style: FilledButton.styleFrom(
                         visualDensity: VisualDensity.compact,
@@ -530,6 +560,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
                       onPressed: () async {
                         await _controller.revoke(item.id);
                         _hasChanged = true;
+                        widget.onChanged?.call();
                       },
                       style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
                       child: const Text('撤回', style: TextStyle(fontSize: 12)),

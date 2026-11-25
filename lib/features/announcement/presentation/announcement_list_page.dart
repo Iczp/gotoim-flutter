@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/announcement_providers.dart';
 import '../data/models/session_announcement.dart';
 import 'announcement_edit_page.dart';
-import 'announcement_manage_page.dart';
 import 'widgets/announcement_detail_dialog.dart';
 
 class AnnouncementListPage extends ConsumerStatefulWidget {
@@ -69,14 +68,6 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
     }
   }
 
-  Future<void> _openManage() async {
-    await AnnouncementManagePage.open(
-      context,
-      sessionId: widget.sessionId,
-    );
-    await _controller.loadList();
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -88,9 +79,6 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
         final perms = _controller.permissions;
         final hasManagementRole = perms?.hasManagementRole ?? widget.canManage;
         final canCreate = perms?.canCreate ?? hasManagementRole;
-        final showManageEntry = perms?.hasManageEntry ?? widget.canManage;
-        final pendingCount = perms?.pendingReviewCount ?? 0;
-        final manageLabel = hasManagementRole ? '管理' : '我的投稿';
 
         return Scaffold(
           appBar: AppBar(
@@ -102,22 +90,9 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
                   tooltip: hasManagementRole || (perms?.canPublish == true) ? '发布公告' : '投稿',
                   onPressed: _openCreate,
                 ),
-              if (showManageEntry)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Badge(
-                    isLabelVisible: pendingCount > 0,
-                    label: Text('$pendingCount'),
-                    child: TextButton.icon(
-                      icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
-                      label: Text(manageLabel),
-                      onPressed: _openManage,
-                    ),
-                  ),
-                ),
             ],
           ),
-          body: _buildBody(context, theme, colorScheme, showManageEntry, manageLabel),
+          body: _buildBody(context, theme, colorScheme),
         );
       },
     );
@@ -127,8 +102,6 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
     BuildContext context,
     ThemeData theme,
     ColorScheme colorScheme,
-    bool showManageEntry,
-    String manageLabel,
   ) {
     if (_controller.loading && _controller.items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -146,14 +119,6 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
             ),
             const SizedBox(height: 12),
             Text('当前会话暂无已发布公告', style: TextStyle(color: colorScheme.outline)),
-            if (showManageEntry) ...[
-              const SizedBox(height: 16),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.tune),
-                label: Text('打开$manageLabel'),
-                onPressed: _openManage,
-              ),
-            ],
           ],
         ),
       );

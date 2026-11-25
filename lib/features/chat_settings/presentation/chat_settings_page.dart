@@ -18,6 +18,8 @@ import '../../user/presentation/profile_page.dart';
 import '../../mine/presentation/my_qr_code_dialog.dart';
 import '../../mine/presentation/my_qr_code_page.dart';
 import '../../group/data/room_api.dart';
+import '../../group_management/application/group_management_controller.dart';
+import '../../group_management/data/group_management_api.dart';
 import '../../group_management/presentation/group_management_page.dart';
 import '../../announcement/presentation/announcement_list_page.dart';
 import '../application/chat_settings_controller.dart';
@@ -25,7 +27,6 @@ import 'chat_background_page.dart';
 import 'chat_background_preview_page.dart';
 import 'member_list_page.dart';
 import 'member_tile.dart';
-import 'room_join_requests_page.dart';
 import '../../../core/security/widgets/report_dialog.dart';
 
 enum ChatSettingsResult { messagesCleared, sessionLeft }
@@ -53,6 +54,7 @@ class ChatSettingsPage extends ConsumerStatefulWidget {
 
 class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   late final ChatSettingsController controller;
+  RoomManagementSettings? _roomMgmtSettings;
 
   @override
   void initState() {
@@ -63,11 +65,30 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
       ownerId: widget.ownerId,
       sessionUnitId: widget.sessionUnitId,
       roomApi: ref.read(roomApiProvider),
-    )..initialize();
+    )..addListener(_onControllerUpdated);
+    controller.initialize();
+  }
+
+  void _onControllerUpdated() {
+    if (controller.isGroup && _roomMgmtSettings == null) {
+      _loadRoomMgmtSettings();
+    }
+  }
+
+  Future<void> _loadRoomMgmtSettings() async {
+    try {
+      final res = await ref
+          .read(groupManagementApiProvider)
+          .getManagementSettings(widget.sessionUnitId);
+      if (mounted) {
+        setState(() => _roomMgmtSettings = res);
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    controller.removeListener(_onControllerUpdated);
     controller.dispose();
     super.dispose();
   }
@@ -302,78 +323,21 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                         }
                       },
                     ),
-                    if (controller.objectType == 2 && controller.isCreator)
+                    if (controller.isGroup)
                       Cell(
-                        icon: const Icon(Icons.verified_user_outlined),
-                        title: '入群需要验证',
-                        subtitle: '开启后新成员加群或扫码入群需管理员审批',
-                        switchValue: controller.isJoinVerificationRequired,
-                        disabled: controller.updating,
-                        onSwitchChanged:
-                            controller.updating
-                                ? null
-                                : (value) async {
-                                  await controller.setJoinVerificationRequired(
-                                    value,
-                                  );
-                                  if (!mounted) return;
-                                  if (controller.error != null) {
-                                    showToast(
-                                      '设置失败：${controller.error}',
-                                      type: ToastType.error,
-                                    );
-                                  } else {
-                                    showToast(
-                                      value ? '已开启入群验证' : '已关闭入群验证',
-                                      type: ToastType.success,
-                                    );
-                                  }
-                                },
-                      ),
-                    if (controller.objectType == 2 &&
-                        controller.destinationId != null)
-                      Cell(
-                        icon: const Icon(Icons.person_add_alt_1_outlined),
-                        title: '入群申请',
-                        subtitle: '查看并审批入群验证请求',
+                        icon: const Icon(Icons.account_tree_outlined),
+                        title: '组织部门',
+                        subtitle: '查看群组织架构',
                         showArrow: true,
-                        onTap: () {
-                          final destinationId = controller.destinationId!;
-                          final isDesktop =
-                              widget.isDrawer ||
-                              MediaQuery.sizeOf(context).width >= 720;
-                          if (isDesktop) {
-                            showDesktopModalDialog<void>(
-                              context: context,
-                              title: '入群申请',
-                              subtitle: controller.title,
-                              width: 560,
-                              height: 580,
-                              child: RoomJoinRequestsPage(
-                                destinationId: destinationId,
-                                handlerSessionUnitId: controller.sessionUnitId,
-                                isDialog: true,
-                              ),
-                            );
-                          } else {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder:
-                                    (_) => RoomJoinRequestsPage(
-                                      destinationId: destinationId,
-                                      handlerSessionUnitId:
-                                          controller.sessionUnitId,
-                                    ),
-                              ),
-                            );
-                          }
-                        },
+                        onTap: controller.sessionId == null
+                            ? null
+                            : () => _openOrgViewerDialog(controller.sessionId!),
                       ),
                     if (controller.isGroup)
                       Cell(
                         icon: const Icon(Icons.campaign_outlined),
-                        title: '群公告与通知',
-                        subtitle: '查看历史公告与已读统计',
+                        title: '群公告',
+                        subtitle: '查看群公告',
                         showArrow: true,
                         onTap: controller.sessionId == null
                             ? null
@@ -389,31 +353,63 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                       Cell(
                         icon: const Icon(Icons.admin_panel_settings_outlined),
                         title: '群管理',
-                        subtitle: '组织部门、角色与权限',
+                        subtitle:
+                            (_roomMgmtSettings?.canEnterManagement ??
+                                    controller.isCreator)
+                                ? '设置、审核与权限'
+                                : '需管理权限',
+                        trailing:
+                            (_roomMgmtSettings?.totalPendingCount ?? 0) > 0
+                                ? Badge(
+                                    label: Text(
+                                      '${_roomMgmtSettings!.totalPendingCount}',
+                                    ),
+                                  )
+                                : null,
                         showArrow: true,
                         onTap:
                             controller.sessionId == null
                                 ? null
-                                : () {
+                                : () async {
+                                    final canEnter =
+                                        _roomMgmtSettings?.canEnterManagement ??
+                                        controller.isCreator;
+                                    if (!canEnter) {
+                                      showToast(
+                                        '需要群管理权限才能进入',
+                                        type: ToastType.info,
+                                      );
+                                      return;
+                                    }
                                     final isDesktop =
                                         widget.isDrawer ||
                                         MediaQuery.sizeOf(context).width >= 720;
                                     if (isDesktop) {
-                                      showDesktopModalDialog<void>(
+                                      await showDesktopModalDialog<void>(
                                         context: context,
-                                        title: '群管理',
+                                        title: '群管理中心',
                                         subtitle: controller.title,
-                                        width: 580,
-                                        height: 620,
+                                        width: 920,
+                                        height: 680,
                                         child: GroupManagementPage(
                                           sessionId: controller.sessionId!,
+                                          sessionUnitId: controller.sessionUnitId,
+                                          ownerId: widget.ownerId,
+                                          destinationId: controller.destinationId,
                                           isDialog: true,
                                         ),
                                       );
+                                      await _loadRoomMgmtSettings();
+                                      await controller.refresh();
                                     } else {
-                                      context.push(
-                                        '/group-management/${Uri.encodeComponent(controller.sessionId!)}',
+                                      final destQuery =
+                                          controller.destinationId != null
+                                              ? '&destinationId=${controller.destinationId}'
+                                              : '';
+                                      await context.push(
+                                        '/group-management/${Uri.encodeComponent(controller.sessionId!)}?sessionUnitId=${Uri.encodeQueryComponent(controller.sessionUnitId)}&ownerId=${widget.ownerId}$destQuery',
                                       );
+                                      await _loadRoomMgmtSettings();
                                     }
                                   },
                       ),
@@ -489,6 +485,48 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
 
   Widget _section(List<Widget> children, {String? title}) =>
       CellGroup(title: title, children: children);
+
+  Future<void> _openOrgViewerDialog(String sessionId) async {
+    List<IdNameItem> orgs = const <IdNameItem>[];
+    Object? loadErr;
+    try {
+      orgs = await ref.read(groupManagementApiProvider).organizations(sessionId);
+    } catch (e) {
+      loadErr = e;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('群组织架构（只读）'),
+            content: SizedBox(
+              width: 380,
+              height: 320,
+              child:
+                  loadErr != null
+                      ? Center(child: Text('加载失败：$loadErr'))
+                      : orgs.isEmpty
+                      ? const Center(child: Text('当前群暂未配置组织部门'))
+                      : ListView.builder(
+                        itemCount: orgs.length,
+                        itemBuilder:
+                            (_, i) => ListTile(
+                              leading: const Icon(Icons.account_tree_outlined),
+                              title: Text(orgs[i].name),
+                              subtitle: Text('ID: ${orgs[i].id}'),
+                            ),
+                      ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('关闭'),
+              ),
+            ],
+          ),
+    );
+  }
 
   String? _avatarFor(SessionSummary friend) {
     final destination = friend.raw['destination'];
