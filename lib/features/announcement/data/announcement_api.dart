@@ -5,11 +5,18 @@ class AnnouncementApi {
   AnnouncementApi(this._client);
   final ApiClient _client;
 
-  Future<SessionAnnouncement?> getPinned(String sessionId) async {
+  Future<SessionAnnouncement?> getPinned(
+    String sessionId, {
+    String? sessionUnitId,
+  }) async {
     try {
       final json = await _client.get<Map<String, dynamic>>(
         '/api/chat/session-announcement/pinned',
-        query: <String, Object?>{'sessionId': sessionId},
+        query: <String, Object?>{
+          'sessionId': sessionId,
+          if (sessionUnitId != null && sessionUnitId.isNotEmpty)
+            'sessionUnitId': sessionUnitId,
+        },
       );
       if (json.isEmpty || json['id'] == null) return null;
       return SessionAnnouncement.fromJson(json);
@@ -18,23 +25,31 @@ class AnnouncementApi {
     }
   }
 
-  Future<List<SessionAnnouncement>> getPinnedList(String sessionId) async {
+  Future<List<SessionAnnouncement>> getPinnedList(
+    String sessionId, {
+    String? sessionUnitId,
+  }) async {
     try {
       final res = await _client.get<List<dynamic>>(
         '/api/chat/session-announcement/pinned-list/$sessionId',
+        query:
+            sessionUnitId != null && sessionUnitId.isNotEmpty
+                ? <String, Object?>{'sessionUnitId': sessionUnitId}
+                : null,
       );
       return res
           .whereType<Map<String, dynamic>>()
           .map(SessionAnnouncement.fromJson)
           .toList(growable: false);
     } catch (_) {
-      final single = await getPinned(sessionId);
+      final single = await getPinned(sessionId, sessionUnitId: sessionUnitId);
       return single != null ? [single] : const [];
     }
   }
 
   Future<List<SessionAnnouncement>> getList({
     required String sessionId,
+    String? sessionUnitId,
     String? keyword,
     bool? isPinned,
     bool includeDrafts = false,
@@ -47,6 +62,8 @@ class AnnouncementApi {
         '/api/chat/session-announcement',
         query: <String, Object?>{
           'SessionId': sessionId,
+          if (sessionUnitId != null && sessionUnitId.isNotEmpty)
+            'SessionUnitId': sessionUnitId,
           if (keyword != null && keyword.isNotEmpty) 'Keyword': keyword,
           if (isPinned != null) 'IsPinned': isPinned,
           if (includeDrafts) 'IncludeDrafts': true,
@@ -67,18 +84,30 @@ class AnnouncementApi {
     }
   }
 
-  Future<SessionAnnouncementPermissions?> getPermissions(String sessionId) async {
+  Future<SessionAnnouncementPermissions?> getPermissions(
+    String sessionId, {
+    String? sessionUnitId,
+  }) async {
     if (sessionId.isEmpty) return null;
+    final query =
+        sessionUnitId != null && sessionUnitId.isNotEmpty
+            ? <String, Object?>{'sessionUnitId': sessionUnitId}
+            : null;
     try {
       final json = await _client.get<Map<String, dynamic>>(
         '/api/chat/session-announcement/permissions/$sessionId',
+        query: query,
       );
       return SessionAnnouncementPermissions.fromJson(json);
     } catch (_) {
       try {
         final json = await _client.get<Map<String, dynamic>>(
           '/api/chat/session-announcement/permissions',
-          query: <String, Object?>{'sessionId': sessionId},
+          query: <String, Object?>{
+            'sessionId': sessionId,
+            if (sessionUnitId != null && sessionUnitId.isNotEmpty)
+              'sessionUnitId': sessionUnitId,
+          },
         );
         return SessionAnnouncementPermissions.fromJson(json);
       } catch (_) {
@@ -118,10 +147,17 @@ class AnnouncementApi {
     }
   }
 
-  Future<SessionAnnouncement?> getDetail(String id) async {
+  Future<SessionAnnouncement?> getDetail(
+    String id, {
+    String? sessionUnitId,
+  }) async {
     try {
       final json = await _client.get<Map<String, dynamic>>(
         '/api/chat/session-announcement/$id',
+        query:
+            sessionUnitId != null && sessionUnitId.isNotEmpty
+                ? <String, Object?>{'sessionUnitId': sessionUnitId}
+                : null,
       );
       return SessionAnnouncement.fromJson(json);
     } catch (_) {
