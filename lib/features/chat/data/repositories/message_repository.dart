@@ -7,6 +7,7 @@ import '../../../../core/network/api_exception.dart';
 
 import '../../../../core/services/file/file_picker_service.dart';
 import '../../../session/data/datasources/session_dao.dart';
+import '../../../chat_settings/data/datasources/chat_member_dao.dart';
 import '../../../session/data/session_change_bus.dart';
 import '../../../session/data/models/session_summary_helpers.dart';
 import '../../../session/data/models/session_summary.dart';
@@ -21,12 +22,43 @@ class MessageRepository {
     required MessageApi api,
     required MessageDao dao,
     SessionDao? sessionDao,
+    ChatMemberDao? memberDao,
     SessionChangeBus? sessionChangeBus,
   }) : _api = api,
        _dao = dao,
        _sessionDao = sessionDao,
+       _memberDao = memberDao,
        _sessionChangeBus = sessionChangeBus;
   final MessageApi _api;
+  final ChatMemberDao? _memberDao;
+
+  /// 将本批消息中去重后的少量发送人顺带合并更新到本地成员表（失败不影响消息落库）。
+  Future<void> _piggybackSenders(
+    int ownerId,
+    String sessionUnitId,
+    Iterable<ChatMessage> items,
+  ) async {
+    final dao = _memberDao;
+    if (dao == null) return;
+    final distinct = <String, Map<String, dynamic>>{};
+    for (final item in items) {
+      final sender = item.senderSessionUnit;
+      final id = sender['id']?.toString();
+      if (id != null && id.isNotEmpty && sender['owner'] is Map) {
+        distinct.putIfAbsent(id, () => sender);
+      }
+    }
+    if (distinct.isEmpty) return;
+    try {
+      await dao.piggybackSenderUnits(
+        ownerId,
+        sessionUnitId,
+        distinct.values.toList(growable: false),
+      );
+    } catch (error) {
+      debugPrint('[piggybackSenders] skipped: $error');
+    }
+  }
   MessageApi get api => _api;
   Future<Map<String, dynamic>> usableTemplates(
     int ownerId, {
@@ -606,6 +638,7 @@ class MessageRepository {
       _checkActive();
       _checkActive();
       await _dao.upsertAll(remote.items);
+      await _piggybackSenders(ownerId, sessionUnitId, remote.items);
       final hasMore = remote.hasMore ?? remote.items.length >= limit;
       if (!hasMore) await _dao.markLoadedAll(sessionUnitId, true);
       await _dao.writeHistoryCoverage(ownerId, sessionUnitId, beforeScore, {
@@ -913,6 +946,7 @@ class MessageRepository {
     _checkActive();
     _checkActive();
     await _dao.upsertAll(items);
+    await _piggybackSenders(ownerId, sessionUnitId, items);
 
     // F2: Separate forward progress and snapshot coverage.
     // Watermark ONLY advances through confirmed forward latest pages!

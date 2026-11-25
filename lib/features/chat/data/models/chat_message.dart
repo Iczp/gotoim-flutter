@@ -47,6 +47,38 @@ Map<String, dynamic> hydrateCompactSenders(Map<String, dynamic> page) {
   };
 }
 
+/// 还原 `/api/chat/message/by-ids` 开启 `compactSenders=true` 时顶层 `senders` 字典到各状态行的 `message` 内。
+Map<String, dynamic> hydrateByIdsCompactSenders(Map<String, dynamic> response) {
+  final rawSenders = response['senders'] ?? response['Senders'];
+  final items = response['items'];
+  if (rawSenders is! Map || rawSenders.isEmpty || items is! List) {
+    return response;
+  }
+  final fakeExtraPage = <String, dynamic>{
+    'extra': <String, dynamic>{'senders': rawSenders},
+    'items': [
+      for (final row in items)
+        if (row is Map && row['message'] is Map) row['message'],
+    ],
+  };
+  final hydratedMessages = (hydrateCompactSenders(fakeExtraPage)['items'] as List)
+      .cast<Map<String, dynamic>>();
+  var idx = 0;
+  return <String, dynamic>{
+    ...response,
+    'items': [
+      for (final row in items)
+        if (row is Map && row['message'] is Map)
+          <String, dynamic>{
+            ...Map<String, dynamic>.from(row),
+            'message': hydratedMessages[idx++],
+          }
+        else
+          row,
+    ],
+  };
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.localId,

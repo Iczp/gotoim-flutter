@@ -32,6 +32,7 @@ import '../../session/data/models/session_summary_helpers.dart';
 import '../../session/data/datasources/session_dao.dart';
 import '../../session/data/repositories/session_repository.dart';
 import '../../session/data/session_change_bus.dart';
+import '../../chat_settings/data/datasources/chat_member_dao.dart';
 import '../../chat_settings/data/models/chat_member.dart';
 import '../../chat_settings/data/repositories/chat_settings_repository.dart';
 import '../presentation/widgets/chat_composer_controller.dart';
@@ -45,6 +46,7 @@ final messageRepositoryProvider = Provider<MessageRepository>((ref) {
       syncNamespace: ref.watch(appEnvironmentProvider).apiBaseUrl,
     ),
     sessionDao: SessionDao(ref.watch(unifiedDatabaseProvider)),
+    memberDao: ChatMemberDao(ref.watch(unifiedDatabaseProvider)),
     sessionChangeBus: ref.watch(sessionChangeBusProvider),
   );
   ref.onDispose(repository.dispose);

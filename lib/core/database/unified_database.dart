@@ -321,6 +321,21 @@ class UnifiedDatabase {
     );
   }
 
+  Future<Map<String, String>> readMemberRawByIds(List<String> memberIds) async {
+    if (memberIds.isEmpty) return const <String, String>{};
+    await initialize();
+    final placeholders = List.filled(memberIds.length, '?').join(',');
+    final rows = await _connection.runSelect(
+      'SELECT id, raw FROM Members WHERE id IN ($placeholders)',
+      memberIds.cast<Object?>(),
+    );
+    return <String, String>{
+      for (final row in rows)
+        if (row['id'] is String && row['raw'] is String)
+          row['id'] as String: row['raw'] as String,
+    };
+  }
+
   Future<void> upsertMemberRows(List<Map<String, Object?>> rows) async {
     await initialize();
     for (final row in rows) {

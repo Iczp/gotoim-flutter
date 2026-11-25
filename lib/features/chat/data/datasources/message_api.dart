@@ -90,6 +90,7 @@ class MessageApi {
       data: {
         'chatObjectId': chatObjectId,
         'deviceId': deviceId ?? this.deviceId,
+        'compactSenders': true,
         'requests': [
           {
             'sessionUnitId': sessionUnitId,
@@ -98,7 +99,8 @@ class MessageApi {
         ],
       },
     );
-    final items = result['items'] as List<dynamic>? ?? const [];
+    final hydrated = hydrateByIdsCompactSenders(Map<String, dynamic>.from(result));
+    final items = hydrated['items'] as List<dynamic>? ?? const [];
     return items.map((row) => Map<String, dynamic>.from(row as Map)).toList();
   }
 
