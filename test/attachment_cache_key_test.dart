@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -13,6 +14,9 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 class _FakeApiClient extends Fake implements ApiClient {
   int getBytesCalls = 0;
   final List<String> requestedUrls = [];
+  final List<Object> cancelledTags = [];
+  Completer<void>? startedCompleter;
+  Completer<List<int>>? pendingCompleter;
   Uint8List payload = Uint8List.fromList(<int>[10, 20, 30, 40]);
 
   @override
@@ -24,12 +28,20 @@ class _FakeApiClient extends Fake implements ApiClient {
   }) async {
     getBytesCalls++;
     requestedUrls.add(path);
+    if (startedCompleter != null && !startedCompleter!.isCompleted) {
+      startedCompleter!.complete();
+    }
+    if (pendingCompleter != null) {
+      return pendingCompleter!.future;
+    }
     onProgress?.call(payload.length, payload.length);
     return payload;
   }
 
   @override
-  Future<void> cancelByTag(Object tag) async {}
+  Future<void> cancelByTag(Object tag) async {
+    cancelledTags.add(tag);
+  }
 }
 
 class _FakeFilePickerService extends Fake implements FilePickerService {}
@@ -148,5 +160,58 @@ void main() {
 
     service.clearSessionCache();
     expect(service.stateFor('local-msg-a', userId: 'account-1').isReady, isFalse);
+  });
+
+  test('cancel matches scoped download cancelTag both with explicit userId and active session user', () async {
+    final tempDir = await Directory.systemTemp.createTemp('gotoim-attach-cancel-');
+    final previousPlatform = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _FakePathProviderPlatform(tempDir.path);
+    addTearDown(() async {
+      PathProviderPlatform.instance = previousPlatform;
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    dotenv.loadFromString(envString: 'API_BASE_URL=https://chat.example.com');
+    final client = _FakeApiClient();
+    final service = AttachmentTransferService(
+      client: client,
+      environment: AppEnvironment.fromDotEnv(AppFlavor.development),
+      filePickerService: _FakeFilePickerService(),
+      cache: createAttachmentCache(storagePathResolver: () async => tempDir.path),
+    );
+
+    final started = Completer<void>();
+    final completer = Completer<List<int>>();
+    client.startedCompleter = started;
+    client.pendingCompleter = completer;
+
+    final downloadFuture = service.download(
+      id: 'local-cancel-1',
+      source: '/api/chat/file/3fa85f64-5717-4562-b3fc-2c963f66afa6',
+      fileName: 'big.bin',
+      userId: 'account-1',
+    );
+    await started.future;
+    expect(service.stateFor('local-cancel-1', userId: 'account-1').isDownloading, isTrue);
+
+    await service.cancel('local-cancel-1', userId: 'account-1');
+    expect(client.cancelledTags, contains('attachment-account-1::local-cancel-1'));
+    expect(
+      service.stateFor('local-cancel-1', userId: 'account-1').status,
+      AttachmentTransferStatus.cancelled,
+    );
+
+    // Also verify omitting userId cancels using _activeUserId fallback cleanly.
+    await service.cancel('local-cancel-2');
+    expect(client.cancelledTags, contains('attachment-account-1::local-cancel-2'));
+
+    completer.complete(Uint8List.fromList(<int>[1, 2, 3]));
+    await downloadFuture;
+    expect(
+      service.stateFor('local-cancel-1', userId: 'account-1').status,
+      AttachmentTransferStatus.cancelled,
+    );
   });
 }

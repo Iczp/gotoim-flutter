@@ -233,10 +233,12 @@ class AttachmentTransferService extends ChangeNotifier {
   }
 
   Future<void> cancel(String id, {String? userId}) async {
-    final sk = _stateKey(id, userId: userId);
+    final effectiveUser =
+        (userId?.trim().isNotEmpty == true) ? userId!.trim() : _activeUserId;
+    final sk = _stateKey(id, userId: effectiveUser);
     _cancelled.add(sk);
     await _client.cancelByTag(_tag(sk));
-    if (!stateFor(id, userId: userId).isDownloading) return;
+    if (!stateFor(id, userId: effectiveUser).isDownloading) return;
     _states[sk] = const AttachmentTransferState(
       status: AttachmentTransferStatus.cancelled,
     );
