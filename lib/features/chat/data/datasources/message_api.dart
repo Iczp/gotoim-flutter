@@ -1,11 +1,25 @@
+import 'package:crypto/crypto.dart';
+
 import '../../../../core/network/api_client.dart';
+import '../../../../core/services/file/attachment_reuse_registry.dart';
 import '../../../session/data/models/paged_result_dto.dart';
 import '../models/chat_message.dart';
 
 class MessageApi {
-  MessageApi(this._client, {this.deviceId = 'flutter-device'});
+  MessageApi(
+    this._client, {
+    this.deviceId = 'flutter-device',
+    this.accountScope,
+    AttachmentReuseRegistry? reuseRegistry,
+  }) : _reuseRegistry = reuseRegistry ?? _sharedReuseRegistry;
+
+  static final AttachmentReuseRegistry _sharedReuseRegistry =
+      AttachmentReuseRegistry();
+
   final ApiClient _client;
   final String deviceId;
+  final String? accountScope;
+  final AttachmentReuseRegistry _reuseRegistry;
 
   Future<Map<String, dynamic>> usableTemplates({
     required int ownerId,
@@ -211,6 +225,21 @@ class MessageApi {
     },
   );
 
+  Future<Map<String, dynamic>> reuseAttachment({
+    required String sessionUnitId,
+    required String reuseToken,
+    String? fileName,
+    String? clientUploadId,
+  }) => _client.post<Map<String, dynamic>>(
+    '/api/chat/attachments/reuse/$sessionUnitId',
+    data: <String, Object?>{
+      'reuseToken': reuseToken,
+      if (fileName != null && fileName.isNotEmpty) 'fileName': fileName,
+      if (clientUploadId != null && clientUploadId.isNotEmpty)
+        'clientUploadId': clientUploadId,
+    },
+  );
+
   Future<Map<String, dynamic>> uploadAttachment({
     required String sessionUnitId,
     required String fileName,
@@ -220,7 +249,9 @@ class MessageApi {
     Map<String, Object?>? extraFields,
     Map<String, MultipartUploadFile>? extraFiles,
     void Function(int sent, int total)? onProgress,
-  }) {
+    String? accountScope,
+    String? clientUploadId,
+  }) async {
     late final String path;
     String? mimeType;
     switch (messageType) {
@@ -249,8 +280,52 @@ class MessageApi {
         path = '/api/chat/attachments/upload-file/$sessionUnitId';
         break;
     }
+
+    final effectiveAccount = (accountScope ?? this.accountScope)?.trim() ?? '';
+    final isOriginal = extraFields?['isOriginal'] == true;
+    String? sha256Hex;
+    if (effectiveAccount.isNotEmpty) {
+      final digest = await sha256.bind(openRead()).first;
+      sha256Hex = digest.toString();
+      final cached = _reuseRegistry.lookup(
+        accountScope: effectiveAccount,
+        messageType: messageType,
+        sha256Hex: sha256Hex,
+        fileLength: fileLength,
+        isOriginal: isOriginal,
+      );
+      if (cached != null) {
+        try {
+          final reused = await reuseAttachment(
+            sessionUnitId: sessionUnitId,
+            reuseToken: cached.reuseToken,
+            fileName: fileName,
+            clientUploadId: clientUploadId,
+          );
+          _rememberReuseToken(
+            accountScope: effectiveAccount,
+            messageType: messageType,
+            sha256Hex: sha256Hex,
+            fileLength: fileLength,
+            isOriginal: isOriginal,
+            response: reused,
+          );
+          onProgress?.call(fileLength, fileLength);
+          return reused;
+        } catch (_) {
+          _reuseRegistry.invalidate(
+            accountScope: effectiveAccount,
+            messageType: messageType,
+            sha256Hex: sha256Hex,
+            fileLength: fileLength,
+            isOriginal: isOriginal,
+          );
+        }
+      }
+    }
+
     final mergedFields = <String, Object?>{...?extraFields, ...?extraFiles};
-    return _client.postMultipart<Map<String, dynamic>>(
+    final uploaded = await _client.postMultipart<Map<String, dynamic>>(
       path,
       file: MultipartUploadFile(
         name: fileName,
@@ -260,6 +335,43 @@ class MessageApi {
       ),
       extraFields: mergedFields.isEmpty ? null : mergedFields,
       onProgress: onProgress,
+    );
+    if (effectiveAccount.isNotEmpty && sha256Hex != null) {
+      _rememberReuseToken(
+        accountScope: effectiveAccount,
+        messageType: messageType,
+        sha256Hex: sha256Hex,
+        fileLength: fileLength,
+        isOriginal: isOriginal,
+        response: uploaded,
+      );
+    }
+    return uploaded;
+  }
+
+  void _rememberReuseToken({
+    required String accountScope,
+    required int messageType,
+    required String sha256Hex,
+    required int fileLength,
+    required bool isOriginal,
+    required Map<String, dynamic> response,
+  }) {
+    final token = response['reuseToken']?.toString().trim() ?? '';
+    if (token.isEmpty) return;
+    final rawExpire = response['expireTime']?.toString();
+    final expireTime =
+        (rawExpire != null && rawExpire.isNotEmpty)
+            ? DateTime.tryParse(rawExpire)
+            : null;
+    _reuseRegistry.remember(
+      accountScope: accountScope,
+      messageType: messageType,
+      sha256Hex: sha256Hex,
+      fileLength: fileLength,
+      isOriginal: isOriginal,
+      reuseToken: token,
+      expireTime: expireTime,
     );
   }
 

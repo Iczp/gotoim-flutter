@@ -38,9 +38,12 @@ import '../../chat_settings/data/repositories/chat_settings_repository.dart';
 import '../presentation/widgets/chat_composer_controller.dart';
 
 final messageRepositoryProvider = Provider<MessageRepository>((ref) {
-  ref.watch(currentUserProvider.select((user) => user?.id));
+  final currentUserId = ref.watch(currentUserProvider.select((user) => user?.id));
   final repository = MessageRepository(
-    api: MessageApi(ref.watch(apiClientProvider)),
+    api: MessageApi(
+      ref.watch(apiClientProvider),
+      accountScope: currentUserId,
+    ),
     dao: MessageDao(
       ref.watch(unifiedDatabaseProvider),
       syncNamespace: ref.watch(appEnvironmentProvider).apiBaseUrl,
