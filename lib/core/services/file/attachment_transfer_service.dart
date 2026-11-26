@@ -54,18 +54,43 @@ class AttachmentTransferService extends ChangeNotifier {
   final Map<String, AttachmentTransferState> _states = {};
   final Map<String, Uint8List> _bytes = {};
   final Set<String> _cancelled = <String>{};
+  String? _activeUserId;
 
-  AttachmentTransferState stateFor(String id) =>
-      _states[id] ?? const AttachmentTransferState();
+  String _stateKey(String id, {String? userId}) {
+    final trimmedUser = userId?.trim() ?? '';
+    return trimmedUser.isEmpty ? id : '$trimmedUser::$id';
+  }
+
+  AttachmentTransferState stateFor(String id, {String? userId}) {
+    final effectiveUser = (userId?.trim().isNotEmpty == true)
+        ? userId!.trim()
+        : _activeUserId;
+    return _states[_stateKey(id, userId: effectiveUser)] ??
+        const AttachmentTransferState();
+  }
+
+  /// 清空内存传输状态与字节缓存（账号切换或登出时调用，防止跨账号复用内存状态）
+  void clearSessionCache() {
+    _activeUserId = null;
+    if (_states.isEmpty && _bytes.isEmpty && _cancelled.isEmpty) return;
+    _states.clear();
+    _bytes.clear();
+    _cancelled.clear();
+    notifyListeners();
+  }
 
   Future<void> registerLocalFile({
     required String id,
     required String localPath,
     int? totalBytes,
+    String? userId,
   }) async {
+    if (userId?.trim().isNotEmpty == true) {
+      _activeUserId = userId!.trim();
+    }
     if (localPath.trim().isEmpty) return;
     if (!await _cache.exists(localPath)) return;
-    _states[id] = AttachmentTransferState(
+    _states[_stateKey(id, userId: userId)] = AttachmentTransferState(
       status: AttachmentTransferStatus.completed,
       receivedBytes: totalBytes ?? 0,
       totalBytes: totalBytes ?? 0,
@@ -84,12 +109,16 @@ class AttachmentTransferService extends ChangeNotifier {
     DateTime? messageDate,
     String? category,
   }) async {
-    final existing = _states[id]?.localPath;
+    if (userId?.trim().isNotEmpty == true) {
+      _activeUserId = userId!.trim();
+    }
+    final sk = _stateKey(id, userId: userId);
+    final existing = _states[sk]?.localPath;
     if (existing != null && await _cache.exists(existing)) return existing;
     if (localFilePath != null &&
         localFilePath.trim().isNotEmpty &&
         await _cache.exists(localFilePath)) {
-      _states[id] = AttachmentTransferState(
+      _states[sk] = AttachmentTransferState(
         status: AttachmentTransferStatus.completed,
         localPath: localFilePath,
       );
@@ -116,7 +145,7 @@ class AttachmentTransferService extends ChangeNotifier {
       );
     }
     if (cached != null) {
-      _states[id] = AttachmentTransferState(
+      _states[sk] = AttachmentTransferState(
         status: AttachmentTransferStatus.completed,
         localPath: cached,
       );
@@ -136,7 +165,7 @@ class AttachmentTransferService extends ChangeNotifier {
     DateTime? messageDate,
     String? category,
   }) async {
-    if (stateFor(id).isDownloading) return;
+    if (stateFor(id, userId: userId).isDownloading) return;
     final cached = await findCachedPath(
       id: id,
       fileName: fileName,
@@ -148,11 +177,12 @@ class AttachmentTransferService extends ChangeNotifier {
       category: category,
     );
     if (cached != null) return;
-    _cancelled.remove(id);
+    final sk = _stateKey(id, userId: userId);
+    _cancelled.remove(sk);
     final resolved = _resolve(source);
     if (resolved.isEmpty) throw StateError('附件下载地址为空。');
     final cacheKey = _cacheKeyFor(id: id, source: source);
-    _states[id] = const AttachmentTransferState(
+    _states[sk] = const AttachmentTransferState(
       status: AttachmentTransferStatus.downloading,
     );
     notifyListeners();
@@ -160,10 +190,10 @@ class AttachmentTransferService extends ChangeNotifier {
       final data = Uint8List.fromList(
         await _client.getBytes(
           resolved,
-          cancelTag: _tag(id),
+          cancelTag: _tag(sk),
           onProgress: (received, total) {
-            if (_cancelled.contains(id)) return;
-            _states[id] = AttachmentTransferState(
+            if (_cancelled.contains(sk)) return;
+            _states[sk] = AttachmentTransferState(
               status: AttachmentTransferStatus.downloading,
               receivedBytes: received,
               totalBytes: total,
@@ -172,8 +202,8 @@ class AttachmentTransferService extends ChangeNotifier {
           },
         ),
       );
-      if (_cancelled.contains(id)) return;
-      _bytes[id] = data;
+      if (_cancelled.contains(sk)) return;
+      _bytes[sk] = data;
       final localPath = await _cache.write(
         cacheKey,
         fileName,
@@ -183,7 +213,7 @@ class AttachmentTransferService extends ChangeNotifier {
         messageDate: messageDate,
         category: category,
       );
-      _states[id] = AttachmentTransferState(
+      _states[sk] = AttachmentTransferState(
         status: AttachmentTransferStatus.completed,
         receivedBytes: data.length,
         totalBytes: data.length,
@@ -191,7 +221,7 @@ class AttachmentTransferService extends ChangeNotifier {
       );
     } catch (error) {
       final text = error.toString().toLowerCase();
-      _states[id] = AttachmentTransferState(
+      _states[sk] = AttachmentTransferState(
         status:
             text.contains('cancel')
                 ? AttachmentTransferStatus.cancelled
@@ -202,11 +232,12 @@ class AttachmentTransferService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> cancel(String id) async {
-    _cancelled.add(id);
-    await _client.cancelByTag(_tag(id));
-    if (!stateFor(id).isDownloading) return;
-    _states[id] = const AttachmentTransferState(
+  Future<void> cancel(String id, {String? userId}) async {
+    final sk = _stateKey(id, userId: userId);
+    _cancelled.add(sk);
+    await _client.cancelByTag(_tag(sk));
+    if (!stateFor(id, userId: userId).isDownloading) return;
+    _states[sk] = const AttachmentTransferState(
       status: AttachmentTransferStatus.cancelled,
     );
     notifyListeners();
@@ -222,7 +253,7 @@ class AttachmentTransferService extends ChangeNotifier {
     DateTime? messageDate,
     String? category,
   }) async {
-    var state = stateFor(id);
+    var state = stateFor(id, userId: userId);
     if (!state.isReady || state.localPath == null) {
       await download(
         id: id,
@@ -234,7 +265,7 @@ class AttachmentTransferService extends ChangeNotifier {
         messageDate: messageDate,
         category: category,
       );
-      state = stateFor(id);
+      state = stateFor(id, userId: userId);
     }
     final path = state.localPath;
     if (path == null) {
@@ -254,7 +285,8 @@ class AttachmentTransferService extends ChangeNotifier {
     String? category,
     String? mimeType,
   }) async {
-    if (!_bytes.containsKey(id)) {
+    final sk = _stateKey(id, userId: userId);
+    if (!_bytes.containsKey(sk)) {
       final cachedPath = await findCachedPath(
         id: id,
         fileName: fileName,
@@ -268,11 +300,11 @@ class AttachmentTransferService extends ChangeNotifier {
       if (cachedPath != null) {
         final localBytes = await _cache.readBytes(cachedPath);
         if (localBytes != null) {
-          _bytes[id] = localBytes;
+          _bytes[sk] = localBytes;
         }
       }
     }
-    if (!_bytes.containsKey(id)) {
+    if (!_bytes.containsKey(sk)) {
       await download(
         id: id,
         source: source,
@@ -284,7 +316,7 @@ class AttachmentTransferService extends ChangeNotifier {
         category: category,
       );
     }
-    final data = _bytes[id];
+    final data = _bytes[sk];
     if (data == null) return null;
     return _filePickerService.saveFile(
       FileSaveRequest(

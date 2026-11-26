@@ -163,7 +163,7 @@ void main() {
       );
       expect(foundU1, equals(user1Path));
 
-      // Query from a different user should NOT find it directly under user_101
+      // Query from a different user should NOT cross into user_100's private cache directory
       final foundU2Exact = await cache.find(
         'msg_u1',
         'doc.pdf',
@@ -171,8 +171,7 @@ void main() {
         chatTarget: 'friend_200',
         messageDate: msgDate,
       );
-      // Fallback recursive search across other users will locate it
-      expect(foundU2Exact, equals(user1Path));
+      expect(foundU2Exact, isNull);
     });
   });
 }

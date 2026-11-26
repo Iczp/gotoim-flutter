@@ -134,9 +134,9 @@ void main() {
     expect(service.stateFor('local-msg-b').isReady, isTrue);
     expect(service.stateFor('local-msg-b').localPath, isNotNull);
 
-    // Switching to another account must NOT reuse account-1's private cache file.
+    // Switching to another account with the SAME local message id must NOT reuse account-1's in-memory or disk cache.
     final otherAccountPath = await service.findCachedPath(
-      id: 'local-msg-other-account',
+      id: 'local-msg-a',
       source: urlA,
       fileName: 'doc.pdf',
       userId: 'account-2',
@@ -144,5 +144,9 @@ void main() {
       messageDate: DateTime(2026, 11, 26),
     );
     expect(otherAccountPath, isNull);
+    expect(service.stateFor('local-msg-a', userId: 'account-2').isReady, isFalse);
+
+    service.clearSessionCache();
+    expect(service.stateFor('local-msg-a', userId: 'account-1').isReady, isFalse);
   });
 }
