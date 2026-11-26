@@ -1409,6 +1409,8 @@ class MessageRepository {
         extraFields: extraFields,
         extraFiles: extraFiles,
         onProgress: onProgress,
+        clientUploadId: local.clientMessageId,
+        clientMessageId: local.clientMessageId,
       );
       final serverId = asInt(response['id']);
       result = local.copyWith(
@@ -1545,6 +1547,8 @@ class MessageRepository {
         extraFields: <String, Object?>{
           'durationMs': resolvedDuration.inMilliseconds,
         },
+        clientUploadId: local.clientMessageId,
+        clientMessageId: local.clientMessageId,
       );
       final serverId =
           response['id'] is num
@@ -1600,6 +1604,8 @@ class MessageRepository {
         fileName: file.name,
         fileLength: file.size,
         openRead: file.readAsByteStream,
+        clientUploadId: local.clientMessageId,
+        clientMessageId: local.clientMessageId,
       );
       final serverId =
           response['id'] is num

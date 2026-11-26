@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:image_picker/image_picker.dart' show XFile;
 
 import '../../../app/application_providers.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
@@ -67,11 +68,35 @@ final audioPlaybackServiceProvider =
         environment: ref.watch(appEnvironmentProvider),
         voiceCacheService: ref.watch(voiceCacheServiceProvider),
         nativeSensor: ref.watch(nativeSensorProvider),
+        authorizeUrl: (
+          url, {
+          sessionUnitId,
+          messageId,
+          rootMessageId,
+        }) => ref
+            .read(attachmentTransferServiceProvider)
+            .authorizePrivateAttachment(
+              url,
+              accessContext: AttachmentAccessContext(
+                sessionUnitId: sessionUnitId,
+                messageId: messageId,
+                rootMessageId: rootMessageId,
+              ),
+            ),
       );
     });
 
-final attachmentTransferServiceProvider =
+bool _attachmentTransferAccountCallbackRegistered = false;
+
+final ChangeNotifierProvider<AttachmentTransferService>
+attachmentTransferServiceProvider =
     ChangeNotifierProvider<AttachmentTransferService>((ref) {
+      if (!_attachmentTransferAccountCallbackRegistered) {
+        _attachmentTransferAccountCallbackRegistered = true;
+        registerAccountChangedCallback((r) {
+          r.read(attachmentTransferServiceProvider).clearSessionCache();
+        });
+      }
       return AttachmentTransferService(
         client: ref.watch(apiClientProvider),
         environment: ref.watch(appEnvironmentProvider),
@@ -1570,6 +1595,13 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
     final ids = localIds.toSet();
     if (ids.isEmpty) return;
     await _repository.deleteLocal(ids);
+    for (final msg in _messages.where((m) => ids.contains(m.localId))) {
+      _attachmentTransferService.invalidateMessageAccess(
+        messageId: msg.serverId,
+        localId: msg.localId,
+        userId: ownerId.toString(),
+      );
+    }
     _messages.removeWhere((message) => ids.contains(message.localId));
     cancelSelection();
   }
@@ -1585,6 +1617,11 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
       } else {
         await _repository.deleteRemote(message);
       }
+      _attachmentTransferService.invalidateMessageAccess(
+        messageId: message.serverId,
+        localId: message.localId,
+        userId: ownerId.toString(),
+      );
     }
     _messages.removeWhere(
       (message) => selectedLocalIds.contains(message.localId),
@@ -1594,12 +1631,22 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
 
   Future<void> deleteRemote(ChatMessage message) async {
     await _repository.deleteRemote(message);
+    _attachmentTransferService.invalidateMessageAccess(
+      messageId: message.serverId,
+      localId: message.localId,
+      userId: ownerId.toString(),
+    );
     _messages.removeWhere((item) => item.localId == message.localId);
     notifyListeners();
   }
 
   Future<void> rollbackMessage(ChatMessage message) async {
     final updated = await _repository.rollback(message);
+    _attachmentTransferService.invalidateMessageAccess(
+      messageId: message.serverId ?? updated.serverId,
+      localId: message.localId,
+      userId: ownerId.toString(),
+    );
     _replaceMessage(updated);
     notifyListeners();
   }
@@ -2054,6 +2101,11 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
           fileSuffix: message.fileSuffix,
           messageType: message.messageType,
         ),
+        accessContext: AttachmentAccessContext(
+          sessionUnitId: message.sessionUnitId,
+          messageId: message.serverId,
+        ),
+        verifyOnline: true,
       );
 
   Future<void> cancelAttachmentDownload(ChatMessage message) =>
@@ -2076,6 +2128,11 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
           fileSuffix: message.fileSuffix,
           messageType: message.messageType,
         ),
+        accessContext: AttachmentAccessContext(
+          sessionUnitId: message.sessionUnitId,
+          messageId: message.serverId,
+        ),
+        verifyOnline: true,
       );
 
   Future<void> saveAttachmentAs(ChatMessage message) =>
@@ -2093,6 +2150,11 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
           messageType: message.messageType,
         ),
         mimeType: message.content['contentType']?.toString(),
+        accessContext: AttachmentAccessContext(
+          sessionUnitId: message.sessionUnitId,
+          messageId: message.serverId,
+        ),
+        verifyOnline: true,
       );
 
   void _playSentEffect(ChatMessage message) {
@@ -2117,6 +2179,13 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   }
 
   void _replaceMessage(ChatMessage value) {
+    if (value.isRollbacked || value.isDeleted) {
+      _attachmentTransferService.invalidateMessageAccess(
+        messageId: value.serverId,
+        localId: value.localId,
+        userId: ownerId.toString(),
+      );
+    }
     if (_deletedMessageIds.contains(value.serverId)) return;
     final index = _messages.indexWhere(
       (message) =>

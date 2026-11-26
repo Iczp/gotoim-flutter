@@ -1467,10 +1467,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
               (message.mediaUrl != null && message.mediaUrl!.isNotEmpty)
                   ? message.mediaUrl!
                   : (localFile ?? message.localFilePath ?? '');
-          final source = resolveApiUrl(sourceUrl, baseUrl);
+          final source = resolveAttachmentUrl(
+            sourceUrl,
+            baseUrl,
+            sessionUnitId: message.sessionUnitId,
+            messageId: message.serverId,
+          );
           final thumbRaw = message.thumbnailUrl ?? message.videoCoverUrl;
           final thumbnail =
-              thumbRaw != null ? resolveApiUrl(thumbRaw, baseUrl) : null;
+              thumbRaw != null
+                  ? resolveAttachmentUrl(
+                    thumbRaw,
+                    baseUrl,
+                    sessionUnitId: message.sessionUnitId,
+                    messageId: message.serverId,
+                  )
+                  : null;
           final fileName =
               message.fileName.isNotEmpty
                   ? message.fileName
@@ -1497,6 +1509,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             createdAt: message.createdAt,
             userId: message.ownerId.toString(),
             chatTarget: message.sessionUnitId,
+            serverMessageId: message.serverId,
             bytes: controller.imagePreview(message.localId),
             heroTag: buildMediaHeroTag(
               messageId: message.localId,

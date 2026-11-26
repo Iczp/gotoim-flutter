@@ -100,6 +100,9 @@ class _FakeUploadMessageApi extends Fake implements MessageApi {
     Map<String, Object?>? extraFields,
     Map<String, MultipartUploadFile>? extraFiles,
     void Function(int sent, int total)? onProgress,
+    String? accountScope,
+    String? clientUploadId,
+    String? clientMessageId,
   }) async {
     return <String, dynamic>{
       'id': 98765,

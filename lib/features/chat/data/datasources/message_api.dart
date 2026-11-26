@@ -499,7 +499,17 @@ class MessageApi {
     Map<String, Object?>? extraFields,
     Map<String, MultipartUploadFile>? extraFiles,
     void Function(int sent, int total)? onProgress,
+    String? accountScope,
+    String? clientUploadId,
+    String? clientMessageId,
   }) async {
+    final trimmedUploadId = clientUploadId?.trim();
+    final effectiveUploadId =
+        (trimmedUploadId != null && trimmedUploadId.isNotEmpty)
+            ? (trimmedUploadId.length > 64
+                ? trimmedUploadId.substring(0, 64)
+                : trimmedUploadId)
+            : null;
     final uploadResult = await uploadAttachment(
       sessionUnitId: sessionUnitId,
       fileName: fileName,
@@ -509,11 +519,14 @@ class MessageApi {
       extraFields: extraFields,
       extraFiles: extraFiles,
       onProgress: onProgress,
+      accountScope: accountScope,
+      clientUploadId: effectiveUploadId,
     );
     return sendAttachmentMessage(
       sessionUnitId: sessionUnitId,
       messageType: messageType,
       uploadResult: uploadResult,
+      clientMessageId: clientMessageId ?? effectiveUploadId,
       extraContent: extraFields,
     );
   }

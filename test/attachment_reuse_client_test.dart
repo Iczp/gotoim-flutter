@@ -147,4 +147,35 @@ void main() {
     expect(client.postCalls, 1);
     expect(client.postMultipartCalls, 3);
   });
+
+  test('sendUploadFile forwards clientUploadId into reuse flow on retry with same local id', () async {
+    final client = _FakeReuseApiClient();
+    final registry = AttachmentReuseRegistry();
+    final api = MessageApi(client, accountScope: 'user-1', reuseRegistry: registry);
+    final payload = Uint8List.fromList(<int>[10, 20, 30, 40]);
+
+    await api.sendUploadFile(
+      sessionUnitId: 'unit-a',
+      fileName: 'contract.pdf',
+      fileLength: payload.length,
+      openRead: () => Stream<List<int>>.value(payload),
+      clientUploadId: 'local-send-op-1',
+    );
+    expect(client.postMultipartCalls, 1);
+    expect(client.postCalls, 1); // sendAttachmentMessage only
+
+    // Retry or second identity send via sendUploadFile uses /api/chat/attachments/reuse with clientUploadId
+    await api.sendUploadFile(
+      sessionUnitId: 'unit-b',
+      fileName: 'contract.pdf',
+      fileLength: payload.length,
+      openRead: () => Stream<List<int>>.value(payload),
+      clientUploadId: 'local-send-op-2',
+    );
+    expect(client.postMultipartCalls, 1);
+    expect(client.postCalls, 3); // reuse + sendAttachmentMessage
+    final reuseBody = Map<String, Object?>.from(client.postBodies[1]! as Map);
+    expect(reuseBody['clientUploadId'], 'local-send-op-2');
+    expect(reuseBody['reuseToken'], 'tok-initial-1');
+  });
 }

@@ -40,6 +40,8 @@ class MediaPreviewItem {
     this.createdAt,
     this.userId,
     this.chatTarget,
+    this.serverMessageId,
+    this.rootMessageId,
   });
   final String id;
   final String messageId;
@@ -58,6 +60,10 @@ class MediaPreviewItem {
   final String? userId;
   /// 聊天对象会话 ID 或名称。
   final String? chatTarget;
+  /// 服务端消息 ID（用于 /api/chat/file 授权参数 `msg`）。
+  final int? serverMessageId;
+  /// 聊天记录根消息 ID（用于 /api/chat/file 授权参数 `rootMsg`）。
+  final int? rootMessageId;
 
   /// 获取优先用于播放或渲染的有效地址。
   /// 若本地已存在有效下载或缓存文件，则直接返回本地文件路径；否则返回远端网络地址。
@@ -83,6 +89,8 @@ class MediaPreviewItem {
     DateTime? createdAt,
     String? userId,
     String? chatTarget,
+    int? serverMessageId,
+    int? rootMessageId,
   }) =>
       MediaPreviewItem(
         id: id ?? this.id,
@@ -97,6 +105,8 @@ class MediaPreviewItem {
         createdAt: createdAt ?? this.createdAt,
         userId: userId ?? this.userId,
         chatTarget: chatTarget ?? this.chatTarget,
+        serverMessageId: serverMessageId ?? this.serverMessageId,
+        rootMessageId: rootMessageId ?? this.rootMessageId,
       );
 }
 

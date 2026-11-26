@@ -35,7 +35,12 @@ class ImageMessageContent extends StatelessWidget {
   final ChatMessagePresentation presentation;
   final VoidCallback? onRetry;
 
-  String get _url => resolveApiUrl(message.mediaUrl, apiBaseUrl);
+  String get _url => resolveAttachmentUrl(
+    message.mediaUrl,
+    apiBaseUrl,
+    sessionUnitId: message.sessionUnitId,
+    messageId: message.serverId,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +86,15 @@ class ImageMessageContent extends StatelessWidget {
       messageId: message.localId,
       type: MediaPreviewType.image,
       source: _url,
-      thumbnail: thumbRaw != null ? resolveApiUrl(thumbRaw, apiBaseUrl) : _url,
+      thumbnail:
+          thumbRaw != null
+              ? resolveAttachmentUrl(
+                thumbRaw,
+                apiBaseUrl,
+                sessionUnitId: message.sessionUnitId,
+                messageId: message.serverId,
+              )
+              : _url,
       fileName: message.fileName.isNotEmpty
           ? message.fileName
           : '${message.localId}${message.fileSuffix.isNotEmpty ? message.fileSuffix : '.jpg'}',
@@ -89,6 +102,7 @@ class ImageMessageContent extends StatelessWidget {
       createdAt: message.createdAt,
       userId: message.ownerId.toString(),
       chatTarget: message.sessionUnitId,
+      serverMessageId: message.serverId,
       bytes: bytes,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,

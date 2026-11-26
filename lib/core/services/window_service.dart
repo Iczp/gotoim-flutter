@@ -28,6 +28,7 @@ import '../platform/desktop_window_capabilities.dart';
 import '../platform/platform_facade.dart';
 import '../theme/theme_mode_controller.dart';
 import '../widgets/desktop_tray_message_box.dart';
+import 'file/attachment_transfer_service.dart';
 import 'file/file_picker_service.dart';
 import 'tray_grouped_unread_provider.dart';
 import 'tray_message_models.dart';
@@ -2601,6 +2602,8 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
               messageId: message.localId,
               localPath: message.localFilePath,
               url: message.mediaUrl,
+              sessionUnitId: message.sessionUnitId,
+              serverMessageId: message.serverId,
             );
         return {'success': true};
       }
@@ -2608,37 +2611,56 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
       final source = message.mediaUrl ?? '';
       final fileName =
           message.fileName.isEmpty ? 'attachment' : message.fileName;
+      final accessContext = AttachmentAccessContext(
+        sessionUnitId: message.sessionUnitId,
+        messageId: message.serverId,
+      );
       if (action == 'cancel') {
-        await transfer.cancel(message.localId);
+        await transfer.cancel(
+          message.localId,
+          userId: message.ownerId.toString(),
+        );
       } else if (action == 'saveAs') {
         await transfer.saveAs(
           id: message.localId,
           source: source,
           fileName: fileName,
+          localFilePath: message.localFilePath,
           userId: message.ownerId.toString(),
           chatTarget: message.sessionUnitId,
           messageDate: message.createdAt,
+          accessContext: accessContext,
+          verifyOnline: true,
         );
       } else if (action == 'open') {
         await transfer.open(
           id: message.localId,
           source: source,
           fileName: fileName,
+          localFilePath: message.localFilePath,
           userId: message.ownerId.toString(),
           chatTarget: message.sessionUnitId,
           messageDate: message.createdAt,
+          accessContext: accessContext,
+          verifyOnline: true,
         );
       } else {
         await transfer.download(
           id: message.localId,
           source: source,
           fileName: fileName,
+          localFilePath: message.localFilePath,
           userId: message.ownerId.toString(),
           chatTarget: message.sessionUnitId,
           messageDate: message.createdAt,
+          accessContext: accessContext,
+          verifyOnline: true,
         );
       }
-      final state = transfer.stateFor(message.localId);
+      final state = transfer.stateFor(
+        message.localId,
+        userId: message.ownerId.toString(),
+      );
       if (state.error != null) throw StateError('附件处理失败: ${state.error}');
       return {
         'success': true,

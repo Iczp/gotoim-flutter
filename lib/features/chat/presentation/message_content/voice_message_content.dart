@@ -62,6 +62,8 @@ class VoiceMessageContent extends ConsumerWidget {
                     localPath: message.localFilePath,
                     url: message.audioUrl,
                     mimeType: message.content['contentType']?.toString(),
+                    sessionUnitId: message.sessionUnitId,
+                    serverMessageId: message.serverId,
                   );
                   if (playback.isMessagePlaying(message.localId)) {
                     await onOpened();

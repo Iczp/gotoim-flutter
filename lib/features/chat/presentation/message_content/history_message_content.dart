@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/api_url_resolver.dart';
 import '../../data/models/chat_message.dart';
 import 'chat_message_presentation.dart';
 import 'message_bubble.dart';
@@ -8,11 +9,30 @@ class HistoryMessageContent extends StatelessWidget {
   const HistoryMessageContent({
     required this.message,
     this.presentation = ChatMessagePresentation.normal,
+    this.rootMessageId,
     super.key,
   });
 
   final ChatMessage message;
   final ChatMessagePresentation presentation;
+  final int? rootMessageId;
+
+  /// 为聊天记录内子消息附件统一补全 `su`、`msg` 与外层可见 `rootMsg` 授权参数。
+  String resolveChildAttachmentUrl(
+    String? rawUrl,
+    String apiBaseUrl, {
+    int? childMessageId,
+    String? childSessionUnitId,
+  }) => resolveAttachmentUrl(
+    rawUrl,
+    apiBaseUrl,
+    sessionUnitId:
+        (childSessionUnitId?.trim().isNotEmpty == true)
+            ? childSessionUnitId
+            : message.sessionUnitId,
+    messageId: childMessageId,
+    rootMessageId: rootMessageId ?? message.serverId,
+  );
 
   @override
   Widget build(BuildContext context) {

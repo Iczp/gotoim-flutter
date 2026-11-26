@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/floating_window/floating_window.dart';
 import '../../../../core/media/app_image_cache_manager.dart';
-import '../../../../core/media/media_auth_headers.dart';
 import '../../../../core/utils/api_url_resolver.dart';
 import '../../../../core/media/media_preview.dart';
 import '../../data/models/chat_message.dart';
@@ -46,10 +45,11 @@ class VideoMessageContent extends StatelessWidget {
     }
     final remote = message.mediaUrl;
     if (remote != null && remote.isNotEmpty) {
-      final resolved = MediaAuthHeaders.withAccessContext(
-        resolveApiUrl(remote, apiBaseUrl),
+      final resolved = resolveAttachmentUrl(
+        remote,
+        apiBaseUrl,
         sessionUnitId: message.sessionUnitId,
-        serverMessageId: message.serverId,
+        messageId: message.serverId,
       );
       return Uri.tryParse(resolved);
     }
@@ -65,18 +65,20 @@ class VideoMessageContent extends StatelessWidget {
     final gifUrl = message.videoGifUrl;
     final resolvedCoverUrl =
         coverUrl != null && coverUrl.isNotEmpty
-            ? MediaAuthHeaders.withAccessContext(
-              resolveApiUrl(coverUrl, apiBaseUrl),
+            ? resolveAttachmentUrl(
+              coverUrl,
+              apiBaseUrl,
               sessionUnitId: message.sessionUnitId,
-              serverMessageId: message.serverId,
+              messageId: message.serverId,
             )
             : null;
     final resolvedGifUrl =
         gifUrl != null && gifUrl.isNotEmpty
-            ? MediaAuthHeaders.withAccessContext(
-              resolveApiUrl(gifUrl, apiBaseUrl),
+            ? resolveAttachmentUrl(
+              gifUrl,
+              apiBaseUrl,
               sessionUnitId: message.sessionUnitId,
-              serverMessageId: message.serverId,
+              messageId: message.serverId,
             )
             : null;
     final localThumbPath =
@@ -108,6 +110,7 @@ class VideoMessageContent extends StatelessWidget {
       createdAt: message.createdAt,
       userId: message.ownerId.toString(),
       chatTarget: message.sessionUnitId,
+      serverMessageId: message.serverId,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,
         mediaId: message.localId,

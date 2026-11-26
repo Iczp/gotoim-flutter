@@ -156,22 +156,23 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
 
   @override
   Future<String?> getCachedPath(MediaPreviewItem item) async {
-    if (item.localPath != null && item.localPath!.isNotEmpty) {
-      try {
-        if (kIsWeb || File(item.localPath!).existsSync()) {
-          return item.localPath;
-        }
-      } catch (_) {}
-    }
     final fileName = _resolveFileName(item);
     final category = item.type == MediaPreviewType.video ? '视频' : '图片';
     final found = await _transferService.findCachedPath(
       id: item.id,
       fileName: fileName,
+      source: item.source,
+      localFilePath: item.localPath,
       userId: item.userId,
       chatTarget: item.chatTarget,
       messageDate: item.createdAt,
       category: category,
+      accessContext: AttachmentAccessContext(
+        sessionUnitId: item.chatTarget,
+        messageId: item.serverMessageId,
+        rootMessageId: item.rootMessageId,
+      ),
+      verifyOnline: true,
     );
     if (found != null) {
       try {
@@ -195,7 +196,7 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
     final completer = Completer<String>();
 
     void listener() {
-      final state = _transferService.stateFor(item.id);
+      final state = _transferService.stateFor(item.id, userId: item.userId);
       if (state.isDownloading && state.totalBytes > 0) {
         onProgress?.call(state.receivedBytes, state.totalBytes);
       } else if (state.isReady && state.localPath != null) {
@@ -215,10 +216,17 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
         id: item.id,
         source: item.source,
         fileName: fileName,
+        localFilePath: item.localPath,
         userId: item.userId,
         chatTarget: item.chatTarget,
         messageDate: item.createdAt,
         category: category,
+        accessContext: AttachmentAccessContext(
+          sessionUnitId: item.chatTarget,
+          messageId: item.serverMessageId,
+          rootMessageId: item.rootMessageId,
+        ),
+        verifyOnline: true,
       );
     } catch (e) {
       _transferService.removeListener(listener);
@@ -229,5 +237,6 @@ class AttachmentTransferMediaDownloader implements MediaDownloader {
   }
 
   @override
-  Future<void> cancel(MediaPreviewItem item) => _transferService.cancel(item.id);
+  Future<void> cancel(MediaPreviewItem item) =>
+      _transferService.cancel(item.id, userId: item.userId);
 }

@@ -6,7 +6,16 @@ import 'package:flutter/foundation.dart';
 
 import '../../config/app_environment.dart';
 import '../../native/sensor.dart';
+import '../../utils/api_url_resolver.dart';
 import 'voice_cache_service.dart';
+
+typedef VoiceAccessAuthorizer =
+    Future<bool> Function(
+      String url, {
+      String? sessionUnitId,
+      int? messageId,
+      int? rootMessageId,
+    });
 
 class AudioPlaybackService extends ChangeNotifier {
   AudioPlaybackService({
@@ -14,9 +23,11 @@ class AudioPlaybackService extends ChangeNotifier {
     required VoiceCacheService voiceCacheService,
     required NativeSensor nativeSensor,
     AudioPlayer? player,
+    VoiceAccessAuthorizer? authorizeUrl,
   }) : _environment = environment,
        _voiceCacheService = voiceCacheService,
-       _player = player ?? AudioPlayer() {
+       _player = player ?? AudioPlayer(),
+       _authorizeUrl = authorizeUrl {
     _stateSubscription = _player.onPlayerStateChanged.listen((state) {
       _playing = state == PlayerState.playing;
       notifyListeners();
@@ -46,6 +57,7 @@ class AudioPlaybackService extends ChangeNotifier {
   final AppEnvironment _environment;
   final VoiceCacheService _voiceCacheService;
   final AudioPlayer _player;
+  final VoiceAccessAuthorizer? _authorizeUrl;
   final AudioPlayer _effectPlayer = AudioPlayer();
   late final StreamSubscription<PlayerState> _stateSubscription;
   late final StreamSubscription<void> _completionSubscription;
@@ -81,6 +93,9 @@ class AudioPlaybackService extends ChangeNotifier {
     String? localPath,
     String? url,
     String? mimeType,
+    String? sessionUnitId,
+    int? serverMessageId,
+    int? rootMessageId,
   }) async {
     final operation = ++_operation;
     _error = null;
@@ -105,6 +120,9 @@ class AudioPlaybackService extends ChangeNotifier {
         localPath: localPath,
         url: url,
         mimeType: mimeType,
+        sessionUnitId: sessionUnitId,
+        serverMessageId: serverMessageId,
+        rootMessageId: rootMessageId,
       );
       if (operation != _operation) return;
       if (_manualEarpiece) {
@@ -214,17 +232,39 @@ class AudioPlaybackService extends ChangeNotifier {
     String? localPath,
     String? url,
     String? mimeType,
+    String? sessionUnitId,
+    int? serverMessageId,
+    int? rootMessageId,
   }) async {
+    final value = url?.trim() ?? '';
+    final resolved =
+        value.isEmpty
+            ? ''
+            : resolveAttachmentUrl(
+              value,
+              _environment.apiBaseUrl,
+              sessionUnitId: sessionUnitId,
+              messageId: serverMessageId,
+              rootMessageId: rootMessageId,
+            );
+    if (_authorizeUrl != null &&
+        resolved.isNotEmpty &&
+        sessionUnitId != null &&
+        sessionUnitId.isNotEmpty) {
+      final allowed = await _authorizeUrl(
+        resolved,
+        sessionUnitId: sessionUnitId,
+        messageId: serverMessageId,
+        rootMessageId: rootMessageId,
+      );
+      if (!allowed) {
+        throw StateError('无权播放该私有语音或消息已撤回/删除');
+      }
+    }
     if (localPath != null && localPath.isNotEmpty) {
       return DeviceFileSource(localPath, mimeType: mimeType);
     }
-    final value = url?.trim() ?? '';
-    if (value.isEmpty) throw StateError('语音文件地址为空。');
-    final parsed = Uri.tryParse(value);
-    final resolved =
-        parsed?.hasScheme == true
-            ? value
-            : Uri.parse(_environment.apiBaseUrl).resolve(value).toString();
+    if (resolved.isEmpty) throw StateError('语音文件地址为空。');
     _downloadingMessageId = messageId;
     _downloadProgress = 0;
     notifyListeners();

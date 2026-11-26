@@ -9,15 +9,35 @@ import 'package:gotoim_flutter/core/network/api_client.dart';
 import 'package:gotoim_flutter/core/services/file/attachment_cache.dart';
 import 'package:gotoim_flutter/core/services/file/attachment_transfer_service.dart';
 import 'package:gotoim_flutter/core/services/file/file_picker_service.dart';
+import 'package:gotoim_flutter/core/utils/api_url_resolver.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 class _FakeApiClient extends Fake implements ApiClient {
   int getBytesCalls = 0;
+  int signCalls = 0;
+  bool allowSign = true;
   final List<String> requestedUrls = [];
+  final List<Map<String, Object?>?> signQueries = [];
   final List<Object> cancelledTags = [];
   Completer<void>? startedCompleter;
   Completer<List<int>>? pendingCompleter;
   Uint8List payload = Uint8List.fromList(<int>[10, 20, 30, 40]);
+
+  @override
+  Future<T> post<T>(
+    String path, {
+    Object? data,
+    Map<String, Object?>? query,
+    Map<String, String>? headers,
+    bool retryOnUnauthorized = true,
+  }) async {
+    signCalls++;
+    signQueries.add(query);
+    if (!allowSign) {
+      throw StateError('403 Forbidden');
+    }
+    return <String, dynamic>{'url': '/signed'} as T;
+  }
 
   @override
   Future<List<int>> getBytes(
@@ -213,5 +233,90 @@ void main() {
       service.stateFor('local-cancel-1', userId: 'account-1').status,
       AttachmentTransferStatus.cancelled,
     );
+  });
+
+  test('resolveAttachmentUrl appends su/msg/rootMsg and findCachedPath enforces online /sign verdict & invalidation', () async {
+    final tempDir = await Directory.systemTemp.createTemp('gotoim-attach-auth-');
+    final previousPlatform = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _FakePathProviderPlatform(tempDir.path);
+    addTearDown(() async {
+      PathProviderPlatform.instance = previousPlatform;
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    const blobId = '7fa85f64-5717-4562-b3fc-2c963f66afa7';
+    final resolved = resolveAttachmentUrl(
+      '/api/chat/file/$blobId',
+      'https://chat.example.com',
+      sessionUnitId: 'su-hist-2',
+      messageId: 777,
+      rootMessageId: 900,
+    );
+    final uri = Uri.parse(resolved);
+    expect(uri.queryParameters['su'], 'su-hist-2');
+    expect(uri.queryParameters['msg'], '777');
+    expect(uri.queryParameters['rootMsg'], '900');
+
+    dotenv.loadFromString(envString: 'API_BASE_URL=https://chat.example.com');
+    final client = _FakeApiClient();
+    final cache = createAttachmentCache(storagePathResolver: () async => tempDir.path);
+    final service = AttachmentTransferService(
+      client: client,
+      environment: AppEnvironment.fromDotEnv(AppFlavor.development),
+      filePickerService: _FakeFilePickerService(),
+      cache: cache,
+    );
+
+    const ctx = AttachmentAccessContext(
+      sessionUnitId: 'su-hist-2',
+      messageId: 777,
+      rootMessageId: 900,
+    );
+
+    // Pre-populate cache via authorized download
+    await service.download(
+      id: 'hist-child-1',
+      source: '/api/chat/file/$blobId',
+      fileName: 'hist.pdf',
+      userId: 'account-1',
+      chatTarget: 'su-hist-2',
+      messageDate: DateTime(2026, 11, 27),
+      accessContext: ctx,
+      verifyOnline: true,
+    );
+    expect(client.signCalls, 1);
+    expect(client.getBytesCalls, 1);
+
+    // Cached hit uses cached 60s verdict without redundant /sign call
+    final hitPath = await service.findCachedPath(
+      id: 'hist-child-1',
+      source: '/api/chat/file/$blobId',
+      fileName: 'hist.pdf',
+      userId: 'account-1',
+      chatTarget: 'su-hist-2',
+      messageDate: DateTime(2026, 11, 27),
+      accessContext: ctx,
+      verifyOnline: true,
+    );
+    expect(hitPath, isNotNull);
+    expect(client.signCalls, 1);
+
+    // After recall/deletion invalidation, next check must re-verify online; denied -> blocks cached hit
+    client.allowSign = false;
+    service.invalidateMessageAccess(messageId: 777, userId: 'account-1');
+    final blockedPath = await service.findCachedPath(
+      id: 'hist-child-1',
+      source: '/api/chat/file/$blobId',
+      fileName: 'hist.pdf',
+      userId: 'account-1',
+      chatTarget: 'su-hist-2',
+      messageDate: DateTime(2026, 11, 27),
+      accessContext: ctx,
+      verifyOnline: true,
+    );
+    expect(blockedPath, isNull);
+    expect(client.signCalls, 2);
   });
 }
