@@ -376,7 +376,8 @@ class ChatMessage {
     fileName.contains('.') ? '.${fileName.split('.').last}' : '',
   ]);
   String? get localFilePath {
-    final value = content['path']?.toString();
+    final value =
+        content['path']?.toString() ?? raw['localFilePath']?.toString();
     return value == null || value.isEmpty ? null : value;
   }
 

@@ -16,6 +16,7 @@ class AnnouncementDetailDialog extends ConsumerStatefulWidget {
     this.sessionUnitId,
     this.sessionTitle,
     this.canManage = false,
+    this.isBottomSheet = false,
     super.key,
   });
 
@@ -23,6 +24,7 @@ class AnnouncementDetailDialog extends ConsumerStatefulWidget {
   final String? sessionUnitId;
   final String? sessionTitle;
   final bool canManage;
+  final bool isBottomSheet;
 
   static Future<bool?> show(
     BuildContext context, {
@@ -31,6 +33,29 @@ class AnnouncementDetailDialog extends ConsumerStatefulWidget {
     String? sessionTitle,
     bool canManage = false,
   }) {
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
+    if (isMobile) {
+      return showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
+          final sheetHeight = (MediaQuery.sizeOf(sheetContext).height * 0.65)
+              .clamp(360.0, 680.0);
+          return SizedBox(
+            height: sheetHeight,
+            child: AnnouncementDetailDialog(
+              announcement: announcement,
+              sessionUnitId: sessionUnitId,
+              sessionTitle: sessionTitle,
+              canManage: canManage,
+              isBottomSheet: true,
+            ),
+          );
+        },
+      );
+    }
     return showDialog<bool>(
       context: context,
       builder: (_) => AnnouncementDetailDialog(
@@ -464,17 +489,29 @@ class _AnnouncementDetailDialogState
         ? '${widget.sessionTitle!.trim()} 公告'
         : '公告详情';
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: dialogWidth,
-        height: dialogHeight,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
+    final content = Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        widget.isBottomSheet ? 6 : 12,
+        16,
+        widget.isBottomSheet ? 10 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.isBottomSheet)
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          Row(
                 children: [
                   Expanded(
                     child: Text(
@@ -488,10 +525,16 @@ class _AnnouncementDetailDialogState
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    style: IconButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
               ),
+              const SizedBox(height: 4),
               Row(
                 children: [
                   if (_item.isPinned) ...[
@@ -509,14 +552,16 @@ class _AnnouncementDetailDialogState
                     const SizedBox(width: 8),
                   ],
                   Expanded(
-                    child: SelectableText(
-                      _item.title,
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    child: SelectionArea(
+                      child: Text(
+                        _item.title,
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Wrap(
                 spacing: 16,
                 runSpacing: 4,
@@ -560,97 +605,105 @@ class _AnnouncementDetailDialogState
                     ),
                 ],
               ),
-              const Divider(height: 20),
+              const Divider(height: 12),
               Expanded(
                 child: Stack(
                   children: [
                     Container(
                       width: double.infinity,
                       height: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: colorScheme.surfaceContainerLowest,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: colorScheme.outlineVariant),
                       ),
                       child: SingleChildScrollView(
-                        child: _item.editorType == 1
-                            ? MarkdownBody(
-                                data: preprocessAnnouncementMarkdownLinks(_item.content),
-                                selectable: true,
-                                onTapLink: (text, href, _) =>
-                                    _handleAppLinkTap(text, href),
-                                imageBuilder: (uri, title, alt) {
-                                  final imageUrl = uri.toString();
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
-                                    child: GestureDetector(
-                                      onTap: () => _showImagePreview(imageUrl, alt ?? title),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxHeight: 280,
-                                          ),
-                                          child: Image.network(
-                                            imageUrl,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (_, _, _) => Container(
-                                              padding: const EdgeInsets.all(12),
-                                              decoration: BoxDecoration(
-                                                color: colorScheme.surfaceContainerHighest,
-                                                borderRadius: BorderRadius.circular(8),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    Icons.broken_image_outlined,
-                                                    size: 18,
-                                                    color: colorScheme.outline,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Flexible(
-                                                    child: Text(
-                                                      alt?.isNotEmpty == true ? alt! : '图片加载失败',
-                                                      style: theme.textTheme.bodySmall,
+                        child: SelectionArea(
+                          child: _item.editorType == 1
+                              ? MarkdownBody(
+                                  data: preprocessAnnouncementMarkdownLinks(_item.content),
+                                  selectable: false,
+                                  shrinkWrap: true,
+                                  styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                                    p: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+                                    pPadding: const EdgeInsets.only(bottom: 4),
+                                    blockSpacing: 6,
+                                  ),
+                                  onTapLink: (text, href, _) =>
+                                      _handleAppLinkTap(text, href),
+                                  imageBuilder: (uri, title, alt) {
+                                    final imageUrl = uri.toString();
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      child: GestureDetector(
+                                        onTap: () => _showImagePreview(imageUrl, alt ?? title),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxHeight: 280,
+                                            ),
+                                            child: Image.network(
+                                              imageUrl,
+                                              fit: BoxFit.contain,
+                                              errorBuilder: (_, _, _) => Container(
+                                                padding: const EdgeInsets.all(12),
+                                                decoration: BoxDecoration(
+                                                  color: colorScheme.surfaceContainerHighest,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.broken_image_outlined,
+                                                      size: 18,
+                                                      color: colorScheme.outline,
                                                     ),
-                                                  ),
-                                                ],
+                                                    const SizedBox(width: 6),
+                                                    Flexible(
+                                                      child: Text(
+                                                        alt?.isNotEmpty == true ? alt! : '图片加载失败',
+                                                        style: theme.textTheme.bodySmall,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
                                       ),
+                                    );
+                                  },
+                                )
+                              : Text.rich(
+                                  TextSpan(
+                                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.55),
+                                    children: parseMessageTagsToSpans(
+                                      _item.content,
+                                      parseMentions: true,
+                                      textStyle:
+                                          theme.textTheme.bodyMedium?.copyWith(height: 1.55) ??
+                                          const TextStyle(),
+                                      linkStyle: (theme.textTheme.bodyMedium ?? const TextStyle())
+                                          .copyWith(
+                                        color: colorScheme.primary,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      onSessionUnitTap: (uid, name) =>
+                                          _openMemberById(uid, name),
+                                      onChatObjectTap: (oid, name) =>
+                                          _openMemberById(oid, name),
+                                      onAppLinkTap: (node) =>
+                                          _handleAppLinkTap(node.text, node.href),
+                                      onMentionTap: (name) =>
+                                          _handleAppLinkTap('@$name', 'im://mention?name=${Uri.encodeComponent(name)}'),
                                     ),
-                                  );
-                                },
-                              )
-                            : SelectableText.rich(
-                                TextSpan(
-                                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
-                                  children: parseMessageTagsToSpans(
-                                    _item.content,
-                                    parseMentions: true,
-                                    textStyle:
-                                        theme.textTheme.bodyMedium?.copyWith(height: 1.6) ??
-                                        const TextStyle(),
-                                    linkStyle: (theme.textTheme.bodyMedium ?? const TextStyle())
-                                        .copyWith(
-                                      color: colorScheme.primary,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                    onSessionUnitTap: (uid, name) =>
-                                        _openMemberById(uid, name),
-                                    onChatObjectTap: (oid, name) =>
-                                        _openMemberById(oid, name),
-                                    onAppLinkTap: (node) =>
-                                        _handleAppLinkTap(node.text, node.href),
-                                    onMentionTap: (name) =>
-                                        _handleAppLinkTap('@$name', 'im://mention?name=${Uri.encodeComponent(name)}'),
                                   ),
                                 ),
-                              ),
+                        ),
                       ),
                     ),
                     if (_navLoading)
@@ -666,7 +719,7 @@ class _AnnouncementDetailDialogState
                   ],
                 ),
               ),
-              const Divider(height: 20),
+              const Divider(height: 12),
               Wrap(
                 alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -797,7 +850,23 @@ class _AnnouncementDetailDialogState
               ),
             ],
           ),
-        ),
+    );
+
+    if (widget.isBottomSheet) {
+      return Material(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: SafeArea(top: false, child: content),
+      );
+    }
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
+        child: content,
       ),
     );
   }

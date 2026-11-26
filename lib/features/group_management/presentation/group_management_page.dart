@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/two_line_app_bar_title.dart';
 import '../../announcement/presentation/announcement_manage_page.dart';
 import '../../chat_settings/application/chat_settings_controller.dart';
 import '../../chat_settings/data/models/chat_member.dart';
@@ -45,6 +46,7 @@ class GroupManagementPage extends ConsumerStatefulWidget {
   const GroupManagementPage({
     required this.sessionId,
     this.sessionUnitId,
+    this.sessionTitle,
     this.ownerId,
     this.destinationId,
     this.isDialog = false,
@@ -53,6 +55,7 @@ class GroupManagementPage extends ConsumerStatefulWidget {
 
   final String sessionId;
   final String? sessionUnitId;
+  final String? sessionTitle;
   final int? ownerId;
   final int? destinationId;
   final bool isDialog;
@@ -269,11 +272,24 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
       animation: controller,
       builder: (context, _) {
         final s = controller.settings;
+        final subtitle =
+            s?.name.isNotEmpty == true ? s!.name : widget.sessionTitle;
         if (controller.loading) {
           final loader = const Center(child: CircularProgressIndicator());
           return widget.isDialog
               ? loader
-              : Scaffold(appBar: AppBar(title: const Text('群管理中心')), body: loader);
+              : Scaffold(
+                backgroundColor: WeChatPageStyle.scaffoldBg(context),
+                appBar: AppBar(
+                  backgroundColor: WeChatPageStyle.appBarBg(context),
+                  scrolledUnderElevation: 0.5,
+                  title: TwoLineAppBarTitle(
+                    title: '群管理中心',
+                    subtitle: subtitle,
+                  ),
+                ),
+                body: loader,
+              );
         }
 
         if (s != null && !s.canEnterManagement) {
@@ -354,7 +370,18 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
           );
           return widget.isDialog
               ? denied
-              : Scaffold(appBar: AppBar(title: const Text('群管理中心')), body: denied);
+              : Scaffold(
+                backgroundColor: WeChatPageStyle.scaffoldBg(context),
+                appBar: AppBar(
+                  backgroundColor: WeChatPageStyle.appBarBg(context),
+                  scrolledUnderElevation: 0.5,
+                  title: TwoLineAppBarTitle(
+                    title: '群管理中心',
+                    subtitle: subtitle,
+                  ),
+                ),
+                body: denied,
+              );
         }
 
         final items = _visibleMenuItems();
@@ -385,9 +412,13 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
           return content;
         }
         return Scaffold(
+          backgroundColor: WeChatPageStyle.scaffoldBg(context),
           appBar: AppBar(
-            title: Text(
-              s?.name.isNotEmpty == true ? '${s!.name} · 群管理中心' : '群管理中心',
+            backgroundColor: WeChatPageStyle.appBarBg(context),
+            scrolledUnderElevation: 0.5,
+            title: TwoLineAppBarTitle(
+              title: '群管理中心',
+              subtitle: subtitle,
             ),
           ),
           body: content,
@@ -811,6 +842,7 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
             child: RoomJoinRequestsPage(
               destinationId: destId,
               handlerSessionUnitId: widget.sessionUnitId!,
+              sessionTitle: controller.settings?.name ?? widget.sessionTitle,
               isDialog: true,
             ),
           ),
@@ -826,7 +858,7 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
     return AnnouncementManagePage(
       sessionId: effectiveSessionId,
       sessionUnitId: widget.sessionUnitId,
-      sessionTitle: controller.settings?.name,
+      sessionTitle: controller.settings?.name ?? widget.sessionTitle,
       isEmbedded: true,
       onChanged: controller.refreshSettingsOnly,
     );
@@ -841,6 +873,7 @@ class _GroupManagementPageState extends ConsumerState<GroupManagementPage> {
     return MemberListPage(
       ownerId: ownerId,
       sessionUnitId: unitId,
+      sessionTitle: controller.settings?.name ?? widget.sessionTitle,
       isDialog: true,
     );
   }

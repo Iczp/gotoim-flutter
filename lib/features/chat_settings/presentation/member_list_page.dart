@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/two_line_app_bar_title.dart';
 import '../application/chat_settings_controller.dart';
 import '../application/member_list_controller.dart';
 import '../data/models/chat_member.dart';
@@ -10,12 +11,14 @@ class MemberListPage extends ConsumerStatefulWidget {
   const MemberListPage({
     required this.ownerId,
     required this.sessionUnitId,
+    this.sessionTitle,
     this.initialTotalCount,
     this.isDialog = false,
     super.key,
   });
   final int ownerId;
   final String sessionUnitId;
+  final String? sessionTitle;
   final int? initialTotalCount;
   final bool isDialog;
 
@@ -221,11 +224,16 @@ class _MemberListPageState extends ConsumerState<MemberListPage> {
       }
 
       return Scaffold(
+        backgroundColor: WeChatPageStyle.scaffoldBg(context),
         appBar: AppBar(
-          title: Text(
-            controller.totalCount > 0
-                ? '群聊成员 (${controller.totalCount})'
-                : '群聊成员',
+          backgroundColor: WeChatPageStyle.appBarBg(context),
+          scrolledUnderElevation: 0.5,
+          title: TwoLineAppBarTitle(
+            title:
+                controller.totalCount > 0
+                    ? '群聊成员 (${controller.totalCount})'
+                    : '群聊成员',
+            subtitle: widget.sessionTitle,
           ),
         ),
         body: content,

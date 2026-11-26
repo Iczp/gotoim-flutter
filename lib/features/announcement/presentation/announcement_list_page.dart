@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/two_line_app_bar_title.dart';
 import '../application/announcement_providers.dart';
 import '../data/models/session_announcement.dart';
 import 'announcement_edit_page.dart';
@@ -9,18 +10,21 @@ class AnnouncementListPage extends ConsumerStatefulWidget {
   const AnnouncementListPage({
     required this.sessionId,
     this.sessionUnitId,
+    this.sessionTitle,
     this.canManage = false,
     super.key,
   });
 
   final String sessionId;
   final String? sessionUnitId;
+  final String? sessionTitle;
   final bool canManage;
 
   static Future<void> open(
     BuildContext context, {
     required String sessionId,
     String? sessionUnitId,
+    String? sessionTitle,
     bool canManage = false,
   }) {
     return Navigator.of(context).push<void>(
@@ -28,6 +32,7 @@ class AnnouncementListPage extends ConsumerStatefulWidget {
         builder: (_) => AnnouncementListPage(
           sessionId: sessionId,
           sessionUnitId: sessionUnitId,
+          sessionTitle: sessionTitle,
           canManage: canManage,
         ),
       ),
@@ -67,6 +72,7 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
       context,
       sessionId: widget.sessionId,
       sessionUnitId: widget.sessionUnitId,
+      sessionTitle: widget.sessionTitle,
       permissions: _controller.permissions,
     );
     if (created != null) {
@@ -87,8 +93,14 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
         final canCreate = perms?.canCreate ?? hasManagementRole;
 
         return Scaffold(
+          backgroundColor: WeChatPageStyle.scaffoldBg(context),
           appBar: AppBar(
-            title: const Text('群公告'),
+            backgroundColor: WeChatPageStyle.appBarBg(context),
+            scrolledUnderElevation: 0.5,
+            title: TwoLineAppBarTitle(
+              title: '群公告',
+              subtitle: widget.sessionTitle,
+            ),
             actions: [
               if (canCreate)
                 IconButton(
@@ -210,19 +222,20 @@ class _AnnouncementListPageState extends ConsumerState<AnnouncementListPage> {
     final hasManagementRole = _controller.permissions?.hasManagementRole ?? widget.canManage;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: WeChatPageStyle.sectionGap),
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      color: WeChatPageStyle.cardBg(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: WeChatPageStyle.cardRadius,
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: WeChatPageStyle.cardRadius,
         onTap: () {
           AnnouncementDetailDialog.show(
             context,
             announcement: item,
             sessionUnitId: widget.sessionUnitId ?? _controller.permissions?.sessionUnitId,
+            sessionTitle: widget.sessionTitle,
             canManage: hasManagementRole,
           );
         },

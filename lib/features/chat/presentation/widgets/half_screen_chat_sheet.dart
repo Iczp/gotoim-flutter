@@ -314,7 +314,7 @@ class _HalfScreenChatSheetState extends ConsumerState<HalfScreenChatSheet> {
         });
       } else {
         setState(() {
-          _hasMoreOlder = false;
+          _hasMoreOlder = page.hasMore;
           _isLoadingOlder = false;
         });
       }
@@ -353,7 +353,7 @@ class _HalfScreenChatSheetState extends ConsumerState<HalfScreenChatSheet> {
         });
       } else {
         setState(() {
-          _hasMoreNewer = false;
+          _hasMoreNewer = page.hasMore;
           _isLoadingNewer = false;
         });
       }

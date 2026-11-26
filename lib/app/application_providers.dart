@@ -37,7 +37,7 @@ final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((ref) {
       BaseOptions(
         baseUrl: environment.apiBaseUrl,
         connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 45),
         contentType: Headers.jsonContentType,
       ),
     ),

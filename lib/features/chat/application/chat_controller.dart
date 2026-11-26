@@ -26,6 +26,7 @@ import 'ai_stream_change_bus.dart';
 import '../data/datasources/message_api.dart';
 import '../data/datasources/message_dao.dart';
 import '../data/models/chat_message.dart';
+import '../data/models/message_sync_progress.dart';
 import '../data/repositories/message_repository.dart';
 import '../../session/data/models/session_summary.dart';
 import '../../session/data/models/session_summary_helpers.dart';
@@ -106,6 +107,9 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
        _signalRGateway = signalRGateway,
        _title = initialTitle {
     _typingService.addListener(notifyListeners);
+    _syncProgressSubscription = _repository.syncProgressStream.listen(
+      _onSyncProgress,
+    );
   }
   static const pageSize = 30;
   static const initialPageSize = 10;
@@ -133,8 +137,43 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   @override
   bool isSending = false;
   bool isLoadingLatest = false;
+  bool isLongSyncing = false;
+  Timer? _longSyncTimer;
+  Timer? _syncElapsedTimer;
+  StreamSubscription<MessageSyncProgress>? _syncProgressSubscription;
+  MessageSyncProgress? _syncProgress;
+  DateTime? _syncStartedAt;
   bool hasMore = true;
   Object? error;
+
+  MessageSyncProgress? get syncProgress => _syncProgress;
+
+  Duration get syncElapsed {
+    final active = _syncProgress;
+    if (active != null && active.isActive) {
+      final diff = DateTime.now().difference(active.startedAt);
+      return diff.isNegative ? Duration.zero : diff;
+    }
+    final started = _syncStartedAt;
+    if (started != null) {
+      final diff = DateTime.now().difference(started);
+      return diff.isNegative ? Duration.zero : diff;
+    }
+    return Duration.zero;
+  }
+
+  void _onSyncProgress(MessageSyncProgress event) {
+    if (_isDisposed) return;
+    if (effectiveOwnerId > 0 && event.ownerId != effectiveOwnerId) return;
+    if (event.isActive) {
+      _syncProgress = event;
+    } else if (!isLoadingLatest) {
+      _syncProgress = null;
+    }
+    if (isLongSyncing) {
+      notifyListeners();
+    }
+  }
 
   bool shouldAnimateMessage(String localId) =>
       _liveAnimatedMessageIds.contains(localId);
@@ -744,7 +783,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
       );
       if (_isDisposed) return;
       if (page.items.isEmpty) {
-        hasMore = false;
+        hasMore = page.hasMore;
       } else {
         final existingIds = _messages.map((item) => item.localId).toSet();
         for (final item in page.items) {
@@ -785,6 +824,38 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
   Future<void> loadLatest({bool refreshRecent = false}) async {
     if (_isDisposed || isLoadingLatest) return;
     isLoadingLatest = true;
+    final startedAt = DateTime.now();
+    _syncStartedAt = startedAt;
+    final activeProgress =
+        effectiveOwnerId > 0
+            ? _repository.currentSyncProgress(effectiveOwnerId)
+            : null;
+    if (activeProgress != null && activeProgress.isActive) {
+      _syncProgress = activeProgress;
+    }
+    _longSyncTimer?.cancel();
+    _longSyncTimer = Timer(const Duration(milliseconds: 600), () {
+      if (!_isDisposed && isLoadingLatest) {
+        isLongSyncing = true;
+        _syncProgress ??= MessageSyncProgress(
+          ownerId: effectiveOwnerId,
+          stage:
+              refreshRecent
+                  ? MessageSyncStage.pullingChanges
+                  : MessageSyncStage.fetchingLatest,
+          startedAt: _syncStartedAt ?? DateTime.now(),
+        );
+        _syncElapsedTimer?.cancel();
+        _syncElapsedTimer = Timer.periodic(const Duration(milliseconds: 500), (
+          _,
+        ) {
+          if (!_isDisposed && isLongSyncing) {
+            notifyListeners();
+          }
+        });
+        notifyListeners();
+      }
+    });
     // The cursor must come from Drift instead of this controller's temporary
     // page.  A new chat controller is created on re-entry, so only the local
     // database can reliably carry forward the newest persisted server ID.
@@ -800,6 +871,16 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
           debugPrint(
             '[loadMessages][changes-failed] session=$sessionUnitId error=$exception',
           );
+        }
+      }
+      if (!_isDisposed) {
+        _syncProgress = MessageSyncProgress(
+          ownerId: effectiveOwnerId,
+          stage: MessageSyncStage.fetchingLatest,
+          startedAt: _syncStartedAt ?? startedAt,
+        );
+        if (isLongSyncing) {
+          notifyListeners();
         }
       }
       final minMessageId = await _repository.getLatestSyncCursor(
@@ -866,7 +947,14 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         '[loadMessages][latest-failed] session=$sessionUnitId error=$exception',
       );
     } finally {
+      _longSyncTimer?.cancel();
+      _longSyncTimer = null;
+      _syncElapsedTimer?.cancel();
+      _syncElapsedTimer = null;
+      _syncStartedAt = null;
+      _syncProgress = null;
       isLoadingLatest = false;
+      isLongSyncing = false;
       if (!_isDisposed) {
         notifyListeners();
       }
@@ -1725,7 +1813,19 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         final sent = await _repository.sendLocalFile(local: local, file: file);
         if (_isDisposed) return;
         _replaceMessage(sent);
-        if (sent.state == 'sent') _pendingFiles.remove(local.localId);
+        if (sent.state == 'sent') {
+          _pendingFiles.remove(local.localId);
+          final localPath = sent.localFilePath;
+          if (localPath != null && localPath.isNotEmpty) {
+            unawaited(
+              _attachmentTransferService.registerLocalFile(
+                id: sent.localId,
+                localPath: localPath,
+                totalBytes: file.size,
+              ),
+            );
+          }
+        }
         notifyListeners();
         _playSentEffect(sent);
       } catch (_) {
@@ -1769,7 +1869,19 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
                 : await _repository.sendLocalFile(local: sending, file: file!);
         if (_isDisposed) return;
         _replaceMessage(sent);
-        if (sent.state == 'sent') _pendingFiles.remove(message.localId);
+        if (sent.state == 'sent') {
+          _pendingFiles.remove(message.localId);
+          final localPath = sent.localFilePath;
+          if (localPath != null && localPath.isNotEmpty) {
+            unawaited(
+              _attachmentTransferService.registerLocalFile(
+                id: sent.localId,
+                localPath: localPath,
+                totalBytes: file?.size,
+              ),
+            );
+          }
+        }
         notifyListeners();
         _playSentEffect(sent);
       } catch (error) {
@@ -1933,6 +2045,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         id: message.localId,
         source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        localFilePath: message.localFilePath,
         userId: ownerId.toString(),
         chatTarget: sessionUnitId,
         messageDate: message.createdAt,
@@ -1954,6 +2067,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         id: message.localId,
         source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        localFilePath: message.localFilePath,
         userId: ownerId.toString(),
         chatTarget: sessionUnitId,
         messageDate: message.createdAt,
@@ -1969,6 +2083,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
         id: message.localId,
         source: _attachmentSource(message),
         fileName: message.fileName.isEmpty ? '附件' : message.fileName,
+        localFilePath: message.localFilePath,
         userId: ownerId.toString(),
         chatTarget: sessionUnitId,
         messageDate: message.createdAt,
@@ -2096,10 +2211,15 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
     unawaited(_sessionChangeSubscription?.cancel());
     unawaited(_aiStreamSubscription?.cancel());
     unawaited(_signalRSubscription?.cancel());
+    unawaited(_syncProgressSubscription?.cancel());
     _aiStreamElapsedTimer?.cancel();
     _aiStreamElapsedTimer = null;
     _aiRunRecoveryTimer?.cancel();
     _aiRunRecoveryTimer = null;
+    _longSyncTimer?.cancel();
+    _longSyncTimer = null;
+    _syncElapsedTimer?.cancel();
+    _syncElapsedTimer = null;
     super.dispose();
   }
 

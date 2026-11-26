@@ -9,6 +9,7 @@ import 'package:gotoim_flutter/app/application_providers.dart';
 import 'package:gotoim_flutter/core/config/app_environment.dart';
 import 'package:gotoim_flutter/core/database/unified_database.dart';
 import 'package:gotoim_flutter/core/device/client_device_context.dart';
+import 'package:gotoim_flutter/core/network/api_exception.dart';
 import 'package:gotoim_flutter/core/network/client_credentials_token_storage.dart';
 import 'package:gotoim_flutter/core/network/session_invalidator.dart';
 import 'package:gotoim_flutter/core/network/token_storage.dart';
@@ -175,6 +176,164 @@ void main() {
       await sessionInvalidator.invalidate(reason: '登录已失效，请重新登录。');
       expect(authController.status, AuthStatus.unauthenticated);
       expect(authController.errorMessage, '登录已失效，请重新登录。');
+    },
+  );
+
+  test(
+    'transient connectionError during refreshSession retries once and succeeds',
+    () async {
+      dotenv.loadFromString(envString: 'AUTH_BASE_URL=https://example.test');
+      final storage = _MemoryTokenStorage(
+        accessToken: 'expired-token',
+        refreshToken: 'valid-refresh',
+      );
+      final dio = Dio();
+      var attempts = 0;
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            attempts++;
+            if (attempts == 1) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  type: DioExceptionType.connectionError,
+                  message: 'SocketException: Connection reset by peer',
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<dynamic>(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'access_token': 'new-access',
+                  'refresh_token': 'new-refresh',
+                  'expires_in': 3600,
+                  'token_type': 'Bearer',
+                },
+              ),
+            );
+          },
+        ),
+      );
+      final repository = OpenIdConnectAuthRepository(
+        dio: dio,
+        environment: AppEnvironment.fromDotEnv(AppFlavor.development),
+        tokenStorage: storage,
+        clientCredentialsTokenStorage: ClientCredentialsTokenStorage(),
+        deviceContext: _deviceContext,
+        transientRefreshRetryDelay: Duration.zero,
+      );
+
+      final session = await repository.refreshSession();
+      expect(attempts, 2);
+      expect(session.accessToken, 'new-access');
+      expect(storage.accessToken, 'new-access');
+      expect(storage.refreshToken, 'new-refresh');
+    },
+  );
+
+  test(
+    'transient connectionError failing twice surfaces network detail instead of Login failed',
+    () async {
+      dotenv.loadFromString(envString: 'AUTH_BASE_URL=https://example.test');
+      final storage = _MemoryTokenStorage(
+        accessToken: 'expired-token',
+        refreshToken: 'valid-refresh',
+      );
+      final dio = Dio();
+      var attempts = 0;
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            attempts++;
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.connectionTimeout,
+                message: 'The request connection took longer than 15s',
+              ),
+            );
+          },
+        ),
+      );
+      final repository = OpenIdConnectAuthRepository(
+        dio: dio,
+        environment: AppEnvironment.fromDotEnv(AppFlavor.development),
+        tokenStorage: storage,
+        clientCredentialsTokenStorage: ClientCredentialsTokenStorage(),
+        deviceContext: _deviceContext,
+        transientRefreshRetryDelay: Duration.zero,
+      );
+
+      await expectLater(
+        repository.refreshSession(),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('认证请求超时'), isNot(contains('Login failed'))),
+          ),
+        ),
+      );
+      expect(attempts, 2);
+      expect(storage.refreshToken, 'valid-refresh');
+    },
+  );
+
+  test(
+    '400 invalid_grant during refreshSession does not retry and throws TokenRefreshRejectedException',
+    () async {
+      dotenv.loadFromString(envString: 'AUTH_BASE_URL=https://example.test');
+      final storage = _MemoryTokenStorage(
+        accessToken: 'expired-token',
+        refreshToken: 'bad-refresh',
+      );
+      final dio = Dio();
+      var attempts = 0;
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            attempts++;
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.badResponse,
+                response: Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 400,
+                  data: {
+                    'error': 'invalid_grant',
+                    'error_description': 'The specified token is invalid.',
+                  },
+                ),
+              ),
+            );
+          },
+        ),
+      );
+      final repository = OpenIdConnectAuthRepository(
+        dio: dio,
+        environment: AppEnvironment.fromDotEnv(AppFlavor.development),
+        tokenStorage: storage,
+        clientCredentialsTokenStorage: ClientCredentialsTokenStorage(),
+        deviceContext: _deviceContext,
+        transientRefreshRetryDelay: Duration.zero,
+      );
+
+      await expectLater(
+        repository.refreshSession(),
+        throwsA(
+          isA<TokenRefreshRejectedException>().having(
+            (e) => e.code,
+            'code',
+            'invalid_grant',
+          ),
+        ),
+      );
+      expect(attempts, 1);
     },
   );
 }

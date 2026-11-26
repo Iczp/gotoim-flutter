@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/application_providers.dart';
 import '../../../core/notifications/local_notification_contract.dart';
 import '../../../core/widgets/cell_group.dart';
+import '../../../core/widgets/two_line_app_bar_title.dart';
 import '../../session/application/message_alert_settings.dart';
 
 class MessageAlertSettingsPage extends ConsumerStatefulWidget {
@@ -68,14 +69,26 @@ class _MessageAlertSettingsPageState extends ConsumerState<MessageAlertSettingsP
     final support = ref.read(localNotificationServiceProvider).support;
     final session = _session;
     if (session == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: WeChatPageStyle.scaffoldBg(context),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
     final enabled = session.notificationsEnabled;
     final content = ListView(
       shrinkWrap: widget.isDialog,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: WeChatPageStyle.pageHorizontalPadding,
+        vertical: 10,
+      ),
         children: [
-          CellGroup(title: '提醒方式', children: [
+          CellGroup(
+            title: '提醒方式',
+            useGlass: false,
+            backgroundColor: WeChatPageStyle.cardBg(context),
+            borderRadius: WeChatPageStyle.cardRadius,
+            margin: const EdgeInsets.only(bottom: WeChatPageStyle.sectionGap),
+            children: [
             SwitchListTile(
               secondary: const Icon(Icons.notifications_active_outlined),
               title: const Text('新消息通知'),
@@ -103,7 +116,13 @@ class _MessageAlertSettingsPageState extends ConsumerState<MessageAlertSettingsP
               onChanged: enabled ? (value) => _update(previewEnabled: value) : null,
             ),
           ]),
-          CellGroup(title: '正在聊天', children: [
+          CellGroup(
+            title: '正在聊天',
+            useGlass: false,
+            backgroundColor: WeChatPageStyle.cardBg(context),
+            borderRadius: WeChatPageStyle.cardRadius,
+            margin: const EdgeInsets.only(bottom: WeChatPageStyle.sectionGap),
+            children: [
             SwitchListTile(
               secondary: const Icon(Icons.chat_bubble_outline),
               title: const Text('当前聊天页振动'),
@@ -114,7 +133,13 @@ class _MessageAlertSettingsPageState extends ConsumerState<MessageAlertSettingsP
                   : null,
             ),
           ]),
-          CellGroup(title: '系统通知权限', children: [
+          CellGroup(
+            title: '系统通知权限',
+            useGlass: false,
+            backgroundColor: WeChatPageStyle.cardBg(context),
+            borderRadius: WeChatPageStyle.cardRadius,
+            margin: const EdgeInsets.only(bottom: WeChatPageStyle.sectionGap),
+            children: [
             ListTile(
               leading: Icon(support.isSupported ? Icons.verified_user_outlined : Icons.phonelink_erase_outlined),
               title: Text(support.isSupported ? '授权系统通知' : '当前平台不支持本地通知'),
@@ -134,7 +159,15 @@ class _MessageAlertSettingsPageState extends ConsumerState<MessageAlertSettingsP
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.title} · 消息提醒')),
+      backgroundColor: WeChatPageStyle.scaffoldBg(context),
+      appBar: AppBar(
+        backgroundColor: WeChatPageStyle.appBarBg(context),
+        scrolledUnderElevation: 0.5,
+        title: TwoLineAppBarTitle(
+          title: '消息提醒',
+          subtitle: widget.title,
+        ),
+      ),
       body: content,
     );
   }

@@ -8,6 +8,7 @@ import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cell_group.dart';
+import '../../../core/widgets/two_line_app_bar_title.dart';
 import '../application/chat_settings_controller.dart';
 import 'chat_background_preview_page.dart';
 
@@ -114,13 +115,20 @@ class _ChatBackgroundPageState extends ConsumerState<ChatBackgroundPage> {
     final hasBg = bgUrl != null && bgUrl.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLowest,
+      backgroundColor: WeChatPageStyle.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text('聊天背景'),
-        centerTitle: true,
+        backgroundColor: WeChatPageStyle.appBarBg(context),
+        scrolledUnderElevation: 0.5,
+        title: TwoLineAppBarTitle(
+          title: '聊天背景',
+          subtitle: controller.title,
+        ),
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        padding: const EdgeInsets.symmetric(
+          horizontal: WeChatPageStyle.pageHorizontalPadding,
+          vertical: 16,
+        ),
         children: [
           // ── 1. 当前背景卡片 ──
           Center(
@@ -240,6 +248,9 @@ class _ChatBackgroundPageState extends ConsumerState<ChatBackgroundPage> {
           // ── 2. 选择新背景选项 ──
           CellGroup(
             title: '选择背景',
+            useGlass: false,
+            backgroundColor: WeChatPageStyle.cardBg(context),
+            borderRadius: WeChatPageStyle.cardRadius,
             children: [
               Cell(
                 icon: const Icon(Icons.photo_library_outlined),

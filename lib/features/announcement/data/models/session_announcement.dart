@@ -323,13 +323,20 @@ class SessionAnnouncementStat {
   });
 
   factory SessionAnnouncementStat.fromJson(Map<String, dynamic> json) {
+    final total =
+        (json['totalMembersCount'] as num?)?.toInt() ??
+        (json['totalMemberCount'] as num?)?.toInt() ??
+        0;
+    final confirmed = (json['confirmedCount'] as num?)?.toInt() ?? 0;
     return SessionAnnouncementStat(
       announcementId: json['announcementId']?.toString() ?? '',
-      totalMemberCount: (json['totalMemberCount'] as num?)?.toInt() ?? 0,
+      totalMemberCount: total,
       readCount: (json['readCount'] as num?)?.toInt() ?? 0,
       unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
-      confirmedCount: (json['confirmedCount'] as num?)?.toInt() ?? 0,
-      unconfirmedCount: (json['unconfirmedCount'] as num?)?.toInt() ?? 0,
+      confirmedCount: confirmed,
+      unconfirmedCount:
+          (json['unconfirmedCount'] as num?)?.toInt() ??
+          (total - confirmed).clamp(0, 999999),
       readRate: (json['readRate'] as num?)?.toDouble() ?? 0.0,
       confirmedRate: (json['confirmedRate'] as num?)?.toDouble() ?? 0.0,
     );
@@ -343,6 +350,19 @@ class SessionAnnouncementStat {
   final int unconfirmedCount;
   final double readRate;
   final double confirmedRate;
+
+  double get readPercent => readRate <= 1.0 ? readRate * 100 : readRate;
+
+  double get confirmedPercent =>
+      confirmedRate <= 1.0 ? confirmedRate * 100 : confirmedRate;
+}
+
+String? _firstNonEmptyString(List<Object?> candidates) {
+  for (final candidate in candidates) {
+    final text = candidate?.toString().trim() ?? '';
+    if (text.isNotEmpty && text != 'null') return text;
+  }
+  return null;
 }
 
 class SessionAnnouncementMember {
@@ -351,6 +371,7 @@ class SessionAnnouncementMember {
     required this.chatObjectId,
     required this.name,
     this.portrait,
+    this.isRead = false,
     this.isConfirmed = false,
     this.confirmedTime,
     this.firstReadTime,
@@ -359,14 +380,27 @@ class SessionAnnouncementMember {
   });
 
   factory SessionAnnouncementMember.fromJson(Map<String, dynamic> json) {
+    final firstReadTime = json['firstReadTime']?.toString();
     return SessionAnnouncementMember(
       sessionUnitId: json['sessionUnitId']?.toString() ?? '',
       chatObjectId: json['chatObjectId']?.toString() ?? '',
-      name: json['name']?.toString() ?? '成员',
-      portrait: json['portrait']?.toString(),
+      name:
+          _firstNonEmptyString([
+            json['memberName'],
+            json['name'],
+            json['displayName'],
+          ]) ??
+          '成员',
+      portrait: _firstNonEmptyString([
+        json['memberPortrait'],
+        json['portrait'],
+        json['avatar'],
+        json['thumbnail'],
+      ]),
+      isRead: json['isRead'] == true || firstReadTime != null,
       isConfirmed: json['isConfirmed'] == true,
       confirmedTime: json['confirmedTime']?.toString(),
-      firstReadTime: json['firstReadTime']?.toString(),
+      firstReadTime: firstReadTime,
       isCreator: json['isCreator'] == true,
       isAdmin: json['isAdmin'] == true,
     );
@@ -376,6 +410,7 @@ class SessionAnnouncementMember {
   final String chatObjectId;
   final String name;
   final String? portrait;
+  final bool isRead;
   final bool isConfirmed;
   final String? confirmedTime;
   final String? firstReadTime;

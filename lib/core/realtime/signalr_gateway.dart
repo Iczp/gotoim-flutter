@@ -69,16 +69,25 @@ String formatSignalRError(Object? error) {
   if (msg.contains('500') || msg.contains('Internal Server Error')) {
     return '服务端内部错误 (HTTP 500)：服务器处理实时长连接时出现异常。';
   }
-  if (msg.contains('Failed host lookup') ||
+  if (msg.contains('认证请求超时') ||
+      msg.contains('timed out') ||
+      msg.contains('TimeoutException')) {
+    return '连接超时：网络延时过大或服务端响应超时。\n详情：$msg';
+  }
+  if (msg.contains('认证服务器证书校验失败') ||
+      msg.contains('HandshakeException') ||
+      msg.contains('Certificate')) {
+    return 'TLS/SSL 握手或证书校验失败：请检查系统时间或网络代理。\n详情：$msg';
+  }
+  if (msg.contains('认证网络连接失败') ||
+      msg.contains('认证网络异常') ||
+      msg.contains('Failed host lookup') ||
       msg.contains('SocketException') ||
       msg.contains('Network is unreachable')) {
-    return '网络异常或无法解析主机：设备未连网或无法访问该域名。';
+    return '网络异常或无法解析主机：设备未连网、刚切回前台网络尚未就绪或无法访问该域名。\n详情：$msg';
   }
   if (msg.contains('Connection refused')) {
     return '连接被拒绝：目标端口未开放或后端 SignalR 服务未启动。';
-  }
-  if (msg.contains('timed out') || msg.contains('TimeoutException')) {
-    return '连接超时：网络延时过大或服务端响应超时。';
   }
   if (msg.contains('Handshake') || msg.contains('handshake')) {
     return 'SignalR 握手失败：协议版本不匹配或凭证校验异常。';

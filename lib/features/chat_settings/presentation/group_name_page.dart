@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widgets/app_avatar.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/widgets/two_line_app_bar_title.dart';
 import '../../session/application/session_list_controller.dart';
 import '../../session/data/models/session_summary.dart';
 import '../application/chat_settings_controller.dart';
@@ -110,8 +111,14 @@ class _GroupNamePageState extends ConsumerState<GroupNamePage> {
         : (widget.initialTitle ?? '');
 
     return Scaffold(
+      backgroundColor: WeChatPageStyle.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text('修改群名称'),
+        backgroundColor: WeChatPageStyle.appBarBg(context),
+        scrolledUnderElevation: 0.5,
+        title: TwoLineAppBarTitle(
+          title: '修改群名称',
+          subtitle: currentTitle,
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -162,13 +169,10 @@ class _GroupNamePageState extends ConsumerState<GroupNamePage> {
             const SizedBox(height: 28),
             Container(
               decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.dividerColor.withValues(alpha: 0.3),
-                ),
+                color: WeChatPageStyle.cardBg(context),
+                borderRadius: WeChatPageStyle.cardRadius,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               child: Row(
                 children: [
                   const Text(

@@ -14,6 +14,7 @@ import '../../../session/data/models/session_summary.dart';
 import '../datasources/message_api.dart';
 import '../datasources/message_dao.dart';
 import '../models/chat_message.dart';
+import '../models/message_sync_progress.dart';
 
 part 'message_repository_sync.dart';
 
@@ -153,7 +154,28 @@ class MessageRepository {
   final Map<String, Future<void>> _changeSyncInFlight = {};
   final Map<String, Future<List<ChatMessage>>> _latestInFlight = {};
   final Map<String, Timer> _latestRetries = {};
+  final StreamController<MessageSyncProgress> _syncProgressController =
+      StreamController<MessageSyncProgress>.broadcast();
+  final Map<int, MessageSyncProgress> _activeSyncProgressByOwner = {};
   bool _disposed = false;
+
+  Stream<MessageSyncProgress> get syncProgressStream =>
+      _syncProgressController.stream;
+
+  MessageSyncProgress? currentSyncProgress(int ownerId) =>
+      _activeSyncProgressByOwner[ownerId];
+
+  void _emitSyncProgress(MessageSyncProgress progress) {
+    if (_disposed) return;
+    if (progress.isActive) {
+      _activeSyncProgressByOwner[progress.ownerId] = progress;
+    } else {
+      _activeSyncProgressByOwner.remove(progress.ownerId);
+    }
+    if (!_syncProgressController.isClosed) {
+      _syncProgressController.add(progress);
+    }
+  }
 
   void dispose() {
     _disposed = true;
@@ -161,6 +183,8 @@ class MessageRepository {
       timer.cancel();
     }
     _latestRetries.clear();
+    _activeSyncProgressByOwner.clear();
+    unawaited(_syncProgressController.close());
   }
 
   void _checkActive() {
@@ -611,15 +635,21 @@ class MessageRepository {
       sessionUnitId,
       beforeScore,
     );
+    var isLocalCovered = false;
     if (covered != null &&
         (beforeScore != null || local.isNotEmpty) &&
         (local.length >= limit || covered['earliest'] == true)) {
       final lowest = local.isEmpty ? 0 : local.last.serverId ?? 0;
       final highest = local.where((m) => m.serverId != null)
           .fold<int>(0, (max, m) => m.serverId! > max ? m.serverId! : max);
-      final withinUpper = beforeScore != null ||
-          highest <= (covered['max'] as int? ?? 0);
-      if (withinUpper && (covered['earliest'] == true || lowest >= (covered['min'] as int))) {
+      final coveredMax = covered['max'] as int? ?? 0;
+      final coveredMin = covered['min'] as int? ?? 0;
+      final withinUpper = coveredMax > 0
+          ? highest <= coveredMax
+          : (beforeScore != null || highest <= 0);
+      isLocalCovered =
+          withinUpper && (covered['earliest'] == true || lowest >= coveredMin);
+      if (isLocalCovered) {
         return MessagePage(
           local,
           covered['earliest'] != true || local.length >= limit,
@@ -679,6 +709,10 @@ class MessageRepository {
           '[loadHistory][403] session=$sessionUnitId Forbidden; returning local without marking loadedAll',
         );
         return MessagePage(local, false);
+      }
+      if (beforeScore != null && !isLocalCovered) {
+        // Do not advance paging cursor past an uncovered gap when remote fails.
+        return const MessagePage(<ChatMessage>[], true);
       }
       if (local.isNotEmpty) return MessagePage(local, true);
       rethrow;
@@ -782,8 +816,23 @@ class MessageRepository {
       limit: limit,
     );
 
-    if (local.length >= limit) {
-      return MessagePage(local, true);
+    final covered = await _dao.readHistoryCoverage(
+      ownerId,
+      sessionUnitId,
+      afterScore,
+    );
+    var isLocalCovered = false;
+    if (covered != null && local.length >= limit) {
+      final lowest = local.isEmpty ? 0 : local.first.serverId ?? 0;
+      final highest = local.where((m) => m.serverId != null)
+          .fold<int>(0, (max, m) => m.serverId! > max ? m.serverId! : max);
+      final coveredMin = covered['min'] as int? ?? 0;
+      final coveredMax = covered['max'] as int? ?? 0;
+      isLocalCovered =
+          coveredMax > 0 && highest <= coveredMax && lowest >= coveredMin;
+      if (isLocalCovered) {
+        return MessagePage(local, true);
+      }
     }
 
     try {
@@ -796,6 +845,15 @@ class MessageRepository {
       _checkActive();
       if (remote.items.isNotEmpty) {
         await _dao.upsertAll(remote.items);
+        final maxRemoteId = remote.items.fold<int>(
+          afterServerId,
+          (max, m) => (m.serverId ?? 0) > max ? m.serverId! : max,
+        );
+        await _dao.writeHistoryCoverage(ownerId, sessionUnitId, afterScore, {
+          'min': afterServerId,
+          'max': maxRemoteId,
+          'earliest': false,
+        });
       }
       final refreshed = await _dao.readNewerPage(
         ownerId: ownerId,
@@ -806,7 +864,11 @@ class MessageRepository {
       final hasMore = remote.hasMore ?? remote.items.length >= limit;
       return MessagePage(refreshed, hasMore);
     } catch (e) {
-      return MessagePage(local, false);
+      if (!isLocalCovered) {
+        // Keep retryable boundary instead of advancing past an uncovered gap.
+        return const MessagePage(<ChatMessage>[], true);
+      }
+      return MessagePage(local, true);
     }
   }
 
@@ -837,8 +899,15 @@ class MessageRepository {
     } catch (error) {
       if (!_disposed && !(error is ApiException &&
           (error.statusCode == 401 || error.statusCode == 403))) {
-        _scheduleLatest(ownerId, sessionUnitId, minMessageId, limit, maxPages,
-            delay: const Duration(seconds: 5));
+        _scheduleLatest(
+          ownerId,
+          sessionUnitId,
+          minMessageId,
+          limit,
+          maxPages,
+          refreshRecent: refreshRecent,
+          delay: const Duration(seconds: 5),
+        );
       }
       rethrow;
     } finally {
@@ -852,6 +921,7 @@ class MessageRepository {
     int cursor,
     int limit,
     int pages, {
+    bool refreshRecent = false,
     Duration delay = const Duration(milliseconds: 100),
   }) {
     if (_disposed) return;
@@ -861,13 +931,24 @@ class MessageRepository {
       _latestRetries.remove(key);
       if (_disposed) return;
       try {
-        await loadLatest(
+        final persisted = await loadLatest(
           ownerId: owner,
           sessionUnitId: unit,
           minMessageId: cursor,
           limit: limit,
           maxPages: pages,
+          refreshRecent: refreshRecent,
         );
+        if (persisted.isNotEmpty) {
+          _sessionChangeBus?.publish(
+            ownerId: owner,
+            sessionUnitId: unit,
+            messageIds: persisted
+                .map((m) => m.serverId)
+                .whereType<int>()
+                .toList(growable: false),
+          );
+        }
       } catch (error) {
         debugPrint('[MessageSync] continuation failed: $error');
         _scheduleLatest(
@@ -876,6 +957,7 @@ class MessageRepository {
           cursor,
           limit,
           pages,
+          refreshRecent: refreshRecent,
           delay: const Duration(seconds: 5),
         );
       }
@@ -895,22 +977,20 @@ class MessageRepository {
     }
     var cursor = minMessageId;
     final collected = <String, ChatMessage>{};
+    final recentItems = <ChatMessage>[];
     var hasMore = false;
     final startedEmpty = minMessageId == 0 &&
         await _dao.maxServerId(ownerId, sessionUnitId) == 0;
-    if (refreshRecent) {
-      // Withdrawals do not create a larger message ID. Refresh a bounded
-      // recent window as well as the forward cursor on re-entry/reconnect.
+    if (refreshRecent && startedEmpty) {
+      // Truly empty DB entry: fetch recent snapshot first to seed initial baseline.
       final recent = await _api.history(
         ownerId: ownerId,
         sessionUnitId: sessionUnitId,
         limit: limit,
       );
-      for (final item in recent.items) {
-        collected[item.localId] = item;
-      }
+      recentItems.addAll(recent.items);
       _checkActive();
-      if (startedEmpty && await _dao.maxServerId(ownerId, sessionUnitId) == 0) {
+      if (await _dao.maxServerId(ownerId, sessionUnitId) == 0) {
         cursor = recent.items.fold<int>(0, (max, m) =>
             (m.serverId ?? 0) > max ? m.serverId! : max);
       }
@@ -942,6 +1022,26 @@ class MessageRepository {
       if (!hasMore || next <= cursor) break;
       cursor = next;
     }
+    // When DB already had cached messages, only fetch & merge recent history after forward latest caught up.
+    if (refreshRecent && !startedEmpty && !hasMore) {
+      final recent = await _api.history(
+        ownerId: ownerId,
+        sessionUnitId: sessionUnitId,
+        limit: limit,
+      );
+      recentItems.addAll(recent.items);
+      _checkActive();
+    }
+    if (!hasMore || startedEmpty) {
+      final enforceWatermarkBound = !startedEmpty;
+      for (final item in recentItems) {
+        if (enforceWatermarkBound &&
+            (item.serverId == null || item.serverId! > forwardWatermark)) {
+          continue;
+        }
+        collected.putIfAbsent(item.localId, () => item);
+      }
+    }
     final items = collected.values.toList(growable: false);
     _checkActive();
     _checkActive();
@@ -966,6 +1066,7 @@ class MessageRepository {
         forwardWatermark,
         limit,
         maxPages,
+        refreshRecent: refreshRecent,
       );
     }
     final persisted =
@@ -1504,11 +1605,30 @@ class MessageRepository {
           response['id'] is num
               ? (response['id'] as num).toInt()
               : int.tryParse('${response['id']}');
+      final preservedLocalPath =
+          (file.originalPath != null && file.originalPath!.isNotEmpty)
+              ? file.originalPath!
+              : local.localFilePath;
+      final responseContent =
+          response['content'] is Map
+              ? Map<String, dynamic>.from(response['content'] as Map)
+              : <String, dynamic>{};
+      if (preservedLocalPath != null && preservedLocalPath.isNotEmpty) {
+        responseContent.putIfAbsent('path', () => preservedLocalPath);
+      }
+      final mergedRaw = <String, dynamic>{
+        ...response,
+        if (response['content'] is Map ||
+            (preservedLocalPath != null && preservedLocalPath.isNotEmpty))
+          'content': responseContent,
+        if (preservedLocalPath != null && preservedLocalPath.isNotEmpty)
+          'localFilePath': preservedLocalPath,
+      };
       result = local.copyWith(
         serverId: serverId,
         score: serverId == null ? local.score : serverId * 1000000,
         state: 'sent',
-        raw: response,
+        raw: mergedRaw,
       );
       debugPrint(
         '[sendFile][remote] session=${local.sessionUnitId} '

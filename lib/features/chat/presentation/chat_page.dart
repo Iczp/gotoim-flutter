@@ -61,6 +61,7 @@ import 'widgets/chat_input_area.dart';
 import 'widgets/chat_message_list.dart';
 import 'widgets/chat_message_row.dart';
 import 'widgets/chat_selection_bar.dart';
+import 'widgets/chat_sync_status_pill.dart';
 import 'widgets/chat_text_selection_sheet.dart';
 import 'widgets/chat_title_bar.dart';
 import 'widgets/chat_transfer_sheet.dart';
@@ -503,6 +504,27 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ],
     );
 
+    final syncingBottom =
+        widget.isDesktop
+            ? 10.0
+            : (_bottomBarHeight > 0
+                    ? _bottomBarHeight
+                    : safeArea.bottom + tokens.chatComposerHeight) +
+                8.0;
+
+    final syncingBanner =
+        controller.isLongSyncing
+            ? Positioned(
+              bottom: syncingBottom,
+              left: 16,
+              right: 16,
+              child: ChatSyncStatusPill(
+                progress: controller.syncProgress,
+                elapsed: controller.syncElapsed,
+              ),
+            )
+            : null;
+
     if (widget.isDesktop) {
       return Padding(
         padding: EdgeInsets.only(
@@ -518,7 +540,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 canManage: true,
                 refreshTriggerKey: _latestAnnouncementTriggerKey(controller.messages),
               ),
-            Expanded(child: messageList),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned.fill(child: messageList),
+                  if (syncingBanner != null) syncingBanner,
+                ],
+              ),
+            ),
             inputArea,
           ],
         ),
@@ -542,6 +572,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
               refreshTriggerKey: _latestAnnouncementTriggerKey(controller.messages),
             ),
           ),
+        if (syncingBanner != null) syncingBanner,
         Positioned(
           left: 0,
           right: 0,

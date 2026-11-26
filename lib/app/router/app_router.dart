@@ -329,6 +329,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             (context, state) => GroupManagementPage(
               sessionId: state.pathParameters['sessionId']!,
               sessionUnitId: state.uri.queryParameters['sessionUnitId'],
+              sessionTitle: state.uri.queryParameters['sessionTitle'],
               ownerId: int.tryParse(state.uri.queryParameters['ownerId'] ?? ''),
               destinationId: int.tryParse(
                 state.uri.queryParameters['destinationId'] ?? '',
@@ -627,6 +628,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ownerId:
                   int.tryParse(state.uri.queryParameters['ownerId'] ?? '') ?? 0,
               sessionUnitId: state.pathParameters['sessionUnitId']!,
+              sessionTitle: state.uri.queryParameters['title'],
               initialTotalCount: int.tryParse(
                 state.uri.queryParameters['totalCount'] ?? '',
               ),

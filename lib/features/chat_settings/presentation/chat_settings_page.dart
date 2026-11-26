@@ -6,7 +6,7 @@ import '../../../core/widgets/app_modal.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cell_group.dart';
 import '../../../core/widgets/desktop_dialog.dart';
-import '../../../core/widgets/glass_container.dart';
+import '../../../core/widgets/two_line_app_bar_title.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/media/image_provider_factory.dart';
 import '../../../core/utils/api_url_resolver.dart';
@@ -129,14 +129,22 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final horizontalPadding =
-        MediaQuery.sizeOf(context).width > 700 ? 32.0 : 16.0;
+        MediaQuery.sizeOf(context).width > 700
+            ? 24.0
+            : WeChatPageStyle.pageHorizontalPadding;
 
     return AnimatedBuilder(
       animation: controller,
       builder:
           (context, _) => Scaffold(
+            backgroundColor: WeChatPageStyle.scaffoldBg(context),
             appBar: AppBar(
-              title: const Text('聊天设置'),
+              backgroundColor: WeChatPageStyle.appBarBg(context),
+              scrolledUnderElevation: 0.5,
+              title: TwoLineAppBarTitle(
+                title: controller.isGroup ? '群聊设置' : '聊天设置',
+                subtitle: controller.title,
+              ),
               leading:
                   widget.isDrawer
                       ? IconButton(
@@ -153,7 +161,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
                   horizontalPadding,
-                  16,
+                  10,
                   horizontalPadding,
                   24,
                 ),
@@ -358,6 +366,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                                   context,
                                   sessionId: controller.sessionId!,
                                   sessionUnitId: widget.sessionUnitId,
+                                  sessionTitle: controller.title,
                                   canManage:
                                       _roomMgmtSettings?.canManageAnnouncements ??
                                       controller.isCreator,
@@ -484,8 +493,14 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     );
   }
 
-  Widget _section(List<Widget> children, {String? title}) =>
-      CellGroup(title: title, children: children);
+  Widget _section(List<Widget> children, {String? title}) => CellGroup(
+    title: title,
+    useGlass: false,
+    backgroundColor: WeChatPageStyle.cardBg(context),
+    borderRadius: WeChatPageStyle.cardRadius,
+    margin: const EdgeInsets.only(bottom: WeChatPageStyle.sectionGap),
+    children: children,
+  );
 
   String _managersSummary(List<ChatMember> members) {
     final owners = members.where((m) => m.isCreator).toList();
@@ -521,6 +536,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
         child: GroupManagementPage(
           sessionId: controller.sessionId!,
           sessionUnitId: controller.sessionUnitId,
+          sessionTitle: controller.title,
           ownerId: widget.ownerId,
           destinationId: controller.destinationId,
           isDialog: true,
@@ -534,7 +550,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
               ? '&destinationId=${controller.destinationId}'
               : '';
       await context.push(
-        '/group-management/${Uri.encodeComponent(controller.sessionId!)}?sessionUnitId=${Uri.encodeQueryComponent(controller.sessionUnitId)}&ownerId=${widget.ownerId}$destQuery',
+        '/group-management/${Uri.encodeComponent(controller.sessionId!)}?sessionUnitId=${Uri.encodeQueryComponent(controller.sessionUnitId)}&sessionTitle=${Uri.encodeQueryComponent(controller.title)}&ownerId=${widget.ownerId}$destQuery',
       );
       await _loadRoomMgmtSettings();
     }
@@ -930,9 +946,13 @@ class _MemberPreview extends StatelessWidget {
   final ChatSettingsController controller;
 
   @override
-  Widget build(BuildContext context) => GlassCard(
-    margin: const EdgeInsets.only(bottom: 12),
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: WeChatPageStyle.sectionGap),
     padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
+    decoration: BoxDecoration(
+      color: WeChatPageStyle.cardBg(context),
+      borderRadius: WeChatPageStyle.cardRadius,
+    ),
     child: Column(
       children: <Widget>[
         if (controller.loading && controller.members.isEmpty)
@@ -1005,6 +1025,7 @@ class _MemberPreview extends StatelessWidget {
                   child: MemberListPage(
                     ownerId: controller.ownerId,
                     sessionUnitId: controller.sessionUnitId,
+                    sessionTitle: controller.title,
                     initialTotalCount: controller.totalCount,
                     isDialog: true,
                   ),
@@ -1012,7 +1033,7 @@ class _MemberPreview extends StatelessWidget {
               } else {
                 context.push(
                   '/chat/${Uri.encodeComponent(controller.sessionUnitId)}/members'
-                  '?ownerId=${controller.ownerId}&totalCount=${controller.totalCount}',
+                  '?ownerId=${controller.ownerId}&totalCount=${controller.totalCount}&title=${Uri.encodeQueryComponent(controller.title)}',
                 );
               }
             },

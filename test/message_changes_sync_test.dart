@@ -8,6 +8,7 @@ import 'package:gotoim_flutter/core/network/api_exception.dart';
 import 'package:gotoim_flutter/features/chat/data/datasources/message_api.dart';
 import 'package:gotoim_flutter/features/chat/data/datasources/message_dao.dart';
 import 'package:gotoim_flutter/features/chat/data/models/chat_message.dart';
+import 'package:gotoim_flutter/features/chat/data/models/message_sync_progress.dart';
 import 'package:gotoim_flutter/features/chat/data/repositories/message_repository.dart';
 import 'package:gotoim_flutter/features/session/data/datasources/session_dao.dart';
 import 'package:gotoim_flutter/features/session/data/models/session_summary.dart';
@@ -733,4 +734,237 @@ void main() {
     expect(await dao.syncCursor(1, '__message_change_v2__'), v2Cursor('e1', '5'));
     expect(ackCalled, isFalse);
   });
+
+  test(
+    'calibration batches multiple sessions into a single by-ids request without inserting Friends.lastMessage into Messages',
+    () async {
+      final sessions = SessionDao(db);
+      await dao.upsertAll([
+        message(10, unit: 'u1'),
+        message(20, unit: 'u2'),
+        message(30, unit: 'u3'),
+        message(40, unit: 'u4'),
+      ]);
+      await sessions.upsertAll([
+        SessionSummary.fromJson({
+          'id': 'u5',
+          'ownerId': 1,
+          'lastMessage': message(50, unit: 'u5').raw,
+        }),
+        SessionSummary.fromJson({
+          'id': 'u6',
+          'ownerId': 1,
+          'lastMessage': message(60, unit: 'u6').raw,
+        }),
+      ]);
+
+      final byIdsBodies = <Map<String, dynamic>>[];
+      client.respond = (path, body) async {
+        if (path.endsWith('/message-change/pull')) {
+          return v2Pull(
+            epoch: 'e1',
+            headChangeId: '10',
+            nextCursor: '0',
+            reset: true,
+          );
+        }
+        if (path.endsWith('/message/by-ids')) {
+          byIdsBodies.add(body);
+          return {
+            'items': [
+              {
+                'sessionUnitId': 'u5',
+                'messageId': '50',
+                'status': 'Visible',
+                'messageChangeId': '0',
+                'message': message(50, unit: 'u5').raw,
+              },
+              {
+                'sessionUnitId': 'u6',
+                'messageId': '60',
+                'status': 'Recalled',
+                'messageChangeId': '9',
+                'rollbackTime': '2026-10-14T02:00:00Z',
+              },
+            ],
+          };
+        }
+        return {};
+      };
+
+      await repo.loadChanges(ownerId: 1);
+
+      expect(byIdsBodies, hasLength(1));
+      final requests = byIdsBodies.single['requests'] as List;
+      expect(requests, hasLength(6));
+      expect(
+        await dao.findByServerId(ownerId: 1, sessionUnitId: 'u5', serverId: 50),
+        isNull,
+      );
+      expect(
+        (await sessions.readById('u6'))!.preview,
+        '消息已撤回',
+      );
+      expect(
+        await dao.syncCursor(1, '__message_change_v2__'),
+        v2Cursor('e1', '10'),
+      );
+    },
+  );
+
+  test(
+    'calibration packs sessions up to 500 ids per batch and 200 per scope',
+    () async {
+      await dao.upsertAll([
+        for (var i = 1; i <= 200; i++) message(i, unit: 'u1'),
+        for (var i = 1; i <= 200; i++) message(i, unit: 'u2'),
+        for (var i = 1; i <= 150; i++) message(i, unit: 'u3'),
+      ]);
+
+      final byIdsBodies = <Map<String, dynamic>>[];
+      client.respond = (path, body) async {
+        if (path.endsWith('/message-change/pull')) {
+          return v2Pull(
+            epoch: 'e1',
+            headChangeId: '10',
+            nextCursor: '0',
+            reset: true,
+          );
+        }
+        if (path.endsWith('/message/by-ids')) {
+          byIdsBodies.add(body);
+          return {'items': const []};
+        }
+        return {};
+      };
+
+      await repo.loadChanges(ownerId: 1);
+
+      expect(byIdsBodies, hasLength(2));
+      final batch1Requests =
+          (byIdsBodies[0]['requests'] as List).cast<Map<String, dynamic>>();
+      final batch2Requests =
+          (byIdsBodies[1]['requests'] as List).cast<Map<String, dynamic>>();
+      expect(batch1Requests, hasLength(2));
+      expect(
+        batch1Requests.fold<int>(
+          0,
+          (sum, r) => sum + (r['messageIds'] as List).length,
+        ),
+        400,
+      );
+      expect(batch2Requests, hasLength(1));
+      expect((batch2Requests.single['messageIds'] as List).length, 150);
+    },
+  );
+
+  test(
+    'calibration saves checkpoint after each batch and resumes without repeating finished batches',
+    () async {
+      await dao.upsertAll([
+        for (var i = 1; i <= 200; i++) message(i, unit: 'u1'),
+        for (var i = 1; i <= 200; i++) message(i, unit: 'u2'),
+        for (var i = 1; i <= 150; i++) message(i, unit: 'u3'),
+      ]);
+
+      var failSecondBatch = true;
+      final requestedUnitsByCall = <List<String>>[];
+      client.respond = (path, body) async {
+        if (path.endsWith('/message-change/pull')) {
+          return v2Pull(
+            epoch: 'e1',
+            headChangeId: '10',
+            nextCursor: '0',
+            reset: true,
+          );
+        }
+        if (path.endsWith('/message/by-ids')) {
+          final reqs =
+              (body['requests'] as List).cast<Map<String, dynamic>>();
+          final units =
+              reqs.map((r) => r['sessionUnitId'].toString()).toList();
+          requestedUnitsByCall.add(units);
+          if (failSecondBatch && units.contains('u3')) {
+            failSecondBatch = false;
+            throw const ApiException('network drop', statusCode: 503);
+          }
+          return {'items': const []};
+        }
+        return {};
+      };
+
+      await expectLater(repo.loadChanges(ownerId: 1), throwsA(isA<ApiException>()));
+      expect(requestedUnitsByCall, [
+        ['u1', 'u2'],
+        ['u3'],
+      ]);
+      expect(await dao.syncCursor(1, '__message_change_v2__'), isNull);
+      expect(
+        await dao.syncCursor(1, '__message_change_v2_calibrating__'),
+        isNotEmpty,
+      );
+
+      requestedUnitsByCall.clear();
+      await repo.loadChanges(ownerId: 1);
+      expect(requestedUnitsByCall, [
+        ['u3'],
+      ]);
+      expect(
+        await dao.syncCursor(1, '__message_change_v2__'),
+        v2Cursor('e1', '10'),
+      );
+      expect(
+        await dao.syncCursor(1, '__message_change_v2_calibrating__'),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'loadChanges emits syncProgressStream events from pullingChanges through calibrating to idle',
+    () async {
+      await dao.upsertAll([
+        for (var i = 1; i <= 200; i++) message(i, unit: 'u1'),
+        for (var i = 1; i <= 200; i++) message(i, unit: 'u2'),
+        for (var i = 1; i <= 150; i++) message(i, unit: 'u3'),
+      ]);
+
+      final events = <MessageSyncProgress>[];
+      final sub = repo.syncProgressStream.listen(events.add);
+      addTearDown(sub.cancel);
+
+      client.respond = (path, body) async {
+        if (path.endsWith('/message-change/pull')) {
+          return v2Pull(
+            epoch: 'e1',
+            headChangeId: '10',
+            nextCursor: '0',
+            reset: true,
+          );
+        }
+        if (path.endsWith('/message/by-ids')) {
+          return {'items': const []};
+        }
+        return {};
+      };
+
+      await repo.loadChanges(ownerId: 1);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events.first.stage, MessageSyncStage.pullingChanges);
+      final calibrating =
+          events
+              .where((e) => e.stage == MessageSyncStage.calibrating)
+              .toList();
+      expect(calibrating, hasLength(3));
+      expect(calibrating[0].completedBatches, 0);
+      expect(calibrating[0].totalBatches, 2);
+      expect(calibrating[0].totalItems, 550);
+      expect(calibrating[1].completedBatches, 1);
+      expect(calibrating[1].processedItems, 400);
+      expect(calibrating[2].completedBatches, 2);
+      expect(calibrating[2].processedItems, 550);
+      expect(events.last.stage, MessageSyncStage.idle);
+    },
+  );
 }

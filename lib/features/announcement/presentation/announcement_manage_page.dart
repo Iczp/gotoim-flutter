@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/two_line_app_bar_title.dart';
 import '../application/announcement_providers.dart';
 import '../data/models/session_announcement.dart';
 import 'announcement_edit_page.dart';
@@ -71,6 +72,7 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
       context,
       sessionId: widget.sessionId,
       sessionUnitId: widget.sessionUnitId,
+      sessionTitle: widget.sessionTitle,
       editItem: editItem,
       permissions: _controller.permissions,
     );
@@ -380,8 +382,14 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
           }
 
           return Scaffold(
+            backgroundColor: WeChatPageStyle.scaffoldBg(context),
             appBar: AppBar(
-              title: Text(perms?.hasManagementRole != false ? '公告管理与审核' : '我的公告投稿'),
+              backgroundColor: WeChatPageStyle.appBarBg(context),
+              scrolledUnderElevation: 0.5,
+              title: TwoLineAppBarTitle(
+                title: perms?.hasManagementRole != false ? '公告管理与审核' : '我的公告投稿',
+                subtitle: widget.sessionTitle,
+              ),
               actions: [
                 if (canCreate)
                   IconButton(
@@ -413,11 +421,11 @@ class _AnnouncementManagePageState extends ConsumerState<AnnouncementManagePage>
     final badge = _statusBadge(item, colorScheme);
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: WeChatPageStyle.sectionGap),
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+      color: WeChatPageStyle.cardBg(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: WeChatPageStyle.cardRadius,
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),

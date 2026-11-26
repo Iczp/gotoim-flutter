@@ -33,4 +33,10 @@ class _UnsupportedAttachmentCache implements AttachmentCache {
     String? category,
   }) async =>
       null;
+
+  @override
+  Future<bool> exists(String path) async => false;
+
+  @override
+  Future<Uint8List?> readBytes(String path) async => null;
 }

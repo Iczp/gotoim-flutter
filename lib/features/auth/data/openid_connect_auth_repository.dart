@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/config/app_environment.dart';
 import '../../../core/device/client_device_context.dart';
+import '../../../core/logging/app_logger.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/client_credentials_token_storage.dart';
 import '../../../core/network/token_refresher.dart';
@@ -18,17 +20,21 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     required TokenStorage tokenStorage,
     required ClientCredentialsTokenStorage clientCredentialsTokenStorage,
     required ClientDeviceContext deviceContext,
+    @visibleForTesting
+    Duration transientRefreshRetryDelay = const Duration(milliseconds: 800),
   }) : _dio = dio,
        _environment = environment,
        _tokenStorage = tokenStorage,
        _clientCredentialsTokenStorage = clientCredentialsTokenStorage,
-       _deviceContext = deviceContext;
+       _deviceContext = deviceContext,
+       _transientRefreshRetryDelay = transientRefreshRetryDelay;
 
   final Dio _dio;
   final AppEnvironment _environment;
   final TokenStorage _tokenStorage;
   final ClientCredentialsTokenStorage _clientCredentialsTokenStorage;
   final ClientDeviceContext _deviceContext;
+  final Duration _transientRefreshRetryDelay;
   static Future<AuthSession>? _globalRefreshInFlight;
   static Future<void> _tokenWrites = Future<void>.value();
   static int _sessionGeneration = 0;
@@ -48,8 +54,9 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     return Dio(
       BaseOptions(
         baseUrl: environment.authBaseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 20),
+        connectTimeout: const Duration(seconds: 60),
+        sendTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 60),
         headers: deviceContext.requestHeaders,
       ),
     );
@@ -328,10 +335,10 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
           code: 'missing_refresh_token',
         );
       }
-      final session = await _requestToken(<String, String>{
-        'grant_type': 'refresh_token',
-        'refresh_token': refreshToken,
-      });
+      final session = await _requestRefreshTokenWithRetry(
+        refreshToken: refreshToken,
+        generation: generation,
+      );
       // Some providers do not rotate refresh tokens. Keep the prior one then.
       final completedSession =
           session.refreshToken.isEmpty
@@ -349,6 +356,39 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     }
   }
 
+  Future<AuthSession> _requestRefreshTokenWithRetry({
+    required String refreshToken,
+    required int generation,
+  }) async {
+    try {
+      return await _requestToken(<String, String>{
+        'grant_type': 'refresh_token',
+        'refresh_token': refreshToken,
+      });
+    } on ApiException catch (error) {
+      final isTransient =
+          error.statusCode == null || error.statusCode! >= 500;
+      if (!isTransient) rethrow;
+      AppLogger.instance.info(
+        'Transient refresh token failure, retrying after ${_transientRefreshRetryDelay.inMilliseconds}ms',
+        category: 'auth',
+        event: 'refresh_token_retry',
+        context: <String, Object?>{
+          'statusCode': error.statusCode,
+          'message': error.message,
+        },
+      );
+      if (_transientRefreshRetryDelay > Duration.zero) {
+        await Future<void>.delayed(_transientRefreshRetryDelay);
+      }
+      _checkSessionGeneration(generation);
+      return await _requestToken(<String, String>{
+        'grant_type': 'refresh_token',
+        'refresh_token': refreshToken,
+      });
+    }
+  }
+
   Future<AuthSession> _requestToken(
     Map<String, String> fields, {
     String? tokenUrl,
@@ -356,9 +396,10 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
     String? clientSecret,
     String? scope,
   }) async {
+    final resolvedUrl = tokenUrl ?? _environment.authTokenUrl;
     try {
       final response = await _postAuthForm(
-        tokenUrl ?? _environment.authTokenUrl,
+        resolvedUrl,
         fields,
         includeScope: true,
         clientId: clientId,
@@ -371,12 +412,30 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
       return AuthSession.fromJson(Map<String, dynamic>.from(response));
     } on DioException catch (error) {
       final body = error.response?.data;
-      final message =
-          body is Map && body['error_description'] != null
-              ? body['error_description'].toString()
-              : 'Login failed. Please check your network and credentials.';
-      final code = body is Map ? body['error']?.toString() : null;
       final statusCode = error.response?.statusCode;
+      final code = body is Map ? body['error']?.toString() : null;
+      final message = _extractTokenErrorMessage(
+        error: error,
+        body: body,
+        statusCode: statusCode,
+        grantType: fields['grant_type'],
+      );
+      AppLogger.instance.error(
+        'Token request failed (${fields['grant_type'] ?? 'unknown'})',
+        category: 'auth',
+        event: 'token_request_failed',
+        error: error.error ?? error.message ?? error,
+        stackTrace: error.stackTrace,
+        context: <String, Object?>{
+          'grantType': fields['grant_type'],
+          'url': resolvedUrl,
+          'dioType': error.type.name,
+          'statusCode': statusCode,
+          'code': code,
+          'resolvedMessage': message,
+          if (body != null) 'responseType': body.runtimeType.toString(),
+        },
+      );
       final exception = ApiException(
         message,
         statusCode: statusCode,
@@ -388,6 +447,52 @@ class OpenIdConnectAuthRepository implements AuthRepository, TokenRefresher {
       }
       throw exception;
     }
+  }
+
+  String _extractTokenErrorMessage({
+    required DioException error,
+    required Object? body,
+    required int? statusCode,
+    required String? grantType,
+  }) {
+    if (body is Map) {
+      if (body['error_description'] != null) {
+        return body['error_description'].toString();
+      }
+      final nestedError = body['error'];
+      if (nestedError is Map && nestedError['message'] != null) {
+        return nestedError['message'].toString();
+      }
+    }
+    if (error.response == null) {
+      final detail = (error.error ?? error.message)?.toString().trim();
+      final suffix = (detail != null && detail.isNotEmpty) ? ': $detail' : '';
+      switch (error.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+          return '认证请求超时 (${error.type.name})$suffix';
+        case DioExceptionType.badCertificate:
+          return '认证服务器证书校验失败$suffix';
+        case DioExceptionType.connectionError:
+          return '认证网络连接失败$suffix';
+        case DioExceptionType.cancel:
+          return '认证请求已取消$suffix';
+        case DioExceptionType.badResponse:
+        case DioExceptionType.unknown:
+        case DioExceptionType.transformTimeout:
+          return detail != null && detail.isNotEmpty
+              ? '认证网络异常 ($detail)'
+              : '认证网络异常 (${error.type.name})';
+      }
+    }
+    if (statusCode != null && grantType == 'refresh_token') {
+      return '刷新登录凭证失败 (HTTP $statusCode)';
+    }
+    if (statusCode != null) {
+      return 'Login failed (HTTP $statusCode). Please check your network and credentials.';
+    }
+    return 'Login failed. Please check your network and credentials.';
   }
 
   void _checkSessionGeneration(int generation) {

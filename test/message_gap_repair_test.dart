@@ -671,4 +671,527 @@ void main() {
       );
     },
   );
+
+  test(
+    'loadLatest with refreshRecent does not create a middle gap when latest hasMore, and background continuation publishes SessionChangeBus',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      await dao.upsertAll([
+        ChatMessage.fromJson({'id': 10}, ownerId: 1, sessionUnitId: 'unit'),
+      ]);
+      await dao.writeMessageWatermark(1, 'unit', 10);
+      final bus = SessionChangeBus();
+      addTearDown(bus.dispose);
+      final events = <SessionChangeEvent>[];
+      final sub = bus.events.listen(events.add);
+      addTearDown(sub.cancel);
+
+      final client = _ContinuationGapClient();
+      final repo = MessageRepository(
+        api: MessageApi(client),
+        dao: dao,
+        sessionChangeBus: bus,
+      );
+      addTearDown(repo.dispose);
+
+      // maxPages=1, limit=2 -> first call gets 11..12 with hasMore=true,
+      // must NOT persist recent [99, 100] yet, and schedules continuation for 13..14.
+      final first = await repo.loadLatest(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        minMessageId: 10,
+        limit: 2,
+        maxPages: 1,
+        refreshRecent: true,
+      );
+      expect(first.map((m) => m.serverId).toList()..sort(), [11, 12]);
+      expect(
+        await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 100),
+        isNull,
+      );
+
+      // Wait for scheduled continuation to fetch 13..14 and publish to SessionChangeBus
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(
+        await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 14),
+        isNotNull,
+      );
+      expect(
+        events.any(
+          (e) =>
+              e.ownerId == 1 &&
+              e.sessionUnitId == 'unit' &&
+              (e.messageIds?.contains(14) ?? false),
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'loadHistory with beforeScore on network failure does not return uncovered local messages past a gap',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      final m10 = ChatMessage.fromJson({'id': 10}, ownerId: 1, sessionUnitId: 'unit');
+      final m100 = ChatMessage.fromJson({'id': 100}, ownerId: 1, sessionUnitId: 'unit');
+      await dao.upsertAll([m10, m100]);
+
+      final repo = MessageRepository(
+        api: MessageApi(_FailingHistoryClient()),
+        dao: dao,
+      );
+      addTearDown(repo.dispose);
+
+      final page = await repo.loadHistory(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        beforeScore: m100.score,
+        limit: 10,
+      );
+      expect(page.items, isEmpty);
+      expect(page.hasMore, isTrue);
+    },
+  );
+
+  test(
+    'ChatController.loadMore keeps hasMore=true on retryable empty page and recovers on retry',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      final m10 = ChatMessage.fromJson({'id': 10}, ownerId: 1, sessionUnitId: 'unit');
+      final m100 = ChatMessage.fromJson({'id': 100}, ownerId: 1, sessionUnitId: 'unit');
+      await dao.upsertAll([m10, m100]);
+
+      final client = _ToggleFailHistoryClient();
+      final repo = MessageRepository(
+        api: MessageApi(client),
+        dao: dao,
+      );
+      addTearDown(repo.dispose);
+
+      final bus = SessionChangeBus();
+      addTearDown(bus.dispose);
+      final aiBus = AiStreamChangeBus();
+      addTearDown(aiBus.dispose);
+      final controller = ChatController(
+        repo,
+        _Sessions(),
+        filePickerService: _Files(),
+        attachmentTransferService: _Transfer(),
+        mediaService: _Media(),
+        audioPlaybackService: _Audio(),
+        sessionChangeBus: bus,
+        clipboardService: _Clipboard(),
+        chatSettingsRepository: _Settings(),
+        aiStreamChangeBus: aiBus,
+        signalRGateway: _Gateway(),
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        initialTitle: 'cached',
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      client.shouldFailHistory = true;
+      await controller.loadMore();
+      expect(controller.hasMore, isTrue);
+
+      client.shouldFailHistory = false;
+      await controller.loadMore();
+      expect(controller.messages.any((m) => m.serverId == 5), isTrue);
+    },
+  );
+
+  test(
+    'loadNewerMessages on network failure does not skip uncovered gap or set hasMore=false',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      final m10 = ChatMessage.fromJson({'id': 10}, ownerId: 1, sessionUnitId: 'unit');
+      final m100 = ChatMessage.fromJson({'id': 100}, ownerId: 1, sessionUnitId: 'unit');
+      await dao.upsertAll([m10, m100]);
+
+      final repo = MessageRepository(
+        api: MessageApi(_FailingHistoryClient()),
+        dao: dao,
+      );
+      addTearDown(repo.dispose);
+
+      final page = await repo.loadNewerMessages(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        afterScore: m10.score,
+        afterServerId: 10,
+        limit: 10,
+      );
+      expect(page.items, isEmpty);
+      expect(page.hasMore, isTrue);
+    },
+  );
+
+  test(
+    'background continuation preserves refreshRecent=true on final caught-up round',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      await dao.upsertAll([
+        ChatMessage.fromJson({'id': 10}, ownerId: 1, sessionUnitId: 'unit'),
+      ]);
+      await dao.writeMessageWatermark(1, 'unit', 10);
+
+      final client = _RefreshRecentContinuationClient();
+      final repo = MessageRepository(
+        api: MessageApi(client),
+        dao: dao,
+      );
+      addTearDown(repo.dispose);
+
+      await repo.loadLatest(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        minMessageId: 10,
+        limit: 2,
+        maxPages: 1,
+        refreshRecent: true,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(client.historyCallCount, greaterThanOrEqualTo(1));
+    },
+  );
+
+  test(
+    'loadLatest with refreshRecent does not persist recent snapshot items above forwardWatermark',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      await dao.upsertAll([
+        ChatMessage.fromJson({'id': 10}, ownerId: 1, sessionUnitId: 'unit'),
+      ]);
+      await dao.writeMessageWatermark(1, 'unit', 10);
+
+      final repo = MessageRepository(
+        api: MessageApi(_RecentAboveWatermarkClient()),
+        dao: dao,
+      );
+      addTearDown(repo.dispose);
+
+      await repo.loadLatest(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        minMessageId: 10,
+        limit: 10,
+        maxPages: 1,
+        refreshRecent: true,
+      );
+      expect(
+        await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 11),
+        isNotNull,
+      );
+      expect(
+        await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 999),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'loadLatest with minMessageId 0 and existing cache skips recent snapshot while hasMore and enforces forwardWatermark when caught up',
+    () async {
+      final database = UnifiedDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(database.close);
+      final dao = MessageDao(database);
+      await dao.upsertAll([
+        ChatMessage.fromJson({'id': 5}, ownerId: 1, sessionUnitId: 'unit'),
+      ]);
+
+      final hasMoreClient = _ZeroCursorNonEmptyClient(hasMore: true);
+      final repo1 = MessageRepository(
+        api: MessageApi(hasMoreClient),
+        dao: dao,
+      );
+      addTearDown(repo1.dispose);
+
+      await repo1.loadLatest(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        minMessageId: 0,
+        limit: 10,
+        maxPages: 1,
+        refreshRecent: true,
+      );
+      expect(hasMoreClient.historyCalls, 0);
+      expect(
+        await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 999),
+        isNull,
+      );
+
+      final caughtUpClient = _ZeroCursorNonEmptyClient(hasMore: false);
+      final repo2 = MessageRepository(
+        api: MessageApi(caughtUpClient),
+        dao: dao,
+      );
+      addTearDown(repo2.dispose);
+
+      await repo2.loadLatest(
+        ownerId: 1,
+        sessionUnitId: 'unit',
+        minMessageId: 0,
+        limit: 10,
+        maxPages: 1,
+        refreshRecent: true,
+      );
+      expect(caughtUpClient.historyCalls, 1);
+      expect(
+        await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 11),
+        isNotNull,
+      );
+      expect(
+        await dao.findByServerId(ownerId: 1, sessionUnitId: 'unit', serverId: 999),
+        isNull,
+      );
+    },
+  );
+}
+
+class _ZeroCursorNonEmptyClient implements ApiClient {
+  _ZeroCursorNonEmptyClient({required this.hasMore});
+
+  final bool hasMore;
+  int historyCalls = 0;
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    if (path.endsWith('/message/latest')) {
+      return {
+        'items': [
+          {'id': 11, 'sessionUnitId': 'unit', 'content': {'text': 'm11'}},
+        ],
+        'extra': {'hasMore': hasMore},
+      } as T;
+    }
+    if (path.endsWith('/message/history')) {
+      historyCalls += 1;
+      return {
+        'items': [
+          {'id': 999, 'sessionUnitId': 'unit', 'content': {'text': 'future 999'}},
+          {'id': 11, 'sessionUnitId': 'unit', 'content': {'text': 'm11'}},
+        ],
+        'extra': {'hasMore': false},
+      } as T;
+    }
+    return {'items': [], 'totalCount': 0} as T;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RecentAboveWatermarkClient implements ApiClient {
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    if (path.endsWith('/message/latest')) {
+      return {
+        'items': [
+          {'id': 11, 'sessionUnitId': 'unit', 'content': {'text': 'm11'}},
+        ],
+        'extra': {'hasMore': false},
+      } as T;
+    }
+    if (path.endsWith('/message/history')) {
+      return {
+        'items': [
+          {'id': 999, 'sessionUnitId': 'unit', 'content': {'text': 'future 999'}},
+          {'id': 11, 'sessionUnitId': 'unit', 'content': {'text': 'm11'}},
+        ],
+        'extra': {'hasMore': false},
+      } as T;
+    }
+    return {'items': [], 'totalCount': 0} as T;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ToggleFailHistoryClient implements ApiClient {
+  bool shouldFailHistory = false;
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    if (path.endsWith('/message/history')) {
+      if (shouldFailHistory) {
+        throw const ApiException('offline', statusCode: 503);
+      }
+      return {
+        'items': [
+          {'id': 5, 'sessionUnitId': 'unit', 'content': {'text': 'recovered 5'}},
+        ],
+        'extra': {'hasMore': true},
+      } as T;
+    }
+    return {'items': [], 'extra': {'hasMore': false}} as T;
+  }
+
+  @override
+  Future<T> post<T>(
+    String path, {
+    Map<String, Object?>? query,
+    Object? data,
+    Map<String, String>? headers,
+    bool retryOnUnauthorized = true,
+  }) async {
+    if (path.endsWith('/message-change/pull')) {
+      return {
+        'epoch': 'epoch-1',
+        'headChangeId': '0',
+        'nextCursor': '0',
+        'items': [],
+      } as T;
+    }
+    return <String, Object?>{} as T;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RefreshRecentContinuationClient implements ApiClient {
+  int historyCallCount = 0;
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    if (path.endsWith('/message/history')) {
+      historyCallCount++;
+      return {
+        'items': [
+          {'id': 14, 'sessionUnitId': 'unit', 'content': {'text': 'm14'}},
+          {'id': 13, 'sessionUnitId': 'unit', 'content': {'text': 'm13'}},
+        ],
+        'extra': {'hasMore': false},
+      } as T;
+    }
+    if (path.endsWith('/message/latest')) {
+      final minId = (query?['minMessageId'] as num?)?.toInt() ?? 0;
+      if (minId == 10) {
+        return {
+          'items': [
+            {'id': 11, 'sessionUnitId': 'unit', 'content': {'text': 'm11'}},
+            {'id': 12, 'sessionUnitId': 'unit', 'content': {'text': 'm12'}},
+          ],
+          'extra': {'hasMore': true},
+        } as T;
+      }
+      if (minId == 12) {
+        return {
+          'items': [
+            {'id': 13, 'sessionUnitId': 'unit', 'content': {'text': 'm13'}},
+            {'id': 14, 'sessionUnitId': 'unit', 'content': {'text': 'm14'}},
+          ],
+          'extra': {'hasMore': false},
+        } as T;
+      }
+      return {'items': [], 'extra': {'hasMore': false}} as T;
+    }
+    return {'items': [], 'totalCount': 0} as T;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FailingHistoryClient implements ApiClient {
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    throw const ApiException('offline', statusCode: 503);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ContinuationGapClient implements ApiClient {
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, Object?>? query,
+    bool retryOnUnauthorized = true,
+  }) async {
+    if (path.endsWith('/message/history')) {
+      return {
+        'items': [
+          {'id': 100, 'sessionUnitId': 'unit', 'content': {'text': 'newest 100'}},
+          {'id': 99, 'sessionUnitId': 'unit', 'content': {'text': 'newest 99'}},
+        ],
+        'extra': {'hasMore': true},
+      } as T;
+    }
+    if (path.endsWith('/message/latest')) {
+      final minId = (query?['minMessageId'] as num?)?.toInt() ?? 0;
+      if (minId == 10) {
+        return {
+          'items': [
+            {'id': 11, 'sessionUnitId': 'unit', 'content': {'text': 'm11'}},
+            {'id': 12, 'sessionUnitId': 'unit', 'content': {'text': 'm12'}},
+          ],
+          'extra': {'hasMore': true},
+        } as T;
+      }
+      if (minId == 12) {
+        return {
+          'items': [
+            {'id': 13, 'sessionUnitId': 'unit', 'content': {'text': 'm13'}},
+            {'id': 14, 'sessionUnitId': 'unit', 'content': {'text': 'm14'}},
+          ],
+          'extra': {'hasMore': false},
+        } as T;
+      }
+      return {'items': [], 'extra': {'hasMore': false}} as T;
+    }
+    return {'items': [], 'totalCount': 0} as T;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

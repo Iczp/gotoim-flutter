@@ -93,12 +93,12 @@ class MessageApi {
     return Map<String, dynamic>.from(result);
   }
 
-  Future<List<Map<String, dynamic>>> messageStates({
+  Future<List<Map<String, dynamic>>> messageStatesBatch({
     required int chatObjectId,
-    required String sessionUnitId,
-    required List<int> messageIds,
+    required List<({String sessionUnitId, List<int> messageIds})> requests,
     String? deviceId,
   }) async {
+    if (requests.isEmpty) return const [];
     final result = await _client.post<Map<String, dynamic>>(
       '/api/chat/message/by-ids',
       data: {
@@ -106,16 +106,31 @@ class MessageApi {
         'deviceId': deviceId ?? this.deviceId,
         'compactSenders': true,
         'requests': [
-          {
-            'sessionUnitId': sessionUnitId,
-            'messageIds': messageIds.map((id) => id.toString()).toList(),
-          },
+          for (final req in requests)
+            {
+              'sessionUnitId': req.sessionUnitId,
+              'messageIds': req.messageIds.map((id) => id.toString()).toList(),
+            },
         ],
       },
     );
     final hydrated = hydrateByIdsCompactSenders(Map<String, dynamic>.from(result));
     final items = hydrated['items'] as List<dynamic>? ?? const [];
     return items.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> messageStates({
+    required int chatObjectId,
+    required String sessionUnitId,
+    required List<int> messageIds,
+    String? deviceId,
+  }) async {
+    if (messageIds.isEmpty) return const [];
+    return messageStatesBatch(
+      chatObjectId: chatObjectId,
+      requests: [(sessionUnitId: sessionUnitId, messageIds: messageIds)],
+      deviceId: deviceId,
+    );
   }
 
   Future<PagedResultDto<ChatMessage>> history({

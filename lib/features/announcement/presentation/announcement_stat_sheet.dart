@@ -88,10 +88,8 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
       ref.read(announcementApiProvider),
       widget.announcementId,
       sessionUnitId: widget.sessionUnitId ?? '',
+      initialFilterType: safeInitial,
     );
-    if (safeInitial != 0) {
-      _controller.setFilterType(safeInitial);
-    }
   }
 
   void _switchToTab(int index) {
@@ -241,7 +239,7 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
                   _buildStatCard('总人数', '${stat?.totalMemberCount ?? 0}', Colors.grey, () => _switchToTab(0)),
                   const SizedBox(width: 8),
                   _buildStatCard(
-                    '已读 (${(stat?.readRate ?? 0).toStringAsFixed(0)}%)',
+                    '已读 (${(stat?.readPercent ?? 0).toStringAsFixed(0)}%)',
                     '${stat?.readCount ?? 0}',
                     Colors.green,
                     () => _switchToTab(1),
@@ -250,7 +248,7 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
                   _buildStatCard('未读', '${stat?.unreadCount ?? 0}', Colors.orange, () => _switchToTab(2)),
                   const SizedBox(width: 8),
                   _buildStatCard(
-                    '已确认 (${(stat?.confirmedRate ?? 0).toStringAsFixed(0)}%)',
+                    '已确认 (${(stat?.confirmedPercent ?? 0).toStringAsFixed(0)}%)',
                     '${stat?.confirmedCount ?? 0}',
                     Colors.blue,
                     () => _switchToTab(3),
@@ -276,8 +274,7 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
                 Tab(text: '未读 (${stat?.unreadCount ?? 0})'),
                 Tab(text: '已确认 (${stat?.confirmedCount ?? 0})'),
                 Tab(
-                  text:
-                      '待确认 (${((stat?.totalMemberCount ?? 0) - (stat?.confirmedCount ?? 0)).clamp(0, 999999)})',
+                  text: '待确认 (${stat?.unconfirmedCount ?? 0})',
                 ),
               ],
             ),
@@ -433,10 +430,10 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
       subtitle: Text(
         member.firstReadTime != null
             ? '首次阅读: ${member.firstReadTime!.length > 16 ? member.firstReadTime!.substring(0, 16).replaceAll("T", " ") : member.firstReadTime}'
-            : '未查看',
+            : (member.isRead ? '已查看' : '未查看'),
         style: TextStyle(
           fontSize: 11,
-          color: member.firstReadTime != null ? colorScheme.outline : Colors.orange,
+          color: member.isRead ? colorScheme.outline : Colors.orange,
         ),
       ),
       trailing: member.isConfirmed
@@ -446,7 +443,7 @@ class _AnnouncementStatSheetState extends ConsumerState<AnnouncementStatSheet>
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
             )
-          : member.firstReadTime != null
+          : member.isRead
               ? const Chip(
                   label: Text('未确认', style: TextStyle(fontSize: 11)),
                   padding: EdgeInsets.zero,

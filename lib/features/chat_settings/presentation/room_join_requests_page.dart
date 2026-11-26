@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/utils/api_url_resolver.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/two_line_app_bar_title.dart';
 import '../../contact/data/contact_api.dart';
 import '../../contact/data/models/session_request_models.dart';
 import '../../contact/presentation/session_request_detail_sheet.dart';
@@ -13,12 +14,14 @@ class RoomJoinRequestsPage extends ConsumerStatefulWidget {
   const RoomJoinRequestsPage({
     required this.destinationId,
     required this.handlerSessionUnitId,
+    this.sessionTitle,
     this.isDialog = false,
     super.key,
   });
 
   final int destinationId;
   final String handlerSessionUnitId;
+  final String? sessionTitle;
   final bool isDialog;
 
   @override
@@ -158,7 +161,15 @@ class _RoomJoinRequestsPageState extends ConsumerState<RoomJoinRequestsPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('入群申请')),
+      backgroundColor: WeChatPageStyle.scaffoldBg(context),
+      appBar: AppBar(
+        backgroundColor: WeChatPageStyle.appBarBg(context),
+        scrolledUnderElevation: 0.5,
+        title: TwoLineAppBarTitle(
+          title: '入群申请',
+          subtitle: widget.sessionTitle,
+        ),
+      ),
       body: content,
     );
   }
