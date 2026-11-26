@@ -58,24 +58,63 @@ class AttachmentTransferService extends ChangeNotifier {
   AttachmentTransferState stateFor(String id) =>
       _states[id] ?? const AttachmentTransferState();
 
+  Future<void> registerLocalFile({
+    required String id,
+    required String localPath,
+    int? totalBytes,
+  }) async {
+    if (localPath.trim().isEmpty) return;
+    if (!await _cache.exists(localPath)) return;
+    _states[id] = AttachmentTransferState(
+      status: AttachmentTransferStatus.completed,
+      receivedBytes: totalBytes ?? 0,
+      totalBytes: totalBytes ?? 0,
+      localPath: localPath,
+    );
+    notifyListeners();
+  }
+
   Future<String?> findCachedPath({
     required String id,
     required String fileName,
+    String? source,
+    String? localFilePath,
     String? userId,
     String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async {
     final existing = _states[id]?.localPath;
-    if (existing != null) return existing;
-    final cached = await _cache.find(
-      id,
+    if (existing != null && await _cache.exists(existing)) return existing;
+    if (localFilePath != null &&
+        localFilePath.trim().isNotEmpty &&
+        await _cache.exists(localFilePath)) {
+      _states[id] = AttachmentTransferState(
+        status: AttachmentTransferStatus.completed,
+        localPath: localFilePath,
+      );
+      notifyListeners();
+      return localFilePath;
+    }
+    final cacheKey = _cacheKeyFor(id: id, source: source);
+    var cached = await _cache.find(
+      cacheKey,
       fileName,
       userId: userId,
       chatTarget: chatTarget,
       messageDate: messageDate,
       category: category,
     );
+    if (cached == null && cacheKey != id) {
+      cached = await _cache.find(
+        id,
+        fileName,
+        userId: userId,
+        chatTarget: chatTarget,
+        messageDate: messageDate,
+        category: category,
+      );
+    }
     if (cached != null) {
       _states[id] = AttachmentTransferState(
         status: AttachmentTransferStatus.completed,
@@ -91,6 +130,7 @@ class AttachmentTransferService extends ChangeNotifier {
     required String id,
     required String source,
     required String fileName,
+    String? localFilePath,
     String? userId,
     String? chatTarget,
     DateTime? messageDate,
@@ -100,6 +140,8 @@ class AttachmentTransferService extends ChangeNotifier {
     final cached = await findCachedPath(
       id: id,
       fileName: fileName,
+      source: source,
+      localFilePath: localFilePath,
       userId: userId,
       chatTarget: chatTarget,
       messageDate: messageDate,
@@ -109,6 +151,7 @@ class AttachmentTransferService extends ChangeNotifier {
     _cancelled.remove(id);
     final resolved = _resolve(source);
     if (resolved.isEmpty) throw StateError('附件下载地址为空。');
+    final cacheKey = _cacheKeyFor(id: id, source: source);
     _states[id] = const AttachmentTransferState(
       status: AttachmentTransferStatus.downloading,
     );
@@ -132,7 +175,7 @@ class AttachmentTransferService extends ChangeNotifier {
       if (_cancelled.contains(id)) return;
       _bytes[id] = data;
       final localPath = await _cache.write(
-        id,
+        cacheKey,
         fileName,
         data,
         userId: userId,
@@ -173,17 +216,19 @@ class AttachmentTransferService extends ChangeNotifier {
     required String id,
     required String source,
     required String fileName,
+    String? localFilePath,
     String? userId,
     String? chatTarget,
     DateTime? messageDate,
     String? category,
   }) async {
     var state = stateFor(id);
-    if (!state.isReady) {
+    if (!state.isReady || state.localPath == null) {
       await download(
         id: id,
         source: source,
         fileName: fileName,
+        localFilePath: localFilePath,
         userId: userId,
         chatTarget: chatTarget,
         messageDate: messageDate,
@@ -202,6 +247,7 @@ class AttachmentTransferService extends ChangeNotifier {
     required String id,
     required String source,
     required String fileName,
+    String? localFilePath,
     String? userId,
     String? chatTarget,
     DateTime? messageDate,
@@ -209,10 +255,29 @@ class AttachmentTransferService extends ChangeNotifier {
     String? mimeType,
   }) async {
     if (!_bytes.containsKey(id)) {
+      final cachedPath = await findCachedPath(
+        id: id,
+        fileName: fileName,
+        source: source,
+        localFilePath: localFilePath,
+        userId: userId,
+        chatTarget: chatTarget,
+        messageDate: messageDate,
+        category: category,
+      );
+      if (cachedPath != null) {
+        final localBytes = await _cache.readBytes(cachedPath);
+        if (localBytes != null) {
+          _bytes[id] = localBytes;
+        }
+      }
+    }
+    if (!_bytes.containsKey(id)) {
       await download(
         id: id,
         source: source,
         fileName: fileName,
+        localFilePath: localFilePath,
         userId: userId,
         chatTarget: chatTarget,
         messageDate: messageDate,
@@ -239,6 +304,13 @@ class AttachmentTransferService extends ChangeNotifier {
         ? value
         : Uri.parse(_environment.apiBaseUrl).resolve(value).toString();
   }
+
+  String _cacheKeyFor({required String id, String? source}) =>
+      normalizeAttachmentCacheKey(
+        source: source,
+        fallbackKey: id,
+        serverOrigin: _environment.apiBaseUrl,
+      );
 
   Object _tag(String id) => 'attachment-$id';
 }

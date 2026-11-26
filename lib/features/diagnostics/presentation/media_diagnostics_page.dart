@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/application_providers.dart';
+import '../../../core/services/file/attachment_cache.dart';
 import '../../../core/services/file/file_picker_service.dart';
 import '../../../core/services/media/media_service.dart';
 import '../../chat/application/chat_controller.dart';
@@ -322,6 +323,45 @@ class _MediaDiagnosticsPageState extends ConsumerState<MediaDiagnosticsPage> {
                         'earpiece': audioPlayback.isEarpiece,
                       };
                     }),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          _Section(
+            title: '附件缓存诊断',
+            children: [
+              _button(
+                '附件缓存键归一化自检',
+                () => _run(() async {
+                  const blobId = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
+                  final urlA =
+                      '/api/chat/file/$blobId?su=su-a&msg=101&exp=1700000100&sig=sigA';
+                  final urlB =
+                      '/api/chat/file/$blobId?su=su-b&msg=202&rootMsg=200&exp=1700000900&sig=sigB';
+                  final keyA = normalizeAttachmentCacheKey(
+                    source: urlA,
+                    fallbackKey: 'local-1',
+                    serverOrigin: 'https://chat.example.com',
+                  );
+                  final keyB = normalizeAttachmentCacheKey(
+                    source: urlB,
+                    fallbackKey: 'local-2',
+                    serverOrigin: 'https://chat.example.com',
+                  );
+                  final otherOriginKey = normalizeAttachmentCacheKey(
+                    source: urlA,
+                    fallbackKey: 'local-1',
+                    serverOrigin: 'https://other.example.com',
+                  );
+                  return <String, Object?>{
+                    'blobId': blobId,
+                    'keyA': keyA,
+                    'keyB': keyB,
+                    'sameServerAndBlobMatch': keyA == keyB,
+                    'otherOriginIsolated': keyA != otherOriginKey,
+                  };
+                }),
               ),
             ],
           ),

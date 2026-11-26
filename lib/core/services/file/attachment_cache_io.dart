@@ -121,62 +121,114 @@ class _IoAttachmentCache implements AttachmentCache {
     final safeName = _sanitizeName(fileName);
     final root = await _getChatFilesRoot();
 
+    final allowPlainFallback = !safeKey.startsWith('blob_');
+
     // 1. 如果指定了用户与聊天对象，优先在精确的 用户/聊天对象/类型/日期 目录下寻找
-    if (userId != null && chatTarget != null) {
+    if (userId != null && userId.trim().isNotEmpty) {
       final userSegment = _sanitizeSegment(userId, 'default_user');
-      final targetSegment = _sanitizeSegment(chatTarget, 'default_target');
-      final cat = category ?? resolveAttachmentCategory(fileName);
-      final date = resolveDateFolder(messageDate);
-      final exactDir = Directory(
-        '${root.path}${Platform.pathSeparator}$userSegment${Platform.pathSeparator}$targetSegment${Platform.pathSeparator}$cat${Platform.pathSeparator}$date',
-      );
-      if (await exactDir.exists()) {
-        final exactFile = File('${exactDir.path}${Platform.pathSeparator}${safeKey}_$safeName');
-        if (await exactFile.exists() && await exactFile.length() > 0) {
-          return exactFile.path;
+      if (chatTarget != null && chatTarget.trim().isNotEmpty) {
+        final targetSegment = _sanitizeSegment(chatTarget, 'default_target');
+        final cat = category ?? resolveAttachmentCategory(fileName);
+        final date = resolveDateFolder(messageDate);
+        final exactDir = Directory(
+          '${root.path}${Platform.pathSeparator}$userSegment${Platform.pathSeparator}$targetSegment${Platform.pathSeparator}$cat${Platform.pathSeparator}$date',
+        );
+        if (await exactDir.exists()) {
+          final exactFile = File(
+            '${exactDir.path}${Platform.pathSeparator}${safeKey}_$safeName',
+          );
+          if (await exactFile.exists() && await exactFile.length() > 0) {
+            return exactFile.path;
+          }
+          if (allowPlainFallback) {
+            final exactPlain = File(
+              '${exactDir.path}${Platform.pathSeparator}$safeName',
+            );
+            if (await exactPlain.exists() && await exactPlain.length() > 0) {
+              return exactPlain.path;
+            }
+          }
         }
-        final exactPlain = File('${exactDir.path}${Platform.pathSeparator}$safeName');
-        if (await exactPlain.exists() && await exactPlain.length() > 0) {
-          return exactPlain.path;
+
+        // 2. 在当前用户的当前会话目录下递归查找
+        final targetDir = Directory(
+          '${root.path}${Platform.pathSeparator}$userSegment${Platform.pathSeparator}$targetSegment',
+        );
+        if (await targetDir.exists()) {
+          final found = await _searchInDirectory(
+            targetDir,
+            safeKey,
+            safeName,
+            allowPlainFallback: allowPlainFallback,
+          );
+          if (found != null) return found;
         }
       }
 
-      // 2. 在当前用户的当前会话目录下递回查找
-      final targetDir = Directory(
-        '${root.path}${Platform.pathSeparator}$userSegment${Platform.pathSeparator}$targetSegment',
+      // 3. 在当前用户目录下跨会话查找（严格隔离其他账号）
+      final userDir = Directory(
+        '${root.path}${Platform.pathSeparator}$userSegment',
       );
-      if (await targetDir.exists()) {
-        final found = await _searchInDirectory(targetDir, safeKey, safeName);
-        if (found != null) return found;
-      }
-
-      // 3. 在当前用户目录下跨会话查找
-      final userDir = Directory('${root.path}${Platform.pathSeparator}$userSegment');
       if (await userDir.exists()) {
-        final found = await _searchInDirectory(userDir, safeKey, safeName);
+        final found = await _searchInDirectory(
+          userDir,
+          safeKey,
+          safeName,
+          allowPlainFallback: allowPlainFallback,
+        );
         if (found != null) return found;
       }
+
+      // 4. 若配置了自定义根目录，在系统默认目录也仅限当前用户子目录下查找
+      try {
+        final docs = await getApplicationDocumentsDirectory();
+        final defaultUserDir = Directory(
+          '${docs.path}${Platform.pathSeparator}LocalShare${Platform.pathSeparator}聊天文件${Platform.pathSeparator}$userSegment',
+        );
+        if (defaultUserDir.path != userDir.path &&
+            await defaultUserDir.exists()) {
+          final found = await _searchInDirectory(
+            defaultUserDir,
+            safeKey,
+            safeName,
+            allowPlainFallback: allowPlainFallback,
+          );
+          if (found != null) return found;
+        }
+      } catch (_) {}
+
+      return null;
     }
 
-    // 4. 扫描 LocalShare/聊天文件 下所有层级子目录（跨用户/未传入用户信息时查找）
+    // 5. 未传入用户信息时，扫描 LocalShare/聊天文件 下所有层级子目录
     if (await root.exists()) {
-      final found = await _searchInDirectory(root, safeKey, safeName);
+      final found = await _searchInDirectory(
+        root,
+        safeKey,
+        safeName,
+        allowPlainFallback: allowPlainFallback,
+      );
       if (found != null) return found;
     }
 
-    // 5. 若配置了自定义根目录且未找到，自动回退到系统默认文档目录查找历史文件
+    // 6. 若配置了自定义根目录且未找到，自动回退到系统默认文档目录查找历史文件
     try {
       final docs = await getApplicationDocumentsDirectory();
       final defaultRoot = Directory(
         '${docs.path}${Platform.pathSeparator}LocalShare${Platform.pathSeparator}聊天文件',
       );
       if (defaultRoot.path != root.path && await defaultRoot.exists()) {
-        final found = await _searchInDirectory(defaultRoot, safeKey, safeName);
+        final found = await _searchInDirectory(
+          defaultRoot,
+          safeKey,
+          safeName,
+          allowPlainFallback: allowPlainFallback,
+        );
         if (found != null) return found;
       }
     } catch (_) {}
 
-    // 6. 兜底兼容旧版私有缓存目录（getApplicationSupportDirectory()/attachments）
+    // 7. 兜底兼容旧版私有缓存目录（getApplicationSupportDirectory()/attachments）
     try {
       final supportRoot = await getApplicationSupportDirectory();
       final legacyDir = Directory(
@@ -196,15 +248,16 @@ class _IoAttachmentCache implements AttachmentCache {
   Future<String?> _searchInDirectory(
     Directory dir,
     String safeKey,
-    String safeName,
-  ) async {
+    String safeName, {
+    bool allowPlainFallback = true,
+  }) async {
     await for (final entity in dir.list(recursive: true, followLinks: false)) {
       if (entity is File) {
         final name = entity.uri.pathSegments.isNotEmpty
             ? entity.uri.pathSegments.last
             : '';
         if ((name == '${safeKey}_$safeName' ||
-                name == safeName ||
+                (allowPlainFallback && name == safeName) ||
                 (safeKey.isNotEmpty && name.startsWith('${safeKey}_'))) &&
             await entity.length() > 0) {
           return entity.path;
@@ -212,6 +265,19 @@ class _IoAttachmentCache implements AttachmentCache {
       }
     }
     return null;
+  }
+
+  @override
+  Future<bool> exists(String path) async {
+    if (path.trim().isEmpty) return false;
+    final file = File(path);
+    return await file.exists() && await file.length() > 0;
+  }
+
+  @override
+  Future<Uint8List?> readBytes(String path) async {
+    if (!await exists(path)) return null;
+    return File(path).readAsBytes();
   }
 
   @override

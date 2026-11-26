@@ -54,6 +54,110 @@ String resolveAttachmentCategory(
   return '文档';
 }
 
+final RegExp _blobRouteRegex = RegExp(
+  r'/(?:api/chat/)?file/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{32})(?:[/?#]|$)',
+  caseSensitive: false,
+);
+final RegExp _blobGuidExactRegex = RegExp(
+  r'^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{32})$',
+);
+const Set<String> _volatileCacheQueryParams = <String>{
+  'su',
+  'msg',
+  'rootmsg',
+  'exp',
+  'sig',
+  'token',
+  'access_token',
+};
+
+/// 从附件 URL 中提取共享的 BlobId（忽略 su/msg/rootMsg/exp/sig 等短时上下文与签名参数）
+String? extractAttachmentBlobId(String? source) {
+  final raw = source?.trim() ?? '';
+  if (raw.isEmpty) return null;
+  final uri = Uri.tryParse(raw);
+  final path = uri?.path ?? raw;
+  final routeMatch = _blobRouteRegex.firstMatch(path);
+  if (routeMatch != null) {
+    return routeMatch.group(1)!.toLowerCase();
+  }
+  if (uri != null) {
+    for (final entry in uri.queryParameters.entries) {
+      if (entry.key.toLowerCase() == 'id' &&
+          _blobGuidExactRegex.hasMatch(entry.value.trim())) {
+        return entry.value.trim().toLowerCase();
+      }
+    }
+  }
+  return null;
+}
+
+String _resolveNormalizedOrigin(String? source, String? serverOrigin) {
+  final sourceUri = source != null ? Uri.tryParse(source.trim()) : null;
+  if (sourceUri != null && sourceUri.hasScheme && sourceUri.host.isNotEmpty) {
+    final port = sourceUri.hasPort ? ':${sourceUri.port}' : '';
+    return '${sourceUri.scheme.toLowerCase()}://${sourceUri.host.toLowerCase()}$port';
+  }
+  final baseUri =
+      serverOrigin != null ? Uri.tryParse(serverOrigin.trim()) : null;
+  if (baseUri != null && baseUri.hasScheme && baseUri.host.isNotEmpty) {
+    final port = baseUri.hasPort ? ':${baseUri.port}' : '';
+    return '${baseUri.scheme.toLowerCase()}://${baseUri.host.toLowerCase()}$port';
+  }
+  return 'default';
+}
+
+String _fnv1aHex(String input) {
+  var h1 = 0x811c9dc5;
+  var h2 = 0x01000193;
+  for (final code in input.codeUnits) {
+    h1 ^= code;
+    h1 = (h1 * 0x01000193) & 0xffffffff;
+    h2 ^= (code + 0x9e3779b9) & 0xffffffff;
+    h2 = (h2 * 0x85ebca6b) & 0xffffffff;
+  }
+  return '${h1.toRadixString(16).padLeft(8, '0')}${h2.toRadixString(16).padLeft(8, '0').substring(0, 4)}';
+}
+
+/// 生成按「服务端实例 + BlobId」归一化的缓存键；账号隔离由目录 `<userId>` 负责
+String normalizeAttachmentCacheKey({
+  String? source,
+  String? blobId,
+  required String fallbackKey,
+  String? serverOrigin,
+}) {
+  final normalizedExplicit =
+      blobId != null && _blobGuidExactRegex.hasMatch(blobId.trim())
+          ? blobId.trim().toLowerCase()
+          : null;
+  final effectiveBlobId = normalizedExplicit ?? extractAttachmentBlobId(source);
+  if (effectiveBlobId != null) {
+    final origin = _resolveNormalizedOrigin(source, serverOrigin);
+    return 'blob_${_fnv1aHex(origin)}_$effectiveBlobId';
+  }
+
+  final raw = (source?.trim().isNotEmpty == true ? source!.trim() : fallbackKey)
+      .trim();
+  final uri = Uri.tryParse(raw);
+  if (uri != null && uri.queryParameters.isNotEmpty) {
+    final filtered = <String, List<String>>{};
+    for (final entry in uri.queryParametersAll.entries) {
+      if (!_volatileCacheQueryParams.contains(entry.key.toLowerCase())) {
+        filtered[entry.key] = entry.value;
+      }
+    }
+    final cleanUri = uri.replace(
+      queryParameters: filtered.isEmpty ? null : filtered,
+    );
+    final sanitized =
+        cleanUri.toString().replaceAll(RegExp(r'\?$'), '');
+    if (sanitized.isNotEmpty && raw == source?.trim()) {
+      return '${_fnv1aHex(sanitized)}_${fallbackKey.trim()}';
+    }
+  }
+  return fallbackKey.trim();
+}
+
 /// 格式化日期作为目录名：yyyy-MM-dd
 String resolveDateFolder(DateTime? date) {
   final d = date ?? DateTime.now();
@@ -84,6 +188,10 @@ abstract class AttachmentCache {
     DateTime? messageDate,
     String? category,
   });
+
+  Future<bool> exists(String path);
+
+  Future<Uint8List?> readBytes(String path);
 
   Future<void> open(String path);
 }
