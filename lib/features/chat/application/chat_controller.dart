@@ -2133,6 +2133,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
           messageId: message.serverId,
         ),
         verifyOnline: true,
+        forceVerifyOnline: true,
       );
 
   Future<void> saveAttachmentAs(ChatMessage message) =>
@@ -2155,6 +2156,7 @@ class ChatController extends ChangeNotifier implements ChatComposerController {
           messageId: message.serverId,
         ),
         verifyOnline: true,
+        forceVerifyOnline: true,
       );
 
   void _playSentEffect(ChatMessage message) {

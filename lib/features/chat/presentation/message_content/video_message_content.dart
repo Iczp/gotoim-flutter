@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/floating_window/floating_window.dart';
 import '../../../../core/media/app_image_cache_manager.dart';
+import '../../../../core/services/file/attachment_transfer_service.dart';
 import '../../../../core/utils/api_url_resolver.dart';
 import '../../../../core/media/media_preview.dart';
 import '../../data/models/chat_message.dart';
 import '../widgets/chat_message_delivery_state.dart';
+import 'authorized_private_attachment_gate.dart';
 import 'chat_message_presentation.dart';
 import 'media_message_layout.dart';
 
@@ -20,6 +22,8 @@ class VideoMessageContent extends StatelessWidget {
     required this.progress,
     required this.mediaItems,
     required this.initialIndex,
+    this.rootMessageId,
+    this.attachmentTransferService,
     this.presentation = ChatMessagePresentation.normal,
     this.onRetry,
     super.key,
@@ -30,8 +34,23 @@ class VideoMessageContent extends StatelessWidget {
   final double? progress;
   final List<MediaPreviewItem> mediaItems;
   final int initialIndex;
+  final int? rootMessageId;
+  final AttachmentTransferService? attachmentTransferService;
   final ChatMessagePresentation presentation;
   final VoidCallback? onRetry;
+
+  String? get _resolvedRemoteUrl {
+    final remote = message.mediaUrl;
+    if (remote == null || remote.isEmpty) return null;
+    final resolved = resolveAttachmentUrl(
+      remote,
+      apiBaseUrl,
+      sessionUnitId: message.sessionUnitId,
+      messageId: message.serverId,
+      rootMessageId: rootMessageId,
+    );
+    return resolved.isEmpty ? null : resolved;
+  }
 
   Uri? get _uri {
     final localPath = message.localFilePath;
@@ -43,14 +62,8 @@ class VideoMessageContent extends StatelessWidget {
         }
       } catch (_) {}
     }
-    final remote = message.mediaUrl;
-    if (remote != null && remote.isNotEmpty) {
-      final resolved = resolveAttachmentUrl(
-        remote,
-        apiBaseUrl,
-        sessionUnitId: message.sessionUnitId,
-        messageId: message.serverId,
-      );
+    final resolved = _resolvedRemoteUrl;
+    if (resolved != null) {
       return Uri.tryParse(resolved);
     }
     if (localPath != null && localPath.isNotEmpty) {
@@ -61,6 +74,7 @@ class VideoMessageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isBlockedLocally = message.isRollbacked || message.isDeleted;
     final coverUrl = message.videoCoverUrl ?? message.thumbnailUrl;
     final gifUrl = message.videoGifUrl;
     final resolvedCoverUrl =
@@ -70,6 +84,7 @@ class VideoMessageContent extends StatelessWidget {
               apiBaseUrl,
               sessionUnitId: message.sessionUnitId,
               messageId: message.serverId,
+              rootMessageId: rootMessageId,
             )
             : null;
     final resolvedGifUrl =
@@ -79,20 +94,24 @@ class VideoMessageContent extends StatelessWidget {
               apiBaseUrl,
               sessionUnitId: message.sessionUnitId,
               messageId: message.serverId,
+              rootMessageId: rootMessageId,
             )
             : null;
     final localThumbPath =
-        (!kIsWeb &&
+        (!isBlockedLocally &&
+                !kIsWeb &&
                 message.localThumbnailPath != null &&
                 message.localThumbnailPath!.isNotEmpty &&
                 File(message.localThumbnailPath!).existsSync())
             ? message.localThumbnailPath
             : null;
-    final existingLocalPath = (message.localFilePath != null &&
-            !kIsWeb &&
-            File(message.localFilePath!).existsSync())
-        ? message.localFilePath
-        : null;
+    final existingLocalPath =
+        (!isBlockedLocally &&
+                message.localFilePath != null &&
+                !kIsWeb &&
+                File(message.localFilePath!).existsSync())
+            ? message.localFilePath
+            : null;
     final item = MediaPreviewItem(
       id: message.localId,
       messageId: message.localId,
@@ -101,16 +120,21 @@ class VideoMessageContent extends StatelessWidget {
       thumbnail:
           resolvedCoverUrl ??
           (localThumbPath != null ? Uri.file(localThumbPath).toString() : null),
-      fileName: message.fileName.isNotEmpty ? message.fileName : '${message.localId}.mp4',
-      localPath: mediaItems
-              .where((it) => it.id == message.localId)
-              .firstOrNull
-              ?.localPath ??
-          existingLocalPath,
+      fileName:
+          message.fileName.isNotEmpty ? message.fileName : '${message.localId}.mp4',
+      localPath:
+          isBlockedLocally
+              ? null
+              : (mediaItems
+                      .where((it) => it.id == message.localId)
+                      .firstOrNull
+                      ?.localPath ??
+                  existingLocalPath),
       createdAt: message.createdAt,
       userId: message.ownerId.toString(),
       chatTarget: message.sessionUnitId,
       serverMessageId: message.serverId,
+      rootMessageId: rootMessageId,
       heroTag: buildMediaHeroTag(
         messageId: message.localId,
         mediaId: message.localId,
@@ -124,16 +148,12 @@ class VideoMessageContent extends StatelessWidget {
             ? <MediaPreviewItem>[item, ...mediaItems]
             : mediaItems;
     final compact = presentation == ChatMessagePresentation.quote;
-    final bubble = InkWell(
-      onTap:
-          _uri == null
-              ? null
-              : () => _openOrRestore(
-                context,
-                previewItems,
-                resolvedInitialIndex < 0 ? 0 : resolvedInitialIndex,
-              ),
-      child: HeroMode(
+
+    Widget buildCardBox(
+      BuildContext context, {
+      required bool authorized,
+    }) {
+      final innerBox = HeroMode(
         enabled: presentation == ChatMessagePresentation.normal,
         child: Hero(
           tag: item.heroTag,
@@ -157,72 +177,84 @@ class VideoMessageContent extends StatelessWidget {
                     fit: StackFit.expand,
                     children: <Widget>[
                       Container(color: Colors.black87),
-                      if (!compact && resolvedGifUrl != null)
-                        CachedNetworkImage(
-                          imageUrl: resolvedGifUrl,
-                          cacheManager: AppImageCacheManager.instance,
-                          fit: BoxFit.cover,
-                          placeholder:
-                              (_, _) =>
-                                  resolvedCoverUrl != null
-                                      ? CachedNetworkImage(
-                                        imageUrl: resolvedCoverUrl,
-                                        cacheManager: AppImageCacheManager.instance,
-                                        fit: BoxFit.cover,
-                                        errorWidget: (_, _, _) => const SizedBox.shrink(),
-                                      )
-                                      : const SizedBox.shrink(),
-                          errorWidget:
-                              (_, _, _) =>
-                                  resolvedCoverUrl != null
-                                      ? CachedNetworkImage(
-                                        imageUrl: resolvedCoverUrl,
-                                        cacheManager: AppImageCacheManager.instance,
-                                        fit: BoxFit.cover,
-                                        errorWidget:
-                                            (_, _, _) =>
-                                                localThumbPath != null
-                                                    ? Image.file(
-                                                      File(localThumbPath),
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder:
-                                                          (_, _, _) =>
-                                                              const SizedBox.shrink(),
-                                                    )
-                                                    : const SizedBox.shrink(),
-                                      )
-                                      : (localThumbPath != null
-                                          ? Image.file(
-                                            File(localThumbPath),
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (_, _, _) =>
-                                                    const SizedBox.shrink(),
-                                          )
-                                          : const SizedBox.shrink()),
-                        )
-                      else if (resolvedCoverUrl != null)
-                        CachedNetworkImage(
-                          imageUrl: resolvedCoverUrl,
-                          cacheManager: AppImageCacheManager.instance,
-                          fit: BoxFit.cover,
-                          errorWidget:
-                              (_, _, _) =>
-                                  localThumbPath != null
-                                      ? Image.file(
-                                        File(localThumbPath),
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                                      )
-                                      : const SizedBox.shrink(),
-                        )
-                      else if (localThumbPath != null)
-                        Image.file(
-                          File(localThumbPath),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                        ),
-                      if (!compact && gifUrl != null && gifUrl.isNotEmpty)
+                      if (authorized) ...[
+                        if (!compact && resolvedGifUrl != null)
+                          CachedNetworkImage(
+                            imageUrl: resolvedGifUrl,
+                            cacheManager: AppImageCacheManager.instance,
+                            fit: BoxFit.cover,
+                            placeholder:
+                                (_, _) =>
+                                    resolvedCoverUrl != null
+                                        ? CachedNetworkImage(
+                                          imageUrl: resolvedCoverUrl,
+                                          cacheManager:
+                                              AppImageCacheManager.instance,
+                                          fit: BoxFit.cover,
+                                          errorWidget:
+                                              (_, _, _) =>
+                                                  const SizedBox.shrink(),
+                                        )
+                                        : const SizedBox.shrink(),
+                            errorWidget:
+                                (_, _, _) =>
+                                    resolvedCoverUrl != null
+                                        ? CachedNetworkImage(
+                                          imageUrl: resolvedCoverUrl,
+                                          cacheManager:
+                                              AppImageCacheManager.instance,
+                                          fit: BoxFit.cover,
+                                          errorWidget:
+                                              (_, _, _) =>
+                                                  localThumbPath != null
+                                                      ? Image.file(
+                                                        File(localThumbPath),
+                                                        fit: BoxFit.cover,
+                                                        errorBuilder:
+                                                            (_, _, _) =>
+                                                                const SizedBox.shrink(),
+                                                      )
+                                                      : const SizedBox.shrink(),
+                                        )
+                                        : (localThumbPath != null
+                                            ? Image.file(
+                                              File(localThumbPath),
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (_, _, _) =>
+                                                      const SizedBox.shrink(),
+                                            )
+                                            : const SizedBox.shrink()),
+                          )
+                        else if (resolvedCoverUrl != null)
+                          CachedNetworkImage(
+                            imageUrl: resolvedCoverUrl,
+                            cacheManager: AppImageCacheManager.instance,
+                            fit: BoxFit.cover,
+                            errorWidget:
+                                (_, _, _) =>
+                                    localThumbPath != null
+                                        ? Image.file(
+                                          File(localThumbPath),
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (_, _, _) =>
+                                                  const SizedBox.shrink(),
+                                        )
+                                        : const SizedBox.shrink(),
+                          )
+                        else if (localThumbPath != null)
+                          Image.file(
+                            File(localThumbPath),
+                            fit: BoxFit.cover,
+                            errorBuilder:
+                                (_, _, _) => const SizedBox.shrink(),
+                          ),
+                      ],
+                      if (authorized &&
+                          !compact &&
+                          gifUrl != null &&
+                          gifUrl.isNotEmpty)
                         Positioned(
                           top: 6,
                           left: 6,
@@ -247,9 +279,11 @@ class VideoMessageContent extends StatelessWidget {
                         ),
                       Center(
                         child: Icon(
-                          Icons.play_circle_fill,
+                          authorized
+                              ? Icons.play_circle_fill
+                              : Icons.lock_outline,
                           color: Colors.white.withValues(alpha: 0.9),
-                          size: compact ? 28 : 50,
+                          size: compact ? 28 : (authorized ? 50 : 32),
                         ),
                       ),
                       if (!compact) ...[
@@ -347,7 +381,35 @@ class VideoMessageContent extends StatelessWidget {
             },
           ),
         ),
+      );
+      if (!authorized || _uri == null) return innerBox;
+      return InkWell(
+        onTap:
+            () => _openOrRestore(
+              context,
+              previewItems,
+              resolvedInitialIndex < 0 ? 0 : resolvedInitialIndex,
+            ),
+        child: innerBox,
+      );
+    }
+
+    final probeUrl =
+        _resolvedRemoteUrl ?? resolvedCoverUrl ?? resolvedGifUrl ?? '';
+    final bubble = AuthorizedPrivateAttachmentGate(
+      url: probeUrl,
+      apiBaseUrl: apiBaseUrl,
+      accessContext: AttachmentAccessContext(
+        sessionUnitId: message.sessionUnitId,
+        messageId: message.serverId,
+        rootMessageId: rootMessageId,
       ),
+      userId: message.ownerId.toString(),
+      isBlockedLocally: isBlockedLocally,
+      transferService: attachmentTransferService,
+      builder: (ctx) => buildCardBox(ctx, authorized: true),
+      deniedBuilder: (ctx) => buildCardBox(ctx, authorized: false),
+      loadingBuilder: (ctx) => buildCardBox(ctx, authorized: false),
     );
 
     if (presentation == ChatMessagePresentation.normal &&

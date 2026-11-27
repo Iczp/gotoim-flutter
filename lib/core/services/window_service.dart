@@ -2631,6 +2631,7 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
           messageDate: message.createdAt,
           accessContext: accessContext,
           verifyOnline: true,
+          forceVerifyOnline: true,
         );
       } else if (action == 'open') {
         await transfer.open(
@@ -2643,6 +2644,7 @@ final Provider<WindowService> windowServiceProvider = Provider<WindowService>((
           messageDate: message.createdAt,
           accessContext: accessContext,
           verifyOnline: true,
+          forceVerifyOnline: true,
         );
       } else {
         await transfer.download(

@@ -70,6 +70,10 @@ class AttachmentTransferService extends ChangeNotifier {
   final Set<String> _cancelled = <String>{};
   final Map<String, DateTime> _authorizedVerdicts = {};
   String? _activeUserId;
+  int _accessRevision = 0;
+
+  /// 每次权限失效或切号清空时递增，用于通知界面媒体组件立即撤销或重验私有附件访问权
+  int get accessRevision => _accessRevision;
 
   String _stateKey(String id, {String? userId}) {
     final trimmedUser = userId?.trim() ?? '';
@@ -87,17 +91,19 @@ class AttachmentTransferService extends ChangeNotifier {
   /// 清空内存传输状态与字节缓存（账号切换或登出时调用，防止跨账号复用内存状态）
   void clearSessionCache() {
     _activeUserId = null;
-    if (_states.isEmpty &&
-        _bytes.isEmpty &&
-        _cancelled.isEmpty &&
-        _authorizedVerdicts.isEmpty) {
-      return;
-    }
+    _accessRevision++;
+    final hadState =
+        _states.isNotEmpty ||
+        _bytes.isNotEmpty ||
+        _cancelled.isNotEmpty ||
+        _authorizedVerdicts.isNotEmpty;
     _states.clear();
     _bytes.clear();
     _cancelled.clear();
     _authorizedVerdicts.clear();
-    notifyListeners();
+    if (hadState || hasListeners) {
+      notifyListeners();
+    }
   }
 
   /// 消息撤回或删除时使对应在线授权结果与进行中的传输失效
@@ -106,12 +112,17 @@ class AttachmentTransferService extends ChangeNotifier {
     String? localId,
     String? userId,
   }) {
+    var changed = false;
     if (messageId != null && messageId > 0) {
       final target = '$messageId';
+      final before = _authorizedVerdicts.length;
       _authorizedVerdicts.removeWhere((key, _) {
         final parts = key.split('|');
         return parts.length >= 6 && (parts[4] == target || parts[5] == target);
       });
+      if (_authorizedVerdicts.length != before || hasListeners) {
+        changed = true;
+      }
     }
     if (localId != null && localId.trim().isNotEmpty) {
       final effectiveUser =
@@ -121,6 +132,10 @@ class AttachmentTransferService extends ChangeNotifier {
       _bytes.remove(sk);
       _cancelled.add(sk);
       _client.cancelByTag(_tag(sk));
+      changed = true;
+    }
+    if (changed) {
+      _accessRevision++;
       notifyListeners();
     }
   }
@@ -146,11 +161,42 @@ class AttachmentTransferService extends ChangeNotifier {
     return Uri.tryParse(resolvedUrl)?.queryParameters['su']?.trim() ?? '';
   }
 
-  /// 在线校验私有聊天附件访问权限（通过 POST /api/chat/file/sign）并短时缓存结论
+  /// 判断 URL 是否指向当前后端受保护的私有聊天附件路由 (`/api/chat/file/{blobId}`)
+  static bool isProtectedChatAttachmentUrl(String? source, String apiBaseUrl) {
+    final value = source?.trim() ?? '';
+    if (value.isEmpty) return false;
+    final rawUri = Uri.tryParse(value);
+    if (rawUri != null &&
+        rawUri.hasScheme &&
+        rawUri.scheme.toLowerCase() != 'http' &&
+        rawUri.scheme.toLowerCase() != 'https') {
+      return false;
+    }
+    final apiTrimmed = apiBaseUrl.trim();
+    final resolved =
+        (rawUri?.hasScheme == true || apiTrimmed.isEmpty)
+            ? value
+            : Uri.parse(apiTrimmed).resolve(value).toString();
+    final blobId = extractAttachmentBlobId(resolved);
+    if (blobId == null) return false;
+    final targetUri = Uri.tryParse(resolved);
+    final apiUri = Uri.tryParse(apiTrimmed);
+    if (targetUri != null &&
+        targetUri.hasScheme &&
+        apiUri != null &&
+        apiUri.hasScheme &&
+        !_isSameOriginUri(targetUri, apiUri)) {
+      return false;
+    }
+    return true;
+  }
+
+  /// 在线校验私有聊天附件访问权限（通过 POST /api/chat/file/sign）并短时缓存结论（5 秒）
   Future<bool> authorizePrivateAttachment(
     String source, {
     AttachmentAccessContext? accessContext,
     String? userId,
+    bool forceVerifyOnline = false,
   }) async {
     final resolved = _resolve(source);
     if (resolved.isEmpty) return false;
@@ -190,12 +236,16 @@ class AttachmentTransferService extends ChangeNotifier {
     final verdictKey =
         '$effectiveUser|$origin|$blobId|$su|${msg ?? ''}|${rootMsg ?? ''}';
 
-    final cachedUntil = _authorizedVerdicts[verdictKey];
-    if (cachedUntil != null) {
-      if (cachedUntil.isAfter(DateTime.now())) {
-        return true;
-      }
+    if (forceVerifyOnline) {
       _authorizedVerdicts.remove(verdictKey);
+    } else {
+      final cachedUntil = _authorizedVerdicts[verdictKey];
+      if (cachedUntil != null) {
+        if (cachedUntil.isAfter(DateTime.now())) {
+          return true;
+        }
+        _authorizedVerdicts.remove(verdictKey);
+      }
     }
 
     try {
@@ -209,7 +259,7 @@ class AttachmentTransferService extends ChangeNotifier {
         },
       );
       _authorizedVerdicts[verdictKey] = DateTime.now().add(
-        const Duration(seconds: 60),
+        const Duration(seconds: 5),
       );
       return true;
     } catch (_) {
@@ -248,19 +298,26 @@ class AttachmentTransferService extends ChangeNotifier {
     String? category,
     AttachmentAccessContext? accessContext,
     bool verifyOnline = false,
+    bool forceVerifyOnline = false,
+    bool skipAuthorize = false,
   }) async {
     if (userId?.trim().isNotEmpty == true) {
       _activeUserId = userId!.trim();
     }
-    if ((accessContext != null || verifyOnline) &&
+    if (!skipAuthorize &&
+        (accessContext != null || verifyOnline) &&
         source != null &&
         source.trim().isNotEmpty) {
       final allowed = await authorizePrivateAttachment(
         source,
         accessContext: accessContext,
         userId: userId,
+        forceVerifyOnline: forceVerifyOnline,
       );
-      if (!allowed) return null;
+      if (!allowed) {
+        _bytes.remove(_stateKey(id, userId: userId));
+        return null;
+      }
     }
     final sk = _stateKey(id, userId: userId);
     final existing = _states[sk]?.localPath;
@@ -316,6 +373,8 @@ class AttachmentTransferService extends ChangeNotifier {
     String? category,
     AttachmentAccessContext? accessContext,
     bool verifyOnline = false,
+    bool forceVerifyOnline = false,
+    bool skipAuthorize = false,
   }) async {
     if (stateFor(id, userId: userId).isDownloading) return;
     final contextualSource = resolveAttachmentUrl(
@@ -327,6 +386,27 @@ class AttachmentTransferService extends ChangeNotifier {
     );
     final effectiveSource =
         contextualSource.isNotEmpty ? contextualSource : source;
+    final sk = _stateKey(id, userId: userId);
+    final resolved = _resolve(effectiveSource);
+    if (!skipAuthorize &&
+        (accessContext != null || verifyOnline) &&
+        resolved.isNotEmpty) {
+      final allowed = await authorizePrivateAttachment(
+        resolved,
+        accessContext: accessContext,
+        userId: userId,
+        forceVerifyOnline: forceVerifyOnline,
+      );
+      if (!allowed) {
+        _bytes.remove(sk);
+        _states[sk] = AttachmentTransferState(
+          status: AttachmentTransferStatus.failed,
+          error: StateError('无权访问该私有附件或消息已撤回/删除'),
+        );
+        notifyListeners();
+        return;
+      }
+    }
     final cached = await findCachedPath(
       id: id,
       fileName: fileName,
@@ -338,28 +418,12 @@ class AttachmentTransferService extends ChangeNotifier {
       category: category,
       accessContext: accessContext,
       verifyOnline: verifyOnline,
+      forceVerifyOnline: forceVerifyOnline,
+      skipAuthorize: true,
     );
     if (cached != null) return;
-    final sk = _stateKey(id, userId: userId);
     _cancelled.remove(sk);
-    final resolved = _resolve(effectiveSource);
     if (resolved.isEmpty) throw StateError('附件下载地址为空。');
-    if ((accessContext != null || verifyOnline) &&
-        _effectiveSessionUnitId(resolved, accessContext).isNotEmpty) {
-      final allowed = await authorizePrivateAttachment(
-        resolved,
-        accessContext: accessContext,
-        userId: userId,
-      );
-      if (!allowed) {
-        _states[sk] = AttachmentTransferState(
-          status: AttachmentTransferStatus.failed,
-          error: StateError('无权访问该私有附件或消息已撤回/删除'),
-        );
-        notifyListeners();
-        return;
-      }
-    }
     final cacheKey = _cacheKeyFor(id: id, source: source);
     _states[sk] = const AttachmentTransferState(
       status: AttachmentTransferStatus.downloading,
@@ -435,9 +499,16 @@ class AttachmentTransferService extends ChangeNotifier {
     String? category,
     AttachmentAccessContext? accessContext,
     bool verifyOnline = false,
+    bool forceVerifyOnline = false,
   }) async {
     var state = stateFor(id, userId: userId);
-    final shouldVerify = accessContext != null || verifyOnline;
+    final isProtected = isProtectedChatAttachmentUrl(
+      source,
+      _environment.apiBaseUrl,
+    );
+    final shouldVerify = accessContext != null || verifyOnline || isProtected;
+    final shouldForceVerify =
+        forceVerifyOnline || (shouldVerify && isProtected);
     if (!state.isReady || state.localPath == null || shouldVerify) {
       await download(
         id: id,
@@ -449,9 +520,13 @@ class AttachmentTransferService extends ChangeNotifier {
         messageDate: messageDate,
         category: category,
         accessContext: accessContext,
-        verifyOnline: verifyOnline,
+        verifyOnline: shouldVerify,
+        forceVerifyOnline: shouldForceVerify,
       );
       state = stateFor(id, userId: userId);
+    }
+    if (state.status == AttachmentTransferStatus.failed) {
+      throw state.error ?? StateError('无权访问该私有附件或消息已撤回/删除');
     }
     final path = state.localPath;
     if (path == null) {
@@ -472,11 +547,32 @@ class AttachmentTransferService extends ChangeNotifier {
     String? mimeType,
     AttachmentAccessContext? accessContext,
     bool verifyOnline = false,
+    bool forceVerifyOnline = false,
   }) async {
     final sk = _stateKey(id, userId: userId);
-    final shouldVerify = accessContext != null || verifyOnline;
+    final isProtected = isProtectedChatAttachmentUrl(
+      source,
+      _environment.apiBaseUrl,
+    );
+    final shouldVerify = accessContext != null || verifyOnline || isProtected;
+    final shouldForceVerify =
+        forceVerifyOnline || (shouldVerify && isProtected);
     if (shouldVerify && source.trim().isNotEmpty) {
       _bytes.remove(sk);
+      final allowed = await authorizePrivateAttachment(
+        source,
+        accessContext: accessContext,
+        userId: userId,
+        forceVerifyOnline: shouldForceVerify,
+      );
+      if (!allowed) {
+        _states[sk] = AttachmentTransferState(
+          status: AttachmentTransferStatus.failed,
+          error: StateError('无权访问该私有附件或消息已撤回/删除'),
+        );
+        notifyListeners();
+        return null;
+      }
     }
     if (!_bytes.containsKey(sk)) {
       final cachedPath = await findCachedPath(
@@ -489,7 +585,9 @@ class AttachmentTransferService extends ChangeNotifier {
         messageDate: messageDate,
         category: category,
         accessContext: accessContext,
-        verifyOnline: verifyOnline,
+        verifyOnline: shouldVerify,
+        forceVerifyOnline: shouldForceVerify,
+        skipAuthorize: true,
       );
       if (cachedPath != null) {
         final localBytes = await _cache.readBytes(cachedPath);
@@ -509,8 +607,13 @@ class AttachmentTransferService extends ChangeNotifier {
         messageDate: messageDate,
         category: category,
         accessContext: accessContext,
-        verifyOnline: verifyOnline,
+        verifyOnline: shouldVerify,
+        forceVerifyOnline: shouldForceVerify,
+        skipAuthorize: true,
       );
+    }
+    if (stateFor(id, userId: userId).status == AttachmentTransferStatus.failed) {
+      return null;
     }
     final data = _bytes[sk];
     if (data == null) return null;

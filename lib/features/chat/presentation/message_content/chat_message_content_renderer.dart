@@ -39,6 +39,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
     this.onLinkTap,
     this.onRetry,
     this.maxWidth,
+    this.rootMessageId,
     this.presentation = ChatMessagePresentation.normal,
     super.key,
   });
@@ -58,6 +59,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
   final Future<void> Function()? onLinkTap;
   final VoidCallback? onRetry;
   final double? maxWidth;
+  final int? rootMessageId;
   final ChatMessagePresentation presentation;
 
   @override
@@ -95,7 +97,12 @@ class ChatMessageContentRenderer extends StatelessWidget {
       apiBaseUrl: apiBaseUrl,
       maxWidth: maxWidth,
     ),
-    12 => HistoryMessageContent(message: message, presentation: presentation),
+    12 => HistoryMessageContent(
+      message: message,
+      apiBaseUrl: apiBaseUrl,
+      rootMessageId: rootMessageId,
+      presentation: presentation,
+    ),
     13 => TemplateMessageContent(
       message: message,
       presentation: presentation,
@@ -104,6 +111,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
     ),
     3 => VoiceMessageContent(
       message: message,
+      rootMessageId: rootMessageId,
       onOpened: onVoiceOpened,
       presentation: presentation,
       maxWidth: maxWidth,
@@ -116,6 +124,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
       progress: uploadProgress,
       mediaItems: mediaItems,
       initialIndex: mediaInitialIndex,
+      rootMessageId: rootMessageId,
       presentation: presentation,
       onRetry: onRetry,
     ),
@@ -125,6 +134,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
       progress: uploadProgress,
       mediaItems: mediaItems,
       initialIndex: mediaInitialIndex,
+      rootMessageId: rootMessageId,
       presentation: presentation,
       onRetry: onRetry,
     ),

@@ -13,6 +13,7 @@ class VoiceMessageContent extends ConsumerWidget {
   const VoiceMessageContent({
     required this.message,
     required this.onOpened,
+    this.rootMessageId,
     this.presentation = ChatMessagePresentation.normal,
     this.maxWidth,
     this.onRetry,
@@ -21,6 +22,7 @@ class VoiceMessageContent extends ConsumerWidget {
 
   final ChatMessage message;
   final Future<void> Function() onOpened;
+  final int? rootMessageId;
   final ChatMessagePresentation presentation;
   final double? maxWidth;
   final VoidCallback? onRetry;
@@ -64,6 +66,7 @@ class VoiceMessageContent extends ConsumerWidget {
                     mimeType: message.content['contentType']?.toString(),
                     sessionUnitId: message.sessionUnitId,
                     serverMessageId: message.serverId,
+                    rootMessageId: rootMessageId,
                   );
                   if (playback.isMessagePlaying(message.localId)) {
                     await onOpened();
