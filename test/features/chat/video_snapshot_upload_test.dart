@@ -43,6 +43,15 @@ class _RecordingApiClient implements ApiClient {
   };
 
   @override
+  Future<T> put<T>(
+    String path, {
+    Object? data,
+    Map<String, Object?>? query,
+    Map<String, String>? headers,
+    bool retryOnUnauthorized = true,
+  }) async => <String, dynamic>{} as T;
+
+  @override
   Future<T> postMultipart<T>(
     String path, {
     Map<String, Object?>? query,
