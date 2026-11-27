@@ -1409,6 +1409,7 @@ class MessageRepository {
         extraFields: extraFields,
         extraFiles: extraFiles,
         onProgress: onProgress,
+        chatObjectId: local.raw['senderId']?.toString(),
         clientUploadId: local.clientMessageId,
         clientMessageId: local.clientMessageId,
       );
@@ -1547,6 +1548,7 @@ class MessageRepository {
         extraFields: <String, Object?>{
           'durationMs': resolvedDuration.inMilliseconds,
         },
+        chatObjectId: local.raw['senderId']?.toString(),
         clientUploadId: local.clientMessageId,
         clientMessageId: local.clientMessageId,
       );
@@ -1604,6 +1606,7 @@ class MessageRepository {
         fileName: file.name,
         fileLength: file.size,
         openRead: file.readAsByteStream,
+        chatObjectId: local.raw['senderId']?.toString(),
         clientUploadId: local.clientMessageId,
         clientMessageId: local.clientMessageId,
       );

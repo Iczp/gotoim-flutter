@@ -101,6 +101,7 @@ class _FakeUploadMessageApi extends Fake implements MessageApi {
     Map<String, MultipartUploadFile>? extraFiles,
     void Function(int sent, int total)? onProgress,
     String? accountScope,
+    String? chatObjectId,
     String? clientUploadId,
     String? clientMessageId,
   }) async {

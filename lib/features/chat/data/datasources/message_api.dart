@@ -549,6 +549,7 @@ class MessageApi {
     Map<String, MultipartUploadFile>? extraFiles,
     void Function(int sent, int total)? onProgress,
     String? accountScope,
+    String? chatObjectId,
     String? clientUploadId,
     String? clientMessageId,
   }) async {
@@ -569,6 +570,7 @@ class MessageApi {
       extraFiles: extraFiles,
       onProgress: onProgress,
       accountScope: accountScope,
+      chatObjectId: chatObjectId,
       clientUploadId: effectiveUploadId,
     );
     return sendAttachmentMessage(
