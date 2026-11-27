@@ -312,26 +312,35 @@ class VideoMessageContent extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                _formatFileSize(message.fileSize),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  shadows: [
-                                    Shadow(color: Colors.black87, blurRadius: 4),
-                                  ],
+                              Flexible(
+                                child: Text(
+                                  _formatFileSize(message.fileSize),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    shadows: [
+                                      Shadow(color: Colors.black87, blurRadius: 4),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              Text(
-                                _formatDuration(message.videoDuration),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  shadows: [
-                                    Shadow(color: Colors.black87, blurRadius: 4),
-                                  ],
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  _formatDuration(message.videoDuration),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    shadows: [
+                                      Shadow(color: Colors.black87, blurRadius: 4),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],

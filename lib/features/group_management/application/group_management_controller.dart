@@ -91,15 +91,27 @@ class GroupManagementController extends ChangeNotifier {
       error = exception;
     } finally {
       loading = false;
-      notifyListeners();
+      if (!_disposed) {
+        notifyListeners();
+      }
     }
+  }
+
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 
   Future<void> refreshSettingsOnly() async {
     if (sessionUnitId == null || sessionUnitId!.isEmpty) return;
     try {
       settings = await _api.getManagementSettings(sessionUnitId!);
-      notifyListeners();
+      if (!_disposed) {
+        notifyListeners();
+      }
     } catch (_) {}
   }
 
