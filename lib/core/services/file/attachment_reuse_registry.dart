@@ -26,29 +26,37 @@ class AttachmentReuseRegistry {
 
   static String buildKey({
     required String accountScope,
+    String chatObjectId = '',
     required int messageType,
     required String sha256Hex,
     required int fileLength,
     bool isOriginal = false,
+    String outputVariant = '',
   }) {
     final normalizedAccount = accountScope.trim();
+    final normalizedChatObject = chatObjectId.trim();
     final normalizedHash = sha256Hex.trim().toLowerCase();
-    return '$normalizedAccount|$messageType|$normalizedHash|$fileLength|${isOriginal ? 1 : 0}';
+    final normalizedVariant = outputVariant.trim();
+    return '$normalizedAccount|$normalizedChatObject|$messageType|$normalizedHash|$fileLength|${isOriginal ? 1 : 0}|$normalizedVariant';
   }
 
   AttachmentReuseEntry? lookup({
     required String accountScope,
+    String chatObjectId = '',
     required int messageType,
     required String sha256Hex,
     required int fileLength,
     bool isOriginal = false,
+    String outputVariant = '',
   }) {
     final key = buildKey(
       accountScope: accountScope,
+      chatObjectId: chatObjectId,
       messageType: messageType,
       sha256Hex: sha256Hex,
       fileLength: fileLength,
       isOriginal: isOriginal,
+      outputVariant: outputVariant,
     );
     final entry = _entries.remove(key);
     if (entry == null) return null;
@@ -70,10 +78,12 @@ class AttachmentReuseRegistry {
 
   void remember({
     required String accountScope,
+    String chatObjectId = '',
     required int messageType,
     required String sha256Hex,
     required int fileLength,
     bool isOriginal = false,
+    String outputVariant = '',
     required String reuseToken,
     DateTime? expireTime,
   }) {
@@ -83,10 +93,12 @@ class AttachmentReuseRegistry {
 
     final key = buildKey(
       accountScope: accountScope,
+      chatObjectId: chatObjectId,
       messageType: messageType,
       sha256Hex: sha256Hex,
       fileLength: fileLength,
       isOriginal: isOriginal,
+      outputVariant: outputVariant,
     );
     _entries.remove(key);
     _entries[key] = AttachmentReuseEntry(
@@ -101,17 +113,21 @@ class AttachmentReuseRegistry {
 
   void invalidate({
     required String accountScope,
+    String chatObjectId = '',
     required int messageType,
     required String sha256Hex,
     required int fileLength,
     bool isOriginal = false,
+    String outputVariant = '',
   }) {
     final key = buildKey(
       accountScope: accountScope,
+      chatObjectId: chatObjectId,
       messageType: messageType,
       sha256Hex: sha256Hex,
       fileLength: fileLength,
       isOriginal: isOriginal,
+      outputVariant: outputVariant,
     );
     _entries.remove(key);
   }

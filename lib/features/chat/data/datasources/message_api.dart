@@ -1,4 +1,5 @@
 import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/services/file/attachment_reuse_registry.dart';
@@ -327,14 +328,19 @@ class MessageApi {
           );
           onProgress?.call(fileLength, fileLength);
           return reused;
+        } on DioException catch (e) {
+          final statusCode = e.response?.statusCode;
+          if (statusCode != null && statusCode >= 400 && statusCode < 500) {
+            _reuseRegistry.invalidate(
+              accountScope: effectiveAccount,
+              messageType: messageType,
+              sha256Hex: sha256Hex,
+              fileLength: fileLength,
+              isOriginal: isOriginal,
+            );
+          }
         } catch (_) {
-          _reuseRegistry.invalidate(
-            accountScope: effectiveAccount,
-            messageType: messageType,
-            sha256Hex: sha256Hex,
-            fileLength: fileLength,
-            isOriginal: isOriginal,
-          );
+          // 瞬时错误不清除仍可用的凭证
         }
       }
     }
