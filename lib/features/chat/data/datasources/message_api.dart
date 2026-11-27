@@ -2,6 +2,7 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/api_exception.dart';
 import '../../../../core/services/file/attachment_reuse_registry.dart';
 import '../../../session/data/models/paged_result_dto.dart';
 import '../models/chat_message.dart';
@@ -266,6 +267,7 @@ class MessageApi {
     Map<String, MultipartUploadFile>? extraFiles,
     void Function(int sent, int total)? onProgress,
     String? accountScope,
+    String? chatObjectId,
     String? clientUploadId,
   }) async {
     late final String path;
@@ -298,17 +300,21 @@ class MessageApi {
     }
 
     final effectiveAccount = (accountScope ?? this.accountScope)?.trim() ?? '';
+    final effectiveChatObject = (chatObjectId ?? '').trim();
     final isOriginal = extraFields?['isOriginal'] == true;
+    final outputVariant = await _computeOutputVariant(extraFiles);
     String? sha256Hex;
     if (effectiveAccount.isNotEmpty) {
       final digest = await sha256.bind(openRead()).first;
       sha256Hex = digest.toString();
       final cached = _reuseRegistry.lookup(
         accountScope: effectiveAccount,
+        chatObjectId: effectiveChatObject,
         messageType: messageType,
         sha256Hex: sha256Hex,
         fileLength: fileLength,
         isOriginal: isOriginal,
+        outputVariant: outputVariant,
       );
       if (cached != null) {
         try {
@@ -320,23 +326,40 @@ class MessageApi {
           );
           _rememberReuseToken(
             accountScope: effectiveAccount,
+            chatObjectId: effectiveChatObject,
             messageType: messageType,
             sha256Hex: sha256Hex,
             fileLength: fileLength,
             isOriginal: isOriginal,
+            outputVariant: outputVariant,
             response: reused,
           );
           onProgress?.call(fileLength, fileLength);
           return reused;
+        } on ApiException catch (e) {
+          final statusCode = e.statusCode;
+          if (statusCode != null && statusCode >= 400 && statusCode < 500) {
+            _reuseRegistry.invalidate(
+              accountScope: effectiveAccount,
+              chatObjectId: effectiveChatObject,
+              messageType: messageType,
+              sha256Hex: sha256Hex,
+              fileLength: fileLength,
+              isOriginal: isOriginal,
+              outputVariant: outputVariant,
+            );
+          }
         } on DioException catch (e) {
           final statusCode = e.response?.statusCode;
           if (statusCode != null && statusCode >= 400 && statusCode < 500) {
             _reuseRegistry.invalidate(
               accountScope: effectiveAccount,
+              chatObjectId: effectiveChatObject,
               messageType: messageType,
               sha256Hex: sha256Hex,
               fileLength: fileLength,
               isOriginal: isOriginal,
+              outputVariant: outputVariant,
             );
           }
         } catch (_) {
@@ -360,22 +383,40 @@ class MessageApi {
     if (effectiveAccount.isNotEmpty && sha256Hex != null) {
       _rememberReuseToken(
         accountScope: effectiveAccount,
+        chatObjectId: effectiveChatObject,
         messageType: messageType,
         sha256Hex: sha256Hex,
         fileLength: fileLength,
         isOriginal: isOriginal,
+        outputVariant: outputVariant,
         response: uploaded,
       );
     }
     return uploaded;
   }
 
+  Future<String> _computeOutputVariant(
+    Map<String, MultipartUploadFile>? extraFiles,
+  ) async {
+    if (extraFiles == null || extraFiles.isEmpty) return '';
+    final keys = extraFiles.keys.toList()..sort();
+    final parts = <String>[];
+    for (final key in keys) {
+      final file = extraFiles[key]!;
+      final digest = await sha256.bind(file.openRead()).first;
+      parts.add('$key:$digest:${file.length}');
+    }
+    return parts.join('|');
+  }
+
   void _rememberReuseToken({
     required String accountScope,
+    String chatObjectId = '',
     required int messageType,
     required String sha256Hex,
     required int fileLength,
     required bool isOriginal,
+    String outputVariant = '',
     required Map<String, dynamic> response,
   }) {
     final token = response['reuseToken']?.toString().trim() ?? '';
@@ -387,10 +428,12 @@ class MessageApi {
             : null;
     _reuseRegistry.remember(
       accountScope: accountScope,
+      chatObjectId: chatObjectId,
       messageType: messageType,
       sha256Hex: sha256Hex,
       fileLength: fileLength,
       isOriginal: isOriginal,
+      outputVariant: outputVariant,
       reuseToken: token,
       expireTime: expireTime,
     );
