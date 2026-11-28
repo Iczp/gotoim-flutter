@@ -66,6 +66,20 @@ class ChatMessageContentRenderer extends StatelessWidget {
   Widget build(BuildContext context) => switch (message.messageType) {
     _ when message.isDeleted => const Text('引用的消息已删除'),
     _ when message.isRollbacked => const Text('消息已撤回'),
+    20 => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.call, size: 16),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            message.content.isNotEmpty ? message.content : '[音视频通话]',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
     5 => FileMessageContent(
       message: message,
       transfer: attachmentState,
