@@ -17,6 +17,8 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onOpenSettings,
     this.onOpenHistory,
     this.onOpenAiRuns,
+    this.onAudioCall,
+    this.onVideoCall,
     this.onPopOut,
     this.selectionMode = false,
     this.onCancelSelection,
@@ -34,6 +36,8 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenSettings;
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenAiRuns;
+  final VoidCallback? onAudioCall;
+  final VoidCallback? onVideoCall;
   final VoidCallback? onPopOut;
   final bool selectionMode;
   final VoidCallback? onCancelSelection;
@@ -81,6 +85,18 @@ class ChatTitleBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'AI 运行记录',
           onPressed: onOpenAiRuns,
           icon: const Icon(Icons.timeline_outlined),
+        ),
+      if (!selectionMode && onAudioCall != null)
+        IconButton(
+          tooltip: '语音通话',
+          onPressed: onAudioCall,
+          icon: const Icon(Icons.call_outlined),
+        ),
+      if (!selectionMode && onVideoCall != null)
+        IconButton(
+          tooltip: '视频通话',
+          onPressed: onVideoCall,
+          icon: const Icon(Icons.videocam_outlined),
         ),
       if (showTransfer && !selectionMode)
         IconButton(

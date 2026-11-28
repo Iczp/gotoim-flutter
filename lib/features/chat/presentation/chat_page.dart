@@ -63,6 +63,9 @@ import 'widgets/chat_message_row.dart';
 import 'widgets/chat_selection_bar.dart';
 import 'widgets/chat_sync_status_pill.dart';
 import 'widgets/chat_text_selection_sheet.dart';
+import 'package:dio/dio.dart';
+import '../../call/data/call_api.dart';
+import '../../call/presentation/call_room_page.dart';
 import 'widgets/chat_title_bar.dart';
 import 'widgets/chat_transfer_sheet.dart';
 import 'widgets/half_screen_chat_sheet.dart';
@@ -289,6 +292,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return null;
   }
 
+  Future<void> _startCall({required int mediaType}) async {
+    try {
+      final env = ref.read(appEnvironmentProvider);
+      final dio = Dio(BaseOptions(baseUrl: env.apiBaseUrl));
+      final callApi = CallApi(dio);
+      final result = await callApi.invite(
+        requestId: DateTime.now().microsecondsSinceEpoch.toString(),
+        sessionId: widget.sessionUnitId,
+        senderSessionUnitId: widget.sessionUnitId,
+        callMode: 1,
+        mediaType: mediaType,
+        targetSessionUnitIds: const <String>[],
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => CallRoomPage(joinResult: result),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('发起通话失败: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
@@ -382,6 +412,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
               onOpenSettings: _openChatSettings,
               onOpenHistory: _openHalfScreenHistory,
               onOpenAiRuns: _openAiRunTimeline,
+              onAudioCall: () => _startCall(mediaType: 1),
+              onVideoCall: () => _startCall(mediaType: 2),
               onPopOut:
                   widget.onPopOut ??
                   () {

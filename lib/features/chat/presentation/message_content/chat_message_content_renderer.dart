@@ -73,7 +73,7 @@ class ChatMessageContentRenderer extends StatelessWidget {
         const SizedBox(width: 6),
         Flexible(
           child: Text(
-            message.content.isNotEmpty ? message.content : '[音视频通话]',
+            message.content.toString().isNotEmpty ? message.content.toString() : '[音视频通话]',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
