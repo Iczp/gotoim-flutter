@@ -74,6 +74,7 @@ dependencies:
   desktop_multi_window: ^0.3.1
   win32: ^6.4.0
   ffi: ^2.1.4
+  livekit_client: ^2.14.0
 
 dev_dependencies:
   integration_test:
