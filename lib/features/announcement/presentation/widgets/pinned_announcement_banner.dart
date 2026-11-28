@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -34,6 +35,10 @@ class _PinnedAnnouncementBannerState
 
   late PinnedAnnouncementController _controller;
   bool _popupFlowRunning = false;
+  bool _isHovered = false;
+  bool _detailOpen = false;
+  Timer? _carouselTimer;
+  static const Duration _carouselInterval = Duration(seconds: 4);
 
   String get _effectiveSessionUnitId =>
       (widget.sessionUnitId != null && widget.sessionUnitId!.isNotEmpty)
@@ -53,7 +58,44 @@ class _PinnedAnnouncementBannerState
       sessionUnitId: widget.sessionUnitId,
       database: ref.read(unifiedDatabaseProvider),
     );
+    _controller.addListener(_syncCarouselTimer);
+    _syncCarouselTimer();
     _checkAndShowPopupQueue();
+  }
+
+  void _stopCarouselTimer() {
+    _carouselTimer?.cancel();
+    _carouselTimer = null;
+  }
+
+  void _syncCarouselTimer() {
+    _stopCarouselTimer();
+    if (!mounted ||
+        _controller.pinnedList.length <= 1 ||
+        _controller.isDismissed ||
+        _isHovered ||
+        _detailOpen) {
+      return;
+    }
+    _carouselTimer = Timer.periodic(_carouselInterval, (_) {
+      if (mounted &&
+          _controller.pinnedList.length > 1 &&
+          !_controller.isDismissed &&
+          !_isHovered &&
+          !_detailOpen) {
+        _controller.nextPinned();
+      }
+    });
+  }
+
+  void _prevPinned() {
+    _controller.prevPinned();
+    _syncCarouselTimer();
+  }
+
+  void _nextPinned() {
+    _controller.nextPinned();
+    _syncCarouselTimer();
   }
 
   @override
@@ -61,6 +103,8 @@ class _PinnedAnnouncementBannerState
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sessionId != widget.sessionId ||
         oldWidget.sessionUnitId != widget.sessionUnitId) {
+      _stopCarouselTimer();
+      _controller.removeListener(_syncCarouselTimer);
       _controller.dispose();
       _popupFlowRunning = false;
       _initController();
@@ -74,6 +118,8 @@ class _PinnedAnnouncementBannerState
 
   @override
   void dispose() {
+    _stopCarouselTimer();
+    _controller.removeListener(_syncCarouselTimer);
     _controller.dispose();
     super.dispose();
   }
@@ -163,142 +209,182 @@ class _PinnedAnnouncementBannerState
         final theme = Theme.of(context);
         final isDark = theme.brightness == Brightness.dark;
 
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E293B).withValues(alpha: 0.62)
-                      : const Color(0xFFFFFBEB).withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
+        return MouseRegion(
+          onEnter: (_) {
+            _isHovered = true;
+            _syncCarouselTimer();
+          },
+          onExit: (_) {
+            _isHovered = false;
+            _syncCarouselTimer();
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withValues(alpha: 0.16)
-                        : Colors.orange.withValues(alpha: 0.28),
+                        ? const Color(0xFF1E293B).withValues(alpha: 0.62)
+                        : const Color(0xFFFFFBEB).withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.16)
+                          : Colors.orange.withValues(alpha: 0.28),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.08),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.08),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.campaign, color: Colors.orange, size: 17),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: const Text(
-                        '公告',
-                        style: TextStyle(
-                          color: Colors.orange,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () async {
-                          final confirmed = await AnnouncementDetailDialog.show(
-                            context,
-                            announcement: item,
-                            sessionUnitId: _effectiveSessionUnitId,
-                            sessionTitle: widget.sessionTitle,
-                            canManage: widget.canManage,
-                          );
-                          if (!mounted) return;
-                          if (confirmed == true) {
-                            await _controller.markViewed(
-                              item.copyWith(isSelfConfirmed: true),
-                            );
-                          } else if (!item.requireConfirm) {
-                            await _controller.markViewed(item);
-                          }
-                        },
-                        child: Text(
-                          item.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: isDark
-                                ? const Color(0xFFFDE68A)
-                                : const Color(0xFF92400E),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (_controller.pinnedList.length > 1) ...[
-                      IconButton(
-                        icon: const Icon(Icons.chevron_left, size: 16),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-                        style: IconButton.styleFrom(
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        onPressed: _controller.prevPinned,
-                      ),
-                      Text(
-                        '${_controller.pinnedIndex + 1}/${_controller.pinnedList.length}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? Colors.grey[300] : Colors.grey[700],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right, size: 16),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-                        style: IconButton.styleFrom(
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        onPressed: _controller.nextPinned,
-                      ),
-                    ],
-                    if (item.requireConfirm && !item.isSelfConfirmed) ...[
+                  child: Row(
+                    children: [
+                      const Icon(Icons.campaign, color: Colors.orange, size: 17),
                       const SizedBox(width: 6),
-                      SizedBox(
-                        height: 22,
-                        child: FilledButton.tonal(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 9),
-                            shape: const StadiumBorder(),
-                            textStyle: const TextStyle(fontSize: 11),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          '公告',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
                           ),
-                          onPressed: _controller.confirm,
-                          child: const Text('确认收到'),
                         ),
                       ),
-                    ],
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 15),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                      style: IconButton.styleFrom(
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () async {
+                            _detailOpen = true;
+                            _syncCarouselTimer();
+                            final confirmed = await AnnouncementDetailDialog.show(
+                              context,
+                              announcement: item,
+                              sessionUnitId: _effectiveSessionUnitId,
+                              sessionTitle: widget.sessionTitle,
+                              canManage: widget.canManage,
+                            );
+                            _detailOpen = false;
+                            _syncCarouselTimer();
+                            if (!mounted) return;
+                            if (confirmed == true) {
+                              await _controller.markViewed(
+                                item.copyWith(isSelfConfirmed: true),
+                              );
+                            } else if (!item.requireConfirm) {
+                              await _controller.markViewed(item);
+                            }
+                          },
+                          child: ClipRect(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              switchInCurve: Curves.easeOut,
+                              switchOutCurve: Curves.easeIn,
+                              transitionBuilder: (child, animation) {
+                                final isIncoming =
+                                    child.key == ValueKey<String>(item.id);
+                                final offsetAnimation = Tween<Offset>(
+                                  begin: Offset(0, isIncoming ? 0.6 : -0.6),
+                                  end: Offset.zero,
+                                ).animate(animation);
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                    position: offsetAnimation,
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: Align(
+                                key: ValueKey<String>(item.id),
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  item.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: isDark
+                                        ? const Color(0xFFFDE68A)
+                                        : const Color(0xFF92400E),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                      color: isDark ? Colors.grey[400] : Colors.grey[600],
-                      tooltip: '隐藏横幅',
-                      onPressed: _controller.dismiss,
-                    ),
-                  ],
+                      if (_controller.pinnedList.length > 1) ...[
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left, size: 16),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: _prevPinned,
+                        ),
+                        Text(
+                          '${_controller.pinnedIndex + 1}/${_controller.pinnedList.length}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.grey[300] : Colors.grey[700],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right, size: 16),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: _nextPinned,
+                        ),
+                      ],
+                      if (item.requireConfirm && !item.isSelfConfirmed) ...[
+                        const SizedBox(width: 6),
+                        SizedBox(
+                          height: 22,
+                          child: FilledButton.tonal(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 9),
+                              shape: const StadiumBorder(),
+                              textStyle: const TextStyle(fontSize: 11),
+                            ),
+                            onPressed: _controller.confirm,
+                            child: const Text('确认收到'),
+                          ),
+                        ),
+                      ],
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 15),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                        tooltip: '隐藏横幅',
+                        onPressed: _controller.dismiss,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
