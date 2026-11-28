@@ -1,4 +1,4 @@
-# GotoIM Flutter 音视频通话与屏幕共享方案（`gotoim-flutter` 冻结候选版）
+# GotoIM Flutter 音视频通话与屏幕共享方案（`gotoim-flutter` 冻结基线）
 
 > 适用仓库：`gotoim-flutter`（Android / iOS / Windows / macOS）  
 > 后端协议基准：[`IczpNet.Chat/docs/protocols/video-call/v1/specification.md`](../../../abpvnext/IczpNet.Chat/docs/protocols/video-call/v1/specification.md)
@@ -14,7 +14,7 @@
 | **Android** | ✅ V1 必选 | ✅ V1 必选（`MediaProjection` 前台服务） | ✅ V1 必选 | ⏳ **V1.1**（需补齐 FCM/厂商推送 + Telecom ConnectionService 契约与验收） |
 | **iOS** | ✅ V1 必选 | ⏳ **V1.1**（需 Xcode 新建 ReplayKit `BroadcastUploadExtension`） | ✅ V1 必选 | ⏳ **V1.1**（需补齐 APNs VoIP PushKit + CallKit 契约与验收） |
 | **Windows / macOS** | ✅ V1 必选 | ✅ V1 必选（桌面端屏幕/窗口选择） | ✅ V1 必选 | ❌ 仅桌面端运行态（托盘保活） |
-| **Web** | ❌ V1 不支持 | ❌ V1 不支持 | ❌ V1 不支持 | ❌（当前 `signalr_gateway_stub.dart` 无实时长连接，UI 隐藏通话入口） |
+| **Web** | ❌ V1 不支持 | ❌ 不支持 | ❌ 不支持 | ❌（当前 `signalr_gateway_factory.dart` 走 `stub` 无实时长连接，UI 隐藏通话入口） |
 
 ---
 
@@ -40,11 +40,11 @@
 ```text
 lib/features/call/
   data/
-    call_api.dart                 # 对接 /api/chat/call/* (全写操作带 requestId 幂等键)
-    call_models.dart              # CallMode / CallMediaType / CallEndReason / ActiveCallSnapshotDto / CallJoinResultDto
+    call_api.dart                 # 对接 /api/chat/call/* (全写操作带 requestId 幂等键，accept/reject 绑定传入 inviteRound)
+    call_models.dart              # CallMode / CallMediaType / CallEndReason / ActiveCallSnapshotDto / CallJoinResultDto / CallHeartbeatResultDto
   application/
-    call_controller.dart          # Riverpod Notifier：双域 stateVersion 控制、active 对账清理、heartbeat (30s)、refreshToken、room_rotated 换房
-    call_ringtone_service.dart    # 来电响铃与震动控制（受 personalStateVersion 与 dismissedCallIds 保护）
+    call_controller.dart          # Riverpod Notifier：双域 stateVersion、轮次去重、范围收敛 active 对账、heartbeat/断开主动换房
+    call_ringtone_service.dart    # 来电响铃与震动控制（受 personalStateVersion 与 dismissedInviteKeys 保护）
   presentation/
     incoming_call_overlay.dart    # 前台全局来电悬浮/全屏接听界面
     call_room_page.dart           # 路由 /call/:callId（1v1 大小窗、群宫格/焦点+屏幕共享捏合缩放、设备/扬声器切换）
@@ -57,16 +57,23 @@ lib/features/call/
 
 ## 4. 关键协议对接与验收清单
 
-1. **双域版本号与 `active` 对账清理**：
+1. **双域版本号、轮次去重与 `active` 范围/序号对账**：
    - `SignalRGateway` 注册 `call.*@rtc` 事件至 `CallController`。
-   - 对每个 `callId` 分别维护 **`personalStateVersion`** 与 **`bannerStateVersion`**：`call.room_updated@rtc` 仅更新 `bannerStateVersion`，绝不导致同版本 `call.invited@rtc` 被误丢；已进入本地 `Accepted/Rejected/Handled/Ended` 的 `callId` 不再因任何 `call.invited@rtc` 重新响铃。
-   - SignalR 建连/重连后调用 `GET /api/chat/call/active`：本地响铃/通话若在服务端快照中已消失（或 `boundDeviceId != 本机 deviceId`），立即停铃或退出房间。
-2. **URL 与内置 TURN 约定**：
-   - `livekit_client` 自动追加 `/rtc`，客户端直接将 `rtcUrl`（如 `ws://10.0.5.20:7880` 或经 Caddy 代理时 `ws://10.0.5.20:8044`）传入 `Room.connect(rtcUrl, token, roomOptions: ..., connectOptions: ConnectOptions(rtcConfiguration: RTCConfiguration(iceTransportPolicy: ...)))`，不手动拼接 `/rtc`；TURN 由 LiveKit 信令自动下发，不另传静态 `iceServers`。
-3. **`MessageTypes.Call = 20` 适配与转发限制**：
+   - 对每个 `callId` 分别维护 **`personalStateVersion`** 与 **`bannerStateVersion`**：`call.room_updated@rtc` 仅更新 `bannerStateVersion`，绝不误丢同版本 `call.invited@rtc`。
+   - 按 **`dismissedInviteKeys`（`${callId}:${inviteRound}`）** 抑制已处理轮次的迟到来电，支持 `inviteMore` 发起新一轮（`inviteRound++`）时正常重新响铃。
+   - **范围收敛与乱序淘汰**：
+     - 按 `(accountId, scopeKey)`（`'global'` 或 `'session:' + sessionId`）维护请求序号 `lastIssuedSeq` / `lastAppliedSeq`：响应返回若 `reqSeq < lastIssuedSeq` 或 `<= lastAppliedSeq` 直接丢弃整份响应；
+     - 未传 `sessionId` 的 `'global'` 查询**禁止清理任何群横幅 `sessionGroupCall`**，仅显式传 `sessionId` 的查询才核对并清理对应群横幅；
+     - 仅清理 `item.updatedAtEpoch <= queryStartEpoch` 的本地对象，查询 RTT 期间的新通话/新来电不被旧快照误挂断。
+2. **被动断开 & 心跳 `roomEpoch` 主动换房恢复**：
+   - `heartbeat`（30s）若发现服务端 `roomEpoch > localRoomEpoch`（哪怕丢失了 `call.room_rotated@rtc`），立即调 `refresh-token` 切换至新房间；
+   - LiveKit `RoomDisconnectedEvent`（非本端主动挂断）触发时立即调用 `GET /api/chat/call/active` 对账：若 `currentCall` 仍在且 `boundDeviceId` 匹配本机设备，立即调用 `refresh-token` 重连新房，否则清理退出。
+3. **URL 与内置 TURN 约定**：
+   - `livekit_client` 自动追加 `/rtc`，客户端直接将 `rtcUrl`（不手动拼接 `/rtc`）及 `iceTransportPolicy` 传入 `Room.connect(rtcUrl, token, connectOptions: ConnectOptions(rtcConfiguration: RTCConfiguration(iceTransportPolicy: ...)))`；TURN 由 LiveKit 信令自动下发。
+4. **`MessageTypes.Call = 20` 适配与转发限制**：
    - `ChatMessage`（`lib/features/chat/data/models/chat_message.dart`）支持解析 `messageType == 20` 与 `CallContentInfo`；未知/损坏结构降级渲染安全文案；
    - 气泡长按转发与多选合并转发均禁用 `messageType == 20`。
-4. **验收测试清单**：
-   - `stateVersion` 双域乱序与 `active` 快照消失停铃单元测试；
+5. **验收测试清单**：
+   - `stateVersion` 双域乱序、`(callId, inviteRound)` 再次邀请响铃（含第 1 轮迟到 `accept`/`reject` 不影响第 2 轮）、`'global'` 查询不误清群横幅、同范围旧非空响应被 `reqSeq` 淘汰、`updatedAtEpoch > queryStartEpoch` 不被空快照误挂断等单元测试；
    - Web 平台自动隐藏通话入口验证，iOS 平台隐藏发起共享按钮但正常观看桌面端共享；
-   - Android/iOS/Windows/macOS 前台与 Electron 互呼、同账号双端抢占 1 秒内停铃、Android 发起屏幕共享（通知栏前台服务保活）、强制 `relay` 模式下 WebRTC Stats 验证 `relay` 双向互通、断网 20s 内重连恢复、被踢出群后 `room_rotated` 无感切换。
+   - Android/iOS/Windows/macOS 前台语音聊天与视频聊天均与 Electron 正常互呼、同账号双端抢占 1 秒内停铃、Android 发起屏幕共享、丢包 `call.room_rotated@rtc` 下经 `heartbeat`/`RoomDisconnected` 主动换房恢复、强制 `relay` 模式下 WebRTC Stats 验证 `relay` 双向互通。
